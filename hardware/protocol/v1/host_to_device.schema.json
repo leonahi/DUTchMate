@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dutchmate.dev/protocol/v1/host_to_device.schema.json",
+  "title": "DUTchMate v1 Host-to-Device Message",
+  "oneOf": [
+    {
+      "title": "Configure GPIO Mode Command",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmd", "pin", "mode"],
+      "properties": {
+        "cmd": {
+          "const": "configure_gpio_mode"
+        },
+        "pin": {
+          "type": "string",
+          "enum": ["reset", "boot"]
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["open_drain", "push_pull"]
+        }
+      }
+    },
+    {
+      "title": "Reset Command",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmd", "pulse_ms"],
+      "properties": {
+        "cmd": {
+          "const": "reset"
+        },
+        "pulse_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      }
+    },
+    {
+      "title": "Set Boot Mode Command",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmd", "mode"],
+      "properties": {
+        "cmd": {
+          "const": "set_boot_mode"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["normal", "bootloader"]
+        }
+      }
+    },
+    {
+      "title": "UART Send Command",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmd", "data_b64"],
+      "properties": {
+        "cmd": {
+          "const": "uart_send"
+        },
+        "data_b64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[project]
+name = "dutchmate-core"
+version = "0.1.0"
+description = "Core hardware interface, protocol parsing, session storage, and workflows for DUTchMate."
+requires-python = ">=3.10"
+dependencies = [
+  "pyserial-asyncio>=0.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12"]
+build-backend = "uv_build"

@@ -1,0 +1,5 @@
+{
+  "cmd": "configure_gpio_mode",
+  "pin": "reset",
+  "mode": "open_drain"
+}

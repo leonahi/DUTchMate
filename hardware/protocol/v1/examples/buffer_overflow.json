@@ -1,0 +1,6 @@
+{
+  "type": "buffer_overflow",
+  "channel": 0,
+  "timestamp_us": 182350000,
+  "dropped_bytes": 512
+}

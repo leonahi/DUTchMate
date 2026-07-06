@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dutchmate.dev/protocol/v1/device_to_host.schema.json",
+  "title": "DUTchMate v1 Device-to-Host Message",
+  "$defs": {
+    "timestamp_us": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "capability": {
+      "type": "string",
+      "enum": [
+        "uart_capture",
+        "gpio_control",
+        "uart_send",
+        "gpio_events",
+        "power_sense",
+        "msgpack"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "title": "Hello Message",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "v", "firmware", "device", "capabilities"],
+      "properties": {
+        "type": {
+          "const": "hello"
+        },
+        "v": {
+          "const": 1
+        },
+        "firmware": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    {
+      "title": "UART Event",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "channel", "timestamp_us", "data_b64"],
+      "properties": {
+        "type": {
+          "const": "uart"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp_us": {
+          "$ref": "#/$defs/timestamp_us"
+        },
+        "data_b64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      }
+    },
+    {
+      "title": "Buffer Overflow Event",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "channel", "timestamp_us", "dropped_bytes"],
+      "properties": {
+        "type": {
+          "const": "buffer_overflow"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp_us": {
+          "$ref": "#/$defs/timestamp_us"
+        },
+        "dropped_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    {
+      "title": "Buffer Status Event",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "timestamp_us",
+        "uart_rx_size_bytes",
+        "uart_rx_used_bytes",
+        "uart_rx_high_water_bytes",
+        "dropped_bytes_total",
+        "overflow_events"
+      ],
+      "properties": {
+        "type": {
+          "const": "buffer_status"
+        },
+        "timestamp_us": {
+          "$ref": "#/$defs/timestamp_us"
+        },
+        "uart_rx_size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "uart_rx_used_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uart_rx_high_water_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dropped_bytes_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overflow_events": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    {
+      "title": "Command Success Response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok"],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "timestamp_us": {
+          "$ref": "#/$defs/timestamp_us"
+        }
+      }
+    },
+    {
+      "$ref": "errors.schema.json"
+    }
+  ]
+}

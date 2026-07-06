@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dutchmate.dev/protocol/v1/errors.schema.json",
+  "title": "DUTchMate v1 Error Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "error", "detail"],
+  "properties": {
+    "ok": {
+      "const": false
+    },
+    "error": {
+      "type": "string",
+      "enum": [
+        "invalid_command",
+        "invalid_argument",
+        "not_configured",
+        "capture_active",
+        "hardware_fault",
+        "timeout"
+      ]
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

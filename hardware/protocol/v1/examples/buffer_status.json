@@ -1,0 +1,9 @@
+{
+  "type": "buffer_status",
+  "timestamp_us": 182360000,
+  "uart_rx_size_bytes": 32768,
+  "uart_rx_used_bytes": 4096,
+  "uart_rx_high_water_bytes": 18432,
+  "dropped_bytes_total": 512,
+  "overflow_events": 1
+}
