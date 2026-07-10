@@ -47,6 +47,12 @@ src = [
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
+pythonpath = [
+  "core/src",
+  "apps/cli/src",
+  "apps/service/src",
+  "apps/mcp_server/src",
+]
 testpaths = [
   "core/tests",
   "apps/cli/tests",
