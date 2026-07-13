@@ -1,0 +1,4 @@
+{
+  "cmd": "set_boot_mode",
+  "mode": "bootloader"
+}
