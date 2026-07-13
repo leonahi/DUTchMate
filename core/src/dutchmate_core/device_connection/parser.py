@@ -17,12 +17,22 @@ from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
     KNOWN_CAPABILITIES,
+    KNOWN_ERROR_CODES,
     PROTOCOL_VERSION,
+    CommandErrorMessage,
+    CommandSuccessMessage,
     HelloMessage,
     UartMessage,
 )
 
-DeviceMessage = HelloMessage | UartMessage | BufferOverflowMessage | BufferStatusMessage
+DeviceMessage = (
+    HelloMessage
+    | UartMessage
+    | BufferOverflowMessage
+    | BufferStatusMessage
+    | CommandSuccessMessage
+    | CommandErrorMessage
+)
 
 _HELLO_KEYS = {"type", "v", "firmware", "device", "capabilities"}
 _UART_KEYS = {"type", "channel", "timestamp_us", "data_b64"}
@@ -36,17 +46,22 @@ _BUFFER_STATUS_KEYS = {
     "dropped_bytes_total",
     "overflow_events",
 }
+_COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us"}
+_COMMAND_ERROR_KEYS = {"ok", "error", "detail"}
 
 
 def parse_device_message(line: str | bytes) -> DeviceMessage:
     """Parse one NDJSON device-to-host protocol line.
 
-    This parser currently supports the `hello` handshake, `uart` events,
-    `buffer_overflow` events, and `buffer_status` events. Other v1 message
-    shapes will be added in later slices.
+    This parser currently supports the `hello` handshake, event messages, and
+    command responses.
     """
 
     payload = _load_json_object(line)
+
+    if "ok" in payload:
+        return _parse_command_response(payload)
+
     message_type = payload.get("type")
 
     if message_type == "hello":
@@ -94,7 +109,7 @@ def _parse_hello(payload: dict[str, Any]) -> HelloMessage:
         raise ProtocolValidationError(f"Missing hello field(s): {names}")
 
     version = payload["v"]
-    if not isinstance(version, int):
+    if not _is_int(version):
         raise ProtocolValidationError("Hello protocol version 'v' must be an integer")
     if version != PROTOCOL_VERSION:
         raise ProtocolVersionError(f"Unsupported protocol version: {version}")
@@ -143,11 +158,11 @@ def _parse_uart(payload: dict[str, Any]) -> UartMessage:
         raise ProtocolValidationError(f"Missing uart field(s): {names}")
 
     channel = payload["channel"]
-    if not isinstance(channel, int) or channel < 0:
+    if not _is_int(channel) or channel < 0:
         raise ProtocolValidationError("UART 'channel' must be a non-negative integer")
 
     timestamp_us = payload["timestamp_us"]
-    if not isinstance(timestamp_us, int) or timestamp_us < 0:
+    if not _is_int(timestamp_us) or timestamp_us < 0:
         raise ProtocolValidationError("UART 'timestamp_us' must be a non-negative integer")
 
     data_b64 = payload["data_b64"]
@@ -179,17 +194,17 @@ def _parse_buffer_overflow(payload: dict[str, Any]) -> BufferOverflowMessage:
         raise ProtocolValidationError(f"Missing buffer_overflow field(s): {names}")
 
     channel = payload["channel"]
-    if not isinstance(channel, int) or channel < 0:
+    if not _is_int(channel) or channel < 0:
         raise ProtocolValidationError("Buffer overflow 'channel' must be a non-negative integer")
 
     timestamp_us = payload["timestamp_us"]
-    if not isinstance(timestamp_us, int) or timestamp_us < 0:
+    if not _is_int(timestamp_us) or timestamp_us < 0:
         raise ProtocolValidationError(
             "Buffer overflow 'timestamp_us' must be a non-negative integer"
         )
 
     dropped_bytes = payload["dropped_bytes"]
-    if not isinstance(dropped_bytes, int) or dropped_bytes < 1:
+    if not _is_int(dropped_bytes) or dropped_bytes < 1:
         raise ProtocolValidationError("Buffer overflow 'dropped_bytes' must be a positive integer")
 
     return BufferOverflowMessage(
@@ -244,11 +259,54 @@ def _parse_buffer_status(payload: dict[str, Any]) -> BufferStatusMessage:
     )
 
 
+def _parse_command_response(
+    payload: dict[str, Any]
+) -> CommandSuccessMessage | CommandErrorMessage:
+    ok = payload["ok"]
+    if ok is True:
+        return _parse_command_success(payload)
+    if ok is False:
+        return _parse_command_error(payload)
+    raise ProtocolValidationError("Command response 'ok' must be a boolean")
+
+
+def _parse_command_success(payload: dict[str, Any]) -> CommandSuccessMessage:
+    extra_keys = set(payload) - _COMMAND_SUCCESS_KEYS
+    if extra_keys:
+        names = ", ".join(sorted(extra_keys))
+        raise ProtocolValidationError(f"Unexpected command success field(s): {names}")
+
+    timestamp_us = _optional_non_negative_int(payload, "timestamp_us", "Command success")
+    return CommandSuccessMessage(timestamp_us=timestamp_us)
+
+
+def _parse_command_error(payload: dict[str, Any]) -> CommandErrorMessage:
+    extra_keys = set(payload) - _COMMAND_ERROR_KEYS
+    if extra_keys:
+        names = ", ".join(sorted(extra_keys))
+        raise ProtocolValidationError(f"Unexpected command error field(s): {names}")
+
+    missing_keys = _COMMAND_ERROR_KEYS - set(payload)
+    if missing_keys:
+        names = ", ".join(sorted(missing_keys))
+        raise ProtocolValidationError(f"Missing command error field(s): {names}")
+
+    error = payload["error"]
+    if not isinstance(error, str) or error not in KNOWN_ERROR_CODES:
+        raise ProtocolValidationError("Command error 'error' must be a known error code")
+
+    detail = payload["detail"]
+    if not isinstance(detail, str) or not detail:
+        raise ProtocolValidationError("Command error 'detail' must be a non-empty string")
+
+    return CommandErrorMessage(error=error, detail=detail)
+
+
 def _required_non_negative_int(
     payload: dict[str, Any], field_name: str, message_name: str
 ) -> int:
     value = payload[field_name]
-    if not isinstance(value, int) or value < 0:
+    if not _is_int(value) or value < 0:
         raise ProtocolValidationError(
             f"{message_name} '{field_name}' must be a non-negative integer"
         )
@@ -257,6 +315,18 @@ def _required_non_negative_int(
 
 def _required_positive_int(payload: dict[str, Any], field_name: str, message_name: str) -> int:
     value = payload[field_name]
-    if not isinstance(value, int) or value < 1:
+    if not _is_int(value) or value < 1:
         raise ProtocolValidationError(f"{message_name} '{field_name}' must be a positive integer")
     return value
+
+
+def _optional_non_negative_int(
+    payload: dict[str, Any], field_name: str, message_name: str
+) -> int | None:
+    if field_name not in payload:
+        return None
+    return _required_non_negative_int(payload, field_name, message_name)
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)

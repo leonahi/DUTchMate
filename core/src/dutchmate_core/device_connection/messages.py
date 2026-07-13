@@ -15,6 +15,17 @@ KNOWN_CAPABILITIES = frozenset(
     }
 )
 
+KNOWN_ERROR_CODES = frozenset(
+    {
+        "invalid_command",
+        "invalid_argument",
+        "not_configured",
+        "capture_active",
+        "hardware_fault",
+        "timeout",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class HelloMessage:
@@ -55,3 +66,18 @@ class BufferStatusMessage:
     uart_rx_high_water_bytes: int
     dropped_bytes_total: int
     overflow_events: int
+
+
+@dataclass(frozen=True, slots=True)
+class CommandSuccessMessage:
+    """Successful command response from the Debug Helper."""
+
+    timestamp_us: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CommandErrorMessage:
+    """Rejected or failed command response from the Debug Helper."""
+
+    error: str
+    detail: str
