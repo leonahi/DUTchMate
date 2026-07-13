@@ -20,6 +20,7 @@ from dutchmate_core.device_connection.messages import (
     UartMessage,
 )
 from dutchmate_core.device_connection.parser import parse_device_message
+from dutchmate_core.device_connection.stream import NdjsonStreamParser
 
 __all__ = [
     "BootModeCommand",
@@ -29,6 +30,7 @@ __all__ = [
     "CommandSuccessMessage",
     "ConfigureGpioModeCommand",
     "HelloMessage",
+    "NdjsonStreamParser",
     "ResetCommand",
     "UartSendCommand",
     "UartMessage",
