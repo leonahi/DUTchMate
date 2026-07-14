@@ -51,6 +51,23 @@ tests/
 | `apps/service/` | `dutchmate-service` | FastAPI Device Core Service. |
 | `apps/mcp_server/` | `dutchmate-mcp-server` | MCP adapter for coding agents. |
 
+## Current Core Modules
+
+The Phase 1 host-side core currently contains:
+
+| Module | Purpose |
+|---|---|
+| `device_connection` | v1 message models, parser, command encoders, and NDJSON stream parser. |
+| `uart_capture` | Raw UART byte buffering, complete-line extraction, and UART capture processing. |
+| `log_processing` | Case-sensitive keyword pattern detection on completed UART lines. |
+| `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, and summaries. |
+| `workflows` | Mock capture recorders from parsed messages or NDJSON byte chunks. |
+
+`reset_control` has not been implemented yet.
+
+See `docs/software_architecture.md` for current dependency direction, module
+responsibilities, and capture data flow.
+
 ## Common Commands
 
 Install/sync the workspace:

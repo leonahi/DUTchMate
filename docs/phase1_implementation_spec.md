@@ -30,16 +30,35 @@ Phase 2 MCP integration is planned in `docs/mcp_integration_plan.md`. Phase 1 sh
 
 Phase 1 should be built host-side first with mocked protocol fixtures, then connected to real firmware and hardware.
 
-1. Define protocol schemas and canonical examples.
-2. Implement Device Core protocol parsing and event models.
-3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering.
-4. Implement session storage.
-5. Implement pattern detection on complete decoded lines.
-6. Implement Device Core workflows using a mock serial transport.
-7. Expose workflows through the Device Core Service API.
-8. Add the CLI as a thin HTTP client.
-9. Implement RP2040 firmware to satisfy the v1 protocol.
-10. Run hardware smoke tests with a real DUT.
+1. Define protocol schemas and canonical examples. **Implemented for v1 MVP.**
+2. Implement Device Core protocol parsing and event models. **Implemented for v1 MVP.**
+3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering. **Implemented.**
+4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
+5. Implement pattern detection on complete decoded lines. **Implemented.**
+6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture is implemented; transport abstraction and boot-test workflow remain.**
+7. Expose workflows through the Device Core Service API. **Not started.**
+8. Add the CLI as a thin HTTP client. **Not started.**
+9. Implement RP2040 firmware to satisfy the v1 protocol. **Not started.**
+10. Run hardware smoke tests with a real DUT. **Not started.**
+
+### Current Host-Side Core Flow
+
+The implemented mock capture path is:
+
+```text
+NDJSON byte chunks
+  -> device_connection.NdjsonStreamParser
+  -> device_connection.parse_device_message
+  -> workflows.CaptureStreamRecorder
+  -> uart_capture.UartCaptureProcessor
+  -> log_processing.PatternDetector
+  -> session_store.SessionStore
+  -> session_store.SessionSummary
+```
+
+The mock runner `run_mock_capture(...)` records finite NDJSON byte chunks into
+a session and returns a `SessionSummary`. It is intentionally host-only and does
+not open a serial port.
 
 ## Package Layout
 
@@ -139,6 +158,15 @@ Writes must be incremental. A USB disconnect, process interruption, or capture f
 - `segments`
 
 Reconnect and resume behavior is defined in `docs/reconnect_session_semantics.md`. UART events written after a reconnect must include `segment_id` and `timestamp_epoch` so device timestamps are never treated as continuous across a disconnect.
+
+Current implementation notes:
+
+- `uart_raw.log` preserves raw UART bytes incrementally.
+- `uart_events.jsonl` records base64 UART payloads, lossy display text, `segment_id`, and `timestamp_epoch`.
+- `hardware_events.jsonl` records `buffer_overflow` and `buffer_status` events.
+- `detected_patterns.json` records complete-line pattern matches with raw line bytes encoded as base64.
+- `metadata.json` currently tracks required Phase 1 flags and segment timestamp bounds.
+- Reconnect/resume mutation helpers are not implemented yet.
 
 ## Device Core Service Requirements
 
