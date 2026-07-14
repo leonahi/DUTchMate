@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from dutchmate_core.device_connection.messages import UartMessage
+from dutchmate_core.device_connection.messages import (
+    BufferOverflowMessage,
+    BufferStatusMessage,
+    UartMessage,
+)
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 
 
@@ -131,6 +135,55 @@ class SessionStore:
             timestamp_us=message.timestamp_us,
         )
 
+    def append_buffer_overflow(
+        self,
+        handle: SessionHandle,
+        *,
+        message: BufferOverflowMessage,
+        segment_id: int = 0,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Append one buffer overflow event to a session."""
+
+        metadata = _read_json_object(handle.paths.metadata)
+        _record_metadata_segment_timestamp(
+            metadata,
+            segment_id=segment_id,
+            timestamp_us=message.timestamp_us,
+        )
+        metadata["overflow"] = True
+
+        _append_jsonl(
+            handle.paths.hardware_events,
+            _buffer_overflow_event_json(message, segment_id, timestamp_epoch),
+        )
+        _write_json(handle.paths.metadata, metadata)
+
+    def append_buffer_status(
+        self,
+        handle: SessionHandle,
+        *,
+        message: BufferStatusMessage,
+        segment_id: int = 0,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Append one buffer status telemetry event to a session."""
+
+        metadata = _read_json_object(handle.paths.metadata)
+        _record_metadata_segment_timestamp(
+            metadata,
+            segment_id=segment_id,
+            timestamp_us=message.timestamp_us,
+        )
+        if message.dropped_bytes_total > 0 or message.overflow_events > 0:
+            metadata["overflow"] = True
+
+        _append_jsonl(
+            handle.paths.hardware_events,
+            _buffer_status_event_json(message, segment_id, timestamp_epoch),
+        )
+        _write_json(handle.paths.metadata, metadata)
+
     def _record_segment_timestamp(
         self,
         handle: SessionHandle,
@@ -139,12 +192,11 @@ class SessionStore:
         timestamp_us: int,
     ) -> None:
         metadata = _read_json_object(handle.paths.metadata)
-        segment = _metadata_segment(metadata, segment_id)
-
-        if segment["first_device_timestamp_us"] is None:
-            segment["first_device_timestamp_us"] = timestamp_us
-        segment["last_device_timestamp_us"] = timestamp_us
-
+        _record_metadata_segment_timestamp(
+            metadata,
+            segment_id=segment_id,
+            timestamp_us=timestamp_us,
+        )
         _write_json(handle.paths.metadata, metadata)
 
 
@@ -267,6 +319,52 @@ def _uart_event_json(
         "data_b64": _bytes_to_b64(message.data),
         "text": message.text,
     }
+
+
+def _buffer_overflow_event_json(
+    message: BufferOverflowMessage,
+    segment_id: int,
+    timestamp_epoch: int,
+) -> dict[str, object]:
+    return {
+        "type": "buffer_overflow",
+        "segment_id": segment_id,
+        "timestamp_epoch": timestamp_epoch,
+        "timestamp_us": message.timestamp_us,
+        "channel": message.channel,
+        "dropped_bytes": message.dropped_bytes,
+    }
+
+
+def _buffer_status_event_json(
+    message: BufferStatusMessage,
+    segment_id: int,
+    timestamp_epoch: int,
+) -> dict[str, object]:
+    return {
+        "type": "buffer_status",
+        "segment_id": segment_id,
+        "timestamp_epoch": timestamp_epoch,
+        "timestamp_us": message.timestamp_us,
+        "uart_rx_size_bytes": message.uart_rx_size_bytes,
+        "uart_rx_used_bytes": message.uart_rx_used_bytes,
+        "uart_rx_high_water_bytes": message.uart_rx_high_water_bytes,
+        "dropped_bytes_total": message.dropped_bytes_total,
+        "overflow_events": message.overflow_events,
+    }
+
+
+def _record_metadata_segment_timestamp(
+    metadata: dict[str, object],
+    *,
+    segment_id: int,
+    timestamp_us: int,
+) -> None:
+    segment = _metadata_segment(metadata, segment_id)
+
+    if segment["first_device_timestamp_us"] is None:
+        segment["first_device_timestamp_us"] = timestamp_us
+    segment["last_device_timestamp_us"] = timestamp_us
 
 
 def _metadata_segment(metadata: dict[str, object], segment_id: int) -> dict[str, object]:

@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from dutchmate_core.device_connection.messages import UartMessage
+from dutchmate_core.device_connection.messages import (
+    BufferOverflowMessage,
+    BufferStatusMessage,
+    UartMessage,
+)
 from dutchmate_core.session_store.store import SessionHandle, SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 
@@ -254,6 +258,240 @@ def test_append_uart_capture_rejects_timestamp_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         store.append_uart_capture(handle, message=message, result=result)
+
+
+def test_append_buffer_overflow_writes_hardware_event_and_marks_metadata(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    message = BufferOverflowMessage(channel=0, timestamp_us=1234, dropped_bytes=512)
+
+    store.append_buffer_overflow(handle, message=message)
+
+    assert _read_jsonl(handle.paths.hardware_events) == [
+        {
+            "type": "buffer_overflow",
+            "segment_id": 0,
+            "timestamp_epoch": 0,
+            "timestamp_us": 1234,
+            "channel": 0,
+            "dropped_bytes": 512,
+        }
+    ]
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    assert metadata["overflow"] is True
+
+
+def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+
+    store.append_buffer_overflow(
+        handle,
+        message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
+    )
+    store.append_buffer_overflow(
+        handle,
+        message=BufferOverflowMessage(channel=0, timestamp_us=250, dropped_bytes=20),
+    )
+
+    segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][0]
+    assert segment["first_device_timestamp_us"] == 100
+    assert segment["last_device_timestamp_us"] == 250
+
+
+def test_append_buffer_overflow_can_write_nonzero_segment_and_epoch(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["segments"].append(
+        {
+            "segment_id": 1,
+            "started_at": "2026-07-14T12:31:00Z",
+            "ended_at": None,
+            "end_reason": None,
+            "hello": None,
+            "first_device_timestamp_us": None,
+            "last_device_timestamp_us": None,
+            "timestamp_epoch": 1,
+        }
+    )
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    store.append_buffer_overflow(
+        handle,
+        message=BufferOverflowMessage(channel=1, timestamp_us=500, dropped_bytes=64),
+        segment_id=1,
+        timestamp_epoch=1,
+    )
+
+    event = _read_jsonl(handle.paths.hardware_events)[0]
+    segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][1]
+    assert event["segment_id"] == 1
+    assert event["timestamp_epoch"] == 1
+    assert segment["first_device_timestamp_us"] == 500
+    assert segment["last_device_timestamp_us"] == 500
+
+
+def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+
+    with pytest.raises(ValueError):
+        store.append_buffer_overflow(
+            handle,
+            message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
+            segment_id=99,
+            timestamp_epoch=99,
+        )
+
+    assert handle.paths.hardware_events.read_text(encoding="utf-8") == ""
+    assert json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["overflow"] is False
+
+
+def test_append_buffer_status_writes_hardware_event(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    message = BufferStatusMessage(
+        timestamp_us=1234,
+        uart_rx_size_bytes=32768,
+        uart_rx_used_bytes=1200,
+        uart_rx_high_water_bytes=8000,
+        dropped_bytes_total=0,
+        overflow_events=0,
+    )
+
+    store.append_buffer_status(handle, message=message)
+
+    assert _read_jsonl(handle.paths.hardware_events) == [
+        {
+            "type": "buffer_status",
+            "segment_id": 0,
+            "timestamp_epoch": 0,
+            "timestamp_us": 1234,
+            "uart_rx_size_bytes": 32768,
+            "uart_rx_used_bytes": 1200,
+            "uart_rx_high_water_bytes": 8000,
+            "dropped_bytes_total": 0,
+            "overflow_events": 0,
+        }
+    ]
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    assert metadata["overflow"] is False
+
+
+def test_append_buffer_status_marks_overflow_when_telemetry_reports_drops(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    message = BufferStatusMessage(
+        timestamp_us=1234,
+        uart_rx_size_bytes=32768,
+        uart_rx_used_bytes=32768,
+        uart_rx_high_water_bytes=32768,
+        dropped_bytes_total=10,
+        overflow_events=1,
+    )
+
+    store.append_buffer_status(handle, message=message)
+
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    assert metadata["overflow"] is True
+
+
+def test_append_buffer_status_updates_segment_device_timestamps(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+
+    store.append_buffer_status(
+        handle,
+        message=BufferStatusMessage(
+            timestamp_us=100,
+            uart_rx_size_bytes=32768,
+            uart_rx_used_bytes=10,
+            uart_rx_high_water_bytes=100,
+            dropped_bytes_total=0,
+            overflow_events=0,
+        ),
+    )
+    store.append_buffer_status(
+        handle,
+        message=BufferStatusMessage(
+            timestamp_us=250,
+            uart_rx_size_bytes=32768,
+            uart_rx_used_bytes=20,
+            uart_rx_high_water_bytes=200,
+            dropped_bytes_total=0,
+            overflow_events=0,
+        ),
+    )
+
+    segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][0]
+    assert segment["first_device_timestamp_us"] == 100
+    assert segment["last_device_timestamp_us"] == 250
+
+
+def test_append_buffer_status_can_write_nonzero_segment_and_epoch(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["segments"].append(
+        {
+            "segment_id": 1,
+            "started_at": "2026-07-14T12:31:00Z",
+            "ended_at": None,
+            "end_reason": None,
+            "hello": None,
+            "first_device_timestamp_us": None,
+            "last_device_timestamp_us": None,
+            "timestamp_epoch": 1,
+        }
+    )
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    store.append_buffer_status(
+        handle,
+        message=BufferStatusMessage(
+            timestamp_us=500,
+            uart_rx_size_bytes=32768,
+            uart_rx_used_bytes=25,
+            uart_rx_high_water_bytes=400,
+            dropped_bytes_total=0,
+            overflow_events=0,
+        ),
+        segment_id=1,
+        timestamp_epoch=1,
+    )
+
+    event = _read_jsonl(handle.paths.hardware_events)[0]
+    segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][1]
+    assert event["segment_id"] == 1
+    assert event["timestamp_epoch"] == 1
+    assert segment["first_device_timestamp_us"] == 500
+    assert segment["last_device_timestamp_us"] == 500
+
+
+def test_append_buffer_status_rejects_missing_segment(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+
+    with pytest.raises(ValueError):
+        store.append_buffer_status(
+            handle,
+            message=BufferStatusMessage(
+                timestamp_us=100,
+                uart_rx_size_bytes=32768,
+                uart_rx_used_bytes=10,
+                uart_rx_high_water_bytes=100,
+                dropped_bytes_total=1,
+                overflow_events=1,
+            ),
+            segment_id=99,
+            timestamp_epoch=99,
+        )
+
+    assert handle.paths.hardware_events.read_text(encoding="utf-8") == ""
+    assert json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["overflow"] is False
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
