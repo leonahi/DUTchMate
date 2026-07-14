@@ -1,5 +1,6 @@
 """Capture workflow coordination for parsed device messages."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TypeAlias, TypeGuard, cast
 
@@ -11,7 +12,7 @@ from dutchmate_core.device_connection.messages import (
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
 from dutchmate_core.log_processing.patterns import PatternMatch
-from dutchmate_core.session_store.store import SessionHandle, SessionStore
+from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
@@ -81,7 +82,7 @@ class CaptureRecorder:
     def session_id(self) -> str:
         """Session identifier this recorder writes to."""
 
-        return cast(str, self._session_handle.session_id)
+        return self._session_handle.session_id
 
     def record_message(self, message: CaptureMessage) -> CaptureRecordResult:
         """Record one parsed device message into the session."""
@@ -201,3 +202,29 @@ class CaptureStreamRecorder:
 
 def _is_capture_message(message: DeviceMessage) -> TypeGuard[CaptureMessage]:
     return isinstance(message, UartMessage | BufferOverflowMessage | BufferStatusMessage)
+
+
+def run_mock_capture(
+    *,
+    chunks: Iterable[bytes],
+    session_store: SessionStore,
+    command: str,
+    firmware: str | None = None,
+    device: str | None = None,
+    baseline: bool = False,
+    uart_processor: UartCaptureProcessor | None = None,
+) -> SessionSummary:
+    """Record a finite mocked NDJSON capture stream and return its summary."""
+
+    recorder = CaptureStreamRecorder.start(
+        session_store=session_store,
+        command=command,
+        firmware=firmware,
+        device=device,
+        baseline=baseline,
+        uart_processor=uart_processor,
+    )
+    for chunk in chunks:
+        recorder.feed(chunk)
+
+    return session_store.summarize_session(recorder.session_id)

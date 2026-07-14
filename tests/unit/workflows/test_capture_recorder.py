@@ -14,6 +14,7 @@ from dutchmate_core.workflows.capture import (
     CaptureRecorder,
     CaptureRecordResult,
     CaptureStreamRecorder,
+    run_mock_capture,
 )
 
 
@@ -244,6 +245,73 @@ def test_stream_recorder_requires_bytes(tmp_path: Path) -> None:
 
     with pytest.raises(TypeError):
         recorder.feed("not bytes")  # type: ignore[arg-type]
+
+
+def test_run_mock_capture_returns_final_session_summary(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_mock_capture(
+        chunks=[
+            b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
+            b'"capabilities":[]}\n',
+            b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"Qk9PVF9PSwo="}\n',
+            b'{"type":"buffer_status","timestamp_us":200,"uart_rx_size_bytes":32768,'
+            b'"uart_rx_used_bytes":10,"uart_rx_high_water_bytes":100,'
+            b'"dropped_bytes_total":0,"overflow_events":0}\n',
+        ],
+        session_store=store,
+        command="capture",
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+    )
+
+    assert summary.session_id == "20260714T123045Z-capture01"
+    assert summary.command == "capture"
+    assert summary.firmware == "0.1.0"
+    assert summary.device == "dutchmate-rp2040"
+    assert summary.overflow is False
+    assert summary.segment_count == 1
+
+
+def test_run_mock_capture_summary_reflects_overflow(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_mock_capture(
+        chunks=[
+            b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"WAo="}\n',
+            b'{"type":"buffer_overflow","channel":0,"timestamp_us":200,"dropped_bytes":64}\n',
+        ],
+        session_store=store,
+        command="capture",
+    )
+
+    assert summary.overflow is True
+
+
+def test_run_mock_capture_persists_capture_evidence(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_mock_capture(
+        chunks=[
+            b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"RVJST1IK"}\n',
+        ],
+        session_store=store,
+        command="capture",
+    )
+    session_root = tmp_path / summary.session_id
+
+    assert (session_root / "uart_raw.log").read_bytes() == b"ERROR\n"
+    assert json.loads((session_root / "detected_patterns.json").read_text()) == [
+        {
+            "pattern": "ERROR",
+            "segment_id": 0,
+            "timestamp_epoch": 0,
+            "timestamp_us": 100,
+            "channel": 0,
+            "line_text": "ERROR\n",
+            "line_raw_b64": "RVJST1IK",
+        }
+    ]
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:

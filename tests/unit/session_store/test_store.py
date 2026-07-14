@@ -9,7 +9,7 @@ from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
     UartMessage,
 )
-from dutchmate_core.session_store.store import SessionHandle, SessionStore
+from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 
 
@@ -82,6 +82,88 @@ def test_load_metadata_reads_metadata_json(tmp_path: Path) -> None:
 
     assert metadata["session_id"] == "20260714T123045Z-abc12345"
     assert metadata["command"] == "capture"
+
+
+def test_summarize_session_returns_compact_metadata_summary(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="boot-test --seconds 15",
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        baseline=True,
+    )
+
+    summary = store.summarize_session(handle.session_id)
+
+    assert summary == SessionSummary(
+        session_id="20260714T123045Z-abc12345",
+        started_at="2026-07-14T12:30:45Z",
+        command="boot-test --seconds 15",
+        truncated=False,
+        interrupted=False,
+        resumed=False,
+        overflow=False,
+        baseline=True,
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        segment_count=1,
+    )
+
+
+def test_summarize_session_reflects_metadata_updates(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["interrupted"] = True
+    metadata["resumed"] = True
+    metadata["truncated"] = True
+    metadata["segments"].append(
+        {
+            "segment_id": 1,
+            "started_at": "2026-07-14T12:31:00Z",
+            "ended_at": None,
+            "end_reason": None,
+            "hello": None,
+            "first_device_timestamp_us": None,
+            "last_device_timestamp_us": None,
+            "timestamp_epoch": 1,
+        }
+    )
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+    store.append_buffer_overflow(
+        handle,
+        message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
+    )
+
+    summary = store.summarize_session(handle.session_id)
+
+    assert summary.truncated is True
+    assert summary.interrupted is True
+    assert summary.resumed is True
+    assert summary.overflow is True
+    assert summary.segment_count == 2
+
+
+def test_summarize_session_rejects_invalid_segments_metadata(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["segments"] = "not a list"
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        store.summarize_session(handle.session_id)
+
+
+def test_summarize_session_rejects_invalid_required_metadata_type(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["overflow"] = "false"
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        store.summarize_session(handle.session_id)
 
 
 def test_create_session_defaults_optional_metadata_to_none_and_false(tmp_path: Path) -> None:

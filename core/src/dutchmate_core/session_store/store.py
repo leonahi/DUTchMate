@@ -37,6 +37,23 @@ class SessionHandle:
     paths: SessionPaths
 
 
+@dataclass(frozen=True, slots=True)
+class SessionSummary:
+    """Compact summary of a debug session for workflow/API responses."""
+
+    session_id: str
+    started_at: str
+    command: str
+    truncated: bool
+    interrupted: bool
+    resumed: bool
+    overflow: bool
+    baseline: bool
+    firmware: str | None
+    device: str | None
+    segment_count: int
+
+
 class SessionStore:
     """Create filesystem-backed debug sessions."""
 
@@ -101,6 +118,11 @@ class SessionStore:
         if not isinstance(loaded, dict):
             raise ValueError("session metadata must be a JSON object")
         return loaded
+
+    def summarize_session(self, session_id: str) -> SessionSummary:
+        """Load and summarize one session's metadata."""
+
+        return _summary_from_metadata(self.load_metadata(session_id))
 
     def append_uart_capture(
         self,
@@ -244,6 +266,49 @@ def _initial_metadata(
             }
         ],
     }
+
+
+def _summary_from_metadata(metadata: dict[str, object]) -> SessionSummary:
+    segments = metadata.get("segments")
+    if not isinstance(segments, list):
+        raise ValueError("session metadata segments must be a JSON array")
+
+    return SessionSummary(
+        session_id=_required_str(metadata, "session_id"),
+        started_at=_required_str(metadata, "started_at"),
+        command=_required_str(metadata, "command"),
+        truncated=_required_bool(metadata, "truncated"),
+        interrupted=_required_bool(metadata, "interrupted"),
+        resumed=_required_bool(metadata, "resumed"),
+        overflow=_required_bool(metadata, "overflow"),
+        baseline=_required_bool(metadata, "baseline"),
+        firmware=_optional_str(metadata, "firmware"),
+        device=_optional_str(metadata, "device"),
+        segment_count=len(segments),
+    )
+
+
+def _required_str(metadata: dict[str, object], key: str) -> str:
+    value = metadata.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"session metadata '{key}' must be a non-empty string")
+    return value
+
+
+def _optional_str(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"session metadata '{key}' must be null or a non-empty string")
+    return value
+
+
+def _required_bool(metadata: dict[str, object], key: str) -> bool:
+    value = metadata.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"session metadata '{key}' must be a boolean")
+    return value
 
 
 def _write_json(path: Path, value: object) -> None:
