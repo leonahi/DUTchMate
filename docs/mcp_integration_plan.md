@@ -124,7 +124,7 @@ Tool errors should preserve Device Core Service error codes:
 {
   "ok": false,
   "error": "not_configured",
-  "detail": "configure_gpio_mode not called for reset pin"
+  "detail": "reset role is not configured"
 }
 ```
 

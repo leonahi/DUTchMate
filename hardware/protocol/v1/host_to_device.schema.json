@@ -7,18 +7,30 @@
       "title": "Configure GPIO Mode Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "pin", "mode"],
+      "required": ["cmd", "channel", "role", "mode", "active_level"],
       "properties": {
         "cmd": {
           "const": "configure_gpio_mode"
         },
-        "pin": {
+        "channel": {
+          "type": "string",
+          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+        },
+        "role": {
           "type": "string",
           "enum": ["reset", "boot"]
         },
         "mode": {
           "type": "string",
           "enum": ["open_drain", "push_pull"]
+        },
+        "active_level": {
+          "type": "string",
+          "enum": ["low", "high"]
+        },
+        "idle_level": {
+          "type": "string",
+          "enum": ["low", "high"]
         }
       }
     },

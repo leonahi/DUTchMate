@@ -7,20 +7,40 @@
 
 GPIO configuration must make hardware control explicit without making every normal boot test repetitive. DUTchMate therefore treats both runtime CLI configuration and config-file configuration as explicit user decisions.
 
-## Pin State Model
+## Role State Model
 
-Each controllable pin has one of these Device Core states:
+Phase 1 treats `reset` and `boot` as configured DUT signal roles. The current
+host-side state model therefore keys state by role:
+
+```text
+reset
+boot
+```
+
+The hardware channel mapping model is defined in
+`docs/dutchmate_hardware_architecture.md`. In that model, physical channels
+such as `CTRL0` are separate from workflow roles such as `reset` and DUT
+schematic names such as `RESET_N`. Phase 1 host code does not implement the full
+generic channel-to-role configuration yet; it keeps the protocol and service
+contract focused on the `reset` and `boot` roles while the `gpio_config` package
+name intentionally avoids locking the architecture to only those two roles.
+
+Each configurable role has one of these Device Core states:
 
 | State | Meaning |
 |---|---|
-| `unconfigured` | No accepted mode exists for this pin. Hardware-starting operations using the pin must fail with `not_configured`. |
+| `unconfigured` | No accepted mode exists for this role. Hardware-starting operations using the role must fail with `not_configured`. |
 | `configured` | The mode was accepted by firmware and may be used by workflows. |
-| `rejected` | A requested mode was refused and no previous accepted mode exists for this pin. Hardware-starting operations using the pin must fail with the rejection reason. |
+| `rejected` | A requested mode was refused and no previous accepted mode exists for this role. Hardware-starting operations using the role must fail with the rejection reason. |
 
-Configured pins also track:
+Configured roles also track:
 
-- `pin`: `reset` or `boot`
+- `role`: currently `reset` or `boot`
+- `channel`: the physical DUTchMate control channel, such as `CTRL0`
+- `dut_signal`: the user's DUT schematic signal name, such as `RESET_N`
 - `mode`: `open_drain` or `push_pull`
+- `active_level`: `low` or `high`
+- `idle_level`: optional `low` or `high`
 - `source`: `config` or `runtime`
 - `configured_at`: host timestamp
 - `device_timestamp_us`: optional firmware timestamp from the accepted command response
@@ -33,44 +53,61 @@ On `dutchmate start`, the Device Core Service:
 1. Loads `.dutchmate/config.toml`.
 2. Connects to the Debug Helper.
 3. Waits for and validates the `hello` message.
-4. Applies configured GPIO modes from `[gpio]`.
-5. Marks each pin `configured` only after firmware accepts the mode.
+4. Applies configured GPIO modes from `[hardware.control.*]`.
+5. Marks each role `configured` only after firmware accepts the mode.
 
-A mode loaded from `.dutchmate/config.toml` counts as explicit configuration because it represents a stored user decision. If a configured startup mode is rejected, the service remains running, the pin is marked `rejected`, and workflows using that pin fail until a valid runtime mode is configured.
+A mode loaded from `.dutchmate/config.toml` counts as explicit configuration because it represents a stored user decision. If a configured startup mode is rejected, the service remains running, the role is marked `rejected`, and workflows using that role fail until a valid runtime mode is configured.
 
-If a pin is omitted from `[gpio]`, it remains `unconfigured`.
+If a required role is omitted from `[hardware.control.*]`, it remains
+`unconfigured`.
 
 ## Runtime Override Behavior
 
-`dutchmate gpio-mode <pin> <mode>` and `POST /gpio/mode` apply immediately.
+`dutchmate gpio-mode <role> <mode>` and `POST /gpio/mode` apply immediately.
 
 Rules:
 
 - Runtime configuration overrides config-file configuration for the current service process.
 - Runtime overrides do not edit `.dutchmate/config.toml`.
-- A successful runtime override updates the pin state to `configured` with `source: "runtime"`.
+- A successful runtime override updates the role state to `configured` with `source: "runtime"`.
 - A rejected runtime override must not change the previous accepted mode or `configured` state.
-- Rejected mode requests must not change physical pin state.
+- Rejected mode requests must not change physical channel state.
 
 ## Validation Order
 
 The Device Core validates before sending a command to firmware:
 
-1. `pin` is one of `reset` or `boot`.
-2. `mode` is one of `open_drain` or `push_pull`.
-3. The requested mode is allowed by the connected firmware capabilities and hardware revision metadata, if known.
-4. No capture or hardware-starting workflow is currently in a conflicting state.
+1. `channel` is one of `CTRL0` to `CTRL3`.
+2. `role` is one of `reset` or `boot` for Phase 1 workflows.
+3. `dut_signal` is a non-empty DUT schematic signal name.
+4. `mode` is one of `open_drain` or `push_pull`.
+5. `active_level` and optional `idle_level` are `low` or `high`.
+6. The requested mode is allowed by the connected firmware capabilities and hardware revision metadata, if known.
+7. No capture or hardware-starting workflow is currently in a conflicting state.
 
-Firmware remains the final authority. If firmware rejects the mode, the Device Core preserves the previous accepted pin state and returns the firmware error. If no previous accepted mode exists, the pin state becomes `rejected`.
+Firmware remains the final authority. If firmware rejects the mode, the Device Core preserves the previous accepted role state and returns the firmware error. If no previous accepted mode exists, the role state becomes `rejected`.
+
+The current host-side `gpio_config` package implements two pieces of this
+boundary:
+
+- config-file validation for `[hardware.control.reset]` and
+  `[hardware.control.boot]`
+- command/result handling for `configure_gpio_mode`
+
+It validates channel, role, mode, level, DUT signal, DUT I/O voltage, and
+duplicate channel assignments before startup integration code tries to apply the
+mapping. It sends the encoded command through an injected transport and updates
+the registry only after a command success or command error response. The real
+serial transport is not implemented yet.
 
 Recommended error mapping:
 
 | Condition | Error |
 |---|---|
-| Unknown pin or mode | `invalid_argument` |
+| Unknown channel, role, mode, or level | `invalid_argument` |
 | Mode is not implemented by this hardware revision | `invalid_argument` |
 | Firmware attempted the mode but GPIO hardware failed | `hardware_fault` |
-| Pin required for workflow has no accepted mode | `not_configured` |
+| Role required for workflow has no accepted mode | `not_configured` |
 
 ## Workflow Requirements
 
@@ -102,6 +139,9 @@ Read-only operations do not require GPIO configuration.
   "gpio_modes": {
     "reset": {
       "state": "configured",
+      "role": "reset",
+      "channel": "CTRL0",
+      "dut_signal": "RESET_N",
       "mode": "open_drain",
       "source": "config",
       "last_rejected": null
@@ -118,7 +158,9 @@ Read-only operations do not require GPIO configuration.
 ```json
 {
   "ok": true,
-  "pin": "reset",
+  "role": "reset",
+  "channel": "CTRL0",
+  "dut_signal": "RESET_N",
   "mode": "open_drain",
   "source": "runtime",
   "timestamp_us": 182334400
@@ -141,7 +183,7 @@ Rejected response:
 
 ```text
 GPIO:
-  reset: open_drain (config)
+  reset: CTRL0 RESET_N open_drain (config)
   boot: unconfigured
 ```
 
@@ -149,7 +191,7 @@ GPIO:
 
 ## Safety Rules
 
-- Default physical pin state is high impedance or inactive.
+- Default physical channel state is high impedance or inactive.
 - Configuration is accepted only after firmware acknowledgment.
 - Configuration state is per service process and must be rebuilt on service start.
 - Runtime overrides are intentionally non-persistent.

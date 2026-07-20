@@ -266,12 +266,12 @@ def test_rejects_unexpected_command_success_field() -> None:
 
 def test_parse_command_error_message() -> None:
     message = parse_device_message(
-        '{"ok":false,"error":"not_configured","detail":"configure_gpio_mode not called for reset pin"}'
+        '{"ok":false,"error":"not_configured","detail":"reset role is not configured"}'
     )
 
     assert message == CommandErrorMessage(
         error="not_configured",
-        detail="configure_gpio_mode not called for reset pin",
+        detail="reset role is not configured",
     )
 
 

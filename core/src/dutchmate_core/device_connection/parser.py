@@ -14,11 +14,11 @@ from dutchmate_core.device_connection.errors import (
     UnsupportedMessageTypeError,
 )
 from dutchmate_core.device_connection.messages import (
-    BufferOverflowMessage,
-    BufferStatusMessage,
     KNOWN_CAPABILITIES,
     KNOWN_ERROR_CODES,
     PROTOCOL_VERSION,
+    BufferOverflowMessage,
+    BufferStatusMessage,
     CommandErrorMessage,
     CommandSuccessMessage,
     HelloMessage,
@@ -310,14 +310,14 @@ def _required_non_negative_int(
         raise ProtocolValidationError(
             f"{message_name} '{field_name}' must be a non-negative integer"
         )
-    return value
+    return int(value)
 
 
 def _required_positive_int(payload: dict[str, Any], field_name: str, message_name: str) -> int:
     value = payload[field_name]
     if not _is_int(value) or value < 1:
         raise ProtocolValidationError(f"{message_name} '{field_name}' must be a positive integer")
-    return value
+    return int(value)
 
 
 def _optional_non_negative_int(

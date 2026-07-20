@@ -4,33 +4,46 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 
-GpioPin = Literal["reset", "boot"]
+GpioControlChannel = Literal["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+GpioRole = Literal["reset", "boot"]
 GpioMode = Literal["open_drain", "push_pull"]
+GpioLevel = Literal["low", "high"]
 BootMode = Literal["normal", "bootloader"]
 
-VALID_GPIO_PINS = frozenset({"reset", "boot"})
+VALID_GPIO_CONTROL_CHANNELS = frozenset({"CTRL0", "CTRL1", "CTRL2", "CTRL3"})
+VALID_GPIO_ROLES = frozenset({"reset", "boot"})
 VALID_GPIO_MODES = frozenset({"open_drain", "push_pull"})
+VALID_GPIO_LEVELS = frozenset({"low", "high"})
 VALID_BOOT_MODES = frozenset({"normal", "bootloader"})
 
 
 @dataclass(frozen=True, slots=True)
 class ConfigureGpioModeCommand:
-    """Configure a DUT control pin drive mode before hardware actions."""
+    """Configure a DUT control role on a physical control channel."""
 
-    pin: GpioPin
+    channel: GpioControlChannel
+    role: GpioRole
     mode: GpioMode
+    active_level: GpioLevel
+    idle_level: GpioLevel | None = None
 
     def to_payload(self) -> dict[str, str]:
-        return {
+        payload = {
             "cmd": "configure_gpio_mode",
-            "pin": self.pin,
+            "channel": self.channel,
+            "role": self.role,
             "mode": self.mode,
+            "active_level": self.active_level,
         }
+        if self.idle_level is not None:
+            payload["idle_level"] = self.idle_level
+        return payload
 
     def to_ndjson(self) -> bytes:
         return _encode_payload(self.to_payload())
@@ -84,15 +97,36 @@ class UartSendCommand:
         return _encode_payload(self.to_payload())
 
 
-def configure_gpio_mode_command(pin: str, mode: str) -> ConfigureGpioModeCommand:
+def configure_gpio_mode_command(
+    *,
+    channel: str,
+    role: str,
+    mode: str,
+    active_level: str,
+    idle_level: str | None = None,
+) -> ConfigureGpioModeCommand:
     """Build a validated `configure_gpio_mode` command."""
 
-    if pin not in VALID_GPIO_PINS:
-        raise ProtocolValidationError("GPIO pin must be 'reset' or 'boot'")
+    if channel not in VALID_GPIO_CONTROL_CHANNELS:
+        raise ProtocolValidationError(
+            "GPIO control channel must be 'CTRL0', 'CTRL1', 'CTRL2', or 'CTRL3'"
+        )
+    if role not in VALID_GPIO_ROLES:
+        raise ProtocolValidationError("GPIO role must be 'reset' or 'boot'")
     if mode not in VALID_GPIO_MODES:
         raise ProtocolValidationError("GPIO mode must be 'open_drain' or 'push_pull'")
+    if active_level not in VALID_GPIO_LEVELS:
+        raise ProtocolValidationError("GPIO active_level must be 'low' or 'high'")
+    if idle_level is not None and idle_level not in VALID_GPIO_LEVELS:
+        raise ProtocolValidationError("GPIO idle_level must be 'low' or 'high'")
 
-    return ConfigureGpioModeCommand(pin=pin, mode=mode)  # type: ignore[arg-type]
+    return ConfigureGpioModeCommand(
+        channel=cast(GpioControlChannel, channel),
+        role=cast(GpioRole, role),
+        mode=cast(GpioMode, mode),
+        active_level=cast(GpioLevel, active_level),
+        idle_level=cast(GpioLevel, idle_level) if idle_level is not None else None,
+    )
 
 
 def boot_mode_command(mode: str) -> BootModeCommand:
@@ -101,7 +135,7 @@ def boot_mode_command(mode: str) -> BootModeCommand:
     if mode not in VALID_BOOT_MODES:
         raise ProtocolValidationError("Boot mode must be 'normal' or 'bootloader'")
 
-    return BootModeCommand(mode=mode)  # type: ignore[arg-type]
+    return BootModeCommand(mode=cast(BootMode, mode))
 
 
 def reset_command(pulse_ms: int = 100) -> ResetCommand:
@@ -137,7 +171,7 @@ def uart_send_text_command(text: str, *, append_newline: bool = True) -> UartSen
     return uart_send_command(data)
 
 
-def _encode_payload(payload: dict[str, object]) -> bytes:
+def _encode_payload(payload: Mapping[str, object]) -> bytes:
     return (json.dumps(payload, separators=(",", ":"), sort_keys=False) + "\n").encode("utf-8")
 
 

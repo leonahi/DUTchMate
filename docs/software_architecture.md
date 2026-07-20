@@ -24,6 +24,9 @@ workflows
 session_store
   persists evidence and metadata to filesystem sessions
 
+gpio_config
+  sends GPIO mode configuration commands through an injected transport and tracks accepted/rejected state
+
 uart_capture
   turns UART byte chunks into complete lines and capture results
 
@@ -58,11 +61,15 @@ building blocks.
 workflows
   -> session_store
   -> uart_capture
+  -> gpio_config
   -> device_connection
 
 session_store
   -> device_connection message models
   -> uart_capture capture result model
+
+gpio_config
+  -> device_connection GPIO command encoder and command response models
 
 uart_capture
   -> device_connection UART message model
@@ -84,6 +91,9 @@ Boundary rules:
 - `log_processing` should remain pure text/line processing.
 - `uart_capture` may hold buffering state, but should not write files.
 - `session_store` owns filesystem persistence, not serial parsing.
+- `gpio_config` owns GPIO hardware mapping validation and GPIO mode
+  configuration workflow/state. It sends encoded commands through an injected
+  transport, but does not open serial ports or toggle physical pins directly.
 - `workflows` may coordinate lower layers, but should not contain low-level
   protocol validation logic.
 
@@ -196,9 +206,53 @@ Important behavior:
 - UART events include `segment_id` and `timestamp_epoch`.
 - Buffer telemetry with drops or overflow events marks the session as overflowed.
 
+### `gpio_config`
+
+Owns current Debug Helper GPIO mapping validation and mode configuration
+workflow/state.
+
+Implemented responsibilities:
+
+- Loads and validates `[hardware.control.*]` TOML mappings for Phase 1 control
+  roles.
+- Builds and sends `configure_gpio_mode` commands through a caller-provided
+  transport.
+- Updates state only after a command success or command error response.
+- Tracks Phase 1 configurable DUT signal roles:
+  - `reset`
+  - `boot`
+- Tracks whether each role is:
+  - `unconfigured`
+  - `configured`
+  - `rejected`
+- Records role, physical channel, DUT schematic signal name, accepted mode,
+  active/idle levels, source, host timestamp, optional device timestamp, and
+  last rejection detail.
+- Preserves the previous accepted mode when a later runtime override is
+  rejected.
+- Provides `require_configured(...)` for reset/boot workflows.
+
+Important behavior:
+
+- Invalid channel/role/mode/level values are rejected before a transport
+  request is made.
+- Config-file mappings reject unknown fields, missing required fields, invalid
+  DUT I/O voltage, and duplicate physical channels.
+- A physical control channel cannot be assigned to more than one configured
+  role.
+- `accept_mode(...)` records that firmware already accepted a GPIO mode request.
+- `reject_mode(...)` records that firmware or Device Core rejected a GPIO mode
+  request.
+- Unexpected non-command responses raise `GpioConfigurationError` and do not
+  update registry state.
+- This package does not own the real serial transport and does not toggle
+  physical pins directly.
+- Debug Helper channel identity is separate from DUT signal role. For example,
+  `channel="CTRL0"` and `role="reset"` are stored as different fields.
+
 ### `workflows`
 
-Owns current host-side capture coordination.
+Owns current host-side workflow coordination.
 
 Implemented responsibilities:
 
@@ -210,13 +264,21 @@ Implemented responsibilities:
   capture messages into `CaptureRecorder`.
 - `run_mock_capture(...)` records a finite mocked NDJSON stream and returns a
   `SessionSummary`.
+- `DeviceActionRunner` sends reset and boot-mode commands through a
+  caller-provided transport.
+- Reset actions require the `reset` role to be configured.
+- Boot-mode actions require the `boot` role to be configured.
 
 Important behavior:
 
 - `hello` and command response messages are ignored by capture recorders for
   now.
+- Reset/boot command arguments are validated before checking configuration
+  state or sending transport requests.
+- Firmware command errors are raised as `DeviceActionError`.
 - The workflow layer is hardware-free; it does not open serial ports.
-- Tests exercise the current capture path using mocked NDJSON bytes.
+- Tests exercise the current workflow paths using mocked NDJSON bytes and mock
+  command transports.
 
 ## Session File Contract
 
@@ -309,14 +371,16 @@ Current unit tests cover:
 - UART capture processing.
 - Session creation and incremental evidence writes.
 - Buffer overflow and buffer status persistence.
+- GPIO configuration workflow/state tracking.
 - Session summaries.
 - Capture recorders from typed messages and NDJSON byte chunks.
+- Reset and boot-mode workflow enforcement.
 - Mock capture summary generation.
 
 Focused host-side core test command:
 
 ```bash
-uv run pytest tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
 ```
 
 ## Not Implemented Yet
@@ -324,10 +388,9 @@ uv run pytest tests/unit/workflows tests/unit/session_store tests/unit/log_proce
 The following layers or behaviors are not part of the current implemented
 architecture yet:
 
-- `reset_control` package.
-- GPIO mode state machine.
-- Reset and boot-mode workflow enforcement.
-- Serial port transport abstraction.
+- Multi-line GPIO role assignment beyond Phase 1 `reset` and `boot` roles.
+- Real serial command transport for GPIO configuration.
+- Real serial port command/event transport.
 - Long-running capture with duration/timeout handling.
 - Reconnect/resume session mutation helpers.
 - Device Core Service API.

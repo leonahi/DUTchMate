@@ -18,8 +18,10 @@ docs/           Project context and implementation specs.
 tests/          Cross-package tests and fixtures.
 ```
 
-See `docs/project_layout.md` for package boundaries and tooling details, and
-`docs/software_architecture.md` for the current host-side Python architecture.
+See `docs/project_layout.md` for package boundaries and tooling details,
+`docs/software_architecture.md` for the current host-side Python architecture,
+and `docs/dutchmate_hardware_architecture.md` for the proposed voltage-domain
+GPIO/UART interface.
 
 ## Python Tooling
 
@@ -46,7 +48,8 @@ device_connection/   v1 protocol models, parsers, command encoders, NDJSON strea
 uart_capture/        UART byte buffering, complete-line extraction, capture processing
 log_processing/      Keyword pattern detection on completed UART lines
 session_store/       Filesystem-backed sessions, UART evidence, telemetry, summaries
-workflows/           Mock capture recorders from parsed messages or NDJSON byte chunks
+workflows/           Mock capture recorders and guarded reset/boot action workflows
+gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 ```
 
 The current host-side capture path is:
@@ -75,13 +78,12 @@ detected_patterns.json
 Useful focused test command while Phase 1 core is being built:
 
 ```bash
-uv run pytest tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
 ```
 
 Known next areas:
 
-- GPIO/reset state rules.
-- Mock transport and higher-level boot-test workflow.
+- Real command transport and higher-level boot-test workflow.
 - Device Core Service API.
 - CLI as a thin HTTP client.
 - RP2040 firmware implementation.

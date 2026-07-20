@@ -62,5 +62,5 @@ def test_parse_success_response_example() -> None:
 def test_parse_error_response_example() -> None:
     assert parse_example("error_response.json") == CommandErrorMessage(
         error="not_configured",
-        detail="configure_gpio_mode not called for reset pin",
+        detail="reset role is not configured",
     )

@@ -42,7 +42,7 @@ pip install dutchmate
 dutchmate start                        # auto-detects DUTchMate device by USB VID/PID
 dutchmate start --port /dev/ttyACM0   # or specify port explicitly if auto-detect is ambiguous
 dutchmate status                       # verify device is connected
-dutchmate gpio-mode reset open_drain   # required before first reset; set reset_mode in [gpio] config.toml to persist
+dutchmate gpio-mode reset open_drain   # required before first reset; use hardware.control.reset config to persist
 dutchmate boot-test --seconds 15       # run first boot test
 ```
 
@@ -90,10 +90,10 @@ apps/
 core/
   device_connection/   Transport and protocol handling
   uart_capture/        UART event ingestion and timestamping
-  reset_control/       DUT reset and boot-mode workflows
+  gpio_config/         Debug Helper GPIO mode configuration workflow/state
   session_store/       Persistent debug sessions
   log_processing/      Pattern detection and log extraction
-  workflows/           Boot test, reset-capture, compare-baseline
+  workflows/           Capture recording, guarded reset/boot actions, later boot test/reset-capture flows
 
 ai/
   debug_reporter/      Optional LLM-based summary and classification
@@ -158,7 +158,7 @@ capture_uart(duration_s: float) -> CaptureResult
 get_recent_logs(lines: int = 300) -> list[LogLine]
 wait_for_pattern(pattern: str, timeout_s: float) -> PatternResult
 run_boot_test(duration_s: float) -> BootTestResult
-configure_gpio_mode(pin: str, mode: Literal["open_drain", "push_pull"]) -> None
+configure_control_role(role: str, channel: str, mode: Literal["open_drain", "push_pull"], dut_signal: str) -> None
 send_uart_command(cmd: str, force: bool = False) -> SendResult
 ```
 
@@ -343,27 +343,43 @@ This definitely proves...      ✗
 
 ### 6.4 UART and Reset/BOOT Electrical Interface
 
-Phase 1 separates UART translation from reset/boot control instead of using one generic bidirectional voltage translator for every signal. See `hardware/schematics/phase1_electrical_design.md` for the detailed electrical decision.
+Phase 1 hardware architecture is defined in
+`docs/dutchmate_hardware_architecture.md`. In short, DUTchMate uses
+fixed-direction voltage-domain interfaces instead of one generic bidirectional
+translator for every signal:
 
-**UART:** use a fixed-direction, dual-supply level translator referenced to RP2040 3.3V on one side and DUT `VREF_DUT` on the other. TXU0304/TXU0204-class translators are the preferred part family for schematic capture because they support mixed voltage rails, fixed direction, and Schmitt-trigger inputs.
+- `CTRL0` to `CTRL3`: DUTchMate-to-DUT control channels.
+- `EVENT0` to `EVENT3`: DUT-to-DUTchMate event channels.
+- UART: fixed TX-to-RX translation in both directions.
 
-**RESET:** open-drain only in Phase 1. DUTchMate pulls the DUT reset line low through a low-side transistor stage or releases it. It does not drive reset high. The DUT should provide the reset pull-up; an optional weak pull-up to `VREF_DUT` may be a documented board option.
+The user maps physical channels to DUT schematic signals in configuration, for
+example `CTRL0` as the `reset` role connected to the DUT `RESET_N` net.
 
-**BOOT/control:** open-drain low-side pull-down is the Phase 1 default. Push-pull BOOT/control is optional and must be explicitly supported by the hardware revision and firmware before `push_pull` mode is accepted.
-
-Do not use TXB0108-style auto-direction translators as the default for RESET, BOOT, or other open-drain control lines. TXS0102-style translators may be acceptable for some signal classes after validation, but they are not the default Phase 1 reset-control choice.
-
-The Device Core exposes an API to set GPIO drive mode per pin:
+The Device Core exposes an API to configure control roles and runtime GPIO
+drive modes:
 
 ```python
-configure_gpio_mode(pin: str, mode: Literal["open_drain", "push_pull"]) -> None
+configure_control_role(
+    role: str,
+    channel: str,
+    mode: Literal["open_drain", "push_pull"],
+    dut_signal: str,
+) -> None
 ```
 
-Valid pin names (MVP): `"reset"` (DUT reset line) and `"boot"` (DUT BOOT/control line).
+Valid Phase 1 workflow roles are `"reset"` and `"boot"`. Valid physical
+control channels are `CTRL0` to `CTRL3`.
 
-This must be called explicitly for each pin before any reset or boot-mode operation. There is no implicit default — the Device Core returns a `not_configured` error if a reset or boot command is issued before `configure_gpio_mode` has been accepted for the relevant pin. A mode loaded from `.dutchmate/config.toml` counts as explicit configuration because it represents a stored user decision. The firmware may reject a requested mode with `invalid_argument` or `hardware_fault` if the connected hardware revision cannot implement that mode safely.
+This must be configured explicitly before any reset or boot-mode operation.
+There is no implicit default — the Device Core returns a `not_configured` error
+if a reset or boot command is issued before the relevant role mapping and mode
+have been accepted. A mode loaded from `.dutchmate/config.toml` counts as
+explicit configuration because it represents a stored user decision. The
+firmware may reject a requested mode with `invalid_argument` or
+`hardware_fault` if the connected hardware revision cannot implement that mode
+safely.
 
-GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical pin state, and `dutchmate status` must show each pin as `unconfigured`, `configured`, or `rejected`.
+GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical channel state, and `dutchmate status` must show each required role as `unconfigured`, `configured`, or `rejected`. The current host core implements the command/result workflow behind this state; the real serial transport is still pending.
 
 ### 6.5 CLI Commands
 
@@ -443,7 +459,7 @@ The REST API exposed by the Device Core Service at `http://localhost:<port>`. Bo
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `POST` | `/gpio/mode` | `{pin: "reset"\|"boot", mode: "open_drain"\|"push_pull"}` | `{ok, pin, mode, source, timestamp_us?}` |
+| `POST` | `/gpio/mode` | `{role: "reset"\|"boot", mode: "open_drain"\|"push_pull"}` | `{ok, role, channel, dut_signal, mode, source, timestamp_us?}` |
 | `POST` | `/dut/reset` | `{pulse_ms?}` | `{ok, timestamp_us}` |
 | `POST` | `/dut/boot-mode` | `{mode: "normal"\|"bootloader"}` | `{ok, timestamp_us}` |
 
@@ -542,14 +558,21 @@ max_size_mb = 50             # per-session cap; triggers truncated: true when hi
 [patterns]
 keywords = ["ERROR", "ASSERT", "PANIC", "HardFault", "BOOT_OK"]
 
-[gpio]
-reset_mode = "open_drain"    # "open_drain" or "push_pull" — applied automatically on service start
-# boot_mode intentionally omitted by default; configure per target wiring
+[hardware]
+dut_io_voltage = 1.8
+
+[hardware.control.reset]
+channel = "CTRL0"
+dut_signal = "RESET_N"
+mode = "open_drain"          # applied automatically on service start
+active_level = "low"
+
+# boot intentionally omitted by default; configure per target wiring
 ```
 
-If a pin's mode is not set in `[gpio]`, the pin remains unconfigured at startup — the `not_configured` error still applies until `dutchmate gpio-mode <pin> <mode>` is called explicitly. `dutchmate gpio-mode` can be used to override the config at runtime without editing the file.
+If a required role is not mapped in `[hardware.control.*]`, that role remains unconfigured at startup — the `not_configured` error still applies until `dutchmate gpio-mode <role> <mode>` is called explicitly. `dutchmate gpio-mode` can be used to override the mode at runtime without editing the file.
 
-Config-file GPIO modes are applied after the Debug Helper `hello` message is validated. A pin is marked configured only after the firmware accepts the mode. If startup configuration is rejected, the service remains running, `dutchmate status` reports the rejected pin state, and workflows requiring that pin fail until a valid runtime mode is configured.
+Config-file GPIO modes are applied after the Debug Helper `hello` message is validated. A role is marked configured only after the firmware accepts the mode. If startup configuration is rejected, the service remains running, `dutchmate status` reports the rejected role state, and workflows requiring that role fail until a valid runtime mode is configured.
 
 Raw logs are always more authoritative than AI summaries and must always be preserved.
 
@@ -608,9 +631,10 @@ The `capabilities` array lists features the connected firmware supports. Known v
 
 The Device Core must not call a command for a capability the firmware did not advertise. MCP tools that depend on an absent capability must return a clear error rather than forwarding a command that will fail.
 
-GPIO mode configuration (must be sent before first reset or boot-mode command):
+Channel-aware GPIO mode configuration (must be sent before first reset or
+boot-mode command):
 ```json
-{"cmd": "configure_gpio_mode", "pin": "reset", "mode": "open_drain"}
+{"cmd": "configure_gpio_mode", "channel": "CTRL0", "role": "reset", "mode": "open_drain", "active_level": "low"}
 ```
 
 Response (success):
@@ -628,9 +652,9 @@ Response (success):
 {"ok": true, "timestamp_us": 182334400}
 ```
 
-Response (error — configure_gpio_mode was not called first):
+Response (error — required role was not configured first):
 ```json
-{"ok": false, "error": "not_configured", "detail": "configure_gpio_mode not called for reset pin"}
+{"ok": false, "error": "not_configured", "detail": "reset role is not configured"}
 ```
 
 Boot-mode command:
@@ -659,7 +683,7 @@ Error codes:
 |---|---|
 | `invalid_command` | Unknown or malformed command |
 | `invalid_argument` | Argument out of range or wrong type |
-| `not_configured` | `configure_gpio_mode` not called before reset/boot operation |
+| `not_configured` | Required role mapping or mode was not configured before reset/boot operation |
 | `capture_active` | A capture is already in progress; hardware command rejected |
 | `hardware_fault` | GPIO or UART operation failed |
 | `timeout` | Operation did not complete in time |
@@ -744,6 +768,7 @@ Any workflow exposed through the CLI must first pass through mocked Device Core 
 - `project_context.md` — this document; read before making changes
 - `docs/project_layout.md` — monorepo package layout and Python tooling decision
 - `docs/phase1_implementation_spec.md` — concrete Phase 1 implementation order and done criteria
+- `docs/dutchmate_hardware_architecture.md` — proposed voltage-domain GPIO/UART interface and channel mapping model
 - `docs/gpio_configuration_semantics.md` — RESET/BOOT configuration state model and service behavior
 - `docs/reconnect_session_semantics.md` — reconnect, resume, segment, and timestamp discontinuity behavior
 - `docs/ring_buffer_sizing_plan.md` — Phase 1 buffer size, telemetry, and validation plan

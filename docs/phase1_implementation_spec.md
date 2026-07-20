@@ -11,7 +11,9 @@ Prove the core hardware-in-the-loop workflow:
 build firmware -> flash DUT externally -> reset DUT -> capture timestamped UART logs -> store evidence -> detect failure
 ```
 
-Phase 1 is successful when DUTchMate can run a boot test against one DUT, preserve raw UART evidence, and return structured results through the local CLI and Device Core Service.
+Phase 1 is successful when DUTchMate can run a boot test against one DUT using
+user-configured hardware channel mappings, preserve raw UART evidence, and
+return structured results through the local CLI and Device Core Service.
 
 ## Non-Goals
 
@@ -21,6 +23,7 @@ Phase 1 is successful when DUTchMate can run a boot test against one DUT, preser
 - GUI
 - Multi-DUT support
 - Power/current/voltage sensing
+- Arbitrary GPIO control workflows beyond configured Phase 1 roles
 - JTAG/SWD debugging
 - Firmware flashing
 
@@ -30,15 +33,15 @@ Phase 2 MCP integration is planned in `docs/mcp_integration_plan.md`. Phase 1 sh
 
 Phase 1 should be built host-side first with mocked protocol fixtures, then connected to real firmware and hardware.
 
-1. Define protocol schemas and canonical examples. **Implemented for v1 MVP.**
+1. Define protocol schemas and canonical examples. **Implemented for the channel-aware v1 MVP.**
 2. Implement Device Core protocol parsing and event models. **Implemented for v1 MVP.**
 3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering. **Implemented.**
 4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
 5. Implement pattern detection on complete decoded lines. **Implemented.**
-6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture is implemented; transport abstraction and boot-test workflow remain.**
+6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture and reset/boot action enforcement are implemented; real serial transport and boot-test workflow remain.**
 7. Expose workflows through the Device Core Service API. **Not started.**
 8. Add the CLI as a thin HTTP client. **Not started.**
-9. Implement RP2040 firmware to satisfy the v1 protocol. **Not started.**
+9. Implement RP2040 firmware to satisfy the channel-aware v1 protocol. **Not started.**
 10. Run hardware smoke tests with a real DUT. **Not started.**
 
 ### Current Host-Side Core Flow
@@ -71,7 +74,7 @@ apps/
 core/
   device_connection/   Serial transport and host-device protocol handling.
   uart_capture/        UART event ingestion, byte preservation, and line buffering.
-  reset_control/       Reset and boot-mode workflows.
+  gpio_config/         Debug Helper GPIO mode configuration workflow/state.
   session_store/       Debug session persistence and retention.
   log_processing/      Pattern detection and log extraction.
   workflows/           Boot test, capture, wait-pattern, and reset-capture flows.
@@ -87,13 +90,89 @@ tests/
   fixtures/      Pre-recorded protocol streams and expected outputs.
 ```
 
+## Phase 1 Hardware Mapping Contract
+
+The proposed voltage-domain hardware architecture is defined in
+`docs/dutchmate_hardware_architecture.md`. Phase 1 software must follow that
+model: physical DUTchMate channels are generic, and the user maps those
+channels to DUT schematic signals and workflow roles.
+
+Phase 1 control channels:
+
+```text
+CTRL0
+CTRL1
+CTRL2
+CTRL3
+```
+
+Phase 1 event channels:
+
+```text
+EVENT0
+EVENT1
+EVENT2
+EVENT3
+```
+
+Phase 1 workflow roles:
+
+| Role | Required when | Channel type |
+|---|---|---|
+| `reset` | `reset`, `reset-capture`, and `boot-test` workflows | `CTRLx` |
+| `boot` | `boot-mode` workflows and boot tests that change BOOT/control state | `CTRLx` |
+
+The user-provided `.dutchmate/config.toml` hardware mapping should use this
+shape:
+
+```toml
+[hardware]
+dut_io_voltage = 1.8
+
+[hardware.control.reset]
+channel = "CTRL0"
+dut_signal = "RESET_N"
+mode = "open_drain"
+active_level = "low"
+
+[hardware.control.boot]
+channel = "CTRL1"
+dut_signal = "BOOT0"
+mode = "push_pull"
+active_level = "high"
+idle_level = "low"
+```
+
+Validation rules:
+
+- Unknown channels are rejected.
+- Duplicate physical channel assignments are rejected.
+- Control roles must map to `CTRLx` channels.
+- Event roles must map to `EVENTx` channels.
+- `dut_signal` must be a non-empty user-facing schematic name.
+- `reset` must be mapped before reset or boot-test workflows can run.
+- `boot` must be mapped before boot-mode workflows can run.
+- Custom roles may be parsed and reported later, but Phase 1 workflows must not
+  assume semantics for custom roles.
+- If `DUT_VIO` measurement is not implemented in Phase 1 firmware, the service
+  may treat configured `dut_io_voltage` as a trusted user declaration. Firmware
+  must still keep all control outputs high-impedance until configuration is
+  accepted.
+
+Current implementation status:
+
+- Host-side TOML validation exists for `[hardware.control.reset]` and
+  `[hardware.control.boot]`.
+- Service startup still needs to call the validator and apply accepted mappings
+  after firmware `hello`.
+
 ## Phase 1 Protocol Contract
 
 The host-device protocol is NDJSON over USB CDC serial. Each line is one JSON message. The v1 schemas live under `hardware/protocol/v1/`.
 
-Only the following host-to-device commands are in scope:
+Only the following host-to-device command categories are in scope:
 
-- `configure_gpio_mode`
+- channel-aware control configuration
 - `reset`
 - `set_boot_mode`
 - `uart_send`
@@ -106,6 +185,20 @@ Only the following device-to-host messages are in scope:
 - `buffer_status`
 - command success response
 - command error response
+
+The Phase 1 `configure_gpio_mode` command is channel-aware so the Device Core
+can tell the Debug Helper which physical control channel a role uses. The
+control configuration command carries at least:
+
+- physical channel, such as `CTRL0`
+- workflow role, such as `reset`
+- electrical mode, such as `open_drain`
+- active level, when the role has assertion semantics
+- idle level, when required by push-pull behavior
+
+`dut_signal` is host-side metadata for status, logs, and reports. It does not
+need to be sent to firmware unless the firmware later exposes user-facing
+diagnostics.
 
 Protocol changes must update the schema files, examples, parser tests, and firmware handling in the same change.
 
@@ -120,10 +213,13 @@ The Device Core library must:
 - Buffer UART bytes into complete lines before running pattern detection.
 - Record buffer overflow events.
 - Start with a 32 KiB UART RX ring buffer and expose buffer telemetry when firmware provides it.
-- Enforce accepted GPIO modes before reset and boot-mode operations.
-- Track each GPIO mode as `unconfigured`, `configured`, or `rejected`.
+- Load and validate hardware channel mappings from `.dutchmate/config.toml`.
+- Enforce accepted GPIO role modes before reset and boot-mode operations.
+- Track each required GPIO role as `unconfigured`, `configured`, or `rejected`.
 - Treat config-file GPIO modes as explicit configuration only after firmware accepts them.
 - Preserve the previous accepted GPIO mode when a runtime override is rejected.
+- Preserve `channel`, `role`, `dut_signal`, mode, source, and last rejection in
+  status/reporting models.
 - Reject hardware-starting operations while a capture is active.
 - Remain independent from MCP and LLM frameworks.
 
@@ -193,9 +289,15 @@ All endpoints return JSON. Errors use:
 {"ok": false, "error": "<code>", "detail": "..."}
 ```
 
-`GET /status` must include `gpio_modes` so users and agents can see which pins are configured, rejected, or still unconfigured.
+`GET /status` must include GPIO/control mapping state so users and agents can
+see which required roles are configured, rejected, or still unconfigured. The
+status payload should include the role, physical channel, DUT signal name, mode,
+source, and last rejection detail when present.
 
-`POST /gpio/mode` must return the accepted pin, mode, source, and optional firmware timestamp. Rejections must leave prior accepted state unchanged.
+`POST /gpio/mode` is the Phase 1 runtime override endpoint for a configured
+role. It must return the accepted role, channel, DUT signal name, mode, source,
+and optional firmware timestamp. Rejections must leave prior accepted state
+unchanged.
 
 Capture-like responses must include `interrupted`, `resumed`, and `segments` in addition to `overflow`.
 
@@ -210,7 +312,7 @@ Minimum Phase 1 commands:
 - `dutchmate start`
 - `dutchmate stop`
 - `dutchmate status`
-- `dutchmate gpio-mode <pin> <mode>`
+- `dutchmate gpio-mode <role> <mode>`
 - `dutchmate reset`
 - `dutchmate boot-mode <normal|bootloader>`
 - `dutchmate capture --seconds <seconds>`
@@ -252,8 +354,10 @@ Minimum Phase 1 test coverage:
 - Reconnect before timeout appending a new session segment.
 - Reconnect after timeout ending the interrupted session.
 - Timestamp discontinuity represented with a new `timestamp_epoch`.
-- Reset rejected before GPIO mode configuration.
-- Config-file GPIO mode accepted after firmware `hello`.
+- Reset rejected before `reset` role mapping/mode configuration.
+- Boot-mode rejected before `boot` role mapping/mode configuration.
+- Invalid hardware mapping rejected: unknown channel, duplicate channel, wrong channel type, or empty `dut_signal`.
+- Config-file hardware control mode accepted after firmware `hello`.
 - Startup GPIO mode rejection visible in service status.
 - Runtime GPIO mode override leaves prior accepted mode unchanged if rejected.
 - Hardware command rejected while capture is active.
@@ -264,7 +368,9 @@ Phase 1 is done when:
 
 - `dutchmate start` starts the local Device Core Service.
 - The service connects to one DUTchMate Debug Helper.
-- `dutchmate gpio-mode reset open_drain` configures reset behavior.
+- `.dutchmate/config.toml` can map `reset` to a physical `CTRLx` channel and
+  DUT schematic signal.
+- `dutchmate gpio-mode reset open_drain` configures the mapped reset role.
 - `dutchmate boot-test --seconds 15` creates a session.
 - The session contains raw UART bytes, parsed events, metadata, and detected patterns.
 - `overflow`, `truncated`, `interrupted`, `resumed`, and segment count are represented in session metadata and API responses.
