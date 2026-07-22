@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TypeAlias, TypeGuard, cast
+from typing import TypeAlias, TypeGuard
 
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
@@ -82,7 +82,7 @@ class CaptureRecorder:
     def session_id(self) -> str:
         """Session identifier this recorder writes to."""
 
-        return cast(str, self._session_handle.session_id)
+        return self._session_handle.session_id
 
     def record_message(self, message: CaptureMessage) -> CaptureRecordResult:
         """Record one parsed device message into the session."""

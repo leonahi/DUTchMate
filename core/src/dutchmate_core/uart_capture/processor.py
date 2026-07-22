@@ -1,7 +1,6 @@
 """UART capture processing from protocol messages to log lines and matches."""
 
 from dataclasses import dataclass
-from typing import cast
 
 from dutchmate_core.device_connection.messages import UartMessage
 from dutchmate_core.log_processing.patterns import PatternDetector, PatternMatch
@@ -48,7 +47,7 @@ class UartCaptureProcessor:
         buffer = self._line_buffers.get(channel)
         if buffer is None:
             return b""
-        return cast(bytes, buffer.pending_bytes)
+        return buffer.pending_bytes
 
     def flush_channel(self, channel: int) -> UartCaptureResult | None:
         """Flush a channel's trailing partial line, if any."""
