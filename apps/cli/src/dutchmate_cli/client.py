@@ -75,6 +75,42 @@ def configure_gpio_mode(
     return _response_payload(response, description="GPIO mode response")
 
 
+def reset_dut(
+    *,
+    pulse_ms: int = 100,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Pulse the configured DUT reset role through the Device Core Service."""
+
+    response = _request_service(
+        method="POST",
+        path="/dut/reset",
+        service_url=service_url,
+        transport=transport,
+        json={"pulse_ms": pulse_ms},
+    )
+    return _response_payload(response, description="reset response")
+
+
+def set_boot_mode(
+    *,
+    mode: str,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Set the configured DUT boot/control role through the Device Core Service."""
+
+    response = _request_service(
+        method="POST",
+        path="/dut/boot-mode",
+        service_url=service_url,
+        transport=transport,
+        json={"mode": mode},
+    )
+    return _response_payload(response, description="boot-mode response")
+
+
 def _request_service(
     *,
     method: str,

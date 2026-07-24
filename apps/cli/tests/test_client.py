@@ -8,6 +8,8 @@ from dutchmate_cli.client import (
     ServiceUnavailableError,
     configure_gpio_mode,
     fetch_status,
+    reset_dut,
+    set_boot_mode,
 )
 
 
@@ -93,3 +95,27 @@ def test_configure_gpio_mode_maps_connection_failure_to_service_unavailable() ->
         )
 
     assert "Run 'dutchmate start' first" in str(error.value)
+
+
+def test_reset_dut_posts_pulse_width() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/reset"
+        assert request.method == "POST"
+        assert request.read() == b'{"pulse_ms":250}'
+        return httpx.Response(200, json={"ok": True, "timestamp_us": 182334500})
+
+    payload = reset_dut(pulse_ms=250, transport=httpx.MockTransport(handler))
+
+    assert payload == {"ok": True, "timestamp_us": 182334500}
+
+
+def test_set_boot_mode_posts_mode() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/boot-mode"
+        assert request.method == "POST"
+        assert request.read() == b'{"mode":"bootloader"}'
+        return httpx.Response(200, json={"ok": True, "timestamp_us": 182334600})
+
+    payload = set_boot_mode(mode="bootloader", transport=httpx.MockTransport(handler))
+
+    assert payload == {"ok": True, "timestamp_us": 182334600}

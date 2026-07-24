@@ -12,12 +12,17 @@ from dutchmate_cli.client import (
     ServiceUnavailableError,
     configure_gpio_mode,
     fetch_status,
+    reset_dut,
+    set_boot_mode,
 )
+from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
 from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.status import format_status
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
+dut_app = typer.Typer(help="Run DUT-level workflows through configured control roles.")
 gpio_app = typer.Typer(help="Configure and inspect DUT control GPIO channels.")
+app.add_typer(dut_app, name="dut")
 app.add_typer(gpio_app, name="gpio")
 
 
@@ -112,6 +117,58 @@ def gpio_mode(
         _fail(str(exc))
 
     typer.echo(format_gpio_mode_result(payload))
+
+
+@dut_app.command("reset")
+def dut_reset(
+    pulse_ms: Annotated[
+        int,
+        typer.Option("--pulse-ms", min=1, max=10000, help="Reset pulse width in milliseconds."),
+    ] = 100,
+    service_url: Annotated[
+        str,
+        typer.Option(
+            "--service-url",
+            help="Base URL for the local Device Core Service.",
+            show_default=True,
+        ),
+    ] = DEFAULT_SERVICE_URL,
+) -> None:
+    """Pulse the DUT reset control role."""
+    try:
+        payload = reset_dut(pulse_ms=pulse_ms, service_url=service_url)
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+    typer.echo(format_reset_result(payload))
+
+
+@dut_app.command("boot-mode")
+def dut_boot_mode(
+    mode: Annotated[
+        str,
+        typer.Argument(help="Boot mode to apply: normal or bootloader."),
+    ],
+    service_url: Annotated[
+        str,
+        typer.Option(
+            "--service-url",
+            help="Base URL for the local Device Core Service.",
+            show_default=True,
+        ),
+    ] = DEFAULT_SERVICE_URL,
+) -> None:
+    """Set the DUT boot/control role."""
+    try:
+        payload = set_boot_mode(mode=mode, service_url=service_url)
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+    typer.echo(format_boot_mode_result(mode, payload))
 
 
 @app.command()
