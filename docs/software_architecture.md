@@ -378,6 +378,9 @@ Current unit tests cover:
 - Capture recorders from typed messages and NDJSON byte chunks.
 - Reset and boot-mode workflow enforcement.
 - Mock capture summary generation.
+- Device Core Service endpoints for status, GPIO mode, reset, and boot-mode.
+- CLI HTTP client commands for service lifecycle, status, GPIO mode, reset, and
+  boot-mode.
 
 Focused host-side core test command:
 
@@ -395,7 +398,10 @@ architecture yet:
 - Real serial port command/event transport.
 - Long-running capture with duration/timeout handling.
 - Reconnect/resume session mutation helpers.
-- Device Core Service API.
-- CLI HTTP client behavior.
+- Real serial transport behind the Device Core Service.
+- Capture/log/session Device Core Service endpoints.
+- Capture/log/session CLI commands.
+- Startup loading/application of `.dutchmate/config.toml` hardware mappings.
+- MCP server runtime.
 - RP2040 firmware.
 - Hardware smoke tests.

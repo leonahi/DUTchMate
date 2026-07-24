@@ -27,7 +27,11 @@ return structured results through the local CLI and Device Core Service.
 - JTAG/SWD debugging
 - Firmware flashing
 
-Phase 2 MCP integration is planned in `docs/mcp_integration_plan.md`. Phase 1 should keep the Device Core Service API stable enough for the later `dutchmate mcp` stdio adapter, but must not implement MCP before CLI workflows are validated.
+Phase 2 MCP integration is planned in `docs/mcp_integration_plan.md`. Phase 1
+should keep the Device Core Service API stable enough for the later MCP stdio
+adapter, but must not implement MCP before CLI workflows are validated. The
+current `dutchmate mcp` CLI command and `dutchmate-mcp` console script are
+placeholders only.
 
 ## Implementation Order
 
@@ -39,8 +43,8 @@ Phase 1 should be built host-side first with mocked protocol fixtures, then conn
 4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
 5. Implement pattern detection on complete decoded lines. **Implemented.**
 6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture and reset/boot action enforcement are implemented; real serial transport and boot-test workflow remain.**
-7. Expose workflows through the Device Core Service API. **Not started.**
-8. Add the CLI as a thin HTTP client. **Not started.**
+7. Expose workflows through the Device Core Service API. **In progress: status, GPIO mode, reset, and boot-mode endpoints are implemented; capture/log/session endpoints remain.**
+8. Add the CLI as a thin HTTP client. **In progress: start, stop, status, GPIO mode, reset, and boot-mode commands are implemented; capture/log/session commands remain.**
 9. Implement RP2040 firmware to satisfy the channel-aware v1 protocol. **Not started.**
 10. Run hardware smoke tests with a real DUT. **Not started.**
 
@@ -72,12 +76,13 @@ apps/
   mcp_server/    Phase 2 only.
 
 core/
-  device_connection/   Serial transport and host-device protocol handling.
-  uart_capture/        UART event ingestion, byte preservation, and line buffering.
-  gpio_config/         Debug Helper GPIO mode configuration workflow/state.
-  session_store/       Debug session persistence and retention.
-  log_processing/      Pattern detection and log extraction.
-  workflows/           Boot test, capture, wait-pattern, and reset-capture flows.
+  src/dutchmate_core/
+    device_connection/   Protocol models, parsing, command encoding, NDJSON framing.
+    uart_capture/        UART event ingestion, byte preservation, and line buffering.
+    gpio_config/         Debug Helper GPIO mode configuration workflow/state.
+    session_store/       Debug session persistence and summaries.
+    log_processing/      Pattern detection on completed UART lines.
+    workflows/           Mock capture recording plus guarded reset/boot actions.
 
 hardware/
   firmware/      RP2040 firmware.
@@ -269,14 +274,21 @@ Current implementation notes:
 
 ## Device Core Service Requirements
 
-The Device Core Service is a persistent FastAPI process that owns the serial port and exposes local HTTP endpoints.
+The Device Core Service is a persistent FastAPI process intended to own the
+serial port and expose local HTTP endpoints. The current implementation starts a
+local FastAPI process, but its default runtime still uses an unavailable
+transport stub; real serial ownership and startup hardware detection are not
+implemented yet.
 
-Minimum Phase 1 endpoints:
+Currently implemented endpoints:
 
 - `GET /status`
 - `POST /gpio/mode`
 - `POST /dut/reset`
 - `POST /dut/boot-mode`
+
+Remaining target Phase 1 endpoints:
+
 - `POST /dut/capture`
 - `GET /dut/logs`
 - `POST /dut/wait-pattern`
@@ -315,9 +327,15 @@ Minimum Phase 1 commands:
 - `dutchmate start`
 - `dutchmate stop`
 - `dutchmate status`
-- `dutchmate gpio-mode <role> <mode>`
-- `dutchmate reset`
-- `dutchmate boot-mode <normal|bootloader>`
+
+Currently implemented hardware-control commands:
+
+- `dutchmate gpio mode <channel> <role> <dut_signal> --mode <open_drain|push_pull> --active-level <low|high> [--idle-level <low|high>]`
+- `dutchmate dut reset [--pulse-ms <ms>]`
+- `dutchmate dut boot-mode <normal|bootloader>`
+
+Remaining target Phase 1 commands:
+
 - `dutchmate capture --seconds <seconds>`
 - `dutchmate logs --last <lines>`
 - `dutchmate wait <pattern> --timeout <seconds>`
@@ -328,7 +346,7 @@ Minimum Phase 1 commands:
 If the service is not running, commands must fail with:
 
 ```text
-Error: service not running. Run 'dutchmate start' first.
+Error: Device Core Service is not running. Run 'dutchmate start' first.
 ```
 
 ## Testing Requirements
@@ -373,7 +391,7 @@ Phase 1 is done when:
 - The service connects to one DUTchMate Debug Helper.
 - `.dutchmate/config.toml` can map `reset` to a physical `CTRLx` channel and
   DUT schematic signal.
-- `dutchmate gpio-mode reset open_drain` configures the mapped reset role.
+- `dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low` configures the mapped reset role.
 - `dutchmate boot-test --seconds 15` creates a session.
 - The session contains raw UART bytes, parsed events, metadata, and detected patterns.
 - `overflow`, `truncated`, `interrupted`, `resumed`, and segment count are represented in session metadata and API responses.

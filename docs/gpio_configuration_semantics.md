@@ -50,7 +50,7 @@ Configured channels also track:
 
 ## Startup Behavior
 
-On `dutchmate start`, the Device Core Service:
+Target startup behavior for `dutchmate start`:
 
 1. Loads `.dutchmate/config.toml`.
 2. Connects to the Debug Helper.
@@ -63,9 +63,15 @@ A mode loaded from `.dutchmate/config.toml` counts as explicit configuration bec
 If a required role is omitted from `[hardware.control.*]`, it remains
 `unconfigured`.
 
+Current implementation note: core validation and `DeviceCoreRuntime.apply_hardware_config(...)`
+exist, but service startup does not yet load/apply `[hardware.control.*]`, and
+the default service runtime has no real serial transport.
+
 ## Runtime Override Behavior
 
-`dutchmate gpio-mode <role> <mode>` and `POST /gpio/mode` apply immediately.
+`dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`
+and `POST /gpio/mode` apply immediately when the service is connected to a
+Debug Helper.
 
 Rules:
 
@@ -189,7 +195,10 @@ GPIO:
   CTRL1: unconfigured
 ```
 
-`dutchmate gpio-mode reset open_drain` should print the accepted mode. Rejections should include the firmware or Device Core reason and leave the previous accepted mode visible in `dutchmate status`.
+`dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low`
+should print the accepted mode. Rejections should include the firmware or
+Device Core reason and leave the previous accepted mode visible in
+`dutchmate status`.
 
 ## Safety Rules
 

@@ -48,8 +48,8 @@ tests/
 |---|---|---|
 | `core/` | `dutchmate-core` | Protocol parsing, serial transport, session storage, workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing command-line client. |
-| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service. |
-| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP adapter for coding agents. |
+| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service; current endpoints cover status, GPIO mode, reset, and boot-mode. |
+| `apps/mcp_server/` | `dutchmate-mcp-server` | Phase 2 MCP adapter scaffold; runtime not implemented yet. |
 
 ## Current Core Modules
 
@@ -68,6 +68,9 @@ Higher-level boot-test orchestration has not been implemented yet.
 
 See `docs/software_architecture.md` for current dependency direction, module
 responsibilities, and capture data flow.
+
+See `docs/developer_guide.md` for local setup, contribution workflow, and
+testing expectations.
 
 ## Common Commands
 
@@ -107,6 +110,6 @@ uv lock
 
 - `core` must not import CLI, service, MCP, or AI packages.
 - `apps/cli` calls the Device Core Service API; it must not own serial transport directly.
-- `apps/service` owns the serial port at runtime by importing and orchestrating `core`.
-- `apps/mcp_server` calls the Device Core Service API; it must not import serial transport modules.
+- `apps/service` is intended to own the serial port at runtime by importing and orchestrating `core`; the current default runtime still uses an unavailable transport stub.
+- `apps/mcp_server` will call the Device Core Service API when implemented; it must not import serial transport modules.
 - `hardware/protocol/v1` is the contract between firmware and host parser tests.

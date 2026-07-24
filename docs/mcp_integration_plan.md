@@ -7,7 +7,14 @@
 
 Phase 2 uses **MCP stdio transport as the default**.
 
-The MCP server is launched by the coding agent as a subprocess and communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own hardware and does not open the serial port. It calls the already-running Device Core Service over local HTTP at `http://localhost:2040` by default.
+The planned MCP server is launched by the coding agent as a subprocess and
+communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own
+hardware and does not open the serial port. It calls the already-running Device
+Core Service over local HTTP at `http://127.0.0.1:2040` by default.
+
+Current implementation note: `apps/mcp_server` is a package scaffold only. The
+`dutchmate mcp` CLI command exits with a placeholder error, and the
+`dutchmate-mcp` console script raises `NotImplementedError`.
 
 Streamable HTTP can be added later for clients that need an independently hosted MCP endpoint. The deprecated HTTP+SSE MCP transport is not the Phase 2 default.
 
@@ -18,18 +25,18 @@ Coding Agent / IDE Agent
         |
         | MCP stdio
         v
-MCP Server process (`dutchmate mcp`)
+MCP Server process (`dutchmate mcp`, planned)
         |
         | HTTP Device Core Service API
         v
-Device Core Service (`dutchmate start`, localhost:2040)
+Device Core Service (`dutchmate start`, 127.0.0.1:2040)
         |
         | USB CDC serial
         v
 RP2040 Debug Helper
 ```
 
-The MCP server is a thin adapter:
+The planned MCP server is a thin adapter:
 
 - Receives MCP tool calls.
 - Validates tool arguments.
@@ -40,7 +47,7 @@ The MCP server is a thin adapter:
 
 ## Launch Commands
 
-Default Phase 2 command:
+Planned default Phase 2 command:
 
 ```bash
 dutchmate mcp
@@ -49,11 +56,12 @@ dutchmate mcp
 Optional flags:
 
 ```bash
-dutchmate mcp --service-url http://localhost:2040
+dutchmate mcp --service-url http://127.0.0.1:2040
 dutchmate mcp --log-level info
 ```
 
-The command must write only valid MCP JSON-RPC messages to stdout. Logs go to stderr.
+These flags are not implemented yet. When implemented, the command must write
+only valid MCP JSON-RPC messages to stdout. Logs go to stderr.
 
 If the Device Core Service is not running, MCP tool calls return a structured tool error that tells the agent to run:
 
@@ -140,7 +148,7 @@ The MCP server may call the Device Core Service's `GET /dut/events` SSE endpoint
 
 ## Registration Example
 
-Generic MCP client configuration shape:
+Planned generic MCP client configuration shape:
 
 ```json
 {
@@ -149,14 +157,16 @@ Generic MCP client configuration shape:
       "command": "dutchmate",
       "args": ["mcp"],
       "env": {
-        "DUTCHMATE_SERVICE_URL": "http://localhost:2040"
+        "DUTCHMATE_SERVICE_URL": "http://127.0.0.1:2040"
       }
     }
   }
 }
 ```
 
-Exact registration keys vary by coding agent. DUTchMate documentation should keep examples per client separate from the core architecture.
+This is not runnable yet because the MCP server is not implemented. Exact
+registration keys vary by coding agent. DUTchMate documentation should keep
+examples per client separate from the core architecture.
 
 ## Test Requirements
 

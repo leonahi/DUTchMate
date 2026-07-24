@@ -30,25 +30,42 @@ DUTchMate is an **AI-assisted embedded debugging system**. A small hardware Debu
 
 **Requirements:**
 - Python 3.10+
-- RP2040-based board with DUTchMate firmware flashed *(see `hardware/firmware/` — use `picotool` or `west flash` to flash)*
+- `uv` for local workspace development
+- RP2040-based Debug Helper hardware and firmware are planned, but firmware is
+  not implemented in this repository yet.
 
-**Install:**
+**Local development setup:**
 ```bash
-pip install dutchmate
+uv sync
+uv run pytest
 ```
 
-**First run:**
+There is no published `pip install dutchmate` package yet. From the repository
+root, run package commands through `uv`.
+
+**Current runnable CLI surface:**
 ```bash
-dutchmate start                        # auto-detects DUTchMate device by USB VID/PID
-dutchmate start --port /dev/ttyACM0   # or specify port explicitly if auto-detect is ambiguous
-dutchmate status                       # verify device is connected
-dutchmate gpio-mode reset open_drain   # required before first reset; use hardware.control.reset config to persist
-dutchmate boot-test --seconds 15       # run first boot test
+uv run --package dutchmate-cli dutchmate start
+uv run --package dutchmate-cli dutchmate status
+uv run --package dutchmate-cli dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
+uv run --package dutchmate-cli dutchmate dut reset
+uv run --package dutchmate-cli dutchmate dut boot-mode normal
 ```
 
-**Optional config** — create `.dutchmate/config.toml` in your firmware project root to override defaults (port, session limits, pattern keywords). See §7 for the full config reference. Add `.dutchmate/` to your project's `.gitignore`.
+`dutchmate start` currently starts the local FastAPI service process, but the
+default service runtime still uses an unavailable serial transport stub.
+USB/serial auto-detection and real Debug Helper connection handling are not
+implemented yet.
 
-**MCP registration** — to expose DUTchMate tools to an AI coding agent (Claude Code, Cursor, etc.), register the DUTchMate MCP Server command `dutchmate mcp` in the agent's MCP configuration. The MCP Server uses stdio transport by default and calls the Device Core Service at `http://localhost:2040`, which must be running first. Refer to your agent's documentation for the exact MCP registration steps.
+**Optional config** — create `.dutchmate/config.toml` to override the local
+daemon host/port and session storage settings currently read by the CLI. Core
+hardware mapping validation for `[hardware.control.*]` exists, but service
+startup does not apply those mappings yet. Add `.dutchmate/` to your project's
+`.gitignore`.
+
+**MCP registration** — planned for Phase 2. The current `dutchmate mcp` command
+and `dutchmate-mcp` console script are placeholders and do not run an MCP
+server yet.
 
 ---
 
@@ -59,11 +76,11 @@ dutchmate boot-test --seconds 15       # run first boot test
 ```
 Coding Agent / IDE Agent
         ↓ MCP stdio (default)
-Host: MCP Server ──┐
+Host: MCP Server ──┐  (planned Phase 2)
                    │ HTTP (Device Core Service API)
 Host: CLI ─────────┤
                    ↓
-Host: Device Core Service (FastAPI, persistent — single process holding the serial port)
+Host: Device Core Service (FastAPI, persistent — intended single owner of serial port)
   └─ Device Core library (hardware interface — no knowledge of MCP or HTTP)
         ↓ USB CDC/serial
 Debug Helper Hardware (RP2040)
@@ -73,8 +90,12 @@ Device Under Test
 
 **Separation of concerns:**
 - **Device Core library** — pure hardware interface. Knows nothing about MCP, HTTP, or AI. Runs inside the Device Core Service process.
-- **Device Core Service** — persistent FastAPI process that owns the serial port and exposes a REST API. No MCP knowledge.
-- **MCP Server** — thin adapter. Receives MCP tool calls from the AI agent, translates them to Device Core Service API calls. No hardware knowledge.
+- **Device Core Service** — persistent FastAPI process intended to own the
+  serial port and expose a REST API. Current default runtime has no real serial
+  transport.
+- **MCP Server** — planned thin adapter. Current package is a placeholder.
+  When implemented, it receives MCP tool calls from the AI agent and translates
+  them to Device Core Service API calls.
 - **CLI** — thin client. Calls the Device Core Service API directly. No MCP involvement.
 
 Both the MCP Server and CLI are independent clients of the Device Core Service API — neither is in the other's call chain.
@@ -84,29 +105,26 @@ Both the MCP Server and CLI are independent clients of the Device Core Service A
 ```
 apps/
   cli/           Human-facing command-line interface
-  mcp_server/    MCP interface for coding agents
-  service/       Device Core Service — long-running process holding the serial port; exposes REST API consumed by CLI and MCP Server
+  mcp_server/    Placeholder package for the Phase 2 MCP interface
+  service/       Device Core Service package; current REST API consumed by CLI
 
 core/
-  device_connection/   Transport and protocol handling
-  uart_capture/        UART event ingestion and timestamping
-  gpio_config/         Debug Helper GPIO mode configuration workflow/state
-  session_store/       Persistent debug sessions
-  log_processing/      Pattern detection and log extraction
-  workflows/           Capture recording, guarded reset/boot actions, later boot test/reset-capture flows
-
-ai/
-  debug_reporter/      Optional LLM-based summary and classification
-  prompt_templates/    Prompts for log diagnosis and report generation
-  context_pack/        Structured context sent to LLM
+  src/dutchmate_core/
+    device_connection/   Protocol handling, command encoding, NDJSON framing
+    uart_capture/        UART byte buffering and line extraction
+    gpio_config/         Debug Helper GPIO mode configuration workflow/state
+    session_store/       Persistent debug sessions
+    log_processing/      Pattern detection and log extraction
+    workflows/           Capture recording and guarded reset/boot actions
 
 hardware/
-  firmware/     Debug helper firmware
+  firmware/     Planned Debug Helper firmware location
   schematics/   Debug helper hardware design files
   protocol/     Host-device protocol definition
 ```
 
-The core must remain usable without the AI layer.
+The core must remain usable without the AI layer. The optional AI/debug reporter
+packages described later in this roadmap are not present in the repository yet.
 
 Phase 1 implementation details are tracked in `docs/phase1_implementation_spec.md`. That document is the buildable contract for the RP2040 Debug Helper MVP and takes precedence over broad roadmap language when deciding Phase 1 task order.
 
@@ -145,7 +163,12 @@ Host-side deterministic library that communicates with the Debug Helper. Runs in
 - Decode the host-device protocol
 - Collect and store UART events and session data
 - Perform reset/capture workflows
-- Detect configurable keyword patterns (defaults: `ERROR`, `ASSERT`, `PANIC`, `HardFault`, `BOOT_OK`; overridable in `.dutchmate/config.toml` under `[patterns]`) on decoded text — never on raw bytes; UART bytes must be buffered into complete lines before matching so that patterns split across USB packet boundaries are never missed
+- Detect keyword patterns (defaults: `ERROR`, `ASSERT`, `PANIC`,
+  `HardFault`, `BOOT_OK`) on decoded text, never on raw bytes. UART bytes are
+  buffered into complete lines before matching so patterns split across USB
+  packet boundaries are not missed. Pattern configuration is supported by the
+  core `PatternDetector` constructor, but `.dutchmate/config.toml` pattern
+  loading is not implemented yet.
 - Expose a clean internal API
 - Decode base64 UART payloads; produce lossy UTF-8 view (with replacement characters) for display and pattern matching
 
@@ -175,7 +198,10 @@ Thin adapter layer that exposes selected Device Core capabilities to AI agents.
 - Return structured, compact results
 - Never expose raw GPIO control as a default tool
 
-**Deployment:** The MCP Server is a separate process launched by the AI agent. Phase 2 uses MCP stdio transport by default via `dutchmate mcp`. The MCP Server is a thin adapter: it receives MCP tool calls from the AI agent and forwards them as HTTP requests to the Device Core Service API (default: `http://localhost:2040`, configurable in `.dutchmate/config.toml`). The Device Core Service must be running before the MCP Server can function. Optional Streamable HTTP MCP hosting can be added later at a local `/mcp` endpoint, but the deprecated HTTP+SSE MCP transport is not the default.
+**Deployment:** planned for Phase 2. The MCP Server will be a separate process
+launched by the AI agent. The intended default transport is MCP stdio. The
+current repository contains only a placeholder `dutchmate mcp` command and
+`dutchmate-mcp` console script; neither starts a working MCP server yet.
 
 MCP transport and tool behavior are defined in `docs/mcp_integration_plan.md`. MCP tools are listed in §6.6.
 
@@ -331,15 +357,24 @@ This definitely proves...      ✗
 
 ### 6.3 Host Software
 
-- Python 3.10+ implementation with `asyncio`-based serial reader using `pyserial-asyncio` (standard `pyserial` does not support asyncio natively)
-- CLI for session management and debug workflows
-- USB CDC/serial communication with RP2040
+- Python 3.10+ implementation. `pyserial-asyncio` is already a core
+  dependency, but the real async USB CDC/serial reader is not implemented yet.
+- CLI for current service lifecycle, status, GPIO mode, reset, and boot-mode
+  commands; capture/log/session commands remain target Phase 1 work.
+- USB CDC/serial communication with RP2040 is planned but not implemented yet.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
-- Reset DUT, BOOT/control pin, and capture-after-reset workflows
-- Get last N log lines, wait for log pattern, basic error keyword detection
+- Reset DUT and BOOT/control workflows exist behind an injected command
+  transport and are exposed through current service/CLI endpoints. Capture
+  after reset is not implemented yet.
+- Basic error keyword detection exists in the core capture recorder path. Get
+  last N log lines and wait-for-pattern API/CLI commands are not implemented
+  yet.
 - MCP tool exposure in Phase 2, after CLI workflows are validated in Phase 1
-- Device Core Service: persistent FastAPI process (single owner of the serial port; CLI and MCP Server both call its REST API over local HTTP on port `2040` by default, configurable in `.dutchmate/config.toml`)
+- Device Core Service: persistent FastAPI process with current endpoints for
+  status, GPIO mode, reset, and boot-mode. It is intended to become the single
+  owner of the serial port; the current default runtime still uses an
+  unavailable serial transport stub.
 
 ### 6.4 UART and Reset/BOOT Electrical Interface
 
@@ -386,50 +421,56 @@ GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.m
 
 **Daemon lifecycle:**
 ```bash
-dutchmate start                        # auto-detect DUTchMate device by USB VID/PID
-dutchmate start --port /dev/ttyACM0   # specify port explicitly
+dutchmate start                        # starts the local Device Core Service
+dutchmate start --host 127.0.0.1 --port 2040
 dutchmate stop                         # shut down the daemon
 dutchmate status                       # show daemon state and connected port
 ```
 
-`dutchmate start` launches the Device Core Service as a background process on `http://localhost:2040` (default, configurable in `.dutchmate/config.toml`) and connects to the Debug Helper. Auto-detection scans USB serial ports for a device matching the DUTchMate USB VID/PID and product string. If exactly one match is found it connects automatically; if multiple matches are found it lists them and exits asking the user to specify `--port`. All other commands send HTTP requests to the running service and fail immediately with a clear error if the service is not running:
+`dutchmate start` launches the Device Core Service as a background process on
+`http://127.0.0.1:2040` by default. Host, port, and session storage path can be
+configured through `.dutchmate/config.toml`. Current startup does not auto-detect
+or connect to a Debug Helper device; real serial transport is still pending. All
+other implemented commands send HTTP requests to the running service and fail
+immediately with a clear error if the service is not running:
 ```
-Error: service not running. Run 'dutchmate start' first.
+Error: Device Core Service is not running. Run 'dutchmate start' first.
 ```
 
-**Debug commands:**
+**Currently implemented debug commands:**
 ```bash
 # hardware configuration (required before first reset/boot-mode)
-dutchmate gpio-mode reset open_drain
+dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
 
 # hardware control
-dutchmate reset
-dutchmate boot-mode normal       # drive BOOT/control pin to inactive state — DUT boots from flash
-dutchmate boot-mode bootloader   # drive BOOT/control pin to active state — DUT enters DFU/bootloader on next reset
+dutchmate dut reset
+dutchmate dut boot-mode normal
+dutchmate dut boot-mode bootloader
+```
 
-# capture and observation
+**Target Phase 1 debug commands not implemented yet:**
+```bash
 dutchmate capture --seconds 10
 dutchmate logs --last 200
 dutchmate wait "BOOT_OK" --timeout 5
 dutchmate boot-test --seconds 15
-
-# UART interaction
-dutchmate send "reboot"              # rejected if capture active
-dutchmate send "reboot" --force      # sends immediately, logs perturbation warning
-
-# session management
+dutchmate send "reboot"
+dutchmate send "reboot" --force
 dutchmate mark-baseline <session_id> # designate session as known-good reference for compare_boot_log
 ```
 
 ### 6.6 MCP Tools
 
-Phase 2 default launch command:
+Planned Phase 2 default launch command:
 
 ```bash
 dutchmate mcp
 ```
 
-This command speaks MCP over stdio and writes logs only to stderr. It does not start or own the Device Core Service; it returns a clear tool error if `dutchmate start` has not been run.
+This command currently exits with a placeholder error. The package also exposes
+a `dutchmate-mcp` console script that raises `NotImplementedError`. When
+implemented, the MCP command should speak MCP over stdio, write logs only to
+stderr, and call the already-running Device Core Service.
 
 Full target tool list:
 
@@ -448,21 +489,28 @@ list_debug_sessions()                     — Phase 2
 
 ### 6.7 Device Core Service API
 
-The REST API exposed by the Device Core Service at `http://localhost:<port>`. Both the CLI and MCP Server are clients of this API. All endpoints return JSON. Error responses follow `{"ok": false, "error": "<code>", "detail": "..."}`.
+The REST API exposed by the Device Core Service at `http://<host>:<port>`.
+The current CLI is a client of this API. The MCP Server is planned to become a
+second client in Phase 2. All endpoints return JSON. Error responses follow
+`{"ok": false, "error": "<code>", "detail": "..."}`.
+
+Currently implemented endpoints:
 
 **Service:**
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `GET` | `/status` | — | `{connected, port, firmware, active_session_id, control_channels}` |
+| `GET` | `/status` | — | `{connected, port, firmware, device, capabilities, active_session_id, control_channels}` |
 
 **Hardware control:**
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `POST` | `/gpio/mode` | `{role, channel, dut_signal, mode: "open_drain"\|"push_pull"}` | `{ok, role, channel, dut_signal, mode, source, timestamp_us?}` |
+| `POST` | `/gpio/mode` | `{channel, role, dut_signal, mode, active_level, idle_level?}` | `{ok, channel, role, dut_signal, mode, active_level, idle_level, source, timestamp_us?}` |
 | `POST` | `/dut/reset` | `{pulse_ms?}` | `{ok, timestamp_us}` |
 | `POST` | `/dut/boot-mode` | `{mode: "normal"\|"bootloader"}` | `{ok, timestamp_us}` |
+
+Target Phase 1 endpoints not implemented yet:
 
 **Capture and observation:**
 
@@ -489,9 +537,14 @@ The REST API exposed by the Device Core Service at `http://localhost:<port>`. Bo
 | `POST` | `/sessions/{id}/baseline` | — | `{ok}` |
 | `GET` | `/sessions/{id}/compare` | — | baseline comparison result *(Phase 4)* |
 
-Every response that involves a capture includes an `overflow: bool` field so callers can tell whether evidence may be incomplete.
+Every target response that involves a capture includes an `overflow: bool` field
+so callers can tell whether evidence may be incomplete.
 
-**Concurrency:** Only one active capture at a time. `POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and `POST /dut/boot-mode` return `{"ok": false, "error": "capture_active"}` immediately if a capture is in progress (use `force: true` on `/dut/uart/send` to bypass the guard for UART commands). Read-only endpoints and `GET /dut/events` are always available.
+**Target concurrency behavior:** only one active capture at a time.
+`POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and
+`POST /dut/boot-mode` should return `{"ok": false, "error": "capture_active"}`
+immediately if a capture is in progress. This guard is not implemented yet
+because long-running capture is not implemented yet.
 
 ---
 
@@ -499,44 +552,42 @@ Every response that involves a capture includes an `overflow: bool` field so cal
 
 Every debug run is stored as a session.
 
-**Session ID format:** `YYYYMMDD_HHmmss_SSS_<label>` (millisecond suffix prevents collision in rapid automated test loops).
+**Current session ID format:** `YYYYMMDDTHHMMSSZ-<uuid8>`.
 
-`<label>` rules:
-- Optional — defaults to the invoking command name in snake_case (e.g. `boot_test`, `capture`, `wait`)
-- Overridable via `--label <name>` on CLI commands and an optional `label` parameter on MCP tools
-- Allowed characters: `[a-z0-9_-]` only; the Device Core Service lowercases and replaces spaces with `_` before use
-- Max 32 characters; truncated silently if longer
-- The Device Core Service sanitizes the label before constructing the session directory path (no path traversal)
+Labels are not implemented yet. A future CLI/API may add optional labels for
+commands such as `boot_test`, `capture`, or `wait`.
 
 **Session contents:**
 - Session ID and timestamp (host wall clock at session start)
-- Project name, DUT name, board name
-- Firmware version or git commit (if provided), test goal (if provided)
-- Reset events
+- Firmware version and device name when provided by the caller
 - UART raw log (decoded bytes, lossless)
 - Parsed UART events (`uart_events.jsonl`)
 - Hardware/session events (`hardware_events.jsonl`)
 - Detected patterns (`detected_patterns.json`)
-- First failure (if any)
+- First failure extraction is planned but not implemented yet
 - `truncated: true` if per-session size cap was hit mid-capture
 - `interrupted: true` if USB disconnected mid-session
 - `resumed: true` if events were appended after a reconnect
 - Segment metadata for reconnect/timestamp discontinuities
 - `baseline: true` if this session has been explicitly marked as the known-good reference
-- Optional AI summary and baseline comparison result
+- Optional AI summary and baseline comparison result are planned later
 
 **Storage location:** `.dutchmate/sessions/` relative to the DUT firmware project root. Overridable via `.dutchmate/config.toml`. The `.dutchmate/` directory should be added to the DUT project's `.gitignore` — it contains raw logs and debug data that should not be committed.
 
-**Retention policy:** keep the last 100 sessions by default; delete the oldest when the count is exceeded. Configurable in `.dutchmate/config.toml`.
+**Retention policy target:** keep the last 100 sessions by default and delete
+the oldest when the count is exceeded. The CLI config parser reads
+`sessions.max_count`, but retention deletion is not implemented yet.
 
-**Per-session size cap:** 50MB per session by default. When the cap is hit mid-capture, ingestion stops, the session is marked `truncated: true` in `metadata.json`, and a warning is logged. Configurable in `.dutchmate/config.toml`. Combined with the session count limit, worst-case disk usage is bounded at 5GB by default.
+**Per-session size cap target:** 50MB per session by default. The CLI config
+parser reads `sessions.max_size_mb`, but size-cap enforcement and truncation are
+not implemented yet.
 
 **File layout:**
 ```
 .dutchmate/
   config.toml
   sessions/
-    20260630_153000_123_boot_test/
+    20260724T120000Z-a1b2c3d4/
       metadata.json
       uart_raw.log
       uart_events.jsonl
@@ -548,32 +599,34 @@ Every debug run is stored as a session.
 **Example `.dutchmate/config.toml`:**
 ```toml
 [daemon]
+host = "127.0.0.1"
 port = 2040                  # localhost HTTP port
-reconnect_timeout_s = 5      # seconds to wait for hello handshake before starting a new session
 
 [sessions]
 path = ".dutchmate/sessions" # relative to project root
-max_count = 100              # oldest session deleted when exceeded
-max_size_mb = 50             # per-session cap; triggers truncated: true when hit
+max_count = 100              # parsed by CLI config; retention enforcement pending
+max_size_mb = 50             # parsed by CLI config; size-cap enforcement pending
 
-[patterns]
-keywords = ["ERROR", "ASSERT", "PANIC", "HardFault", "BOOT_OK"]
-
-[hardware]
+[hardware]                   # parsed by core hardware config helpers
 dut_io_voltage = 1.8
 
 [hardware.control.reset]
 channel = "CTRL0"
 dut_signal = "RESET_N"
-mode = "open_drain"          # applied automatically on service start
+mode = "open_drain"          # service startup application pending
 active_level = "low"
 
 # boot intentionally omitted by default; configure per target wiring
 ```
 
-If a required role is not mapped in `[hardware.control.*]`, that role remains unconfigured at startup — the `not_configured` error still applies until `dutchmate gpio-mode <role> <mode>` is called explicitly. `dutchmate gpio-mode` can be used to override the mode at runtime without editing the file.
+If a required role is not mapped in `[hardware.control.*]`, that role remains
+unconfigured. The current runtime command for explicit configuration is
+`dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`.
 
-Config-file GPIO modes are applied after the Debug Helper `hello` message is validated. A role is marked configured only after the firmware accepts the mode. If startup configuration is rejected, the service remains running, `dutchmate status` reports the rejected role state, and workflows requiring that role fail until a valid runtime mode is configured.
+Target startup behavior is to apply config-file GPIO modes after the Debug
+Helper `hello` message is validated. A role should be marked configured only
+after firmware accepts the mode. Current service startup does not apply
+config-file GPIO modes yet.
 
 Raw logs are always more authoritative than AI summaries and must always be preserved.
 
@@ -592,7 +645,14 @@ The protocol must be:
 
 The v1 protocol schemas and canonical examples live under `hardware/protocol/v1/`. Firmware, Device Core parsing, and tests must use those schemas as the implementation contract.
 
-**Reconnect behaviour:** see `docs/reconnect_session_semantics.md` for the full policy. In short, the Device Core writes `uart_raw.log`, `uart_events.jsonl`, `hardware_events.jsonl`, and `metadata.json` incrementally as events arrive. Data up to a disconnect is always preserved on disk. A disconnect marks the session `interrupted: true`; a valid reconnect before `reconnect_timeout_s` may append a new segment to the same session and mark `resumed: true`. Device timestamps are authoritative only within a segment, so resumed sessions record a timestamp discontinuity instead of pretending timestamps are continuous.
+**Reconnect behaviour:** see `docs/reconnect_session_semantics.md` for the full
+policy. Current session writes are incremental, but reconnect/resume mutation
+helpers are not implemented yet. Target behavior is that data up to a
+disconnect is always preserved on disk; a disconnect marks the session
+`interrupted: true`; a valid reconnect before a configured timeout may append a
+new segment to the same session and mark `resumed: true`. Device timestamps are
+authoritative only within a segment, so resumed sessions record a timestamp
+discontinuity instead of pretending timestamps are continuous.
 
 ### 8.2 Encoding
 
@@ -843,7 +903,10 @@ Possible features: multiple UART channels, PIO-based GPIO edge capture, current/
 
 ---
 
-## 12. Example Workflow
+## 12. Target MCP Workflow Example
+
+This is the intended Phase 2 workflow after MCP, real serial transport, capture,
+and boot-test orchestration are implemented.
 
 ```
 1.  Coding Agent builds firmware.
@@ -863,7 +926,7 @@ Example structured result:
 ```json
 {
   "status": "failed",
-  "session_id": "20260630_153000_123_boot_test",
+  "session_id": "20260724T120000Z-a1b2c3d4",
   "first_error": "ERROR: sensor init failed -5",
   "time_to_error_ms": 1240,
   "reset_count": 1,
@@ -959,6 +1022,12 @@ The size is constrained by the RP2040's 264 KiB RAM, which is shared with firmwa
 
 ### 15.9 Device Core Service Has No Authentication (MVP)
 
-The Device Core Service binds to `http://localhost:2040` with no authentication. Any local process or user on the machine can send hardware commands (reset, boot-mode, UART injection). Localhost binding prevents remote access, so this is acceptable for a single-developer workstation. On shared workstations or CI servers it is a real exposure.
+The Device Core Service binds to `http://127.0.0.1:2040` by default with no
+authentication. Any local process or user on the machine can call the current
+hardware-control endpoints (`/gpio/mode`, `/dut/reset`, `/dut/boot-mode`) when
+the service is running. Planned UART injection and capture endpoints would share
+the same trusted-local exposure unless authentication is added. Loopback binding
+prevents remote access, so this is acceptable for a single-developer
+workstation. On shared workstations or CI servers it is a real exposure.
 
 A simple API key (bearer token, configurable in `.dutchmate/config.toml`) is planned for Phase 3 when multi-user or CI use becomes relevant. Until then, treat the Device Core Service port as trusted-local only and do not expose it to the network.
