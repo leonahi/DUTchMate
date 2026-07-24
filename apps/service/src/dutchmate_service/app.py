@@ -13,8 +13,15 @@ from dutchmate_core.runtime import (
     DeviceCoreRuntimeError,
     DeviceCoreStatus,
 )
+from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
-from dutchmate_service.schemas import GpioModeRequest, gpio_mode_payload, status_payload
+from dutchmate_service.schemas import (
+    GpioModeRequest,
+    ResetRequest,
+    device_action_payload,
+    gpio_mode_payload,
+    status_payload,
+)
 
 
 class RuntimeProvider(Protocol):
@@ -34,6 +41,9 @@ class RuntimeProvider(Protocol):
         idle_level: str | None = None,
     ) -> GpioControlChannelState:
         """Configure a control channel GPIO mode."""
+
+    def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
+        """Pulse the configured DUT reset role."""
 
 
 def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
@@ -58,6 +68,12 @@ def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
             idle_level=request.idle_level,
         )
         return gpio_mode_payload(state)
+
+    @app.post("/dut/reset")
+    def reset_dut(request: ResetRequest | None = None) -> dict[str, object]:
+        if request is None:
+            request = ResetRequest()
+        return device_action_payload(runtime_provider.reset_dut(pulse_ms=request.pulse_ms))
 
     return app
 

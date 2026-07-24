@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
+from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
 def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
@@ -60,4 +61,19 @@ def gpio_mode_payload(state: GpioControlChannelState) -> dict[str, object]:
         "idle_level": state.idle_level,
         "source": state.source,
         "timestamp_us": state.device_timestamp_us,
+    }
+
+
+class ResetRequest(BaseModel):
+    """Request body for pulsing the configured reset role."""
+
+    pulse_ms: int = Field(default=100, ge=1, le=10000)
+
+
+def device_action_payload(result: DeviceActionResult) -> dict[str, object]:
+    """Serialize a successful hardware action response."""
+
+    return {
+        "ok": True,
+        "timestamp_us": result.timestamp_us,
     }

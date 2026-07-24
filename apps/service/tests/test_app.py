@@ -1,8 +1,13 @@
 from fastapi.testclient import TestClient
 
 from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
+from dutchmate_core.gpio_config.modes import (
+    GpioConfigurationError,
+    GpioControlChannelState,
+    GpioModeRegistry,
+)
 from dutchmate_core.runtime import DeviceCoreRuntimeError, DeviceCoreStatus
+from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.app import create_app
 
 
@@ -10,6 +15,7 @@ class FakeRuntime:
     def __init__(self, status: DeviceCoreStatus) -> None:
         self._status = status
         self.gpio_mode_requests: list[dict[str, object]] = []
+        self.reset_requests: list[int] = []
 
     def status(self) -> DeviceCoreStatus:
         return self._status
@@ -44,6 +50,10 @@ class FakeRuntime:
             source="runtime",
             device_timestamp_us=182334400,
         )
+
+    def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
+        self.reset_requests.append(pulse_ms)
+        return DeviceActionResult(action="reset", timestamp_us=182334500)
 
 
 def test_status_returns_disconnected_runtime_state() -> None:
@@ -339,6 +349,107 @@ def test_configure_gpio_mode_validation_error_uses_service_error_contract() -> N
             "active_level": "low",
         },
     )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_argument",
+        "detail": "Request validation failed",
+    }
+
+
+def test_reset_uses_default_pulse_and_returns_timestamp() -> None:
+    registry = GpioModeRegistry()
+    runtime = FakeRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/reset")
+
+    assert response.status_code == 200
+    assert runtime.reset_requests == [100]
+    assert response.json() == {
+        "ok": True,
+        "timestamp_us": 182334500,
+    }
+
+
+def test_reset_passes_explicit_pulse_to_runtime() -> None:
+    registry = GpioModeRegistry()
+    runtime = FakeRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/reset", json={"pulse_ms": 250})
+
+    assert response.status_code == 200
+    assert runtime.reset_requests == [250]
+
+
+def test_reset_not_configured_uses_service_error_contract() -> None:
+    class UnconfiguredResetRuntime(FakeRuntime):
+        def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
+            raise GpioConfigurationError("GPIO role 'reset' is not configured")
+
+    registry = GpioModeRegistry()
+    runtime = UnconfiguredResetRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/reset", json={"pulse_ms": 100})
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "ok": False,
+        "error": "not_configured",
+        "detail": "GPIO role 'reset' is not configured",
+    }
+
+
+def test_reset_validation_error_uses_service_error_contract() -> None:
+    registry = GpioModeRegistry()
+    app = create_app(
+        FakeRuntime(
+            DeviceCoreStatus(
+                connected=True,
+                port="/dev/ttyACM0",
+                firmware="0.1.0",
+                device="dutchmate-rp2040",
+                capabilities=("gpio_control",),
+                active_session_id=None,
+                control_channels=registry.snapshot(),
+            )
+        )
+    )
+
+    response = TestClient(app).post("/dut/reset", json={"pulse_ms": 0})
 
     assert response.status_code == 400
     assert response.json() == {
