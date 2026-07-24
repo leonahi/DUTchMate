@@ -7,36 +7,38 @@
 
 GPIO configuration must make hardware control explicit without making every normal boot test repetitive. DUTchMate therefore treats both runtime CLI configuration and config-file configuration as explicit user decisions.
 
-## Role State Model
+## Channel State Model
 
-Phase 1 treats `reset` and `boot` as configured DUT signal roles. The current
-host-side state model therefore keys state by role:
+Phase 1 treats `CTRL0` to `CTRL3` as the primary configured DUT control
+resources. The current host-side state model therefore keys state by physical
+channel:
 
 ```text
-reset
-boot
+CTRL0
+CTRL1
+CTRL2
+CTRL3
 ```
 
 The hardware channel mapping model is defined in
 `docs/dutchmate_hardware_architecture.md`. In that model, physical channels
 such as `CTRL0` are separate from workflow roles such as `reset` and DUT
-schematic names such as `RESET_N`. Phase 1 host code does not implement the full
-generic channel-to-role configuration yet; it keeps the protocol and service
-contract focused on the `reset` and `boot` roles while the `gpio_config` package
-name intentionally avoids locking the architecture to only those two roles.
+schematic names such as `RESET_N`. Phase 1 host code accepts custom control
+roles as project metadata, while built-in workflows only assign semantics to
+known roles such as `reset` and `boot`.
 
-Each configurable role has one of these Device Core states:
+Each configurable channel has one of these Device Core states:
 
 | State | Meaning |
 |---|---|
-| `unconfigured` | No accepted mode exists for this role. Hardware-starting operations using the role must fail with `not_configured`. |
+| `unconfigured` | No accepted mode exists for this channel. Hardware-starting operations using a missing role must fail with `not_configured`. |
 | `configured` | The mode was accepted by firmware and may be used by workflows. |
-| `rejected` | A requested mode was refused and no previous accepted mode exists for this role. Hardware-starting operations using the role must fail with the rejection reason. |
+| `rejected` | A requested mode was refused and no previous accepted mode exists for this channel. Hardware-starting operations using that role must fail with the rejection reason. |
 
-Configured roles also track:
+Configured channels also track:
 
-- `role`: currently `reset` or `boot`
 - `channel`: the physical DUTchMate control channel, such as `CTRL0`
+- `role`: the user/project role, such as `reset`, `boot`, `wake`, or `power_en`
 - `dut_signal`: the user's DUT schematic signal name, such as `RESET_N`
 - `mode`: `open_drain` or `push_pull`
 - `active_level`: `low` or `high`
@@ -54,9 +56,9 @@ On `dutchmate start`, the Device Core Service:
 2. Connects to the Debug Helper.
 3. Waits for and validates the `hello` message.
 4. Applies configured GPIO modes from `[hardware.control.*]`.
-5. Marks each role `configured` only after firmware accepts the mode.
+5. Marks each channel `configured` only after firmware accepts the mode.
 
-A mode loaded from `.dutchmate/config.toml` counts as explicit configuration because it represents a stored user decision. If a configured startup mode is rejected, the service remains running, the role is marked `rejected`, and workflows using that role fail until a valid runtime mode is configured.
+A mode loaded from `.dutchmate/config.toml` counts as explicit configuration because it represents a stored user decision. If a configured startup mode is rejected, the service remains running, the channel is marked `rejected`, and workflows using that role fail until a valid runtime mode is configured.
 
 If a required role is omitted from `[hardware.control.*]`, it remains
 `unconfigured`.
@@ -69,7 +71,7 @@ Rules:
 
 - Runtime configuration overrides config-file configuration for the current service process.
 - Runtime overrides do not edit `.dutchmate/config.toml`.
-- A successful runtime override updates the role state to `configured` with `source: "runtime"`.
+- A successful runtime override updates the channel state to `configured` with `source: "runtime"`.
 - A rejected runtime override must not change the previous accepted mode or `configured` state.
 - Rejected mode requests must not change physical channel state.
 
@@ -78,20 +80,20 @@ Rules:
 The Device Core validates before sending a command to firmware:
 
 1. `channel` is one of `CTRL0` to `CTRL3`.
-2. `role` is one of `reset` or `boot` for Phase 1 workflows.
+2. `role` is a non-empty project role name. Phase 1 workflows only attach
+   built-in semantics to known roles such as `reset` and `boot`.
 3. `dut_signal` is a non-empty DUT schematic signal name.
 4. `mode` is one of `open_drain` or `push_pull`.
 5. `active_level` and optional `idle_level` are `low` or `high`.
 6. The requested mode is allowed by the connected firmware capabilities and hardware revision metadata, if known.
 7. No capture or hardware-starting workflow is currently in a conflicting state.
 
-Firmware remains the final authority. If firmware rejects the mode, the Device Core preserves the previous accepted role state and returns the firmware error. If no previous accepted mode exists, the role state becomes `rejected`.
+Firmware remains the final authority. If firmware rejects the mode, the Device Core preserves the previous accepted channel state and returns the firmware error. If no previous accepted mode exists, the channel state becomes `rejected`.
 
 The current host-side `gpio_config` package implements two pieces of this
 boundary:
 
-- config-file validation for `[hardware.control.reset]` and
-  `[hardware.control.boot]`
+- config-file validation for `[hardware.control.*]`
 - command/result handling for `configure_gpio_mode`
 
 It validates channel, role, mode, level, DUT signal, DUT I/O voltage, and
@@ -128,7 +130,7 @@ Read-only operations do not require GPIO configuration.
 
 ## Service API Reporting
 
-`GET /status` should include GPIO mode state:
+`GET /status` should include channel-first GPIO mode state:
 
 ```json
 {
@@ -136,8 +138,8 @@ Read-only operations do not require GPIO configuration.
   "port": "/dev/ttyACM0",
   "firmware": "0.1.0",
   "active_session_id": null,
-  "gpio_modes": {
-    "reset": {
+  "control_channels": {
+    "CTRL0": {
       "state": "configured",
       "role": "reset",
       "channel": "CTRL0",
@@ -146,7 +148,7 @@ Read-only operations do not require GPIO configuration.
       "source": "config",
       "last_rejected": null
     },
-    "boot": {
+    "CTRL1": {
       "state": "unconfigured"
     }
   }
@@ -183,8 +185,8 @@ Rejected response:
 
 ```text
 GPIO:
-  reset: CTRL0 RESET_N open_drain (config)
-  boot: unconfigured
+  CTRL0: reset RESET_N open_drain (config)
+  CTRL1: unconfigured
 ```
 
 `dutchmate gpio-mode reset open_drain` should print the accepted mode. Rejections should include the firmware or Device Core reason and leave the previous accepted mode visible in `dutchmate status`.

@@ -11,7 +11,6 @@ from dutchmate_core.device_connection.commands import (
     VALID_GPIO_CONTROL_CHANNELS,
     VALID_GPIO_LEVELS,
     VALID_GPIO_MODES,
-    VALID_GPIO_ROLES,
 )
 from dutchmate_core.gpio_config.modes import (
     GpioControlChannel,
@@ -177,9 +176,9 @@ def _optional_string(
 
 
 def _validate_role_name(role: str) -> GpioRoleName:
-    if role not in VALID_GPIO_ROLES:
-        raise GpioConfigError("GPIO role must be 'reset' or 'boot'")
-    return cast(GpioRoleName, role)
+    if not isinstance(role, str) or not role.strip():
+        raise GpioConfigError("GPIO role must be a non-empty string")
+    return role.strip()
 
 
 def _validate_channel(channel: str) -> GpioControlChannel:

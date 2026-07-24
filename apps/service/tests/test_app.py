@@ -25,7 +25,7 @@ def test_status_returns_disconnected_runtime_state() -> None:
                 device=None,
                 capabilities=(),
                 active_session_id=None,
-                gpio_modes=registry.snapshot(),
+                control_channels=registry.snapshot(),
             )
         )
     )
@@ -40,11 +40,11 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "device": None,
         "capabilities": [],
         "active_session_id": None,
-        "gpio_modes": {
-            "reset": {
-                "role": "reset",
+        "control_channels": {
+            "CTRL0": {
+                "channel": "CTRL0",
                 "state": "unconfigured",
-                "channel": None,
+                "role": None,
                 "dut_signal": None,
                 "mode": None,
                 "active_level": None,
@@ -54,10 +54,36 @@ def test_status_returns_disconnected_runtime_state() -> None:
                 "device_timestamp_us": None,
                 "last_rejected": None,
             },
-            "boot": {
-                "role": "boot",
+            "CTRL1": {
+                "channel": "CTRL1",
                 "state": "unconfigured",
-                "channel": None,
+                "role": None,
+                "dut_signal": None,
+                "mode": None,
+                "active_level": None,
+                "idle_level": None,
+                "source": None,
+                "configured_at": None,
+                "device_timestamp_us": None,
+                "last_rejected": None,
+            },
+            "CTRL2": {
+                "channel": "CTRL2",
+                "state": "unconfigured",
+                "role": None,
+                "dut_signal": None,
+                "mode": None,
+                "active_level": None,
+                "idle_level": None,
+                "source": None,
+                "configured_at": None,
+                "device_timestamp_us": None,
+                "last_rejected": None,
+            },
+            "CTRL3": {
+                "channel": "CTRL3",
+                "state": "unconfigured",
+                "role": None,
                 "dut_signal": None,
                 "mode": None,
                 "active_level": None,
@@ -96,7 +122,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                 device=hello.device,
                 capabilities=hello.capabilities,
                 active_session_id="20260724T100000Z-abc12345",
-                gpio_modes=registry.snapshot(),
+                control_channels=registry.snapshot(),
             )
         )
     )
@@ -110,9 +136,9 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["device"] == "dutchmate-rp2040"
     assert payload["capabilities"] == ["uart_capture", "gpio_control"]
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
-    assert payload["gpio_modes"]["reset"]["state"] == "configured"
-    assert payload["gpio_modes"]["reset"]["channel"] == "CTRL0"
-    assert payload["gpio_modes"]["reset"]["dut_signal"] == "RESET_N"
-    assert payload["gpio_modes"]["reset"]["mode"] == "open_drain"
-    assert payload["gpio_modes"]["reset"]["source"] == "config"
-    assert payload["gpio_modes"]["reset"]["device_timestamp_us"] == 123
+    assert payload["control_channels"]["CTRL0"]["state"] == "configured"
+    assert payload["control_channels"]["CTRL0"]["role"] == "reset"
+    assert payload["control_channels"]["CTRL0"]["dut_signal"] == "RESET_N"
+    assert payload["control_channels"]["CTRL0"]["mode"] == "open_drain"
+    assert payload["control_channels"]["CTRL0"]["source"] == "config"
+    assert payload["control_channels"]["CTRL0"]["device_timestamp_us"] == 123

@@ -48,7 +48,7 @@ class DeviceActionRunner:
         """Pulse the DUT reset role after confirming reset GPIO configuration."""
 
         command = reset_command(pulse_ms)
-        self._registry.require_configured("reset")
+        self._registry.require_role_configured("reset")
         response = self._transport.request(command.to_ndjson())
         return self._require_success(response, action="reset")
 
@@ -56,7 +56,7 @@ class DeviceActionRunner:
         """Set DUT boot mode after confirming boot GPIO configuration."""
 
         command = boot_mode_command(mode)
-        self._registry.require_configured("boot")
+        self._registry.require_role_configured("boot")
         response = self._transport.request(command.to_ndjson())
         return self._require_success(response, action="set_boot_mode")
 

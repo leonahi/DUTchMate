@@ -1,6 +1,7 @@
 """Device connection and host-device protocol handling."""
 
 from dutchmate_core.device_connection.commands import (
+    WELL_KNOWN_GPIO_ROLES,
     BootModeCommand,
     ConfigureGpioModeCommand,
     ResetCommand,
@@ -36,6 +37,7 @@ __all__ = [
     "ResetCommand",
     "UartSendCommand",
     "UartMessage",
+    "WELL_KNOWN_GPIO_ROLES",
     "boot_mode_command",
     "configure_gpio_mode_command",
     "parse_device_message",

@@ -367,8 +367,9 @@ configure_control_role(
 ) -> None
 ```
 
-Valid Phase 1 workflow roles are `"reset"` and `"boot"`. Valid physical
-control channels are `CTRL0` to `CTRL3`.
+Valid physical control channels are `CTRL0` to `CTRL3`. Project configuration
+may use custom control roles, but Phase 1 workflows only assign built-in
+semantics to known roles such as `"reset"` and `"boot"`.
 
 This must be configured explicitly before any reset or boot-mode operation.
 There is no implicit default — the Device Core returns a `not_configured` error
@@ -379,7 +380,7 @@ firmware may reject a requested mode with `invalid_argument` or
 `hardware_fault` if the connected hardware revision cannot implement that mode
 safely.
 
-GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical channel state, and `dutchmate status` must show each required role as `unconfigured`, `configured`, or `rejected`. The current host core implements the command/result workflow behind this state; the real serial transport is still pending.
+GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical channel state, and `dutchmate status` must show each `CTRLx` channel as `unconfigured`, `configured`, or `rejected`. The current host core implements the command/result workflow behind this state; the real serial transport is still pending.
 
 ### 6.5 CLI Commands
 
@@ -453,13 +454,13 @@ The REST API exposed by the Device Core Service at `http://localhost:<port>`. Bo
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `GET` | `/status` | — | `{connected, port, firmware, active_session_id, gpio_modes}` |
+| `GET` | `/status` | — | `{connected, port, firmware, active_session_id, control_channels}` |
 
 **Hardware control:**
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `POST` | `/gpio/mode` | `{role: "reset"\|"boot", mode: "open_drain"\|"push_pull"}` | `{ok, role, channel, dut_signal, mode, source, timestamp_us?}` |
+| `POST` | `/gpio/mode` | `{role, channel, dut_signal, mode: "open_drain"\|"push_pull"}` | `{ok, role, channel, dut_signal, mode, source, timestamp_us?}` |
 | `POST` | `/dut/reset` | `{pulse_ms?}` | `{ok, timestamp_us}` |
 | `POST` | `/dut/boot-mode` | `{mode: "normal"\|"bootloader"}` | `{ok, timestamp_us}` |
 

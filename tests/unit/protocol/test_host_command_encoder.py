@@ -61,6 +61,25 @@ def test_build_configure_gpio_mode_command_with_idle_level() -> None:
     }
 
 
+def test_build_configure_gpio_mode_command_with_custom_role() -> None:
+    command = configure_gpio_mode_command(
+        channel="CTRL2",
+        role="power_en",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+
+    assert command == ConfigureGpioModeCommand(
+        channel="CTRL2",
+        role="power_en",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+    assert command.to_payload()["role"] == "power_en"
+
+
 def test_encode_configure_gpio_mode_command_as_ndjson() -> None:
     command = configure_gpio_mode_command(
         channel="CTRL0",
@@ -97,11 +116,11 @@ def test_rejects_unknown_gpio_channel() -> None:
         )
 
 
-def test_rejects_unknown_gpio_role() -> None:
+def test_rejects_empty_gpio_role() -> None:
     with pytest.raises(ProtocolValidationError):
         configure_gpio_mode_command(
             channel="CTRL0",
-            role="power",
+            role=" ",
             mode="open_drain",
             active_level="low",
         )

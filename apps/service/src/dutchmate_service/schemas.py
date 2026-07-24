@@ -17,7 +17,8 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         "device": status.device,
         "capabilities": list(status.capabilities),
         "active_session_id": status.active_session_id,
-        "gpio_modes": {
-            role: asdict(role_status) for role, role_status in status.gpio_modes.items()
+        "control_channels": {
+            channel: asdict(channel_status)
+            for channel, channel_status in status.control_channels.items()
         },
     }

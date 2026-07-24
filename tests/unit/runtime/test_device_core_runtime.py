@@ -52,10 +52,10 @@ def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -
         device=None,
         capabilities=(),
         active_session_id=None,
-        gpio_modes=status.gpio_modes,
+        control_channels=status.control_channels,
     )
-    assert status.gpio_modes["reset"].state == "unconfigured"
-    assert status.gpio_modes["boot"].state == "unconfigured"
+    assert status.control_channels["CTRL0"].state == "unconfigured"
+    assert status.control_channels["CTRL3"].state == "unconfigured"
     assert runtime.session_store.root == tmp_path
 
 
@@ -119,12 +119,14 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
         b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n',
     ]
     assert states["reset"].state == "configured"
+    assert states["reset"].channel == "CTRL0"
     assert states["reset"].source == "config"
     assert states["reset"].device_timestamp_us == 100
     assert states["boot"].state == "configured"
+    assert states["boot"].channel == "CTRL1"
     assert states["boot"].source == "config"
     assert states["boot"].device_timestamp_us == 200
-    assert runtime.status().gpio_modes["reset"] == states["reset"]
+    assert runtime.status().control_channels["CTRL0"] == states["reset"]
 
 
 def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
@@ -171,4 +173,4 @@ def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Pa
     assert status.connected is False
     assert status.port == "/dev/ttyACM0"
     assert status.firmware is None
-    assert status.gpio_modes["reset"].state == "configured"
+    assert status.control_channels["CTRL0"].state == "configured"

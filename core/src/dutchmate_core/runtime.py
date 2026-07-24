@@ -11,10 +11,11 @@ from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
+    GpioControlChannel,
+    GpioControlChannelState,
     GpioModeRegistry,
     GpioModeRequestSource,
     GpioRoleName,
-    GpioRoleState,
 )
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.device_actions import (
@@ -39,7 +40,7 @@ class DeviceCoreStatus:
     device: str | None
     capabilities: tuple[str, ...]
     active_session_id: str | None
-    gpio_modes: dict[GpioRoleName, GpioRoleState]
+    control_channels: dict[GpioControlChannel, GpioControlChannelState]
 
 
 class DeviceCoreRuntime:
@@ -105,17 +106,17 @@ class DeviceCoreRuntime:
             device=self._hello.device if self._hello is not None else None,
             capabilities=self._hello.capabilities if self._hello is not None else (),
             active_session_id=self._active_session_id,
-            gpio_modes=self._gpio_registry.snapshot(),
+            control_channels=self._gpio_registry.snapshot(),
         )
 
     def apply_hardware_config(
         self,
         config: HardwareGpioConfig,
-    ) -> dict[GpioRoleName, GpioRoleState]:
+    ) -> dict[GpioRoleName, GpioControlChannelState]:
         """Apply configured GPIO modes after a Debug Helper hello is available."""
 
         self._require_connected()
-        applied: dict[GpioRoleName, GpioRoleState] = {}
+        applied: dict[GpioRoleName, GpioControlChannelState] = {}
         for mapping in config.controls.values():
             applied[mapping.role] = self.configure_gpio_mode(
                 role=mapping.role,
@@ -138,7 +139,7 @@ class DeviceCoreRuntime:
         active_level: str,
         source: GpioModeRequestSource = "runtime",
         idle_level: str | None = None,
-    ) -> GpioRoleState:
+    ) -> GpioControlChannelState:
         """Configure one GPIO role through firmware and update runtime state."""
 
         self._require_connected()

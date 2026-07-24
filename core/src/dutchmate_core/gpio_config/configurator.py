@@ -9,9 +9,9 @@ from dutchmate_core.device_connection.messages import CommandErrorMessage, Comma
 from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
+    GpioControlChannelState,
     GpioModeRegistry,
     GpioModeRequestSource,
-    GpioRoleState,
 )
 
 GpioCommandTransport: TypeAlias = CommandTransport
@@ -39,7 +39,7 @@ class GpioConfigurator:
         active_level: str,
         source: GpioModeRequestSource,
         idle_level: str | None = None,
-    ) -> GpioRoleState:
+    ) -> GpioControlChannelState:
         """Send `configure_gpio_mode` and record the firmware result."""
 
         command = configure_gpio_mode_command(

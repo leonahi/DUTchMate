@@ -46,7 +46,7 @@ def test_configure_mode_sends_command_and_accepts_success() -> None:
     assert state.active_level == "low"
     assert state.source == "runtime"
     assert state.device_timestamp_us == 182334400
-    assert registry.get("reset") == state
+    assert registry.get("CTRL0") == state
 
 
 def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
@@ -108,7 +108,7 @@ def test_configure_mode_records_firmware_rejection() -> None:
     assert state.last_rejected.detail == "push_pull is not supported for reset"
     assert state.last_rejected.channel == "CTRL0"
     assert state.last_rejected.dut_signal == "RESET_N"
-    assert registry.get("reset") == state
+    assert registry.get("CTRL0") == state
 
 
 def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
@@ -163,18 +163,42 @@ def test_invalid_channel_is_rejected_before_transport_request() -> None:
         )
 
     assert transport.requests == []
-    assert registry.get("reset").state == "unconfigured"
-    assert registry.get("boot").state == "unconfigured"
+    assert registry.get("CTRL0").state == "unconfigured"
+    assert registry.get("CTRL1").state == "unconfigured"
 
 
-def test_invalid_role_is_rejected_before_transport_request() -> None:
+def test_custom_role_is_sent_and_recorded() -> None:
+    registry = GpioModeRegistry()
+    transport = FakeTransport(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, transport=transport)
+
+    state = configurator.configure_mode(
+        role="power_en",
+        channel="CTRL2",
+        dut_signal="PMIC_EN",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+        source="runtime",
+    )
+
+    assert transport.requests == [
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"power_en",'
+        b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n'
+    ]
+    assert state.state == "configured"
+    assert state.role == "power_en"
+    assert registry.get("CTRL2") == state
+
+
+def test_empty_role_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, transport=transport)
 
     with pytest.raises(ProtocolValidationError, match="GPIO role"):
         configurator.configure_mode(
-            role="power",
+            role=" ",
             channel="CTRL0",
             dut_signal="PMIC_EN",
             mode="open_drain",
@@ -183,8 +207,8 @@ def test_invalid_role_is_rejected_before_transport_request() -> None:
         )
 
     assert transport.requests == []
-    assert registry.get("reset").state == "unconfigured"
-    assert registry.get("boot").state == "unconfigured"
+    assert registry.get("CTRL0").state == "unconfigured"
+    assert registry.get("CTRL1").state == "unconfigured"
 
 
 def test_invalid_mode_is_rejected_before_transport_request() -> None:
@@ -203,7 +227,7 @@ def test_invalid_mode_is_rejected_before_transport_request() -> None:
         )
 
     assert transport.requests == []
-    assert registry.get("reset").state == "unconfigured"
+    assert registry.get("CTRL0").state == "unconfigured"
 
 
 def test_unexpected_response_does_not_update_registry() -> None:
@@ -231,4 +255,4 @@ def test_unexpected_response_does_not_update_registry() -> None:
         b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
         b'"mode":"open_drain","active_level":"low"}\n'
     ]
-    assert registry.get("reset").state == "unconfigured"
+    assert registry.get("CTRL0").state == "unconfigured"

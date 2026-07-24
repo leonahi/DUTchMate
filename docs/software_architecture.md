@@ -218,10 +218,12 @@ Implemented responsibilities:
 - Builds and sends `configure_gpio_mode` commands through a caller-provided
   transport.
 - Updates state only after a command success or command error response.
-- Tracks Phase 1 configurable DUT signal roles:
-  - `reset`
-  - `boot`
-- Tracks whether each role is:
+- Tracks Phase 1 physical control channels:
+  - `CTRL0`
+  - `CTRL1`
+  - `CTRL2`
+  - `CTRL3`
+- Tracks whether each channel is:
   - `unconfigured`
   - `configured`
   - `rejected`
@@ -230,7 +232,7 @@ Implemented responsibilities:
   last rejection detail.
 - Preserves the previous accepted mode when a later runtime override is
   rejected.
-- Provides `require_configured(...)` for reset/boot workflows.
+- Provides role lookup helpers for reset/boot workflows.
 
 Important behavior:
 
@@ -238,8 +240,8 @@ Important behavior:
   request is made.
 - Config-file mappings reject unknown fields, missing required fields, invalid
   DUT I/O voltage, and duplicate physical channels.
-- A physical control channel cannot be assigned to more than one configured
-  role.
+- A configured role can be moved to another channel without leaving a duplicate
+  role assignment behind.
 - `accept_mode(...)` records that firmware already accepted a GPIO mode request.
 - `reject_mode(...)` records that firmware or Device Core rejected a GPIO mode
   request.

@@ -152,8 +152,9 @@ Validation rules:
 - `dut_signal` must be a non-empty user-facing schematic name.
 - `reset` must be mapped before reset or boot-test workflows can run.
 - `boot` must be mapped before boot-mode workflows can run.
-- Custom roles may be parsed and reported later, but Phase 1 workflows must not
-  assume semantics for custom roles.
+- Custom control roles are accepted as project/user metadata and reported in
+  status, but Phase 1 workflows only assume built-in semantics for known roles
+  such as `reset` and `boot`.
 - If `DUT_VIO` measurement is not implemented in Phase 1 firmware, the service
   may treat configured `dut_io_voltage` as a trusted user declaration. Firmware
   must still keep all control outputs high-impedance until configuration is
@@ -161,8 +162,10 @@ Validation rules:
 
 Current implementation status:
 
-- Host-side TOML validation exists for `[hardware.control.reset]` and
-  `[hardware.control.boot]`.
+- Host-side TOML validation accepts `[hardware.control.*]` mappings for any
+  non-empty role name and rejects duplicate physical control channels.
+- GPIO runtime state is channel-first: `CTRL0` to `CTRL3` are tracked as the
+  primary resources, with role lookup used by reset/boot workflows.
 - Service startup still needs to call the validator and apply accepted mappings
   after firmware `hello`.
 

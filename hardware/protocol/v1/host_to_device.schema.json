@@ -18,7 +18,7 @@
         },
         "role": {
           "type": "string",
-          "enum": ["reset", "boot"]
+          "minLength": 1
         },
         "mode": {
           "type": "string",

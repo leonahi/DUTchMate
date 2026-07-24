@@ -120,13 +120,38 @@ def test_rejects_non_table_control_mapping() -> None:
         parse_hardware_gpio_config({"hardware": {"control": {"reset": "bad"}}})
 
 
-def test_rejects_unknown_role() -> None:
+def test_parse_custom_role_mapping() -> None:
+    config = parse_hardware_gpio_config(
+        {
+            "hardware": {
+                "control": {
+                    "wake": {
+                        "channel": "CTRL2",
+                        "dut_signal": "WAKE_N",
+                        "mode": "push_pull",
+                        "active_level": "low",
+                    }
+                }
+            }
+        }
+    )
+
+    assert config.require_control("wake") == HardwareControlMapping(
+        role="wake",
+        channel="CTRL2",
+        dut_signal="WAKE_N",
+        mode="push_pull",
+        active_level="low",
+    )
+
+
+def test_rejects_empty_role() -> None:
     with pytest.raises(GpioConfigError, match="GPIO role"):
         parse_hardware_gpio_config(
             {
                 "hardware": {
                     "control": {
-                        "wake": {
+                        "": {
                             "channel": "CTRL2",
                             "dut_signal": "WAKE_N",
                             "mode": "push_pull",

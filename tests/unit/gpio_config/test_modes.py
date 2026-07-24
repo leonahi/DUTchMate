@@ -4,9 +4,9 @@ import pytest
 
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
+    GpioControlChannelState,
     GpioModeRegistry,
     GpioModeRejection,
-    GpioRoleState,
 )
 
 
@@ -14,14 +14,20 @@ def fixed_clock() -> datetime:
     return datetime(2026, 7, 14, 12, 30, 45, tzinfo=timezone.utc)
 
 
-def test_roles_start_unconfigured() -> None:
+def test_channels_start_unconfigured() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
-    assert registry.get("reset") == GpioRoleState(role="reset", state="unconfigured")
-    assert registry.get("boot") == GpioRoleState(role="boot", state="unconfigured")
+    assert registry.get("CTRL0") == GpioControlChannelState(
+        channel="CTRL0",
+        state="unconfigured",
+    )
+    assert registry.get("CTRL3") == GpioControlChannelState(
+        channel="CTRL3",
+        state="unconfigured",
+    )
 
 
-def test_accept_mode_marks_role_configured() -> None:
+def test_accept_mode_marks_channel_configured_with_role_metadata() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
     state = registry.accept_mode(
@@ -34,10 +40,10 @@ def test_accept_mode_marks_role_configured() -> None:
         device_timestamp_us=1234,
     )
 
-    assert state == GpioRoleState(
-        role="reset",
-        state="configured",
+    assert state == GpioControlChannelState(
         channel="CTRL0",
+        state="configured",
+        role="reset",
         dut_signal="RESET_N",
         mode="open_drain",
         active_level="low",
@@ -45,26 +51,29 @@ def test_accept_mode_marks_role_configured() -> None:
         configured_at="2026-07-14T12:30:45Z",
         device_timestamp_us=1234,
     )
-    assert registry.get("reset") == state
+    assert registry.get("CTRL0") == state
+    assert registry.find_by_role("reset") == state
 
 
-def test_accept_mode_can_record_idle_level() -> None:
+def test_accept_mode_can_record_custom_role_and_idle_level() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
     state = registry.accept_mode(
-        role="boot",
-        channel="CTRL1",
-        dut_signal="BOOT0",
+        role="power_en",
+        channel="CTRL2",
+        dut_signal="REG_EN",
         mode="push_pull",
         active_level="high",
         idle_level="low",
         source="config",
     )
 
+    assert state.role == "power_en"
     assert state.idle_level == "low"
+    assert registry.find_by_role("power_en") == state
 
 
-def test_runtime_accept_replaces_previous_config_for_same_role() -> None:
+def test_runtime_accept_moves_role_to_new_channel() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     registry.accept_mode(
         role="reset",
@@ -85,16 +94,17 @@ def test_runtime_accept_replaces_previous_config_for_same_role() -> None:
         source="runtime",
     )
 
+    assert registry.get("CTRL0").state == "unconfigured"
     assert state.state == "configured"
     assert state.channel == "CTRL2"
+    assert state.role == "reset"
     assert state.dut_signal == "NRST"
     assert state.mode == "push_pull"
     assert state.idle_level == "high"
     assert state.source == "runtime"
-    assert state.last_rejected is None
 
 
-def test_accept_mode_rejects_duplicate_configured_channel() -> None:
+def test_reconfiguring_same_channel_replaces_role_metadata() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     registry.accept_mode(
         role="reset",
@@ -105,18 +115,22 @@ def test_accept_mode_rejects_duplicate_configured_channel() -> None:
         source="config",
     )
 
-    with pytest.raises(ValueError, match="already assigned"):
-        registry.accept_mode(
-            role="boot",
-            channel="CTRL0",
-            dut_signal="BOOT0",
-            mode="push_pull",
-            active_level="high",
-            source="config",
-        )
+    state = registry.accept_mode(
+        role="wake",
+        channel="CTRL0",
+        dut_signal="WAKE_N",
+        mode="push_pull",
+        active_level="high",
+        source="runtime",
+    )
+
+    assert state.role == "wake"
+    assert state.dut_signal == "WAKE_N"
+    assert registry.find_by_role("reset") is None
+    assert registry.find_by_role("wake") == state
 
 
-def test_rejection_without_previous_accept_marks_role_rejected() -> None:
+def test_rejection_without_previous_accept_marks_channel_rejected() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
     state = registry.reject_mode(
@@ -131,9 +145,10 @@ def test_rejection_without_previous_accept_marks_role_rejected() -> None:
         device_timestamp_us=200,
     )
 
-    assert state == GpioRoleState(
-        role="reset",
+    assert state == GpioControlChannelState(
+        channel="CTRL0",
         state="rejected",
+        role="reset",
         last_rejected=GpioModeRejection(
             role="reset",
             channel="CTRL0",
@@ -149,7 +164,7 @@ def test_rejection_without_previous_accept_marks_role_rejected() -> None:
     )
 
 
-def test_rejected_runtime_override_preserves_previous_accepted_mode() -> None:
+def test_rejected_runtime_override_preserves_previous_accepted_channel_state() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     registry.accept_mode(
         role="reset",
@@ -176,6 +191,7 @@ def test_rejected_runtime_override_preserves_previous_accepted_mode() -> None:
 
     assert state.state == "configured"
     assert state.channel == "CTRL0"
+    assert state.role == "reset"
     assert state.dut_signal == "RESET_N"
     assert state.mode == "open_drain"
     assert state.source == "config"
@@ -222,7 +238,7 @@ def test_later_accept_clears_previous_rejection() -> None:
     assert state.last_rejected is None
 
 
-def test_require_configured_returns_configured_state() -> None:
+def test_require_role_configured_returns_configured_state() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     configured = registry.accept_mode(
         role="reset",
@@ -233,17 +249,18 @@ def test_require_configured_returns_configured_state() -> None:
         source="runtime",
     )
 
+    assert registry.require_role_configured("reset") == configured
     assert registry.require_configured("reset") == configured
 
 
-def test_require_configured_rejects_unconfigured_role() -> None:
+def test_require_role_configured_rejects_unconfigured_role() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
     with pytest.raises(GpioConfigurationError, match="not configured"):
-        registry.require_configured("reset")
+        registry.require_role_configured("reset")
 
 
-def test_require_configured_uses_rejection_detail_for_rejected_role() -> None:
+def test_require_role_configured_uses_rejection_detail_for_rejected_role() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     registry.reject_mode(
         role="reset",
@@ -257,10 +274,10 @@ def test_require_configured_uses_rejection_detail_for_rejected_role() -> None:
     )
 
     with pytest.raises(GpioConfigurationError, match="unsupported reset mode"):
-        registry.require_configured("reset")
+        registry.require_role_configured("reset")
 
 
-def test_snapshot_returns_all_role_states() -> None:
+def test_snapshot_returns_all_channel_states() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
     registry.accept_mode(
         role="reset",
@@ -272,22 +289,24 @@ def test_snapshot_returns_all_role_states() -> None:
     )
 
     assert registry.snapshot() == {
-        "reset": GpioRoleState(
-            role="reset",
-            state="configured",
+        "CTRL0": GpioControlChannelState(
             channel="CTRL0",
+            state="configured",
+            role="reset",
             dut_signal="RESET_N",
             mode="open_drain",
             active_level="low",
             source="runtime",
             configured_at="2026-07-14T12:30:45Z",
         ),
-        "boot": GpioRoleState(role="boot", state="unconfigured"),
+        "CTRL1": GpioControlChannelState(channel="CTRL1", state="unconfigured"),
+        "CTRL2": GpioControlChannelState(channel="CTRL2", state="unconfigured"),
+        "CTRL3": GpioControlChannelState(channel="CTRL3", state="unconfigured"),
     }
 
 
-@pytest.mark.parametrize("role", ["power", "", "RESET"])
-def test_rejects_unknown_role(role: str) -> None:
+@pytest.mark.parametrize("role", ["", "   "])
+def test_rejects_empty_role(role: str) -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
     with pytest.raises(ValueError):
