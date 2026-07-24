@@ -10,11 +10,15 @@ from dutchmate_cli.client import (
     DEFAULT_SERVICE_URL,
     ServiceClientError,
     ServiceUnavailableError,
+    configure_gpio_mode,
     fetch_status,
 )
+from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.status import format_status
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
+gpio_app = typer.Typer(help="Configure and inspect DUT control GPIO channels.")
+app.add_typer(gpio_app, name="gpio")
 
 
 @app.callback()
@@ -54,6 +58,60 @@ def status(
         _fail(str(exc))
 
     typer.echo(format_status(payload))
+
+
+@gpio_app.command("mode")
+def gpio_mode(
+    channel: Annotated[
+        str,
+        typer.Argument(help="Control channel to configure, for example CTRL0."),
+    ],
+    role: Annotated[
+        str,
+        typer.Argument(help="User-facing role name, for example reset or power_en."),
+    ],
+    dut_signal: Annotated[
+        str,
+        typer.Argument(help="DUT signal connected to the channel, for example RESET_N."),
+    ],
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="GPIO drive mode: open_drain or push_pull."),
+    ],
+    active_level: Annotated[
+        str,
+        typer.Option("--active-level", help="Asserted signal level: low or high."),
+    ],
+    idle_level: Annotated[
+        str | None,
+        typer.Option("--idle-level", help="Optional idle signal level: low or high."),
+    ] = None,
+    service_url: Annotated[
+        str,
+        typer.Option(
+            "--service-url",
+            help="Base URL for the local Device Core Service.",
+            show_default=True,
+        ),
+    ] = DEFAULT_SERVICE_URL,
+) -> None:
+    """Configure a DUT control GPIO channel."""
+    try:
+        payload = configure_gpio_mode(
+            channel=channel,
+            role=role,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+            service_url=service_url,
+        )
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+    typer.echo(format_gpio_mode_result(payload))
 
 
 @app.command()

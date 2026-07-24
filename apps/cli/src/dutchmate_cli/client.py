@@ -33,13 +33,63 @@ def fetch_status(
 ) -> dict[str, object]:
     """Fetch the current Device Core Service status payload."""
 
+    response = _request_service(
+        method="GET",
+        path="/status",
+        service_url=service_url,
+        transport=transport,
+    )
+    return _response_payload(response, description="status payload")
+
+
+def configure_gpio_mode(
+    *,
+    channel: str,
+    role: str,
+    dut_signal: str,
+    mode: str,
+    active_level: str,
+    idle_level: str | None = None,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Configure one Device Core Service GPIO control channel."""
+
+    request_payload: dict[str, object] = {
+        "channel": channel,
+        "role": role,
+        "dut_signal": dut_signal,
+        "mode": mode,
+        "active_level": active_level,
+    }
+    if idle_level is not None:
+        request_payload["idle_level"] = idle_level
+
+    response = _request_service(
+        method="POST",
+        path="/gpio/mode",
+        service_url=service_url,
+        transport=transport,
+        json=request_payload,
+    )
+    return _response_payload(response, description="GPIO mode response")
+
+
+def _request_service(
+    *,
+    method: str,
+    path: str,
+    service_url: str,
+    transport: httpx.BaseTransport | None = None,
+    json: Mapping[str, object] | None = None,
+) -> httpx.Response:
     try:
         with httpx.Client(
             base_url=service_url,
             timeout=DEFAULT_TIMEOUT_SECONDS,
             transport=transport,
         ) as client:
-            response = client.get("/status")
+            response = client.request(method, path, json=json)
     except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
         raise ServiceUnavailableError(SERVICE_NOT_RUNNING_MESSAGE) from exc
     except httpx.HTTPError as exc:
@@ -48,13 +98,17 @@ def fetch_status(
     if response.is_error:
         raise ServiceApiError(_response_error_message(response))
 
+    return response
+
+
+def _response_payload(response: httpx.Response, *, description: str) -> dict[str, object]:
     try:
         payload = response.json()
     except ValueError as exc:
         raise ServiceApiError("Device Core Service returned invalid JSON.") from exc
 
     if not isinstance(payload, Mapping):
-        raise ServiceApiError("Device Core Service returned an invalid status payload.")
+        raise ServiceApiError(f"Device Core Service returned an invalid {description}.")
 
     return cast(dict[str, object], payload)
 

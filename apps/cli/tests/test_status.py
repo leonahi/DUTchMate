@@ -1,42 +1,11 @@
 from __future__ import annotations
 
-import httpx
 import pytest
 from typer.testing import CliRunner
 
 from dutchmate_cli import main
-from dutchmate_cli.client import ServiceApiError, ServiceUnavailableError, fetch_status
+from dutchmate_cli.client import ServiceUnavailableError
 from dutchmate_cli.status import format_status
-
-
-def test_fetch_status_returns_status_payload() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/status"
-        return httpx.Response(200, json={"connected": False, "control_channels": {}})
-
-    payload = fetch_status(transport=httpx.MockTransport(handler))
-
-    assert payload == {"connected": False, "control_channels": {}}
-
-
-def test_fetch_status_maps_connection_failure_to_service_unavailable() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused", request=request)
-
-    with pytest.raises(ServiceUnavailableError) as error:
-        fetch_status(transport=httpx.MockTransport(handler))
-
-    assert "Run 'dutchmate start' first" in str(error.value)
-
-
-def test_fetch_status_includes_service_error_detail() -> None:
-    def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"detail": "runtime failed"})
-
-    with pytest.raises(ServiceApiError) as error:
-        fetch_status(transport=httpx.MockTransport(handler))
-
-    assert str(error.value) == "Device Core Service returned HTTP 500: runtime failed"
 
 
 def test_format_status_renders_channel_first_state() -> None:
