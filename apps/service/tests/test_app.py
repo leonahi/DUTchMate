@@ -16,6 +16,7 @@ class FakeRuntime:
         self._status = status
         self.gpio_mode_requests: list[dict[str, object]] = []
         self.reset_requests: list[int] = []
+        self.boot_mode_requests: list[str] = []
 
     def status(self) -> DeviceCoreStatus:
         return self._status
@@ -54,6 +55,10 @@ class FakeRuntime:
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
         self.reset_requests.append(pulse_ms)
         return DeviceActionResult(action="reset", timestamp_us=182334500)
+
+    def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
+        self.boot_mode_requests.append(mode)
+        return DeviceActionResult(action="set_boot_mode", timestamp_us=182334600)
 
 
 def test_status_returns_disconnected_runtime_state() -> None:
@@ -450,6 +455,107 @@ def test_reset_validation_error_uses_service_error_contract() -> None:
     )
 
     response = TestClient(app).post("/dut/reset", json={"pulse_ms": 0})
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_argument",
+        "detail": "Request validation failed",
+    }
+
+
+def test_boot_mode_passes_mode_to_runtime_and_returns_timestamp() -> None:
+    registry = GpioModeRegistry()
+    runtime = FakeRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/boot-mode", json={"mode": "bootloader"})
+
+    assert response.status_code == 200
+    assert runtime.boot_mode_requests == ["bootloader"]
+    assert response.json() == {
+        "ok": True,
+        "timestamp_us": 182334600,
+    }
+
+
+def test_boot_mode_accepts_normal_mode() -> None:
+    registry = GpioModeRegistry()
+    runtime = FakeRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/boot-mode", json={"mode": "normal"})
+
+    assert response.status_code == 200
+    assert runtime.boot_mode_requests == ["normal"]
+
+
+def test_boot_mode_not_configured_uses_service_error_contract() -> None:
+    class UnconfiguredBootRuntime(FakeRuntime):
+        def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
+            raise GpioConfigurationError("GPIO role 'boot' is not configured")
+
+    registry = GpioModeRegistry()
+    runtime = UnconfiguredBootRuntime(
+        DeviceCoreStatus(
+            connected=True,
+            port="/dev/ttyACM0",
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("gpio_control",),
+            active_session_id=None,
+            control_channels=registry.snapshot(),
+        )
+    )
+    app = create_app(runtime)
+
+    response = TestClient(app).post("/dut/boot-mode", json={"mode": "bootloader"})
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "ok": False,
+        "error": "not_configured",
+        "detail": "GPIO role 'boot' is not configured",
+    }
+
+
+def test_boot_mode_validation_error_uses_service_error_contract() -> None:
+    registry = GpioModeRegistry()
+    app = create_app(
+        FakeRuntime(
+            DeviceCoreStatus(
+                connected=True,
+                port="/dev/ttyACM0",
+                firmware="0.1.0",
+                device="dutchmate-rp2040",
+                capabilities=("gpio_control",),
+                active_session_id=None,
+                control_channels=registry.snapshot(),
+            )
+        )
+    )
+
+    response = TestClient(app).post("/dut/boot-mode", json={"mode": "factory"})
 
     assert response.status_code == 400
     assert response.json() == {

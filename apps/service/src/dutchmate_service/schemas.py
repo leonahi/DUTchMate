@@ -70,6 +70,12 @@ class ResetRequest(BaseModel):
     pulse_ms: int = Field(default=100, ge=1, le=10000)
 
 
+class BootModeRequest(BaseModel):
+    """Request body for setting the configured boot/control role."""
+
+    mode: Literal["normal", "bootloader"]
+
+
 def device_action_payload(result: DeviceActionResult) -> dict[str, object]:
     """Serialize a successful hardware action response."""
 

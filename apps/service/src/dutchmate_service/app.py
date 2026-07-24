@@ -16,6 +16,7 @@ from dutchmate_core.runtime import (
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
+    BootModeRequest,
     GpioModeRequest,
     ResetRequest,
     device_action_payload,
@@ -44,6 +45,9 @@ class RuntimeProvider(Protocol):
 
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
         """Pulse the configured DUT reset role."""
+
+    def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
+        """Set the configured DUT boot/control role."""
 
 
 def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
@@ -74,6 +78,10 @@ def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
         if request is None:
             request = ResetRequest()
         return device_action_payload(runtime_provider.reset_dut(pulse_ms=request.pulse_ms))
+
+    @app.post("/dut/boot-mode")
+    def set_boot_mode(request: BootModeRequest) -> dict[str, object]:
+        return device_action_payload(runtime_provider.set_boot_mode(mode=request.mode))
 
     return app
 
