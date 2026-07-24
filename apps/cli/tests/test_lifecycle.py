@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from dutchmate_cli import main
+from dutchmate_cli.config import CliConfig, DaemonConfig, SessionsConfig
 from dutchmate_cli.lifecycle import (
     LifecycleError,
     ServiceStartResult,
@@ -48,7 +49,17 @@ def test_start_service_spawns_background_process_and_writes_pid(
         is_running=lambda _pid: False,
     )
 
-    assert calls == [["dutchmate-service", "--host", "127.0.0.1", "--port", "2041"]]
+    assert calls == [
+        [
+            "dutchmate-service",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "2041",
+            "--session-root",
+            ".dutchmate/sessions",
+        ]
+    ]
     assert pid_file.read_text(encoding="utf-8") == "4242\n"
     assert result == ServiceStartResult(
         pid=4242,
@@ -97,9 +108,10 @@ def test_stop_service_reports_missing_pid_file(tmp_path: Path) -> None:
 
 
 def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_start_service(*, host: str, port: int) -> ServiceStartResult:
+    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
         assert host == "127.0.0.1"
         assert port == 2040
+        assert session_root == Path(".dutchmate/sessions")
         return ServiceStartResult(
             pid=4242,
             url="http://127.0.0.1:2040",
@@ -117,7 +129,7 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_start_service(*, host: str, port: int) -> ServiceStartResult:
+    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
         raise LifecycleError("Device Core Service is already running (pid 4242).")
 
     monkeypatch.setattr(main, "start_service", fake_start_service)
@@ -126,6 +138,35 @@ def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) 
 
     assert result.exit_code == 1
     assert "Error: Device Core Service is already running (pid 4242)." in result.output
+
+
+def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
+        assert host == "localhost"
+        assert port == 2041
+        assert session_root == Path(".dutchmate/custom-sessions")
+        return ServiceStartResult(
+            pid=4242,
+            url="http://localhost:2041",
+            pid_file=Path(".dutchmate/dutchmate-service.pid"),
+            log_file=Path(".dutchmate/dutchmate-service.log"),
+            ready=True,
+        )
+
+    monkeypatch.setattr(
+        main,
+        "load_cli_config",
+        lambda: CliConfig(
+            daemon=DaemonConfig(host="localhost", port=2041),
+            sessions=SessionsConfig(path=Path(".dutchmate/custom-sessions")),
+        ),
+    )
+    monkeypatch.setattr(main, "start_service", fake_start_service)
+
+    result = CliRunner().invoke(main.app, ["start"])
+
+    assert result.exit_code == 0
+    assert result.output == "Device Core Service started (pid 4242, http://localhost:2041)\n"
 
 
 def test_stop_command_reports_stopped_service(monkeypatch: pytest.MonkeyPatch) -> None:

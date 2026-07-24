@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from dutchmate_cli import main
 from dutchmate_cli.client import ServiceUnavailableError
+from dutchmate_cli.config import CliConfig, DaemonConfig
 from dutchmate_cli.status import format_status
 
 
@@ -73,3 +74,22 @@ def test_status_command_reports_service_unavailable(monkeypatch: pytest.MonkeyPa
 
     assert result.exit_code == 1
     assert "Error: Device Core Service is not running." in result.output
+
+
+def test_status_command_uses_config_service_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_fetch_status(*, service_url: str) -> dict[str, object]:
+        assert service_url == "http://localhost:2041"
+        return {"connected": False}
+
+    monkeypatch.setattr(
+        main,
+        "load_cli_config",
+        lambda: CliConfig(daemon=DaemonConfig(host="localhost", port=2041)),
+    )
+    monkeypatch.setattr(main, "fetch_status", fake_fetch_status)
+    monkeypatch.setattr(main, "format_status", lambda _payload: "Service: running")
+
+    result = CliRunner().invoke(main.app, ["status"])
+
+    assert result.exit_code == 0
+    assert result.output == "Service: running\n"

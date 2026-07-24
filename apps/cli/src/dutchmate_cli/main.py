@@ -7,7 +7,6 @@ from typing import Annotated, NoReturn
 import typer
 
 from dutchmate_cli.client import (
-    DEFAULT_SERVICE_URL,
     ServiceClientError,
     ServiceUnavailableError,
     configure_gpio_mode,
@@ -15,11 +14,10 @@ from dutchmate_cli.client import (
     reset_dut,
     set_boot_mode,
 )
+from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
 from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
 from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.lifecycle import (
-    DEFAULT_HOST,
-    DEFAULT_PORT,
     LifecycleError,
     start_service,
     stop_service,
@@ -41,17 +39,24 @@ def main() -> None:
 @app.command()
 def start(
     host: Annotated[
-        str,
+        str | None,
         typer.Option("--host", help="Host interface for the local Device Core Service."),
-    ] = DEFAULT_HOST,
+    ] = None,
     port: Annotated[
-        int,
+        int | None,
         typer.Option("--port", min=1, max=65535, help="HTTP port for the local service."),
-    ] = DEFAULT_PORT,
+    ] = None,
 ) -> None:
     """Start the Device Core Service."""
+    config = _load_config_or_fail()
+    resolved_host = host or config.daemon.host
+    resolved_port = port or config.daemon.port
     try:
-        result = start_service(host=host, port=port)
+        result = start_service(
+            host=resolved_host,
+            port=resolved_port,
+            session_root=config.sessions.path,
+        )
     except LifecycleError as exc:
         _fail(str(exc))
 
@@ -74,17 +79,17 @@ def stop() -> None:
 @app.command()
 def status(
     service_url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--service-url",
             help="Base URL for the local Device Core Service.",
-            show_default=True,
         ),
-    ] = DEFAULT_SERVICE_URL,
+    ] = None,
 ) -> None:
     """Show DUTchMate service and hardware status."""
+    resolved_service_url = _resolve_service_url(service_url)
     try:
-        payload = fetch_status(service_url=service_url)
+        payload = fetch_status(service_url=resolved_service_url)
     except ServiceUnavailableError as exc:
         _fail(str(exc))
     except ServiceClientError as exc:
@@ -120,15 +125,15 @@ def gpio_mode(
         typer.Option("--idle-level", help="Optional idle signal level: low or high."),
     ] = None,
     service_url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--service-url",
             help="Base URL for the local Device Core Service.",
-            show_default=True,
         ),
-    ] = DEFAULT_SERVICE_URL,
+    ] = None,
 ) -> None:
     """Configure a DUT control GPIO channel."""
+    resolved_service_url = _resolve_service_url(service_url)
     try:
         payload = configure_gpio_mode(
             channel=channel,
@@ -137,7 +142,7 @@ def gpio_mode(
             mode=mode,
             active_level=active_level,
             idle_level=idle_level,
-            service_url=service_url,
+            service_url=resolved_service_url,
         )
     except ServiceUnavailableError as exc:
         _fail(str(exc))
@@ -154,17 +159,17 @@ def dut_reset(
         typer.Option("--pulse-ms", min=1, max=10000, help="Reset pulse width in milliseconds."),
     ] = 100,
     service_url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--service-url",
             help="Base URL for the local Device Core Service.",
-            show_default=True,
         ),
-    ] = DEFAULT_SERVICE_URL,
+    ] = None,
 ) -> None:
     """Pulse the DUT reset control role."""
+    resolved_service_url = _resolve_service_url(service_url)
     try:
-        payload = reset_dut(pulse_ms=pulse_ms, service_url=service_url)
+        payload = reset_dut(pulse_ms=pulse_ms, service_url=resolved_service_url)
     except ServiceUnavailableError as exc:
         _fail(str(exc))
     except ServiceClientError as exc:
@@ -180,17 +185,17 @@ def dut_boot_mode(
         typer.Argument(help="Boot mode to apply: normal or bootloader."),
     ],
     service_url: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--service-url",
             help="Base URL for the local Device Core Service.",
-            show_default=True,
         ),
-    ] = DEFAULT_SERVICE_URL,
+    ] = None,
 ) -> None:
     """Set the DUT boot/control role."""
+    resolved_service_url = _resolve_service_url(service_url)
     try:
-        payload = set_boot_mode(mode=mode, service_url=service_url)
+        payload = set_boot_mode(mode=mode, service_url=resolved_service_url)
     except ServiceUnavailableError as exc:
         _fail(str(exc))
     except ServiceClientError as exc:
@@ -208,3 +213,16 @@ def mcp() -> None:
 def _fail(message: str) -> NoReturn:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(code=1)
+
+
+def _load_config_or_fail() -> CliConfig:
+    try:
+        return load_cli_config()
+    except CliConfigError as exc:
+        _fail(str(exc))
+
+
+def _resolve_service_url(service_url: str | None) -> str:
+    if service_url is not None:
+        return service_url
+    return _load_config_or_fail().service_url

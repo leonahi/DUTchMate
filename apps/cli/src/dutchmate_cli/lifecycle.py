@@ -13,9 +13,11 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from dutchmate_cli.client import ServiceClientError, fetch_status
+from dutchmate_cli.config import DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT, DEFAULT_SESSION_PATH
 
-DEFAULT_HOST: Final = "127.0.0.1"
-DEFAULT_PORT: Final = 2040
+DEFAULT_HOST: Final = DEFAULT_DAEMON_HOST
+DEFAULT_PORT: Final = DEFAULT_DAEMON_PORT
+DEFAULT_SESSION_ROOT: Final = DEFAULT_SESSION_PATH
 DEFAULT_PID_FILE: Final = Path(".dutchmate/dutchmate-service.pid")
 DEFAULT_LOG_FILE: Final = Path(".dutchmate/dutchmate-service.log")
 DEFAULT_START_TIMEOUT_SECONDS: Final = 5.0
@@ -55,6 +57,7 @@ def start_service(
     *,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
+    session_root: Path = DEFAULT_SESSION_ROOT,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
     command: Sequence[str] | None = None,
@@ -75,7 +78,18 @@ def start_service(
 
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    service_command = list(command or ("dutchmate-service", "--host", host, "--port", str(port)))
+    service_command = list(
+        command
+        or (
+            "dutchmate-service",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--session-root",
+            str(session_root),
+        )
+    )
 
     with log_file.open("ab") as log:
         process: StartedProcess = subprocess.Popen(

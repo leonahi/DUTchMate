@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Protocol
 
 from fastapi import FastAPI
@@ -50,12 +51,19 @@ class RuntimeProvider(Protocol):
         """Set the configured DUT boot/control role."""
 
 
-def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
+def create_app(
+    runtime: RuntimeProvider | None = None,
+    *,
+    session_root: Path | str = Path(".dutchmate/sessions"),
+) -> FastAPI:
     """Create the Device Core Service application."""
 
     app = FastAPI(title="DUTchMate Device Core Service")
     register_error_handlers(app)
-    runtime_provider = runtime or DeviceCoreRuntime(transport=_UnavailableTransport())
+    runtime_provider = runtime or DeviceCoreRuntime(
+        transport=_UnavailableTransport(),
+        session_root=session_root,
+    )
 
     @app.get("/status")
     def get_status() -> dict[str, object]:

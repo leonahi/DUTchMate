@@ -316,6 +316,7 @@ source = { editable = "apps/cli" }
 dependencies = [
     { name = "dutchmate-core" },
     { name = "httpx" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "typer" },
 ]
 
@@ -323,6 +324,7 @@ dependencies = [
 requires-dist = [
     { name = "dutchmate-core", editable = "core" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
