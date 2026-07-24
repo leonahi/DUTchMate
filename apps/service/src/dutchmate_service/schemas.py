@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Literal
 
+from pydantic import BaseModel, Field, field_validator
+
+from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
 
 
@@ -21,4 +25,39 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
             channel: asdict(channel_status)
             for channel, channel_status in status.control_channels.items()
         },
+    }
+
+
+class GpioModeRequest(BaseModel):
+    """Request body for configuring a control channel mode."""
+
+    channel: Literal["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+    role: str = Field(min_length=1)
+    dut_signal: str = Field(min_length=1)
+    mode: Literal["open_drain", "push_pull"]
+    active_level: Literal["low", "high"]
+    idle_level: Literal["low", "high"] | None = None
+
+    @field_validator("role", "dut_signal")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must be a non-empty string")
+        return stripped
+
+
+def gpio_mode_payload(state: GpioControlChannelState) -> dict[str, object]:
+    """Serialize a configured GPIO mode response."""
+
+    return {
+        "ok": True,
+        "channel": state.channel,
+        "role": state.role,
+        "dut_signal": state.dut_signal,
+        "mode": state.mode,
+        "active_level": state.active_level,
+        "idle_level": state.idle_level,
+        "source": state.source,
+        "timestamp_us": state.device_timestamp_us,
     }

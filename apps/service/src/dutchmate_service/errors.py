@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
@@ -45,6 +46,13 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
 
     if isinstance(exc, DeviceCoreRuntimeError):
         return ServiceError(error="service_unavailable", detail=str(exc), status_code=503)
+
+    if isinstance(exc, RequestValidationError):
+        return ServiceError(
+            error="invalid_argument",
+            detail="Request validation failed",
+            status_code=400,
+        )
 
     if isinstance(exc, ProtocolValidationError | GpioConfigError | ValueError):
         return ServiceError(error="invalid_argument", detail=str(exc), status_code=400)
@@ -87,6 +95,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_gpio_config_error(
         request: Request,
         exc: GpioConfigError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(
+        request: Request,
+        exc: RequestValidationError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

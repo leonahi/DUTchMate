@@ -7,23 +7,36 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
     DeviceCoreRuntime,
     DeviceCoreRuntimeError,
     DeviceCoreStatus,
 )
 from dutchmate_service.errors import register_error_handlers
-from dutchmate_service.schemas import status_payload
+from dutchmate_service.schemas import GpioModeRequest, gpio_mode_payload, status_payload
 
 
-class RuntimeStatusProvider(Protocol):
+class RuntimeProvider(Protocol):
     """Runtime surface needed by the current service API."""
 
     def status(self) -> DeviceCoreStatus:
         """Return the current Device Core status."""
 
+    def configure_gpio_mode(
+        self,
+        *,
+        role: str,
+        channel: str,
+        dut_signal: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None = None,
+    ) -> GpioControlChannelState:
+        """Configure a control channel GPIO mode."""
 
-def create_app(runtime: RuntimeStatusProvider | None = None) -> FastAPI:
+
+def create_app(runtime: RuntimeProvider | None = None) -> FastAPI:
     """Create the Device Core Service application."""
 
     app = FastAPI(title="DUTchMate Device Core Service")
@@ -33,6 +46,18 @@ def create_app(runtime: RuntimeStatusProvider | None = None) -> FastAPI:
     @app.get("/status")
     def get_status() -> dict[str, object]:
         return status_payload(runtime_provider.status())
+
+    @app.post("/gpio/mode")
+    def configure_gpio_mode(request: GpioModeRequest) -> dict[str, object]:
+        state = runtime_provider.configure_gpio_mode(
+            role=request.role,
+            channel=request.channel,
+            dut_signal=request.dut_signal,
+            mode=request.mode,
+            active_level=request.active_level,
+            idle_level=request.idle_level,
+        )
+        return gpio_mode_payload(state)
 
     return app
 
