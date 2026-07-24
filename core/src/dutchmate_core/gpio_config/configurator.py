@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TypeAlias
 
 from dutchmate_core.device_connection.commands import configure_gpio_mode_command
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
-from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
     GpioModeRegistry,
@@ -14,12 +14,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioRoleState,
 )
 
-
-class GpioCommandTransport(Protocol):
-    """Transport capable of sending one host command and returning its response."""
-
-    def request(self, command: bytes) -> DeviceMessage:
-        """Send one encoded command and return one parsed device response."""
+GpioCommandTransport: TypeAlias = CommandTransport
 
 
 class GpioConfigurator:

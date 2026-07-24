@@ -21,6 +21,7 @@ from dutchmate_core.device_connection.messages import (
 )
 from dutchmate_core.device_connection.parser import parse_device_message
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
+from dutchmate_core.device_connection.transport import CommandTransport
 
 __all__ = [
     "BootModeCommand",
@@ -28,6 +29,7 @@ __all__ = [
     "BufferStatusMessage",
     "CommandErrorMessage",
     "CommandSuccessMessage",
+    "CommandTransport",
     "ConfigureGpioModeCommand",
     "HelloMessage",
     "NdjsonStreamParser",

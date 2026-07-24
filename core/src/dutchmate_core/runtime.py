@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TypeAlias
 
 from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
@@ -22,12 +22,7 @@ from dutchmate_core.workflows.device_actions import (
     DeviceActionRunner,
 )
 
-
-class DeviceCoreTransport(Protocol):
-    """Command transport owned by the future Device Core Service."""
-
-    def request(self, command: bytes) -> DeviceMessage:
-        """Send one encoded host command and return one parsed device response."""
+DeviceCoreTransport: TypeAlias = CommandTransport
 
 
 class DeviceCoreRuntimeError(RuntimeError):
