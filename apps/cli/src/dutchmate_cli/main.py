@@ -17,6 +17,13 @@ from dutchmate_cli.client import (
 )
 from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
 from dutchmate_cli.gpio import format_gpio_mode_result
+from dutchmate_cli.lifecycle import (
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    LifecycleError,
+    start_service,
+    stop_service,
+)
 from dutchmate_cli.status import format_status
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
@@ -32,15 +39,36 @@ def main() -> None:
 
 
 @app.command()
-def start() -> None:
+def start(
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Host interface for the local Device Core Service."),
+    ] = DEFAULT_HOST,
+    port: Annotated[
+        int,
+        typer.Option("--port", min=1, max=65535, help="HTTP port for the local service."),
+    ] = DEFAULT_PORT,
+) -> None:
     """Start the Device Core Service."""
-    _fail("Device Core Service is not implemented yet.")
+    try:
+        result = start_service(host=host, port=port)
+    except LifecycleError as exc:
+        _fail(str(exc))
+
+    typer.echo(f"Device Core Service started (pid {result.pid}, {result.url})")
+    if not result.ready:
+        typer.echo(f"Status endpoint is not ready yet. Logs: {result.log_file}")
 
 
 @app.command()
 def stop() -> None:
     """Stop the Device Core Service."""
-    _fail("Device Core Service is not implemented yet.")
+    try:
+        result = stop_service()
+    except LifecycleError as exc:
+        _fail(str(exc))
+
+    typer.echo(f"Device Core Service stopped (pid {result.pid})")
 
 
 @app.command()
