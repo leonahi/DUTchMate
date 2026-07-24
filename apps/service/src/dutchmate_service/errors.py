@@ -1,0 +1,105 @@
+"""HTTP error mapping for the Device Core Service."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.gpio_config.config import GpioConfigError
+from dutchmate_core.gpio_config.modes import GpioConfigurationError
+from dutchmate_core.runtime import DeviceCoreRuntimeError
+from dutchmate_core.workflows.device_actions import DeviceActionError
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceError:
+    """HTTP-facing service error response."""
+
+    error: str
+    detail: str
+    status_code: int
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "ok": False,
+            "error": self.error,
+            "detail": self.detail,
+        }
+
+
+def service_error_from_exception(exc: Exception) -> ServiceError:
+    """Map known core exceptions to the service error contract."""
+
+    if isinstance(exc, DeviceActionError):
+        return ServiceError(
+            error=exc.error,
+            detail=exc.detail,
+            status_code=_status_for_error(exc.error),
+        )
+
+    if isinstance(exc, GpioConfigurationError):
+        return ServiceError(error="not_configured", detail=str(exc), status_code=409)
+
+    if isinstance(exc, DeviceCoreRuntimeError):
+        return ServiceError(error="service_unavailable", detail=str(exc), status_code=503)
+
+    if isinstance(exc, ProtocolValidationError | GpioConfigError | ValueError):
+        return ServiceError(error="invalid_argument", detail=str(exc), status_code=400)
+
+    return ServiceError(error="internal_error", detail="Internal service error", status_code=500)
+
+
+def register_error_handlers(app: FastAPI) -> None:
+    """Register service exception handlers on an app."""
+
+    @app.exception_handler(DeviceActionError)
+    async def handle_device_action_error(
+        request: Request,
+        exc: DeviceActionError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(GpioConfigurationError)
+    async def handle_gpio_configuration_error(
+        request: Request,
+        exc: GpioConfigurationError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(DeviceCoreRuntimeError)
+    async def handle_runtime_error(
+        request: Request,
+        exc: DeviceCoreRuntimeError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(ProtocolValidationError)
+    async def handle_protocol_validation_error(
+        request: Request,
+        exc: ProtocolValidationError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(GpioConfigError)
+    async def handle_gpio_config_error(
+        request: Request,
+        exc: GpioConfigError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+
+def _json_response(error: ServiceError) -> JSONResponse:
+    return JSONResponse(status_code=error.status_code, content=error.payload())
+
+
+def _status_for_error(error: str) -> int:
+    if error == "invalid_argument":
+        return 400
+    if error in {"not_configured", "capture_active"}:
+        return 409
+    if error in {"timeout", "hardware_fault"}:
+        return 502
+    return 400

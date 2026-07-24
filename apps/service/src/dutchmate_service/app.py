@@ -12,6 +12,7 @@ from dutchmate_core.runtime import (
     DeviceCoreRuntimeError,
     DeviceCoreStatus,
 )
+from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import status_payload
 
 
@@ -26,6 +27,7 @@ def create_app(runtime: RuntimeStatusProvider | None = None) -> FastAPI:
     """Create the Device Core Service application."""
 
     app = FastAPI(title="DUTchMate Device Core Service")
+    register_error_handlers(app)
     runtime_provider = runtime or DeviceCoreRuntime(transport=_UnavailableTransport())
 
     @app.get("/status")
