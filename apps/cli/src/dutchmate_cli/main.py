@@ -15,7 +15,7 @@ from dutchmate_cli.client import (
     set_boot_mode,
 )
 from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
-from dutchmate_cli.devices import format_devices
+from dutchmate_cli.devices import DeviceSelectionError, format_devices, resolve_start_serial_port
 from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
 from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.lifecycle import (
@@ -61,11 +61,19 @@ def start(
     resolved_host = host or config.daemon.host
     resolved_port = port or config.daemon.port
     try:
+        resolved_serial_port = resolve_start_serial_port(
+            serial_port,
+            list_dutchmate_candidates(),
+        )
+    except DeviceSelectionError as exc:
+        _fail(str(exc))
+
+    try:
         result = start_service(
             host=resolved_host,
             port=resolved_port,
             session_root=config.sessions.path,
-            serial_port=serial_port,
+            serial_port=resolved_serial_port,
         )
     except LifecycleError as exc:
         _fail(str(exc))

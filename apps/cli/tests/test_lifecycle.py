@@ -15,6 +15,7 @@ from dutchmate_cli.lifecycle import (
     start_service,
     stop_service,
 )
+from dutchmate_core.device_connection.discovery import SerialPortCandidate
 
 
 class FakeProcess:
@@ -157,6 +158,7 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
         )
 
     monkeypatch.setattr(main, "start_service", fake_start_service)
+    monkeypatch.setattr(main, "list_dutchmate_candidates", lambda: [])
 
     result = CliRunner().invoke(main.app, ["start"])
 
@@ -175,6 +177,7 @@ def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) 
         raise LifecycleError("Device Core Service is already running (pid 4242).")
 
     monkeypatch.setattr(main, "start_service", fake_start_service)
+    monkeypatch.setattr(main, "list_dutchmate_candidates", lambda: [])
 
     result = CliRunner().invoke(main.app, ["start"])
 
@@ -211,11 +214,75 @@ def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> 
         ),
     )
     monkeypatch.setattr(main, "start_service", fake_start_service)
+    monkeypatch.setattr(main, "list_dutchmate_candidates", lambda: [])
 
     result = CliRunner().invoke(main.app, ["start"])
 
     assert result.exit_code == 0
     assert result.output == "Device Core Service started (pid 4242, http://localhost:2041)\n"
+
+
+def test_start_command_auto_selects_single_dutchmate_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_start_service(
+        *,
+        host: str,
+        port: int,
+        session_root: Path,
+        serial_port: str | None,
+    ) -> ServiceStartResult:
+        assert serial_port == "/dev/ttyACM0"
+        return ServiceStartResult(
+            pid=4242,
+            url="http://127.0.0.1:2040",
+            pid_file=Path(".dutchmate/dutchmate-service.pid"),
+            log_file=Path(".dutchmate/dutchmate-service.log"),
+            ready=True,
+        )
+
+    monkeypatch.setattr(main, "start_service", fake_start_service)
+    monkeypatch.setattr(
+        main,
+        "list_dutchmate_candidates",
+        lambda: [
+            SerialPortCandidate(
+                device="/dev/ttyACM0",
+                description="DUTchMate Debug Helper",
+                hwid="USB VID:PID=2E8A:000A",
+            )
+        ],
+    )
+
+    result = CliRunner().invoke(main.app, ["start"])
+
+    assert result.exit_code == 0
+
+
+def test_start_command_rejects_multiple_dutchmate_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        main,
+        "list_dutchmate_candidates",
+        lambda: [
+            SerialPortCandidate(
+                device="/dev/ttyACM0",
+                description="DUTchMate Debug Helper",
+                hwid="USB VID:PID=2E8A:000A",
+            ),
+            SerialPortCandidate(
+                device="/dev/ttyACM1",
+                description="DUTchMate Debug Helper",
+                hwid="USB VID:PID=2E8A:000A",
+            ),
+        ],
+    )
+
+    result = CliRunner().invoke(main.app, ["start"])
+
+    assert result.exit_code == 1
+    assert "Error: Multiple DUTchMate serial devices found" in result.output
 
 
 def test_stop_command_reports_stopped_service(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 from dutchmate_cli import main
-from dutchmate_cli.devices import format_devices
+from dutchmate_cli.devices import DeviceSelectionError, format_devices, resolve_start_serial_port
 from dutchmate_core.device_connection.discovery import SerialPortCandidate
 
 
@@ -32,6 +33,53 @@ def test_format_devices_renders_serial_metadata() -> None:
         "Serial ports:\n"
         "  /dev/ttyACM0 dutchmate_hint: DUTchMate Debug Helper "
         "(vid:pid=2E8A:000A, manufacturer=DUTchMate, product=Debug Helper, serial=ABC123)"
+    )
+
+
+def test_resolve_start_serial_port_uses_explicit_port() -> None:
+    assert resolve_start_serial_port("/dev/ttyACM9", []) == "/dev/ttyACM9"
+
+
+def test_resolve_start_serial_port_returns_none_without_candidates() -> None:
+    assert resolve_start_serial_port(None, []) is None
+
+
+def test_resolve_start_serial_port_auto_selects_single_candidate() -> None:
+    assert (
+        resolve_start_serial_port(
+            None,
+            [
+                SerialPortCandidate(
+                    device="/dev/ttyACM0",
+                    description="DUTchMate Debug Helper",
+                    hwid="USB VID:PID=2E8A:000A",
+                )
+            ],
+        )
+        == "/dev/ttyACM0"
+    )
+
+
+def test_resolve_start_serial_port_rejects_multiple_candidates() -> None:
+    candidates = [
+        SerialPortCandidate(
+            device="/dev/ttyACM0",
+            description="DUTchMate Debug Helper",
+            hwid="USB VID:PID=2E8A:000A",
+        ),
+        SerialPortCandidate(
+            device="/dev/ttyACM1",
+            description="DUTchMate Debug Helper",
+            hwid="USB VID:PID=2E8A:000A",
+        ),
+    ]
+
+    with pytest.raises(DeviceSelectionError) as error:
+        resolve_start_serial_port(None, candidates)
+
+    assert str(error.value) == (
+        "Multiple DUTchMate serial devices found: /dev/ttyACM0, /dev/ttyACM1. "
+        "Run 'dutchmate devices' and pass --serial-port."
     )
 
 
