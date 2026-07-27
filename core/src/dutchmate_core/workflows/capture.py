@@ -1,8 +1,10 @@
 """Capture workflow coordination for parsed device messages."""
 
-from collections.abc import Iterable
+import math
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import TypeAlias, TypeGuard
+from typing import Protocol, TypeAlias, TypeGuard
 
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
@@ -11,12 +13,20 @@ from dutchmate_core.device_connection.messages import (
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
+from dutchmate_core.device_connection.transport import TransportTimeoutError
 from dutchmate_core.log_processing.patterns import PatternMatch
 from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
 CaptureMessage: TypeAlias = UartMessage | BufferOverflowMessage | BufferStatusMessage
+
+
+class CaptureMessageSource(Protocol):
+    """Blocking source of parsed Debug Helper messages."""
+
+    def read_message(self) -> DeviceMessage:
+        """Read the next parsed message or raise on a read timeout."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,3 +238,53 @@ def run_mock_capture(
         recorder.feed(chunk)
 
     return session_store.summarize_session(recorder.session_id)
+
+
+def run_transport_capture(
+    *,
+    transport: CaptureMessageSource,
+    duration_s: float,
+    session_store: SessionStore,
+    command: str,
+    firmware: str | None = None,
+    device: str | None = None,
+    baseline: bool = False,
+    uart_processor: UartCaptureProcessor | None = None,
+    monotonic_clock: Callable[[], float] | None = None,
+) -> SessionSummary:
+    """Record transport messages until the host-side capture deadline."""
+
+    _validate_capture_duration(duration_s)
+    clock = monotonic_clock or time.monotonic
+    recorder = CaptureRecorder.start(
+        session_store=session_store,
+        command=command,
+        firmware=firmware,
+        device=device,
+        baseline=baseline,
+        uart_processor=uart_processor,
+    )
+    deadline = clock() + duration_s
+
+    while clock() < deadline:
+        try:
+            message = transport.read_message()
+        except TransportTimeoutError:
+            continue
+
+        if clock() >= deadline:
+            break
+        if _is_capture_message(message):
+            recorder.record_message(message)
+
+    return session_store.summarize_session(recorder.session_id)
+
+
+def _validate_capture_duration(duration_s: float) -> None:
+    if (
+        isinstance(duration_s, bool)
+        or not isinstance(duration_s, int | float)
+        or not math.isfinite(duration_s)
+        or duration_s <= 0
+    ):
+        raise ValueError("capture duration must be a positive finite number")

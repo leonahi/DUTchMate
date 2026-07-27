@@ -7,14 +7,19 @@ import pytest
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
+    CommandSuccessMessage,
+    HelloMessage,
     UartMessage,
 )
+from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.transport import TransportTimeoutError
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.capture import (
     CaptureRecorder,
     CaptureRecordResult,
     CaptureStreamRecorder,
     run_mock_capture,
+    run_transport_capture,
 )
 
 
@@ -24,6 +29,42 @@ def fixed_clock() -> datetime:
 
 def fixed_id() -> str:
     return "capture01"
+
+
+class FakeMonotonicClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
+class FakeCaptureTransport:
+    def __init__(
+        self,
+        script: list[DeviceMessage | Exception],
+        *,
+        clock: FakeMonotonicClock,
+        read_duration_s: float = 0.1,
+    ) -> None:
+        self._script = script
+        self._clock = clock
+        self._read_duration_s = read_duration_s
+        self.read_count = 0
+
+    def read_message(self) -> DeviceMessage:
+        self.read_count += 1
+        self._clock.advance(self._read_duration_s)
+        if not self._script:
+            raise TransportTimeoutError("no message")
+
+        result = self._script.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 def test_start_creates_session_with_metadata(tmp_path: Path) -> None:
@@ -312,6 +353,121 @@ def test_run_mock_capture_persists_capture_evidence(tmp_path: Path) -> None:
             "line_raw_b64": "RVJST1IK",
         }
     ]
+
+
+def test_run_transport_capture_records_capture_messages_until_deadline(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeCaptureTransport(
+        [
+            HelloMessage(
+                firmware="0.1.0",
+                device="dutchmate-rp2040",
+                capabilities=(),
+            ),
+            UartMessage(
+                channel=0,
+                timestamp_us=100,
+                data=b"BOOT_OK\n",
+                text="BOOT_OK\n",
+            ),
+            BufferStatusMessage(
+                timestamp_us=200,
+                uart_rx_size_bytes=32768,
+                uart_rx_used_bytes=10,
+                uart_rx_high_water_bytes=100,
+                dropped_bytes_total=0,
+                overflow_events=0,
+            ),
+            CommandSuccessMessage(timestamp_us=250),
+        ],
+        clock=clock,
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_transport_capture(
+        transport=transport,
+        duration_s=0.6,
+        session_store=store,
+        command="capture --seconds 0.6",
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        monotonic_clock=clock,
+    )
+
+    assert summary.command == "capture --seconds 0.6"
+    assert summary.firmware == "0.1.0"
+    assert summary.device == "dutchmate-rp2040"
+    session_root = tmp_path / summary.session_id
+    assert (session_root / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    assert [
+        event["type"] for event in _read_jsonl(session_root / "hardware_events.jsonl")
+    ] == ["buffer_status"]
+
+
+def test_run_transport_capture_continues_after_read_timeout(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeCaptureTransport(
+        [
+            TransportTimeoutError("no message"),
+            UartMessage(channel=0, timestamp_us=100, data=b"READY\n", text="READY\n"),
+        ],
+        clock=clock,
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_transport_capture(
+        transport=transport,
+        duration_s=0.4,
+        session_store=store,
+        command="capture",
+        monotonic_clock=clock,
+    )
+
+    assert transport.read_count == 4
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+
+
+def test_run_transport_capture_does_not_record_message_after_deadline(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeCaptureTransport(
+        [UartMessage(channel=0, timestamp_us=100, data=b"LATE\n", text="LATE\n")],
+        clock=clock,
+        read_duration_s=0.2,
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_transport_capture(
+        transport=transport,
+        duration_s=0.1,
+        session_store=store,
+        command="capture",
+        monotonic_clock=clock,
+    )
+
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b""
+
+
+@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan"), True])
+def test_run_transport_capture_rejects_invalid_duration(
+    tmp_path: Path,
+    duration_s: float,
+) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeCaptureTransport([], clock=clock)
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    with pytest.raises(ValueError, match="positive finite"):
+        run_transport_capture(
+            transport=transport,
+            duration_s=duration_s,
+            session_store=store,
+            command="capture",
+            monotonic_clock=clock,
+        )
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:

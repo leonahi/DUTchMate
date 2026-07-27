@@ -277,6 +277,9 @@ Implemented responsibilities:
   capture messages into `CaptureRecorder`.
 - `run_mock_capture(...)` records a finite mocked NDJSON stream and returns a
   `SessionSummary`.
+- `run_transport_capture(...)` reads parsed transport messages until a
+  host-monotonic deadline, records supported capture messages, and returns a
+  `SessionSummary`.
 - `DeviceActionRunner` sends reset and boot-mode commands through a
   caller-provided transport.
 - Reset actions require the `reset` role to be configured.
@@ -286,6 +289,8 @@ Important behavior:
 
 - `hello` and command response messages are ignored by capture recorders for
   now.
+- Transport read timeouts do not end a quiet capture before its requested
+  duration.
 - Reset/boot command arguments are validated before checking configuration
   state or sending transport requests.
 - Firmware command errors are raised as `DeviceActionError`.
@@ -409,8 +414,8 @@ architecture yet:
 
 - Built-in workflow semantics for control roles beyond Phase 1 `reset` and
   `boot`.
-- Continuous serial event ingestion and routing into capture sessions.
-- Long-running capture with duration/timeout handling.
+- Service-owned continuous serial ingestion and active-capture coordination.
+- Capture service/CLI duration limits and request handling.
 - Reconnect/resume session mutation helpers.
 - Capture/log/session Device Core Service endpoints.
 - Capture/log/session CLI commands.

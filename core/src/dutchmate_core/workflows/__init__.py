@@ -1,10 +1,12 @@
 """Device Core workflows."""
 
 from dutchmate_core.workflows.capture import (
+    CaptureMessageSource,
     CaptureRecorder,
     CaptureRecordResult,
     CaptureStreamRecorder,
     run_mock_capture,
+    run_transport_capture,
 )
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
@@ -14,6 +16,7 @@ from dutchmate_core.workflows.device_actions import (
 )
 
 __all__ = [
+    "CaptureMessageSource",
     "CaptureRecordResult",
     "CaptureRecorder",
     "CaptureStreamRecorder",
@@ -22,4 +25,5 @@ __all__ = [
     "DeviceActionRunner",
     "DeviceCommandTransport",
     "run_mock_capture",
+    "run_transport_capture",
 ]
