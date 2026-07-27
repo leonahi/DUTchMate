@@ -57,7 +57,7 @@ The Phase 1 host-side core currently contains:
 
 | Module | Purpose |
 |---|---|
-| `device_connection` | v1 message models, parser, command encoders, and NDJSON stream parser. |
+| `device_connection` | v1 protocol, NDJSON parsing, serial discovery, and synchronous command transport. |
 | `uart_capture` | Raw UART byte buffering, complete-line extraction, and UART capture processing. |
 | `log_processing` | Case-sensitive keyword pattern detection on completed UART lines. |
 | `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, and summaries. |
@@ -110,6 +110,6 @@ uv lock
 
 - `core` must not import CLI, service, MCP, or AI packages.
 - `apps/cli` calls the Device Core Service API; it must not own serial transport directly.
-- `apps/service` is intended to own the serial port at runtime by importing and orchestrating `core`; the current default runtime still uses an unavailable transport stub.
+- `apps/service` owns an explicitly selected or auto-selected serial port at runtime by importing and orchestrating `core`; it can also run disconnected when no device is selected.
 - `apps/mcp_server` will call the Device Core Service API when implemented; it must not import serial transport modules.
 - `hardware/protocol/v1` is the contract between firmware and host parser tests.

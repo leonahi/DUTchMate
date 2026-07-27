@@ -46,22 +46,23 @@ root, run package commands through `uv`.
 **Current runnable CLI surface:**
 ```bash
 uv run --package dutchmate-cli dutchmate start
+uv run --package dutchmate-cli dutchmate devices
 uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
 uv run --package dutchmate-cli dutchmate dut reset
 uv run --package dutchmate-cli dutchmate dut boot-mode normal
 ```
 
-`dutchmate start` currently starts the local FastAPI service process, but the
-default service runtime still uses an unavailable serial transport stub.
-USB/serial auto-detection and real Debug Helper connection handling are not
-implemented yet.
+`dutchmate start` starts the local FastAPI service process. It uses
+`--serial-port` when provided or auto-selects exactly one serial device whose
+metadata identifies it as DUTchMate. Multiple candidates require an explicit
+port; no candidates starts the service disconnected.
 
 **Optional config** — create `.dutchmate/config.toml` to override the local
-daemon host/port and session storage settings currently read by the CLI. Core
-hardware mapping validation for `[hardware.control.*]` exists, but service
-startup does not apply those mappings yet. Add `.dutchmate/` to your project's
-`.gitignore`.
+daemon host/port and session storage settings currently read by the CLI.
+Service startup loads `[hardware.control.*]` and applies mappings after a
+connected Debug Helper sends a valid `hello`. Add `.dutchmate/` to your
+project's `.gitignore`.
 
 **MCP registration** — planned for Phase 2. The current `dutchmate mcp` command
 and `dutchmate-mcp` console script are placeholders and do not run an MCP
@@ -90,9 +91,9 @@ Device Under Test
 
 **Separation of concerns:**
 - **Device Core library** — pure hardware interface. Knows nothing about MCP, HTTP, or AI. Runs inside the Device Core Service process.
-- **Device Core Service** — persistent FastAPI process intended to own the
-  serial port and expose a REST API. Current default runtime has no real serial
-  transport.
+- **Device Core Service** — persistent FastAPI process that owns the selected
+  serial port and exposes a REST API. It can also run disconnected when no
+  device is selected.
 - **MCP Server** — planned thin adapter. Current package is a placeholder.
   When implemented, it receives MCP tool calls from the AI agent and translates
   them to Device Core Service API calls.
@@ -357,11 +358,13 @@ This definitely proves...      ✗
 
 ### 6.3 Host Software
 
-- Python 3.10+ implementation. `pyserial-asyncio` is already a core
-  dependency, but the real async USB CDC/serial reader is not implemented yet.
-- CLI for current service lifecycle, status, GPIO mode, reset, and boot-mode
-  commands; capture/log/session commands remain target Phase 1 work.
-- USB CDC/serial communication with RP2040 is planned but not implemented yet.
+- Python 3.10+ implementation with a synchronous pyserial command transport;
+  continuous async USB CDC event ingestion is not implemented yet.
+- CLI for current service lifecycle, serial device discovery, status, GPIO
+  mode, reset, and boot-mode commands; capture/log/session commands remain
+  target Phase 1 work.
+- Serial startup opens the selected Debug Helper, validates its `hello`, and
+  applies configured hardware control mappings.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
@@ -372,9 +375,7 @@ This definitely proves...      ✗
   yet.
 - MCP tool exposure in Phase 2, after CLI workflows are validated in Phase 1
 - Device Core Service: persistent FastAPI process with current endpoints for
-  status, GPIO mode, reset, and boot-mode. It is intended to become the single
-  owner of the serial port; the current default runtime still uses an
-  unavailable serial transport stub.
+  status, GPIO mode, reset, and boot-mode. It owns the selected serial port.
 
 ### 6.4 UART and Reset/BOOT Electrical Interface
 
@@ -415,7 +416,7 @@ firmware may reject a requested mode with `invalid_argument` or
 `hardware_fault` if the connected hardware revision cannot implement that mode
 safely.
 
-GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical channel state, and `dutchmate status` must show each `CTRLx` channel as `unconfigured`, `configured`, or `rejected`. The current host core implements the command/result workflow behind this state; the real serial transport is still pending.
+GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.md`. In short: configuration is accepted only after firmware acknowledgement, runtime overrides do not edit `.dutchmate/config.toml`, rejected mode requests must not change the previous accepted mode or physical channel state, and `dutchmate status` must show each `CTRLx` channel as `unconfigured`, `configured`, or `rejected`. The service applies this workflow through the selected serial command transport.
 
 ### 6.5 CLI Commands
 
@@ -423,16 +424,22 @@ GPIO configuration semantics are defined in `docs/gpio_configuration_semantics.m
 ```bash
 dutchmate start                        # starts the local Device Core Service
 dutchmate start --host 127.0.0.1 --port 2040
+dutchmate start --serial-port /dev/ttyACM0
+dutchmate devices                      # list DUTchMate serial candidates
+dutchmate devices --all                # list every serial port
 dutchmate stop                         # shut down the daemon
 dutchmate status                       # show daemon state and connected port
 ```
 
 `dutchmate start` launches the Device Core Service as a background process on
 `http://127.0.0.1:2040` by default. Host, port, and session storage path can be
-configured through `.dutchmate/config.toml`. Current startup does not auto-detect
-or connect to a Debug Helper device; real serial transport is still pending. All
-other implemented commands send HTTP requests to the running service and fail
-immediately with a clear error if the service is not running:
+configured through `.dutchmate/config.toml`. An explicit `--serial-port` takes
+priority. Otherwise startup auto-selects exactly one DUTchMate candidate,
+starts disconnected when none are found, and rejects multiple candidates until
+the user selects one. Candidate matching currently uses serial metadata
+containing `DUTchMate`; fixed VID/PID matching depends on the finalized firmware
+USB identity. All other implemented commands send HTTP requests to the running
+service and fail immediately with a clear error if the service is not running:
 ```
 Error: Device Core Service is not running. Run 'dutchmate start' first.
 ```
@@ -613,7 +620,7 @@ dut_io_voltage = 1.8
 [hardware.control.reset]
 channel = "CTRL0"
 dut_signal = "RESET_N"
-mode = "open_drain"          # service startup application pending
+mode = "open_drain"
 active_level = "low"
 
 # boot intentionally omitted by default; configure per target wiring
@@ -623,10 +630,9 @@ If a required role is not mapped in `[hardware.control.*]`, that role remains
 unconfigured. The current runtime command for explicit configuration is
 `dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`.
 
-Target startup behavior is to apply config-file GPIO modes after the Debug
-Helper `hello` message is validated. A role should be marked configured only
-after firmware accepts the mode. Current service startup does not apply
-config-file GPIO modes yet.
+Service startup applies config-file GPIO modes after the Debug Helper `hello`
+message is validated. A role is marked configured only after firmware accepts
+the mode.
 
 Raw logs are always more authoritative than AI summaries and must always be preserved.
 
@@ -905,8 +911,8 @@ Possible features: multiple UART channels, PIO-based GPIO edge capture, current/
 
 ## 12. Target MCP Workflow Example
 
-This is the intended Phase 2 workflow after MCP, real serial transport, capture,
-and boot-test orchestration are implemented.
+This is the intended Phase 2 workflow after MCP, continuous serial capture, and
+boot-test orchestration are implemented.
 
 ```
 1.  Coding Agent builds firmware.

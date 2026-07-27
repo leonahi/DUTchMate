@@ -42,9 +42,9 @@ Phase 1 should be built host-side first with mocked protocol fixtures, then conn
 3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering. **Implemented.**
 4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
 5. Implement pattern detection on complete decoded lines. **Implemented.**
-6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture and reset/boot action enforcement are implemented; real serial transport and boot-test workflow remain.**
+6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON byte capture, reset/boot action enforcement, and synchronous serial command transport are implemented; continuous capture and the boot-test workflow remain.**
 7. Expose workflows through the Device Core Service API. **In progress: status, GPIO mode, reset, and boot-mode endpoints are implemented; capture/log/session endpoints remain.**
-8. Add the CLI as a thin HTTP client. **In progress: start, stop, status, GPIO mode, reset, and boot-mode commands are implemented; capture/log/session commands remain.**
+8. Add the CLI as a thin HTTP client. **In progress: start, stop, device discovery, status, GPIO mode, reset, and boot-mode commands are implemented; capture/log/session commands remain.**
 9. Implement RP2040 firmware to satisfy the channel-aware v1 protocol. **Not started.**
 10. Run hardware smoke tests with a real DUT. **Not started.**
 
@@ -171,8 +171,8 @@ Current implementation status:
   non-empty role name and rejects duplicate physical control channels.
 - GPIO runtime state is channel-first: `CTRL0` to `CTRL3` are tracked as the
   primary resources, with role lookup used by reset/boot workflows.
-- Service startup still needs to call the validator and apply accepted mappings
-  after firmware `hello`.
+- Service startup loads the hardware config and applies accepted mappings after
+  validating the firmware `hello` when a serial port is selected.
 
 ## Phase 1 Protocol Contract
 
@@ -274,11 +274,10 @@ Current implementation notes:
 
 ## Device Core Service Requirements
 
-The Device Core Service is a persistent FastAPI process intended to own the
-serial port and expose local HTTP endpoints. The current implementation starts a
-local FastAPI process, but its default runtime still uses an unavailable
-transport stub; real serial ownership and startup hardware detection are not
-implemented yet.
+The Device Core Service is a persistent FastAPI process that owns the selected
+serial port and exposes local HTTP endpoints. With a serial port, startup opens
+the command transport, validates the first `hello`, and applies configured
+hardware mappings. Without a selected port, it runs in a disconnected state.
 
 Currently implemented endpoints:
 
@@ -327,6 +326,14 @@ Minimum Phase 1 commands:
 - `dutchmate start`
 - `dutchmate stop`
 - `dutchmate status`
+
+Currently implemented startup/discovery behavior:
+
+- `dutchmate devices [--all]` lists DUTchMate candidates or all serial ports.
+- `dutchmate start --serial-port <device>` selects an explicit device.
+- Without `--serial-port`, start auto-selects exactly one DUTchMate candidate,
+  starts disconnected when there are none, and rejects ambiguous multiple
+  candidates.
 
 Currently implemented hardware-control commands:
 

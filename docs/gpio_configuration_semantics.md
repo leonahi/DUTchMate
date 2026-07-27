@@ -63,9 +63,10 @@ A mode loaded from `.dutchmate/config.toml` counts as explicit configuration bec
 If a required role is omitted from `[hardware.control.*]`, it remains
 `unconfigured`.
 
-Current implementation note: core validation and `DeviceCoreRuntime.apply_hardware_config(...)`
-exist, but service startup does not yet load/apply `[hardware.control.*]`, and
-the default service runtime has no real serial transport.
+Current implementation note: service startup loads `[hardware.control.*]` and,
+when connected to a selected Debug Helper, applies each mapping after validating
+the firmware `hello`. Without a selected device, the service starts disconnected
+and leaves the mappings unapplied.
 
 ## Runtime Override Behavior
 
@@ -105,8 +106,9 @@ boundary:
 It validates channel, role, mode, level, DUT signal, DUT I/O voltage, and
 duplicate channel assignments before startup integration code tries to apply the
 mapping. It sends the encoded command through an injected transport and updates
-the registry only after a command success or command error response. The real
-serial transport is not implemented yet.
+the registry only after a command success or command error response. Service
+startup supplies the pyserial-backed command transport when a device is
+selected.
 
 Recommended error mapping:
 

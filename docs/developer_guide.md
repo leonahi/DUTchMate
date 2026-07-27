@@ -31,9 +31,14 @@ uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate stop
 ```
 
-The default service runtime does not connect to real serial hardware yet. It
-uses an unavailable transport stub, so hardware-changing endpoints require a
-test-provided or future real transport before they can succeed against a device.
+Use `dutchmate devices` to inspect detected serial ports. `dutchmate start`
+uses an explicit `--serial-port` when provided, otherwise it auto-selects one
+DUTchMate candidate. Multiple candidates require `--serial-port`; no candidates
+starts the service in a disconnected state.
+
+Candidate matching currently depends on serial metadata containing
+`DUTchMate`. Fixed USB VID/PID matching can be added after the firmware USB
+identity is finalized.
 
 ## Repository Boundaries
 
@@ -41,8 +46,8 @@ Keep dependencies flowing in one direction:
 
 - `core` contains reusable protocol, capture, GPIO, workflow, runtime, and
   session logic. It must not import CLI, service, MCP, or AI packages.
-- `apps/service` exposes selected `core` behavior over FastAPI. It should own
-  runtime orchestration and, once implemented, serial-port ownership.
+- `apps/service` exposes selected `core` behavior over FastAPI. It owns runtime
+  orchestration and the selected serial port.
 - `apps/cli` is a thin HTTP client for the Device Core Service. It must not
   open serial ports or import low-level transport code.
 - `apps/mcp_server` is a Phase 2 scaffold. When implemented, it should call the
@@ -64,13 +69,15 @@ Current CLI commands:
 
 - `dutchmate start`
 - `dutchmate stop`
+- `dutchmate devices [--all]`
 - `dutchmate status`
 - `dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`
 - `dutchmate dut reset`
 - `dutchmate dut boot-mode <normal|bootloader>`
 
 Capture, log retrieval, wait-pattern, boot-test, UART-send, session listing,
-real serial transport, RP2040 firmware, and MCP runtime are not implemented yet.
+continuous serial event ingestion/reconnect, RP2040 firmware, and MCP runtime
+are not implemented yet.
 
 ## Adding a Service Endpoint
 

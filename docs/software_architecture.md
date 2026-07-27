@@ -34,7 +34,8 @@ log_processing
   detects configured patterns on complete UART lines
 
 device_connection
-  owns host-device protocol models, parsing, encoding, and NDJSON framing
+  owns host-device protocol models, parsing, encoding, NDJSON framing,
+  serial discovery, and synchronous command transport
 ```
 
 The main implemented host-side capture path is:
@@ -119,12 +120,20 @@ Implemented responsibilities:
 - `parse_device_message(...)` for one complete JSON message.
 - `NdjsonStreamParser` for buffering serial byte chunks into complete NDJSON
   messages.
+- Serial-port discovery with normalized USB metadata and DUTchMate text-hint
+  filtering.
+- `SerialCommandTransport` for newline-terminated command exchange over a
+  pyserial port.
+- `open_serial_command_transport(...)` for opening the selected device.
 
 Important behavior:
 
 - `data_b64` is decoded to raw bytes.
 - UART display text is derived with lossy UTF-8 replacement.
 - Protocol validation errors are raised before data reaches higher layers.
+- Command requests ignore intervening non-response messages until a command
+  success or error is received.
+- Serial read timeouts and incomplete lines raise transport errors.
 
 ### `uart_capture`
 
@@ -381,6 +390,9 @@ Current unit tests cover:
 - Device Core Service endpoints for status, GPIO mode, reset, and boot-mode.
 - CLI HTTP client commands for service lifecycle, status, GPIO mode, reset, and
   boot-mode.
+- Serial command transport, serial-port discovery, startup `hello` validation,
+  and startup hardware mapping application.
+- CLI device listing and single-candidate startup selection.
 
 Focused host-side core test command:
 
@@ -393,15 +405,13 @@ uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_sto
 The following layers or behaviors are not part of the current implemented
 architecture yet:
 
-- Multi-line GPIO role assignment beyond Phase 1 `reset` and `boot` roles.
-- Real serial command transport for GPIO configuration.
-- Real serial port command/event transport.
+- Built-in workflow semantics for control roles beyond Phase 1 `reset` and
+  `boot`.
+- Continuous serial event ingestion and routing into capture sessions.
 - Long-running capture with duration/timeout handling.
 - Reconnect/resume session mutation helpers.
-- Real serial transport behind the Device Core Service.
 - Capture/log/session Device Core Service endpoints.
 - Capture/log/session CLI commands.
-- Startup loading/application of `.dutchmate/config.toml` hardware mappings.
 - MCP server runtime.
 - RP2040 firmware.
 - Hardware smoke tests.

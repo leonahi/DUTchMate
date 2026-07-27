@@ -38,15 +38,16 @@ The workspace is defined in `pyproject.toml`. Commit `uv.lock` once generated.
 
 ## Current Implementation Status
 
-The current codebase contains the first host-side Phase 1 core pieces plus a
-local FastAPI service shell and a CLI HTTP client. It does not yet include real
-serial-port integration, RP2040 firmware, long-running capture endpoints, log
-retrieval endpoints, session-listing endpoints, or the Phase 2 MCP server.
+The current codebase contains the first host-side Phase 1 core pieces, a local
+FastAPI service, a CLI HTTP client, and synchronous serial command transport.
+It does not yet include RP2040 firmware, continuous serial event capture,
+long-running capture endpoints, log retrieval endpoints, session-listing
+endpoints, or the Phase 2 MCP server.
 
 Implemented in `core/src/dutchmate_core/`:
 
 ```text
-device_connection/   v1 protocol models, parsers, command encoders, NDJSON stream parsing
+device_connection/   v1 protocol, NDJSON parsing, serial discovery and command transport
 uart_capture/        UART byte buffering, complete-line extraction, capture processing
 log_processing/      Keyword pattern detection on completed UART lines
 session_store/       Filesystem-backed sessions, UART evidence, telemetry, summaries
@@ -57,10 +58,10 @@ gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 Implemented in `apps/`:
 
 ```text
-service/      FastAPI app with GET /status, POST /gpio/mode,
-              POST /dut/reset, and POST /dut/boot-mode.
-cli/          `dutchmate`/`dm` commands for start, stop, status,
-              `gpio mode`, `dut reset`, and `dut boot-mode`.
+service/      FastAPI app with serial startup plus status, GPIO mode,
+              reset, and boot-mode endpoints.
+cli/          `dutchmate`/`dm` commands for lifecycle, device discovery,
+              status, GPIO mode, reset, and boot-mode.
 mcp_server/   Package scaffold only; MCP runtime is not implemented yet.
 ```
 
@@ -95,9 +96,9 @@ uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_sto
 
 Known next areas:
 
-- Real command transport and higher-level boot-test workflow.
-- Real serial-port integration in the Device Core Service.
+- Continuous serial event ingestion, reconnect handling, and the higher-level
+  boot-test workflow.
 - Capture/log/session HTTP endpoints and matching CLI commands.
-- Startup application of `.dutchmate/config.toml` hardware mappings.
 - Phase 2 MCP server implementation.
 - RP2040 firmware implementation.
+- Real hardware smoke tests.
