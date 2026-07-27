@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from dutchmate_cli.client import ServiceClientError, fetch_status
-from dutchmate_cli.config import DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT, DEFAULT_SESSION_PATH
+from dutchmate_cli.config import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_DAEMON_HOST,
+    DEFAULT_DAEMON_PORT,
+    DEFAULT_SESSION_PATH,
+)
 
 DEFAULT_HOST: Final = DEFAULT_DAEMON_HOST
 DEFAULT_PORT: Final = DEFAULT_DAEMON_PORT
@@ -57,6 +62,7 @@ def start_service(
     *,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
+    config_path: Path = DEFAULT_CONFIG_PATH,
     session_root: Path = DEFAULT_SESSION_ROOT,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
@@ -88,6 +94,8 @@ def start_service(
             str(port),
             "--session-root",
             str(session_root),
+            "--config",
+            str(config_path),
         )
     )
 

@@ -1,3 +1,4 @@
+from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.workflows.device_actions import DeviceActionResult
@@ -9,6 +10,7 @@ class FakeRuntime:
         self.gpio_mode_requests: list[dict[str, object]] = []
         self.reset_requests: list[int] = []
         self.boot_mode_requests: list[str] = []
+        self.hardware_configs: list[HardwareGpioConfig] = []
 
     def status(self) -> DeviceCoreStatus:
         return self._status
@@ -51,6 +53,13 @@ class FakeRuntime:
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         self.boot_mode_requests.append(mode)
         return DeviceActionResult(action="set_boot_mode", timestamp_us=182334600)
+
+    def apply_hardware_config(
+        self,
+        config: HardwareGpioConfig,
+    ) -> dict[str, GpioControlChannelState]:
+        self.hardware_configs.append(config)
+        return {}
 
 
 def connected_status() -> DeviceCoreStatus:

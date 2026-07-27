@@ -58,6 +58,8 @@ def test_start_service_spawns_background_process_and_writes_pid(
             "2041",
             "--session-root",
             ".dutchmate/sessions",
+            "--config",
+            ".dutchmate/config.toml",
         ]
     ]
     assert pid_file.read_text(encoding="utf-8") == "4242\n"

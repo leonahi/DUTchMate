@@ -8,6 +8,7 @@ from typing import Protocol
 from fastapi import FastAPI
 
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
     DeviceCoreRuntime,
@@ -24,6 +25,7 @@ from dutchmate_service.schemas import (
     gpio_mode_payload,
     status_payload,
 )
+from dutchmate_service.startup import apply_startup_hardware_config
 
 
 class RuntimeProvider(Protocol):
@@ -50,11 +52,18 @@ class RuntimeProvider(Protocol):
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         """Set the configured DUT boot/control role."""
 
+    def apply_hardware_config(
+        self,
+        config: HardwareGpioConfig,
+    ) -> dict[str, GpioControlChannelState]:
+        """Apply startup hardware control mappings."""
+
 
 def create_app(
     runtime: RuntimeProvider | None = None,
     *,
     session_root: Path | str = Path(".dutchmate/sessions"),
+    hardware_config: HardwareGpioConfig | None = None,
 ) -> FastAPI:
     """Create the Device Core Service application."""
 
@@ -64,6 +73,8 @@ def create_app(
         transport=_UnavailableTransport(),
         session_root=session_root,
     )
+    if hardware_config is not None:
+        apply_startup_hardware_config(runtime_provider, hardware_config)
 
     @app.get("/status")
     def get_status() -> dict[str, object]:
