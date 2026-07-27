@@ -72,6 +72,7 @@ def build_startup_runtime(
     transport = open_serial_command_transport(port=serial_port)
     runtime = DeviceCoreRuntime(
         transport=transport,
+        message_source=transport,
         session_root=session_root,
         port=serial_port,
     )

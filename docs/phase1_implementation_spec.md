@@ -42,7 +42,7 @@ Phase 1 should be built host-side first with mocked protocol fixtures, then conn
 3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering. **Implemented.**
 4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
 5. Implement pattern detection on complete decoded lines. **Implemented.**
-6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON capture, finite transport-backed capture, reset/boot action enforcement, and synchronous serial command transport are implemented; service capture coordination and the boot-test workflow remain.**
+6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON capture, runtime-integrated finite transport capture with an active-session guard, reset/boot action enforcement, and synchronous serial command transport are implemented; service capture exposure and the boot-test workflow remain.**
 7. Expose workflows through the Device Core Service API. **In progress: status, GPIO mode, reset, and boot-mode endpoints are implemented; capture/log/session endpoints remain.**
 8. Add the CLI as a thin HTTP client. **In progress: start, stop, device discovery, status, GPIO mode, reset, and boot-mode commands are implemented; capture/log/session commands remain.**
 9. Implement RP2040 firmware to satisfy the channel-aware v1 protocol. **Not started.**
@@ -67,6 +67,21 @@ The mock runner `run_mock_capture(...)` records finite NDJSON byte chunks into
 a session. The transport runner `run_transport_capture(...)` reads parsed
 messages until a host-monotonic deadline. Both return a `SessionSummary`; the
 workflow layer accepts injected transports and does not open a serial port.
+
+The service-facing core path currently reaches the same recorder through:
+
+```text
+device_connection.SerialCommandTransport
+  -> runtime.DeviceCoreRuntime.capture_uart
+  -> workflows.TransportCaptureRunner
+  -> workflows.CaptureRecorder
+  -> session_store.SessionStore
+  -> session_store.SessionSummary
+```
+
+The runtime publishes `active_session_id` while this loop is running and
+rejects overlapping GPIO, reset, boot-mode, or capture operations with
+`capture_active`.
 
 ## Package Layout
 

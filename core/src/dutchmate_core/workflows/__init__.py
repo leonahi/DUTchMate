@@ -5,6 +5,7 @@ from dutchmate_core.workflows.capture import (
     CaptureRecorder,
     CaptureRecordResult,
     CaptureStreamRecorder,
+    TransportCaptureRunner,
     run_mock_capture,
     run_transport_capture,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "DeviceActionResult",
     "DeviceActionRunner",
     "DeviceCommandTransport",
+    "TransportCaptureRunner",
     "run_mock_capture",
     "run_transport_capture",
 ]

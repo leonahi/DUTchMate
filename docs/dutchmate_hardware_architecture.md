@@ -583,7 +583,7 @@ active_edge = "both"
 dut_output_type = "push_pull"
 
 [hardware.uart]
-baudrate = 115200
+baudrate = 460800
 data_bits = 8
 parity = "none"
 stop_bits = 1

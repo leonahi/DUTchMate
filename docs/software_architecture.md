@@ -53,6 +53,19 @@ NDJSON byte chunks
   -> session_store.SessionSummary
 ```
 
+The finite transport-backed capture path is:
+
+```text
+device_connection.SerialCommandTransport queued/new messages
+  -> runtime.DeviceCoreRuntime.capture_uart
+  -> workflows.TransportCaptureRunner
+  -> workflows.CaptureRecorder
+  -> uart_capture.UartCaptureProcessor
+  -> log_processing.PatternDetector
+  -> session_store.SessionStore
+  -> session_store.SessionSummary
+```
+
 ## Dependency Direction
 
 Dependencies should point from higher-level orchestration toward lower-level
@@ -280,6 +293,8 @@ Implemented responsibilities:
 - `run_transport_capture(...)` reads parsed transport messages until a
   host-monotonic deadline, records supported capture messages, and returns a
   `SessionSummary`.
+- `TransportCaptureRunner` lets the service-facing runtime reserve the active
+  session before the finite transport read loop begins.
 - `DeviceActionRunner` sends reset and boot-mode commands through a
   caller-provided transport.
 - Reset actions require the `reset` role to be configured.
@@ -291,6 +306,11 @@ Important behavior:
   now.
 - Transport read timeouts do not end a quiet capture before its requested
   duration.
+- `DeviceCoreRuntime.capture_uart(...)` exposes the finite capture workflow to
+  service orchestration, reports the active session in status, and clears it
+  after success or failure.
+- Runtime GPIO, reset, boot-mode, and overlapping capture operations return
+  `capture_active` while a capture owns the serial message stream.
 - Reset/boot command arguments are validated before checking configuration
   state or sending transport requests.
 - Firmware command errors are raised as `DeviceActionError`.
@@ -394,6 +414,8 @@ Current unit tests cover:
 - Capture recorders from typed messages and NDJSON byte chunks.
 - Reset and boot-mode workflow enforcement.
 - Mock capture summary generation.
+- Finite transport-backed capture deadlines and timeout handling.
+- Runtime active-session reporting, conflict guards, and failure cleanup.
 - Device Core Service endpoints for status, GPIO mode, reset, and boot-mode.
 - CLI HTTP client commands for service lifecycle, status, GPIO mode, reset, and
   boot-mode.
@@ -404,7 +426,7 @@ Current unit tests cover:
 Focused host-side core test command:
 
 ```bash
-uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
 ```
 
 ## Not Implemented Yet
@@ -414,10 +436,9 @@ architecture yet:
 
 - Built-in workflow semantics for control roles beyond Phase 1 `reset` and
   `boot`.
-- Service-owned continuous serial ingestion and active-capture coordination.
-- Capture service/CLI duration limits and request handling.
+- Background serial ingestion outside finite capture requests.
 - Reconnect/resume session mutation helpers.
-- Capture/log/session Device Core Service endpoints.
+- Capture/log/session Device Core Service endpoints and request handling.
 - Capture/log/session CLI commands.
 - MCP server runtime.
 - RP2040 firmware.

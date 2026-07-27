@@ -75,9 +75,11 @@ Current CLI commands:
 - `dutchmate dut reset`
 - `dutchmate dut boot-mode <normal|bootloader>`
 
-Capture, log retrieval, wait-pattern, boot-test, UART-send, session listing,
-continuous serial event ingestion/reconnect, RP2040 firmware, and MCP runtime
-are not implemented yet.
+The core runtime implements finite transport-backed capture and rejects
+overlapping hardware-changing operations with `capture_active`. Capture HTTP/CLI
+commands, log retrieval, wait-pattern, boot-test, UART-send, session listing,
+background serial ingestion/reconnect, RP2040 firmware, and MCP runtime are not
+implemented yet.
 
 ## Adding a Service Endpoint
 

@@ -365,6 +365,9 @@ This definitely proves...      ✗
   target Phase 1 work.
 - Serial startup opens the selected Debug Helper, validates its `hello`, and
   applies configured hardware control mappings.
+- The core runtime can run a finite transport-backed capture into session
+  storage, publishes `active_session_id`, and prevents overlapping hardware
+  operations. HTTP and CLI capture commands remain pending.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
@@ -550,8 +553,9 @@ so callers can tell whether evidence may be incomplete.
 **Target concurrency behavior:** only one active capture at a time.
 `POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and
 `POST /dut/boot-mode` should return `{"ok": false, "error": "capture_active"}`
-immediately if a capture is in progress. This guard is not implemented yet
-because long-running capture is not implemented yet.
+immediately if a capture is in progress. The core runtime now enforces this
+guard for finite captures and hardware-changing operations; the capture and
+boot-test HTTP endpoints are not implemented yet.
 
 ---
 
@@ -823,7 +827,7 @@ Any workflow exposed through the CLI must first pass through mocked Device Core 
 
 ## 10. Contributing
 
-**Repository:** `https://github.com/<your-org>/dutchmate` *(placeholder — update when repo is created)*
+**Repository:** `https://github.com/leonahi/DUTchMate`
 
 **Contribution workflow:**
 1. Fork the repository and create a feature branch.
@@ -832,7 +836,7 @@ Any workflow exposed through the CLI must first pass through mocked Device Core 
 4. Open a pull request with a clear description of what changed and why.
 
 **Key files for new contributors:**
-- `project_context.md` — this document; read before making changes
+- `docs/project_context.md` — this document; read before making changes
 - `docs/project_layout.md` — monorepo package layout and Python tooling decision
 - `docs/phase1_implementation_spec.md` — concrete Phase 1 implementation order and done criteria
 - `docs/dutchmate_hardware_architecture.md` — proposed voltage-domain GPIO/UART interface and channel mapping model
@@ -850,7 +854,8 @@ Any workflow exposed through the CLI must first pass through mocked Device Core 
 - Raw log preservation is non-negotiable (design rule 4)
 - Hardware-facing changes (reset pulse timing, GPIO mode, protocol messages) require justification in the PR description
 
-**Reporting bugs:** open a GitHub issue at `https://github.com/<your-org>/dutchmate/issues` *(placeholder — update when repo is created)*. Include:
+**Reporting bugs:** open a GitHub issue at
+`https://github.com/leonahi/DUTchMate/issues`. Include:
 - OS and Python version
 - Firmware version (`dutchmate status` output)
 - RP2040 board model
@@ -1012,9 +1017,13 @@ NDJSON + base64 encoding adds ~33–50% overhead over raw UART bytes. At 460800 
 
 The RP2040 UART peripheral delivers bytes via interrupt. TIMER timestamps are captured in the interrupt handler — accurate to firmware scheduling jitter (typically tens of microseconds under Zephyr). This is sufficient for boot sequence analysis and failure detection but not for sub-microsecond timing measurements. PIO-based hardware UART capture (Phase 5) could provide true hardware timestamps if needed.
 
-### 15.6 pyserial-asyncio Required
+### 15.6 pyserial-asyncio for Continuous Reading
 
-Standard `pyserial` does not support asyncio. The Device Core serial reader must use `pyserial-asyncio`. Using `pyserial` directly in an asyncio context requires `loop.run_in_executor` wrapping a blocking read, which adds complexity and latency. Pin `pyserial-asyncio` as an explicit dependency from the start.
+The current command transport uses synchronous `pyserial` reads. Standard
+`pyserial` does not support asyncio, so the future background Device Core serial
+reader should use the already-pinned `pyserial-asyncio` dependency. Wrapping
+blocking reads with `loop.run_in_executor` would add avoidable complexity and
+latency.
 
 ### 15.7 Ring Buffer Size Requires Validation
 

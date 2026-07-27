@@ -1,6 +1,6 @@
 # Project Layout
 
-> Status: initial scaffold
+> Status: current workspace layout
 > Scope: monorepo structure for hardware, Python core, host apps, and tests.
 
 ## Python Tooling Decision
@@ -61,7 +61,7 @@ The Phase 1 host-side core currently contains:
 | `uart_capture` | Raw UART byte buffering, complete-line extraction, and UART capture processing. |
 | `log_processing` | Case-sensitive keyword pattern detection on completed UART lines. |
 | `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, and summaries. |
-| `workflows` | Mock capture recorders and guarded reset/boot action workflows. |
+| `workflows` | Mock and transport-backed capture plus guarded hardware action workflows. |
 | `gpio_config` | GPIO mode configuration workflow/state for Debug Helper lines used as DUT control signals. |
 
 Higher-level boot-test orchestration has not been implemented yet.
@@ -104,7 +104,8 @@ Generate or refresh the lockfile:
 uv lock
 ```
 
-`uv.lock` should be committed once generated.
+`uv.lock` is the committed shared workspace lockfile and should be refreshed
+when dependency declarations change.
 
 ## Boundary Rules
 

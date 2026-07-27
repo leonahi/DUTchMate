@@ -29,6 +29,37 @@ class CaptureMessageSource(Protocol):
         """Read the next parsed message or raise on a read timeout."""
 
 
+class TransportCaptureRunner:
+    """Record parsed transport messages for one finite capture duration."""
+
+    def __init__(
+        self,
+        *,
+        transport: CaptureMessageSource,
+        duration_s: float,
+        monotonic_clock: Callable[[], float] | None = None,
+    ) -> None:
+        _validate_capture_duration(duration_s)
+        self._transport = transport
+        self._duration_s = duration_s
+        self._clock = monotonic_clock or time.monotonic
+
+    def run(self, recorder: "CaptureRecorder") -> None:
+        """Record supported messages until the host-monotonic deadline."""
+
+        deadline = self._clock() + self._duration_s
+        while self._clock() < deadline:
+            try:
+                message = self._transport.read_message()
+            except TransportTimeoutError:
+                continue
+
+            if self._clock() >= deadline:
+                break
+            if _is_capture_message(message):
+                recorder.record_message(message)
+
+
 @dataclass(frozen=True, slots=True)
 class CaptureRecordResult:
     """Result of recording one parsed device message into a capture session."""
@@ -254,8 +285,11 @@ def run_transport_capture(
 ) -> SessionSummary:
     """Record transport messages until the host-side capture deadline."""
 
-    _validate_capture_duration(duration_s)
-    clock = monotonic_clock or time.monotonic
+    runner = TransportCaptureRunner(
+        transport=transport,
+        duration_s=duration_s,
+        monotonic_clock=monotonic_clock,
+    )
     recorder = CaptureRecorder.start(
         session_store=session_store,
         command=command,
@@ -264,19 +298,7 @@ def run_transport_capture(
         baseline=baseline,
         uart_processor=uart_processor,
     )
-    deadline = clock() + duration_s
-
-    while clock() < deadline:
-        try:
-            message = transport.read_message()
-        except TransportTimeoutError:
-            continue
-
-        if clock() >= deadline:
-            break
-        if _is_capture_message(message):
-            recorder.record_message(message)
-
+    runner.run(recorder)
     return session_store.summarize_session(recorder.session_id)
 
 

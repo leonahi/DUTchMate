@@ -34,15 +34,16 @@ uv run pytest
 uv run ruff check .
 ```
 
-The workspace is defined in `pyproject.toml`. Commit `uv.lock` once generated.
+The workspace is defined in `pyproject.toml`, with the shared lockfile committed
+as `uv.lock`.
 
 ## Current Implementation Status
 
 The current codebase contains the first host-side Phase 1 core pieces, a local
-FastAPI service, a CLI HTTP client, and synchronous serial command transport.
-It does not yet include RP2040 firmware, continuous serial event capture,
-long-running capture endpoints, log retrieval endpoints, session-listing
-endpoints, or the Phase 2 MCP server.
+FastAPI service, a CLI HTTP client, synchronous serial command transport, and a
+finite transport-backed core capture workflow. It does not yet include RP2040
+firmware, background serial event ingestion, capture HTTP/CLI commands, log
+retrieval endpoints, session-listing endpoints, or the Phase 2 MCP server.
 
 Implemented in `core/src/dutchmate_core/`:
 
@@ -51,7 +52,7 @@ device_connection/   v1 protocol, NDJSON parsing, serial discovery and command t
 uart_capture/        UART byte buffering, complete-line extraction, capture processing
 log_processing/      Keyword pattern detection on completed UART lines
 session_store/       Filesystem-backed sessions, UART evidence, telemetry, summaries
-workflows/           Mock capture recorders and guarded reset/boot action workflows
+workflows/           Mock/transport capture plus guarded hardware action workflows
 gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 ```
 
@@ -65,13 +66,26 @@ cli/          `dutchmate`/`dm` commands for lifecycle, device discovery,
 mcp_server/   Package scaffold only; MCP runtime is not implemented yet.
 ```
 
-The current host-side capture path is:
+The mock host-side capture path is:
 
 ```text
 NDJSON bytes
   -> NdjsonStreamParser
   -> parse_device_message
   -> CaptureStreamRecorder
+  -> UartCaptureProcessor
+  -> PatternDetector
+  -> SessionStore
+  -> SessionSummary
+```
+
+The finite transport-backed path is:
+
+```text
+SerialCommandTransport queued/new messages
+  -> DeviceCoreRuntime.capture_uart
+  -> TransportCaptureRunner
+  -> CaptureRecorder
   -> UartCaptureProcessor
   -> PatternDetector
   -> SessionStore
@@ -91,12 +105,12 @@ detected_patterns.json
 Useful focused test command while Phase 1 core is being built:
 
 ```bash
-uv run pytest tests/unit/gpio_config tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
 ```
 
 Known next areas:
 
-- Continuous serial event ingestion, reconnect handling, and the higher-level
+- Background serial event ingestion, reconnect handling, and the higher-level
   boot-test workflow.
 - Capture/log/session HTTP endpoints and matching CLI commands.
 - Phase 2 MCP server implementation.

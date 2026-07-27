@@ -108,7 +108,8 @@ duplicate channel assignments before startup integration code tries to apply the
 mapping. It sends the encoded command through an injected transport and updates
 the registry only after a command success or command error response. Service
 startup supplies the pyserial-backed command transport when a device is
-selected.
+selected. The service-facing runtime rejects GPIO configuration with
+`capture_active` while a finite capture owns the serial message stream.
 
 Recommended error mapping:
 
