@@ -12,3 +12,11 @@ class CommandTransport(Protocol):
 
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return one parsed device response."""
+
+
+class TransportError(RuntimeError):
+    """Raised when host-to-device transport cannot complete an operation."""
+
+
+class TransportTimeoutError(TransportError):
+    """Raised when the Debug Helper does not provide a complete message in time."""
