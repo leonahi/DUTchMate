@@ -15,6 +15,7 @@ from dutchmate_cli.client import (
     set_boot_mode,
 )
 from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
+from dutchmate_cli.devices import format_devices
 from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
 from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.lifecycle import (
@@ -23,6 +24,10 @@ from dutchmate_cli.lifecycle import (
     stop_service,
 )
 from dutchmate_cli.status import format_status
+from dutchmate_core.device_connection.discovery import (
+    list_dutchmate_candidates,
+    list_serial_ports,
+)
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
 dut_app = typer.Typer(help="Run DUT-level workflows through configured control roles.")
@@ -79,6 +84,18 @@ def stop() -> None:
         _fail(str(exc))
 
     typer.echo(f"Device Core Service stopped (pid {result.pid})")
+
+
+@app.command()
+def devices(
+    all_ports: Annotated[
+        bool,
+        typer.Option("--all", help="Show all serial ports, not just DUTchMate candidates."),
+    ] = False,
+) -> None:
+    """List serial ports that may be DUTchMate Debug Helpers."""
+    candidates = list_serial_ports() if all_ports else list_dutchmate_candidates()
+    typer.echo(format_devices(candidates))
 
 
 @app.command()

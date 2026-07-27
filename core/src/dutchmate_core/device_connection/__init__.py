@@ -12,6 +12,11 @@ from dutchmate_core.device_connection.commands import (
     uart_send_command,
     uart_send_text_command,
 )
+from dutchmate_core.device_connection.discovery import (
+    SerialPortCandidate,
+    list_dutchmate_candidates,
+    list_serial_ports,
+)
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
@@ -46,6 +51,7 @@ __all__ = [
     "ResetCommand",
     "SerialCommandTransport",
     "SerialPort",
+    "SerialPortCandidate",
     "UartSendCommand",
     "UartMessage",
     "TransportError",
@@ -53,6 +59,8 @@ __all__ = [
     "WELL_KNOWN_GPIO_ROLES",
     "boot_mode_command",
     "configure_gpio_mode_command",
+    "list_dutchmate_candidates",
+    "list_serial_ports",
     "open_serial_command_transport",
     "parse_device_message",
     "reset_command",
