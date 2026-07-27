@@ -72,6 +72,33 @@ def test_start_service_spawns_background_process_and_writes_pid(
     )
 
 
+def test_start_service_passes_serial_port_to_background_process(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_popen(command: list[str], **_kwargs: object) -> FakeProcess:
+        calls.append(command)
+        return FakeProcess()
+
+    monkeypatch.setattr("dutchmate_cli.lifecycle.subprocess.Popen", fake_popen)
+    health_checks = iter((False, True))
+
+    start_service(
+        host="127.0.0.1",
+        port=2041,
+        serial_port="/dev/ttyACM0",
+        pid_file=tmp_path / "service.pid",
+        log_file=tmp_path / "service.log",
+        wait_timeout_s=0,
+        health_check=lambda _url: next(health_checks),
+        is_running=lambda _pid: False,
+    )
+
+    assert calls[0][-2:] == ["--serial-port", "/dev/ttyACM0"]
+
+
 def test_start_service_rejects_existing_running_pid(tmp_path: Path) -> None:
     pid_file = tmp_path / "service.pid"
     pid_file.write_text("4242\n", encoding="utf-8")
@@ -110,10 +137,17 @@ def test_stop_service_reports_missing_pid_file(tmp_path: Path) -> None:
 
 
 def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
+    def fake_start_service(
+        *,
+        host: str,
+        port: int,
+        session_root: Path,
+        serial_port: str | None,
+    ) -> ServiceStartResult:
         assert host == "127.0.0.1"
         assert port == 2040
         assert session_root == Path(".dutchmate/sessions")
+        assert serial_port is None
         return ServiceStartResult(
             pid=4242,
             url="http://127.0.0.1:2040",
@@ -131,7 +165,13 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
+    def fake_start_service(
+        *,
+        host: str,
+        port: int,
+        session_root: Path,
+        serial_port: str | None,
+    ) -> ServiceStartResult:
         raise LifecycleError("Device Core Service is already running (pid 4242).")
 
     monkeypatch.setattr(main, "start_service", fake_start_service)
@@ -143,10 +183,17 @@ def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_start_service(*, host: str, port: int, session_root: Path) -> ServiceStartResult:
+    def fake_start_service(
+        *,
+        host: str,
+        port: int,
+        session_root: Path,
+        serial_port: str | None,
+    ) -> ServiceStartResult:
         assert host == "localhost"
         assert port == 2041
         assert session_root == Path(".dutchmate/custom-sessions")
+        assert serial_port is None
         return ServiceStartResult(
             pid=4242,
             url="http://localhost:2041",

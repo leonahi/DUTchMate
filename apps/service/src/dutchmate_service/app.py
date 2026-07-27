@@ -7,12 +7,9 @@ from typing import Protocol
 
 from fastapi import FastAPI
 
-from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
-    DeviceCoreRuntime,
-    DeviceCoreRuntimeError,
     DeviceCoreStatus,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
@@ -25,7 +22,7 @@ from dutchmate_service.schemas import (
     gpio_mode_payload,
     status_payload,
 )
-from dutchmate_service.startup import apply_startup_hardware_config
+from dutchmate_service.startup import apply_startup_hardware_config, build_startup_runtime
 
 
 class RuntimeProvider(Protocol):
@@ -64,14 +61,15 @@ def create_app(
     *,
     session_root: Path | str = Path(".dutchmate/sessions"),
     hardware_config: HardwareGpioConfig | None = None,
+    serial_port: str | None = None,
 ) -> FastAPI:
     """Create the Device Core Service application."""
 
     app = FastAPI(title="DUTchMate Device Core Service")
     register_error_handlers(app)
-    runtime_provider = runtime or DeviceCoreRuntime(
-        transport=_UnavailableTransport(),
+    runtime_provider = runtime or build_startup_runtime(
         session_root=session_root,
+        serial_port=serial_port,
     )
     if hardware_config is not None:
         apply_startup_hardware_config(runtime_provider, hardware_config)
@@ -103,8 +101,3 @@ def create_app(
         return device_action_payload(runtime_provider.set_boot_mode(mode=request.mode))
 
     return app
-
-
-class _UnavailableTransport:
-    def request(self, command: bytes) -> DeviceMessage:
-        raise DeviceCoreRuntimeError("Serial transport is not implemented yet")

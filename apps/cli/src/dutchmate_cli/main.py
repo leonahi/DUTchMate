@@ -46,6 +46,10 @@ def start(
         int | None,
         typer.Option("--port", min=1, max=65535, help="HTTP port for the local service."),
     ] = None,
+    serial_port: Annotated[
+        str | None,
+        typer.Option("--serial-port", help="Debug Helper serial device path."),
+    ] = None,
 ) -> None:
     """Start the Device Core Service."""
     config = _load_config_or_fail()
@@ -56,6 +60,7 @@ def start(
             host=resolved_host,
             port=resolved_port,
             session_root=config.sessions.path,
+            serial_port=serial_port,
         )
     except LifecycleError as exc:
         _fail(str(exc))

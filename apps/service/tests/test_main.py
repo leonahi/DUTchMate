@@ -25,9 +25,15 @@ active_level = "low"
         encoding="utf-8",
     )
 
-    def fake_create_app(*, session_root: object, hardware_config: object) -> object:
+    def fake_create_app(
+        *,
+        session_root: object,
+        hardware_config: object,
+        serial_port: str | None,
+    ) -> object:
         session_roots.append(session_root)
         hardware_configs.append(hardware_config)
+        assert serial_port == "/dev/ttyACM0"
         return object()
 
     def fake_run(app: object, *, host: str, port: int) -> None:
@@ -46,6 +52,8 @@ active_level = "low"
             ".dutchmate/custom-sessions",
             "--config",
             str(config_path),
+            "--serial-port",
+            "/dev/ttyACM0",
         ]
     )
 

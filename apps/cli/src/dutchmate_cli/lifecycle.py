@@ -64,6 +64,7 @@ def start_service(
     port: int = DEFAULT_PORT,
     config_path: Path = DEFAULT_CONFIG_PATH,
     session_root: Path = DEFAULT_SESSION_ROOT,
+    serial_port: str | None = None,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
     command: Sequence[str] | None = None,
@@ -84,9 +85,8 @@ def start_service(
 
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    service_command = list(
-        command
-        or (
+    if command is None:
+        service_command = [
             "dutchmate-service",
             "--host",
             host,
@@ -96,8 +96,11 @@ def start_service(
             str(session_root),
             "--config",
             str(config_path),
-        )
-    )
+        ]
+        if serial_port is not None:
+            service_command.extend(["--serial-port", serial_port])
+    else:
+        service_command = list(command)
 
     with log_file.open("ab") as log:
         process: StartedProcess = subprocess.Popen(
