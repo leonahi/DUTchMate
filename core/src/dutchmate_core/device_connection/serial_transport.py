@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections import deque
 from collections.abc import Callable
 from typing import Protocol, cast
 
@@ -38,6 +39,7 @@ class SerialCommandTransport:
 
     def __init__(self, serial_port: SerialPort) -> None:
         self._serial_port = serial_port
+        self._pending_messages: deque[DeviceMessage] = deque()
 
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return the matching command response."""
@@ -51,13 +53,26 @@ class SerialCommandTransport:
         self._serial_port.flush()
 
         while True:
-            message = self.read_message()
+            message = self._read_serial_message()
             if isinstance(message, CommandSuccessMessage | CommandErrorMessage):
                 return message
+            self._pending_messages.append(message)
 
     def read_message(self) -> DeviceMessage:
-        """Read and parse one complete Debug Helper message."""
+        """Return the oldest queued or newly read Debug Helper message."""
 
+        if self._pending_messages:
+            return self._pending_messages.popleft()
+        return self._read_serial_message()
+
+    def drain_pending_messages(self) -> tuple[DeviceMessage, ...]:
+        """Return and clear messages queued during command requests."""
+
+        messages = tuple(self._pending_messages)
+        self._pending_messages.clear()
+        return messages
+
+    def _read_serial_message(self) -> DeviceMessage:
         line = self._serial_port.read_until(b"\n")
         if not line:
             raise TransportTimeoutError("Timed out waiting for Debug Helper message")

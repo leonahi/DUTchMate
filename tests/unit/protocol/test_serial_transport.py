@@ -1,9 +1,11 @@
 import pytest
 
 from dutchmate_core.device_connection.messages import (
+    BufferStatusMessage,
     CommandErrorMessage,
     CommandSuccessMessage,
     HelloMessage,
+    UartMessage,
 )
 from dutchmate_core.device_connection.serial_transport import (
     SerialCommandTransport,
@@ -60,7 +62,7 @@ def test_request_returns_command_error_response() -> None:
     )
 
 
-def test_request_ignores_non_command_messages_before_response() -> None:
+def test_request_queues_non_command_messages_before_response() -> None:
     serial = FakeSerial(
         [
             b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
@@ -73,6 +75,65 @@ def test_request_ignores_non_command_messages_before_response() -> None:
     response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
 
     assert response == CommandSuccessMessage()
+    assert transport.read_message() == HelloMessage(
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        capabilities=(),
+    )
+
+
+def test_drain_pending_messages_preserves_event_order() -> None:
+    serial = FakeSerial(
+        [
+            b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"Qk9PVAo="}\n',
+            b'{"type":"buffer_status","timestamp_us":11,"uart_rx_size_bytes":32768,'
+            b'"uart_rx_used_bytes":64,"uart_rx_high_water_bytes":128,'
+            b'"dropped_bytes_total":0,"overflow_events":0}\n',
+            b'{"ok":true,"timestamp_us":12}\n',
+        ]
+    )
+    transport = SerialCommandTransport(serial)
+
+    response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+
+    assert response == CommandSuccessMessage(timestamp_us=12)
+    assert transport.drain_pending_messages() == (
+        UartMessage(
+            channel=0,
+            timestamp_us=10,
+            data=b"BOOT\n",
+            text="BOOT\n",
+        ),
+        BufferStatusMessage(
+            timestamp_us=11,
+            uart_rx_size_bytes=32768,
+            uart_rx_used_bytes=64,
+            uart_rx_high_water_bytes=128,
+            dropped_bytes_total=0,
+            overflow_events=0,
+        ),
+    )
+    assert transport.drain_pending_messages() == ()
+
+
+def test_read_message_returns_queued_message_before_reading_serial_port() -> None:
+    serial = FakeSerial(
+        [
+            b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"QQ=="}\n',
+            b'{"ok":true}\n',
+            b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"Qg=="}\n',
+        ]
+    )
+    transport = SerialCommandTransport(serial)
+    transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+
+    first = transport.read_message()
+    second = transport.read_message()
+
+    assert isinstance(first, UartMessage)
+    assert first.data == b"A"
+    assert isinstance(second, UartMessage)
+    assert second.data == b"B"
 
 
 def test_read_message_returns_non_command_message() -> None:

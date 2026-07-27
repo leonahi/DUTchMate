@@ -131,8 +131,10 @@ Important behavior:
 - `data_b64` is decoded to raw bytes.
 - UART display text is derived with lossy UTF-8 replacement.
 - Protocol validation errors are raised before data reaches higher layers.
-- Command requests ignore intervening non-response messages until a command
-  success or error is received.
+- Command requests queue intervening non-response messages in FIFO order until
+  a command success or error is received.
+- `read_message()` returns queued messages before reading new serial data, and
+  `drain_pending_messages()` provides non-blocking access to the current queue.
 - Serial read timeouts and incomplete lines raise transport errors.
 
 ### `uart_capture`
