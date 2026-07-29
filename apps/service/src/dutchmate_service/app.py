@@ -17,6 +17,7 @@ from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
     BootModeRequest,
+    BootTestRequest,
     CaptureRequest,
     GpioModeRequest,
     ResetRequest,
@@ -54,6 +55,9 @@ class RuntimeProvider(Protocol):
 
     def capture_uart(self, *, duration_s: float) -> SessionSummary:
         """Capture UART and telemetry messages into a session."""
+
+    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
+        """Reset the DUT and capture boot evidence into a session."""
 
     def apply_hardware_config(
         self,
@@ -109,6 +113,11 @@ def create_app(
     @app.post("/dut/capture")
     def capture_uart(request: CaptureRequest) -> dict[str, object]:
         summary = runtime_provider.capture_uart(duration_s=request.duration_s)
+        return capture_summary_payload(summary)
+
+    @app.post("/dut/boot-test")
+    def run_boot_test(request: BootTestRequest) -> dict[str, object]:
+        summary = runtime_provider.run_boot_test(duration_s=request.duration_s)
         return capture_summary_payload(summary)
 
     return app

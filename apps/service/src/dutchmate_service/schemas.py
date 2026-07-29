@@ -83,6 +83,12 @@ class CaptureRequest(BaseModel):
     duration_s: float = Field(gt=0, allow_inf_nan=False)
 
 
+class BootTestRequest(BaseModel):
+    """Request body for a reset-triggered boot capture."""
+
+    duration_s: float = Field(gt=0, allow_inf_nan=False)
+
+
 def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
     """Serialize a completed capture session summary."""
 

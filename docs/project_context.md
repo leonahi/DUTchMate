@@ -368,7 +368,8 @@ This definitely proves...      ✗
 - The core runtime can run finite transport-backed capture and reset-triggered
   boot-test workflows into session storage, publishes `active_session_id`, and
   prevents overlapping hardware operations. The finite capture HTTP endpoint
-  and CLI command are implemented; boot-test service/CLI exposure remains.
+  and CLI command are implemented; the boot-test endpoint is implemented and
+  its CLI command remains.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
@@ -379,7 +380,8 @@ This definitely proves...      ✗
   yet.
 - MCP tool exposure in Phase 2, after CLI workflows are validated in Phase 1
 - Device Core Service: persistent FastAPI process with current endpoints for
-  status, GPIO mode, reset, and boot-mode. It owns the selected serial port.
+  status, capture, boot-test, GPIO mode, reset, and boot-mode. It owns the
+  selected serial port.
 
 ### 6.4 UART and Reset/BOOT Electrical Interface
 
@@ -528,6 +530,7 @@ Currently implemented endpoints:
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
 | `POST` | `/dut/capture` | `{duration_s}` | `{ok, session_id, truncated, overflow, interrupted, resumed, segments}` |
+| `POST` | `/dut/boot-test` | `{duration_s}` | `{ok, session_id, truncated, overflow, interrupted, resumed, segments}` |
 
 Target Phase 1 endpoints not implemented yet:
 
@@ -538,7 +541,6 @@ Target Phase 1 endpoints not implemented yet:
 | `GET` | `/dut/logs` | `?lines=300` | `{lines: [...], overflow}` |
 | `GET` | `/dut/events` | — | SSE stream of NDJSON events |
 | `POST` | `/dut/wait-pattern` | `{pattern, timeout_s}` | `{ok, matched, line, timestamp_us, overflow}` |
-| `POST` | `/dut/boot-test` | `{duration_s}` | `{ok, session_id, first_error, overflow, interrupted, resumed, segments}` |
 
 **UART:**
 
@@ -555,15 +557,16 @@ Target Phase 1 endpoints not implemented yet:
 | `POST` | `/sessions/{id}/baseline` | — | `{ok}` |
 | `GET` | `/sessions/{id}/compare` | — | baseline comparison result *(Phase 4)* |
 
-Every target response that involves a capture includes an `overflow: bool` field
-so callers can tell whether evidence may be incomplete.
+Every capture response includes an `overflow: bool` field so callers can tell
+whether evidence may be incomplete. Boot-test first-error extraction remains
+future work.
 
 **Target concurrency behavior:** only one active capture at a time.
 `POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and
 `POST /dut/boot-mode` should return `{"ok": false, "error": "capture_active"}`
 immediately if a capture is in progress. The core runtime now enforces this
 guard for finite capture, boot-test, and hardware-changing operations. The
-capture endpoint is implemented; the boot-test endpoint is not.
+capture and boot-test endpoints are implemented.
 
 ---
 

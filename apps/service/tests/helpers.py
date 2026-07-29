@@ -12,6 +12,7 @@ class FakeRuntime:
         self.reset_requests: list[int] = []
         self.boot_mode_requests: list[str] = []
         self.capture_requests: list[float] = []
+        self.boot_test_requests: list[float] = []
         self.hardware_configs: list[HardwareGpioConfig] = []
 
     def status(self) -> DeviceCoreStatus:
@@ -62,6 +63,22 @@ class FakeRuntime:
             session_id="20260729T100000Z-capture01",
             started_at="2026-07-29T10:00:00Z",
             command=f"capture --seconds {duration_s:g}",
+            truncated=False,
+            interrupted=False,
+            resumed=False,
+            overflow=False,
+            baseline=False,
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            segment_count=1,
+        )
+
+    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
+        self.boot_test_requests.append(duration_s)
+        return SessionSummary(
+            session_id="20260729T100000Z-boot01",
+            started_at="2026-07-29T10:00:00Z",
+            command=f"boot-test --seconds {duration_s:g}",
             truncated=False,
             interrupted=False,
             resumed=False,

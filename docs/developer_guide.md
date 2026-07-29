@@ -62,6 +62,7 @@ Current service endpoints:
 
 - `GET /status`
 - `POST /dut/capture`
+- `POST /dut/boot-test`
 - `POST /gpio/mode`
 - `POST /dut/reset`
 - `POST /dut/boot-mode`
@@ -79,9 +80,9 @@ Current CLI commands:
 
 The core runtime implements finite transport-backed capture plus reset-triggered
 boot-test orchestration and rejects overlapping hardware-changing operations
-with `capture_active`. Boot-test service/CLI exposure, log retrieval,
-wait-pattern, UART-send, session listing, background serial ingestion/reconnect,
-RP2040 firmware, and MCP runtime are not implemented yet.
+with `capture_active`. Boot-test CLI exposure and first-error extraction, log
+retrieval, wait-pattern, UART-send, session listing, background serial
+ingestion/reconnect, RP2040 firmware, and MCP runtime are not implemented yet.
 
 ## Adding a Service Endpoint
 

@@ -43,8 +43,8 @@ The current codebase contains the first host-side Phase 1 core pieces, a local
 FastAPI service, a CLI HTTP client, synchronous serial command transport, and a
 finite transport-backed core capture and reset-triggered boot-test workflow. It
 does not yet include RP2040 firmware, background serial event ingestion, the
-boot-test service/CLI surface, log retrieval endpoints, session-listing
-endpoints, or the Phase 2 MCP server.
+boot-test CLI command, log retrieval endpoints, session-listing endpoints, or
+the Phase 2 MCP server.
 
 Implemented in `core/src/dutchmate_core/`:
 
@@ -60,7 +60,7 @@ gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 Implemented in `apps/`:
 
 ```text
-service/      FastAPI app with serial startup plus status, capture,
+service/      FastAPI app with serial startup plus status, capture, boot-test,
               GPIO mode, reset, and boot-mode endpoints.
 cli/          `dutchmate`/`dm` commands for lifecycle, device discovery,
               status, capture, GPIO mode, reset, and boot-mode.
@@ -112,7 +112,7 @@ uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tes
 Known next areas:
 
 - Background serial event ingestion and reconnect handling.
-- Boot-test Device Core Service and CLI exposure.
+- Boot-test CLI exposure and first-error extraction.
 - Log/session HTTP endpoints and matching CLI commands.
 - Phase 2 MCP server implementation.
 - RP2040 firmware implementation.
