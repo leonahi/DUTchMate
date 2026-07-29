@@ -44,7 +44,7 @@ Phase 1 should be built host-side first with mocked protocol fixtures, then conn
 5. Implement pattern detection on complete decoded lines. **Implemented.**
 6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON capture, runtime-integrated finite transport capture with an active-session guard, reset/boot action enforcement, and synchronous serial command transport are implemented; service capture exposure and the boot-test workflow remain.**
 7. Expose workflows through the Device Core Service API. **In progress: status, finite capture, GPIO mode, reset, and boot-mode endpoints are implemented; log/session and higher-level workflow endpoints remain.**
-8. Add the CLI as a thin HTTP client. **In progress: start, stop, device discovery, status, GPIO mode, reset, and boot-mode commands are implemented; capture/log/session commands remain.**
+8. Add the CLI as a thin HTTP client. **In progress: start, stop, device discovery, status, capture, GPIO mode, reset, and boot-mode commands are implemented; log/session and higher-level workflow commands remain.**
 9. Implement RP2040 firmware to satisfy the channel-aware v1 protocol. **Not started.**
 10. Run hardware smoke tests with a real DUT. **Not started.**
 
@@ -357,9 +357,12 @@ Currently implemented hardware-control commands:
 - `dutchmate dut reset [--pulse-ms <ms>]`
 - `dutchmate dut boot-mode <normal|bootloader>`
 
-Remaining target Phase 1 commands:
+Currently implemented capture command:
 
 - `dutchmate capture --seconds <seconds>`
+
+Remaining target Phase 1 commands:
+
 - `dutchmate logs --last <lines>`
 - `dutchmate wait <pattern> --timeout <seconds>`
 - `dutchmate boot-test --seconds <seconds>`

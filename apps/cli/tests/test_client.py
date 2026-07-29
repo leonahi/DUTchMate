@@ -6,6 +6,7 @@ import pytest
 from dutchmate_cli.client import (
     ServiceApiError,
     ServiceUnavailableError,
+    capture_uart,
     configure_gpio_mode,
     fetch_status,
     reset_dut,
@@ -119,3 +120,43 @@ def test_set_boot_mode_posts_mode() -> None:
     payload = set_boot_mode(mode="bootloader", transport=httpx.MockTransport(handler))
 
     assert payload == {"ok": True, "timestamp_us": 182334600}
+
+
+def test_capture_uart_posts_duration_with_duration_aware_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/capture"
+        assert request.method == "POST"
+        assert request.read() == b'{"duration_s":5.0}'
+        assert request.extensions["timeout"]["read"] == 7.0
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "session_id": "20260729T100000Z-capture01",
+                "truncated": False,
+                "interrupted": False,
+                "resumed": False,
+                "overflow": False,
+                "segments": 1,
+            },
+        )
+
+    payload = capture_uart(duration_s=5.0, transport=httpx.MockTransport(handler))
+
+    assert payload["session_id"] == "20260729T100000Z-capture01"
+
+
+def test_capture_uart_maps_read_timeout_to_service_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("capture timed out", request=request)
+
+    with pytest.raises(ServiceApiError) as error:
+        capture_uart(duration_s=5.0, transport=httpx.MockTransport(handler))
+
+    assert str(error.value) == "Device Core Service request timed out."
+
+
+@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan")])
+def test_capture_uart_rejects_invalid_duration(duration_s: float) -> None:
+    with pytest.raises(ValueError, match="positive finite"):
+        capture_uart(duration_s=duration_s)

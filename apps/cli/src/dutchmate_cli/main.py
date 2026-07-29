@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, NoReturn
 
 import typer
 
+from dutchmate_cli.capture import format_capture_result
 from dutchmate_cli.client import (
     ServiceClientError,
     ServiceUnavailableError,
+    capture_uart,
     configure_gpio_mode,
     fetch_status,
     reset_dut,
@@ -39,6 +42,12 @@ app.add_typer(gpio_app, name="gpio")
 @app.callback()
 def main() -> None:
     """DUTchMate command-line interface."""
+
+
+def _validate_capture_seconds(value: float) -> float:
+    if not math.isfinite(value) or value <= 0:
+        raise typer.BadParameter("must be a positive finite number")
+    return value
 
 
 @app.command()
@@ -126,6 +135,39 @@ def status(
         _fail(str(exc))
 
     typer.echo(format_status(payload))
+
+
+@app.command()
+def capture(
+    seconds: Annotated[
+        float,
+        typer.Option(
+            "--seconds",
+            callback=_validate_capture_seconds,
+            help="Capture duration in seconds.",
+        ),
+    ],
+    service_url: Annotated[
+        str | None,
+        typer.Option(
+            "--service-url",
+            help="Base URL for the local Device Core Service.",
+        ),
+    ] = None,
+) -> None:
+    """Capture DUT UART evidence into a debug session."""
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = capture_uart(
+            duration_s=seconds,
+            service_url=resolved_service_url,
+        )
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+    typer.echo(format_capture_result(payload))
 
 
 @gpio_app.command("mode")

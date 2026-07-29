@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Final, cast
 
@@ -9,6 +10,7 @@ import httpx
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
+CAPTURE_TIMEOUT_GRACE_SECONDS: Final = 2.0
 SERVICE_NOT_RUNNING_MESSAGE: Final = (
     "Device Core Service is not running. Run 'dutchmate start' first."
 )
@@ -111,6 +113,31 @@ def set_boot_mode(
     return _response_payload(response, description="boot-mode response")
 
 
+def capture_uart(
+    *,
+    duration_s: float,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Capture DUT UART evidence through the Device Core Service."""
+
+    if not math.isfinite(duration_s) or duration_s <= 0:
+        raise ValueError("capture duration must be a positive finite number")
+
+    response = _request_service(
+        method="POST",
+        path="/dut/capture",
+        service_url=service_url,
+        transport=transport,
+        json={"duration_s": duration_s},
+        timeout_s=max(
+            DEFAULT_TIMEOUT_SECONDS,
+            duration_s + CAPTURE_TIMEOUT_GRACE_SECONDS,
+        ),
+    )
+    return _response_payload(response, description="capture response")
+
+
 def _request_service(
     *,
     method: str,
@@ -118,16 +145,19 @@ def _request_service(
     service_url: str,
     transport: httpx.BaseTransport | None = None,
     json: Mapping[str, object] | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> httpx.Response:
     try:
         with httpx.Client(
             base_url=service_url,
-            timeout=DEFAULT_TIMEOUT_SECONDS,
+            timeout=timeout_s,
             transport=transport,
         ) as client:
             response = client.request(method, path, json=json)
-    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         raise ServiceUnavailableError(SERVICE_NOT_RUNNING_MESSAGE) from exc
+    except httpx.ReadTimeout as exc:
+        raise ServiceApiError("Device Core Service request timed out.") from exc
     except httpx.HTTPError as exc:
         raise ServiceApiError(f"Unable to contact Device Core Service: {exc}") from exc
 

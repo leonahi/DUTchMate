@@ -360,9 +360,9 @@ This definitely proves...      ✗
 
 - Python 3.10+ implementation with a synchronous pyserial command transport;
   continuous async USB CDC event ingestion is not implemented yet.
-- CLI for current service lifecycle, serial device discovery, status, GPIO
-  mode, reset, and boot-mode commands; capture/log/session commands remain
-  target Phase 1 work.
+- CLI for current service lifecycle, serial device discovery, status, capture,
+  GPIO mode, reset, and boot-mode commands; log/session and higher-level
+  workflow commands remain target Phase 1 work.
 - Serial startup opens the selected Debug Helper, validates its `hello`, and
   applies configured hardware control mappings.
 - The core runtime can run a finite transport-backed capture into session
@@ -450,6 +450,9 @@ Error: Device Core Service is not running. Run 'dutchmate start' first.
 
 **Currently implemented debug commands:**
 ```bash
+# finite UART capture
+dutchmate capture --seconds 10
+
 # hardware configuration (required before first reset/boot-mode)
 dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
 
@@ -461,7 +464,6 @@ dutchmate dut boot-mode bootloader
 
 **Target Phase 1 debug commands not implemented yet:**
 ```bash
-dutchmate capture --seconds 10
 dutchmate logs --last 200
 dutchmate wait "BOOT_OK" --timeout 5
 dutchmate boot-test --seconds 15

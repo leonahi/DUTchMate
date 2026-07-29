@@ -72,15 +72,15 @@ Current CLI commands:
 - `dutchmate stop`
 - `dutchmate devices [--all]`
 - `dutchmate status`
+- `dutchmate capture --seconds <seconds>`
 - `dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`
 - `dutchmate dut reset`
 - `dutchmate dut boot-mode <normal|bootloader>`
 
 The core runtime implements finite transport-backed capture and rejects
-overlapping hardware-changing operations with `capture_active`. The capture CLI
-command, log retrieval, wait-pattern, boot-test, UART-send, session listing,
-background serial ingestion/reconnect, RP2040 firmware, and MCP runtime are not
-implemented yet.
+overlapping hardware-changing operations with `capture_active`. Log retrieval,
+wait-pattern, boot-test, UART-send, session listing, background serial
+ingestion/reconnect, RP2040 firmware, and MCP runtime are not implemented yet.
 
 ## Adding a Service Endpoint
 
