@@ -6,13 +6,16 @@ import pytest
 
 from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
+    CommandErrorMessage,
     CommandSuccessMessage,
     HelloMessage,
     UartMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.device_connection.transport import TransportTimeoutError
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
+from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import (
     DeviceCoreRuntime,
     DeviceCoreRuntimeError,
@@ -34,6 +37,35 @@ class FakeTransport:
         return self.responses.pop(0)
 
 
+class FakeSerial:
+    def __init__(
+        self,
+        reads: list[bytes],
+        *,
+        on_write: Callable[[bytes], None] | None = None,
+    ) -> None:
+        self.reads = reads
+        self.on_write = on_write
+        self.writes: list[bytes] = []
+
+    def write(self, data: bytes) -> int:
+        self.writes.append(data)
+        if self.on_write is not None:
+            self.on_write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
+        if not self.reads:
+            return b""
+        return self.reads.pop(0)
+
+    def close(self) -> None:
+        pass
+
+
 class FakeMonotonicClock:
     def __init__(self) -> None:
         self.value = 0.0
@@ -43,6 +75,16 @@ class FakeMonotonicClock:
 
     def advance(self, seconds: float) -> None:
         self.value += seconds
+
+
+class AdvancingMonotonicClock:
+    def __init__(self, *, step_s: float = 0.1) -> None:
+        self.value = 0.0
+        self._step_s = step_s
+
+    def __call__(self) -> float:
+        self.value += self._step_s
+        return self.value
 
 
 class FakeCaptureSource:
@@ -278,6 +320,8 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.capture_uart(duration_s=0.1)
         with pytest.raises(DeviceActionError, match="capture is already active"):
+            runtime.run_boot_test(duration_s=0.1)
+        with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.reset_dut()
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.set_boot_mode(mode="normal")
@@ -356,6 +400,132 @@ def test_capture_uart_rejects_invalid_duration_before_creating_session(
 
     with pytest.raises(ValueError, match="positive finite"):
         runtime.capture_uart(duration_s=0)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
+    tmp_path: Path,
+) -> None:
+    runtime: DeviceCoreRuntime
+
+    def assert_session_reserved_before_reset(command: bytes) -> None:
+        if b'"cmd":"reset"' not in command:
+            return
+        active_session_id = runtime.status().active_session_id
+        assert active_session_id is not None
+        assert (tmp_path / active_session_id / "metadata.json").is_file()
+
+    serial = FakeSerial(
+        [
+            b'{"ok":true,"timestamp_us":10}\n',
+            b'{"type":"uart","channel":0,"timestamp_us":20,'
+            b'"data_b64":"Qk9PVF9PSwo="}\n',
+            b'{"ok":true,"timestamp_us":30}\n',
+        ],
+        on_write=assert_session_reserved_before_reset,
+    )
+    transport = SerialCommandTransport(serial)
+    store = SessionStore(
+        root=tmp_path,
+        clock=_fixed_session_time,
+        id_factory=lambda: "boot-test",
+    )
+    runtime = DeviceCoreRuntime(
+        transport=transport,
+        message_source=transport,
+        capture_clock=AdvancingMonotonicClock(),
+        session_store=store,
+    )
+    runtime.record_hello(hello())
+    runtime.configure_gpio_mode(
+        role="reset",
+        channel="CTRL2",
+        dut_signal="NRST",
+        mode="open_drain",
+        active_level="low",
+    )
+
+    summary = runtime.run_boot_test(duration_s=0.4)
+
+    assert summary.command == "boot-test --seconds 0.4"
+    assert serial.writes == [
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"reset",'
+        b'"mode":"open_drain","active_level":"low"}\n',
+        b'{"cmd":"reset","pulse_ms":100}\n',
+    ]
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    assert runtime.status().active_session_id is None
+
+
+def test_run_boot_test_requires_reset_role_before_creating_session(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeTransport()
+    runtime = DeviceCoreRuntime(
+        transport=transport,
+        message_source=FakeCaptureSource([], clock=clock),
+        capture_clock=clock,
+        session_root=tmp_path,
+    )
+    runtime.record_hello(hello())
+
+    with pytest.raises(GpioConfigurationError, match="'reset'.*not configured"):
+        runtime.run_boot_test(duration_s=0.2)
+
+    assert transport.requests == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeTransport(
+        [
+            CommandErrorMessage(
+                error="hardware_fault",
+                detail="reset pulse failed",
+            )
+        ]
+    )
+    runtime = DeviceCoreRuntime(
+        transport=transport,
+        message_source=FakeCaptureSource([], clock=clock),
+        capture_clock=clock,
+        session_root=tmp_path,
+    )
+    runtime.record_hello(hello())
+    runtime.gpio_registry.accept_mode(
+        role="reset",
+        channel="CTRL0",
+        dut_signal="RESET_N",
+        mode="open_drain",
+        active_level="low",
+        source="runtime",
+    )
+
+    with pytest.raises(DeviceActionError, match="reset pulse failed"):
+        runtime.run_boot_test(duration_s=0.2)
+
+    assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
+    assert runtime.status().active_session_id is None
+    assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_run_boot_test_rejects_invalid_duration_before_creating_session(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=FakeCaptureSource([], clock=clock),
+        capture_clock=clock,
+        session_root=tmp_path,
+    )
+    runtime.record_hello(hello())
+
+    with pytest.raises(ValueError, match="positive finite"):
+        runtime.run_boot_test(duration_s=0)
 
     assert list(tmp_path.iterdir()) == []
 

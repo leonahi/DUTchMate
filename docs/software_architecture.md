@@ -57,7 +57,7 @@ The finite transport-backed capture path is:
 
 ```text
 device_connection.SerialCommandTransport queued/new messages
-  -> runtime.DeviceCoreRuntime.capture_uart
+  -> runtime.DeviceCoreRuntime.capture_uart / run_boot_test
   -> workflows.TransportCaptureRunner
   -> workflows.CaptureRecorder
   -> uart_capture.UartCaptureProcessor
@@ -299,6 +299,8 @@ Implemented responsibilities:
   caller-provided transport.
 - Reset actions require the `reset` role to be configured.
 - Boot-mode actions require the `boot` role to be configured.
+- `DeviceCoreRuntime.run_boot_test(...)` reserves a session, resets through the
+  configured `reset` role, and records queued and subsequent boot messages.
 
 Important behavior:
 
@@ -306,9 +308,8 @@ Important behavior:
   now.
 - Transport read timeouts do not end a quiet capture before its requested
   duration.
-- `DeviceCoreRuntime.capture_uart(...)` exposes the finite capture workflow to
-  service orchestration, reports the active session in status, and clears it
-  after success or failure.
+- `DeviceCoreRuntime.capture_uart(...)` and `run_boot_test(...)` report the
+  active session in status and clear it after success or failure.
 - Runtime GPIO, reset, boot-mode, and overlapping capture operations return
   `capture_active` while a capture owns the serial message stream.
 - Reset/boot command arguments are validated before checking configuration

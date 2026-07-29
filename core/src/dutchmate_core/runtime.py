@@ -196,32 +196,65 @@ class DeviceCoreRuntime:
     def capture_uart(self, *, duration_s: float) -> SessionSummary:
         """Capture UART and telemetry messages into one filesystem session."""
 
-        with self._operation_lock:
-            self._require_connected()
-            self._require_no_active_capture()
-            if self._message_source is None:
-                raise DeviceCoreRuntimeError("Capture message source is not configured")
+        return self._run_capture_workflow(
+            duration_s=duration_s,
+            command=f"capture --seconds {duration_s:g}",
+        )
 
-            runner = TransportCaptureRunner(
-                transport=self._message_source,
-                duration_s=duration_s,
-                monotonic_clock=self._capture_clock,
-            )
-            assert self._hello is not None
-            recorder = CaptureRecorder.start(
-                session_store=self._session_store,
-                command=f"capture --seconds {duration_s:g}",
-                firmware=self._hello.firmware,
-                device=self._hello.device,
-            )
-            self._active_session_id = recorder.session_id
+    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
+        """Reset the DUT and capture its boot UART into one session."""
 
+        return self._run_capture_workflow(
+            duration_s=duration_s,
+            command=f"boot-test --seconds {duration_s:g}",
+            required_role="reset",
+            start_action=self._action_runner.reset_dut,
+        )
+
+    def _run_capture_workflow(
+        self,
+        *,
+        duration_s: float,
+        command: str,
+        required_role: str | None = None,
+        start_action: Callable[[], DeviceActionResult] | None = None,
+    ) -> SessionSummary:
+        active_session_id: str | None = None
         try:
+            with self._operation_lock:
+                self._require_connected()
+                self._require_no_active_capture()
+                if self._message_source is None:
+                    raise DeviceCoreRuntimeError("Capture message source is not configured")
+
+                runner = TransportCaptureRunner(
+                    transport=self._message_source,
+                    duration_s=duration_s,
+                    monotonic_clock=self._capture_clock,
+                )
+                if required_role is not None:
+                    self._gpio_registry.require_role_configured(required_role)
+
+                assert self._hello is not None
+                recorder = CaptureRecorder.start(
+                    session_store=self._session_store,
+                    command=command,
+                    firmware=self._hello.firmware,
+                    device=self._hello.device,
+                )
+                active_session_id = recorder.session_id
+                self._active_session_id = active_session_id
+
+                if start_action is not None:
+                    start_action()
+
             runner.run(recorder)
             return self._session_store.summarize_session(recorder.session_id)
         finally:
-            with self._operation_lock:
-                self._active_session_id = None
+            if active_session_id is not None:
+                with self._operation_lock:
+                    if self._active_session_id == active_session_id:
+                        self._active_session_id = None
 
     def _require_connected(self) -> None:
         if self._hello is None:

@@ -365,15 +365,15 @@ This definitely proves...      ✗
   workflow commands remain target Phase 1 work.
 - Serial startup opens the selected Debug Helper, validates its `hello`, and
   applies configured hardware control mappings.
-- The core runtime can run a finite transport-backed capture into session
-  storage, publishes `active_session_id`, and prevents overlapping hardware
-  operations. The finite capture HTTP endpoint is implemented; the CLI command
-  remains pending.
+- The core runtime can run finite transport-backed capture and reset-triggered
+  boot-test workflows into session storage, publishes `active_session_id`, and
+  prevents overlapping hardware operations. The finite capture HTTP endpoint
+  and CLI command are implemented; boot-test service/CLI exposure remains.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
-  transport and are exposed through current service/CLI endpoints. Capture
-  after reset is not implemented yet.
+  transport and are exposed through current service/CLI endpoints. Reset then
+  capture is implemented in the core boot-test workflow.
 - Basic error keyword detection exists in the core capture recorder path. Get
   last N log lines and wait-for-pattern API/CLI commands are not implemented
   yet.
@@ -562,8 +562,8 @@ so callers can tell whether evidence may be incomplete.
 `POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and
 `POST /dut/boot-mode` should return `{"ok": false, "error": "capture_active"}`
 immediately if a capture is in progress. The core runtime now enforces this
-guard for finite captures and hardware-changing operations. The capture endpoint
-is implemented; the boot-test endpoint is not.
+guard for finite capture, boot-test, and hardware-changing operations. The
+capture endpoint is implemented; the boot-test endpoint is not.
 
 ---
 

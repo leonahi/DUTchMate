@@ -41,9 +41,10 @@ as `uv.lock`.
 
 The current codebase contains the first host-side Phase 1 core pieces, a local
 FastAPI service, a CLI HTTP client, synchronous serial command transport, and a
-finite transport-backed core capture workflow. It does not yet include RP2040
-firmware, background serial event ingestion, log retrieval endpoints,
-session-listing endpoints, or the Phase 2 MCP server.
+finite transport-backed core capture and reset-triggered boot-test workflow. It
+does not yet include RP2040 firmware, background serial event ingestion, the
+boot-test service/CLI surface, log retrieval endpoints, session-listing
+endpoints, or the Phase 2 MCP server.
 
 Implemented in `core/src/dutchmate_core/`:
 
@@ -52,7 +53,7 @@ device_connection/   v1 protocol, NDJSON parsing, serial discovery and command t
 uart_capture/        UART byte buffering, complete-line extraction, capture processing
 log_processing/      Keyword pattern detection on completed UART lines
 session_store/       Filesystem-backed sessions, UART evidence, telemetry, summaries
-workflows/           Mock/transport capture plus guarded hardware action workflows
+workflows/           Mock/transport capture plus guarded reset/boot-test workflows
 gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 ```
 
@@ -83,7 +84,7 @@ The finite transport-backed path is:
 
 ```text
 SerialCommandTransport queued/new messages
-  -> DeviceCoreRuntime.capture_uart
+  -> DeviceCoreRuntime.capture_uart / run_boot_test
   -> TransportCaptureRunner
   -> CaptureRecorder
   -> UartCaptureProcessor
@@ -110,8 +111,8 @@ uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tes
 
 Known next areas:
 
-- Background serial event ingestion, reconnect handling, and the higher-level
-  boot-test workflow.
+- Background serial event ingestion and reconnect handling.
+- Boot-test Device Core Service and CLI exposure.
 - Log/session HTTP endpoints and matching CLI commands.
 - Phase 2 MCP server implementation.
 - RP2040 firmware implementation.
