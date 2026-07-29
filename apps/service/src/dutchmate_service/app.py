@@ -12,12 +12,15 @@ from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
     DeviceCoreStatus,
 )
+from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
     BootModeRequest,
+    CaptureRequest,
     GpioModeRequest,
     ResetRequest,
+    capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
     status_payload,
@@ -48,6 +51,9 @@ class RuntimeProvider(Protocol):
 
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         """Set the configured DUT boot/control role."""
+
+    def capture_uart(self, *, duration_s: float) -> SessionSummary:
+        """Capture UART and telemetry messages into a session."""
 
     def apply_hardware_config(
         self,
@@ -99,5 +105,10 @@ def create_app(
     @app.post("/dut/boot-mode")
     def set_boot_mode(request: BootModeRequest) -> dict[str, object]:
         return device_action_payload(runtime_provider.set_boot_mode(mode=request.mode))
+
+    @app.post("/dut/capture")
+    def capture_uart(request: CaptureRequest) -> dict[str, object]:
+        summary = runtime_provider.capture_uart(duration_s=request.duration_s)
+        return capture_summary_payload(summary)
 
     return app

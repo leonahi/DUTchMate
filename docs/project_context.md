@@ -367,7 +367,8 @@ This definitely proves...      ✗
   applies configured hardware control mappings.
 - The core runtime can run a finite transport-backed capture into session
   storage, publishes `active_session_id`, and prevents overlapping hardware
-  operations. HTTP and CLI capture commands remain pending.
+  operations. The finite capture HTTP endpoint is implemented; the CLI command
+  remains pending.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
@@ -520,13 +521,18 @@ Currently implemented endpoints:
 | `POST` | `/dut/reset` | `{pulse_ms?}` | `{ok, timestamp_us}` |
 | `POST` | `/dut/boot-mode` | `{mode: "normal"\|"bootloader"}` | `{ok, timestamp_us}` |
 
+**Capture:**
+
+| Method | Path | Params / Body | Response |
+|--------|------|---------------|----------|
+| `POST` | `/dut/capture` | `{duration_s}` | `{ok, session_id, truncated, overflow, interrupted, resumed, segments}` |
+
 Target Phase 1 endpoints not implemented yet:
 
 **Capture and observation:**
 
 | Method | Path | Params / Body | Response |
 |--------|------|---------------|----------|
-| `POST` | `/dut/capture` | `{duration_s}` | `{ok, session_id, overflow, interrupted, resumed, segments}` |
 | `GET` | `/dut/logs` | `?lines=300` | `{lines: [...], overflow}` |
 | `GET` | `/dut/events` | — | SSE stream of NDJSON events |
 | `POST` | `/dut/wait-pattern` | `{pattern, timeout_s}` | `{ok, matched, line, timestamp_us, overflow}` |
@@ -554,8 +560,8 @@ so callers can tell whether evidence may be incomplete.
 `POST /dut/capture`, `POST /dut/boot-test`, `POST /dut/reset`, and
 `POST /dut/boot-mode` should return `{"ok": false, "error": "capture_active"}`
 immediately if a capture is in progress. The core runtime now enforces this
-guard for finite captures and hardware-changing operations; the capture and
-boot-test HTTP endpoints are not implemented yet.
+guard for finite captures and hardware-changing operations. The capture endpoint
+is implemented; the boot-test endpoint is not.
 
 ---
 

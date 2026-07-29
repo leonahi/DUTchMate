@@ -48,7 +48,7 @@ tests/
 |---|---|---|
 | `core/` | `dutchmate-core` | Protocol parsing, serial transport, session storage, workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing command-line client. |
-| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service; current endpoints cover status, GPIO mode, reset, and boot-mode. |
+| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service; current endpoints cover status, capture, GPIO mode, reset, and boot-mode. |
 | `apps/mcp_server/` | `dutchmate-mcp-server` | Phase 2 MCP adapter scaffold; runtime not implemented yet. |
 
 ## Current Core Modules

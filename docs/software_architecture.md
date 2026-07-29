@@ -416,7 +416,8 @@ Current unit tests cover:
 - Mock capture summary generation.
 - Finite transport-backed capture deadlines and timeout handling.
 - Runtime active-session reporting, conflict guards, and failure cleanup.
-- Device Core Service endpoints for status, GPIO mode, reset, and boot-mode.
+- Device Core Service endpoints for status, finite capture, GPIO mode, reset,
+  and boot-mode.
 - CLI HTTP client commands for service lifecycle, status, GPIO mode, reset, and
   boot-mode.
 - Serial command transport, serial-port discovery, startup `hello` validation,
@@ -438,7 +439,7 @@ architecture yet:
   `boot`.
 - Background serial ingestion outside finite capture requests.
 - Reconnect/resume session mutation helpers.
-- Capture/log/session Device Core Service endpoints and request handling.
+- Log/session and higher-level workflow Device Core Service endpoints.
 - Capture/log/session CLI commands.
 - MCP server runtime.
 - RP2040 firmware.

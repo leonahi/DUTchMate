@@ -1,6 +1,7 @@
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
+from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
@@ -10,6 +11,7 @@ class FakeRuntime:
         self.gpio_mode_requests: list[dict[str, object]] = []
         self.reset_requests: list[int] = []
         self.boot_mode_requests: list[str] = []
+        self.capture_requests: list[float] = []
         self.hardware_configs: list[HardwareGpioConfig] = []
 
     def status(self) -> DeviceCoreStatus:
@@ -53,6 +55,22 @@ class FakeRuntime:
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         self.boot_mode_requests.append(mode)
         return DeviceActionResult(action="set_boot_mode", timestamp_us=182334600)
+
+    def capture_uart(self, *, duration_s: float) -> SessionSummary:
+        self.capture_requests.append(duration_s)
+        return SessionSummary(
+            session_id="20260729T100000Z-capture01",
+            started_at="2026-07-29T10:00:00Z",
+            command=f"capture --seconds {duration_s:g}",
+            truncated=False,
+            interrupted=False,
+            resumed=False,
+            overflow=False,
+            baseline=False,
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            segment_count=1,
+        )
 
     def apply_hardware_config(
         self,

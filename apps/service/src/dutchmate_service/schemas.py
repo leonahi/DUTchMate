@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
+from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
@@ -74,6 +75,26 @@ class BootModeRequest(BaseModel):
     """Request body for setting the configured boot/control role."""
 
     mode: Literal["normal", "bootloader"]
+
+
+class CaptureRequest(BaseModel):
+    """Request body for a finite UART capture."""
+
+    duration_s: float = Field(gt=0, allow_inf_nan=False)
+
+
+def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
+    """Serialize a completed capture session summary."""
+
+    return {
+        "ok": True,
+        "session_id": summary.session_id,
+        "truncated": summary.truncated,
+        "interrupted": summary.interrupted,
+        "resumed": summary.resumed,
+        "overflow": summary.overflow,
+        "segments": summary.segment_count,
+    }
 
 
 def device_action_payload(result: DeviceActionResult) -> dict[str, object]:

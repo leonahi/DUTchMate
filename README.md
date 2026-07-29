@@ -42,7 +42,7 @@ as `uv.lock`.
 The current codebase contains the first host-side Phase 1 core pieces, a local
 FastAPI service, a CLI HTTP client, synchronous serial command transport, and a
 finite transport-backed core capture workflow. It does not yet include RP2040
-firmware, background serial event ingestion, capture HTTP/CLI commands, log
+firmware, background serial event ingestion, a capture CLI command, log
 retrieval endpoints, session-listing endpoints, or the Phase 2 MCP server.
 
 Implemented in `core/src/dutchmate_core/`:
@@ -59,8 +59,8 @@ gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 Implemented in `apps/`:
 
 ```text
-service/      FastAPI app with serial startup plus status, GPIO mode,
-              reset, and boot-mode endpoints.
+service/      FastAPI app with serial startup plus status, capture,
+              GPIO mode, reset, and boot-mode endpoints.
 cli/          `dutchmate`/`dm` commands for lifecycle, device discovery,
               status, GPIO mode, reset, and boot-mode.
 mcp_server/   Package scaffold only; MCP runtime is not implemented yet.
@@ -112,7 +112,7 @@ Known next areas:
 
 - Background serial event ingestion, reconnect handling, and the higher-level
   boot-test workflow.
-- Capture/log/session HTTP endpoints and matching CLI commands.
+- Log/session HTTP endpoints and capture/log/session CLI commands.
 - Phase 2 MCP server implementation.
 - RP2040 firmware implementation.
 - Real hardware smoke tests.
