@@ -40,7 +40,7 @@ Phase 1 should be built host-side first with mocked protocol fixtures, then conn
 1. Define protocol schemas and canonical examples. **Implemented for the channel-aware v1 MVP.**
 2. Implement Device Core protocol parsing and event models. **Implemented for v1 MVP.**
 3. Implement UART byte preservation, lossy UTF-8 display text, and complete-line buffering. **Implemented.**
-4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, and summaries.**
+4. Implement session storage. **Implemented for creation, incremental UART/event writes, telemetry, summaries, newest-first discovery, and latest-session lookup.**
 5. Implement pattern detection on complete decoded lines. **Implemented.**
 6. Implement Device Core workflows using a mock serial transport. **In progress: mocked NDJSON capture, runtime-integrated finite transport capture, reset-triggered boot-test orchestration with an active-session guard, reset/boot action enforcement, and synchronous serial command transport are implemented; log, wait-pattern, reconnect, and UART-send workflows remain.**
 7. Expose workflows through the Device Core Service API. **In progress: status, finite capture, boot-test, GPIO mode, reset, and boot-mode endpoints are implemented; log/session, wait-pattern, and UART-send endpoints remain.**

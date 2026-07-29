@@ -51,7 +51,7 @@ Implemented in `core/src/dutchmate_core/`:
 device_connection/   v1 protocol, NDJSON parsing, serial discovery and command transport
 uart_capture/        UART byte buffering, complete-line extraction, capture processing
 log_processing/      Keyword pattern detection on completed UART lines
-session_store/       Filesystem-backed sessions, UART evidence, telemetry, summaries
+session_store/       Filesystem-backed sessions, evidence, summaries, newest-first discovery
 workflows/           Mock/transport capture plus guarded reset/boot-test workflows
 gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
 ```
@@ -112,7 +112,7 @@ Known next areas:
 
 - Background serial event ingestion and reconnect handling.
 - Boot-test first-error extraction.
-- Log/session HTTP endpoints and matching CLI commands.
+- Session-listing and recent-log HTTP/CLI exposure.
 - Phase 2 MCP server implementation.
 - RP2040 firmware implementation.
 - Real hardware smoke tests.

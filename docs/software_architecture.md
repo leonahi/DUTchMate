@@ -222,6 +222,8 @@ detected_patterns.json
   - `overflow`
   - segment first/last device timestamps
 - Provides `SessionSummary` via `summarize_session(...)`.
+- Lists valid stored sessions newest-first and provides latest-session lookup.
+- Rejects path-unsafe session IDs before filesystem access.
 
 Important behavior:
 
@@ -408,7 +410,7 @@ Current unit tests cover:
 - UART line buffering.
 - Pattern detection.
 - UART capture processing.
-- Session creation and incremental evidence writes.
+- Session creation, incremental evidence writes, and newest-first discovery.
 - Buffer overflow and buffer status persistence.
 - GPIO configuration workflow/state tracking.
 - Session summaries.

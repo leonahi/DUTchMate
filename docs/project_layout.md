@@ -60,7 +60,7 @@ The Phase 1 host-side core currently contains:
 | `device_connection` | v1 protocol, NDJSON parsing, serial discovery, and synchronous command transport. |
 | `uart_capture` | Raw UART byte buffering, complete-line extraction, and UART capture processing. |
 | `log_processing` | Case-sensitive keyword pattern detection on completed UART lines. |
-| `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, and summaries. |
+| `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, summaries, and newest-first discovery. |
 | `workflows` | Mock and transport-backed capture plus guarded reset and boot-test workflows. |
 | `gpio_config` | GPIO mode configuration workflow/state for Debug Helper lines used as DUT control signals. |
 

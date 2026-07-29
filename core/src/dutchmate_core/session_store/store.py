@@ -88,7 +88,9 @@ class SessionStore:
             raise ValueError("session command must not be empty")
 
         started_at = self._clock()
-        session_id = f"{_format_session_id_timestamp(started_at)}-{self._id_factory()}"
+        session_id = _validate_session_id(
+            f"{_format_session_id_timestamp(started_at)}-{self._id_factory()}"
+        )
         paths = _session_paths(self._root / session_id)
 
         paths.root.mkdir(parents=True, exist_ok=False)
@@ -112,7 +114,8 @@ class SessionStore:
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
 
-        metadata_path = _session_paths(self._root / session_id).metadata
+        session_name = _validate_session_id(session_id)
+        metadata_path = _session_paths(self._root / session_name).metadata
         with metadata_path.open("r", encoding="utf-8") as file:
             loaded = json.load(file)
         if not isinstance(loaded, dict):
@@ -122,7 +125,42 @@ class SessionStore:
     def summarize_session(self, session_id: str) -> SessionSummary:
         """Load and summarize one session's metadata."""
 
-        return _summary_from_metadata(self.load_metadata(session_id))
+        session_name = _validate_session_id(session_id)
+        summary = _summary_from_metadata(self.load_metadata(session_name))
+        if summary.session_id != session_name:
+            raise ValueError("session metadata ID must match its directory name")
+        return summary
+
+    def list_sessions(self, *, limit: int | None = None) -> tuple[SessionSummary, ...]:
+        """Return stored session summaries in newest-first order."""
+
+        _validate_session_limit(limit)
+        if not self._root.exists():
+            return ()
+
+        summaries: list[SessionSummary] = []
+        for session_root in self._root.iterdir():
+            if (
+                session_root.is_symlink()
+                or not session_root.is_dir()
+                or not _session_paths(session_root).metadata.is_file()
+            ):
+                continue
+            summaries.append(self.summarize_session(session_root.name))
+
+        summaries.sort(
+            key=lambda summary: (summary.started_at, summary.session_id),
+            reverse=True,
+        )
+        if limit is not None:
+            summaries = summaries[:limit]
+        return tuple(summaries)
+
+    def latest_session(self) -> SessionSummary | None:
+        """Return the newest stored session summary, if one exists."""
+
+        sessions = self.list_sessions(limit=1)
+        return sessions[0] if sessions else None
 
     def append_uart_capture(
         self,
@@ -231,6 +269,26 @@ def _session_paths(root: Path) -> SessionPaths:
         hardware_events=root / "hardware_events.jsonl",
         detected_patterns=root / "detected_patterns.json",
     )
+
+
+def _validate_session_id(session_id: str) -> str:
+    if (
+        not isinstance(session_id, str)
+        or not session_id
+        or session_id.strip() != session_id
+        or session_id in {".", ".."}
+        or "/" in session_id
+        or "\\" in session_id
+    ):
+        raise ValueError("session ID must be a non-empty path-safe name")
+    return session_id
+
+
+def _validate_session_limit(limit: int | None) -> None:
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0
+    ):
+        raise ValueError("session limit must be a positive integer")
 
 
 def _initial_metadata(

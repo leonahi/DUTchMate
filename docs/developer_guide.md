@@ -82,8 +82,8 @@ Current CLI commands:
 The core runtime implements finite transport-backed capture plus reset-triggered
 boot-test orchestration and rejects overlapping hardware-changing operations
 with `capture_active`. Boot-test first-error extraction, log retrieval,
-wait-pattern, UART-send, session listing, background serial ingestion/reconnect,
-RP2040 firmware, and MCP runtime are not implemented yet.
+wait-pattern, UART-send, session-listing HTTP/CLI exposure, background serial
+ingestion/reconnect, RP2040 firmware, and MCP runtime are not implemented yet.
 
 ## Adding a Service Endpoint
 

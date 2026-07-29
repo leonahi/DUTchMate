@@ -371,7 +371,8 @@ This definitely proves...      ✗
   and CLI command are implemented, as are the boot-test endpoint and CLI
   command.
 - Timestamped UART/event ingestion and raw log file storage
-- Structured debug session storage
+- Structured debug session storage with newest-first summary discovery and
+  latest-session lookup; HTTP/CLI retrieval remains pending.
 - Reset DUT and BOOT/control workflows exist behind an injected command
   transport and are exposed through current service/CLI endpoints. Reset then
   capture is implemented in the core boot-test workflow.
