@@ -48,7 +48,7 @@ tests/
 |---|---|---|
 | `core/` | `dutchmate-core` | Protocol parsing, serial transport, session storage, workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing command-line client. |
-| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service; current endpoints cover status, capture, GPIO mode, reset, and boot-mode. |
+| `apps/service/` | `dutchmate-service` | FastAPI Device Core Service; current endpoints cover status, capture, boot-test, GPIO mode, reset, and boot-mode. |
 | `apps/mcp_server/` | `dutchmate-mcp-server` | Phase 2 MCP adapter scaffold; runtime not implemented yet. |
 
 ## Current Core Modules
@@ -61,10 +61,11 @@ The Phase 1 host-side core currently contains:
 | `uart_capture` | Raw UART byte buffering, complete-line extraction, and UART capture processing. |
 | `log_processing` | Case-sensitive keyword pattern detection on completed UART lines. |
 | `session_store` | Filesystem session creation, incremental evidence writes, telemetry events, and summaries. |
-| `workflows` | Mock and transport-backed capture plus guarded hardware action workflows. |
+| `workflows` | Mock and transport-backed capture plus guarded reset and boot-test workflows. |
 | `gpio_config` | GPIO mode configuration workflow/state for Debug Helper lines used as DUT control signals. |
 
-Higher-level boot-test orchestration has not been implemented yet.
+`DeviceCoreRuntime` composes reset and finite capture into the current boot-test
+workflow.
 
 See `docs/software_architecture.md` for current dependency direction, module
 responsibilities, and capture data flow.

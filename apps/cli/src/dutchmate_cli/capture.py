@@ -8,6 +8,16 @@ from collections.abc import Mapping
 def format_capture_result(payload: Mapping[str, object]) -> str:
     """Format a completed capture session summary."""
 
+    return _format_capture_summary("Capture complete", payload)
+
+
+def format_boot_test_result(payload: Mapping[str, object]) -> str:
+    """Format a completed boot-test session summary."""
+
+    return _format_capture_summary("Boot test complete", payload)
+
+
+def _format_capture_summary(label: str, payload: Mapping[str, object]) -> str:
     session_id = _display(payload.get("session_id"))
     segments = _display(payload.get("segments"))
     flags = ", ".join(
@@ -19,7 +29,7 @@ def format_capture_result(payload: Mapping[str, object]) -> str:
             f"truncated={_flag(payload.get('truncated'))}",
         )
     )
-    return f"Capture complete: {session_id} ({flags})"
+    return f"{label}: {session_id} ({flags})"
 
 
 def _display(value: object) -> str:

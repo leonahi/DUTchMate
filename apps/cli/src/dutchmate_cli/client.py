@@ -121,12 +121,46 @@ def capture_uart(
 ) -> dict[str, object]:
     """Capture DUT UART evidence through the Device Core Service."""
 
+    return _run_timed_capture_request(
+        path="/dut/capture",
+        description="capture",
+        duration_s=duration_s,
+        service_url=service_url,
+        transport=transport,
+    )
+
+
+def run_boot_test(
+    *,
+    duration_s: float,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Reset the DUT and capture boot evidence through the Device Core Service."""
+
+    return _run_timed_capture_request(
+        path="/dut/boot-test",
+        description="boot-test",
+        duration_s=duration_s,
+        service_url=service_url,
+        transport=transport,
+    )
+
+
+def _run_timed_capture_request(
+    *,
+    path: str,
+    description: str,
+    duration_s: float,
+    service_url: str,
+    transport: httpx.BaseTransport | None,
+) -> dict[str, object]:
     if not math.isfinite(duration_s) or duration_s <= 0:
-        raise ValueError("capture duration must be a positive finite number")
+        raise ValueError(f"{description} duration must be a positive finite number")
 
     response = _request_service(
         method="POST",
-        path="/dut/capture",
+        path=path,
         service_url=service_url,
         transport=transport,
         json={"duration_s": duration_s},
@@ -135,7 +169,7 @@ def capture_uart(
             duration_s + CAPTURE_TIMEOUT_GRACE_SECONDS,
         ),
     )
-    return _response_payload(response, description="capture response")
+    return _response_payload(response, description=f"{description} response")
 
 
 def _request_service(

@@ -361,15 +361,15 @@ This definitely proves...      ✗
 - Python 3.10+ implementation with a synchronous pyserial command transport;
   continuous async USB CDC event ingestion is not implemented yet.
 - CLI for current service lifecycle, serial device discovery, status, capture,
-  GPIO mode, reset, and boot-mode commands; log/session and higher-level
-  workflow commands remain target Phase 1 work.
+  boot-test, GPIO mode, reset, and boot-mode commands; log/session,
+  wait-pattern, and UART-send commands remain target Phase 1 work.
 - Serial startup opens the selected Debug Helper, validates its `hello`, and
   applies configured hardware control mappings.
 - The core runtime can run finite transport-backed capture and reset-triggered
   boot-test workflows into session storage, publishes `active_session_id`, and
   prevents overlapping hardware operations. The finite capture HTTP endpoint
-  and CLI command are implemented; the boot-test endpoint is implemented and
-  its CLI command remains.
+  and CLI command are implemented, as are the boot-test endpoint and CLI
+  command.
 - Timestamped UART/event ingestion and raw log file storage
 - Structured debug session storage
 - Reset DUT and BOOT/control workflows exist behind an injected command
@@ -455,8 +455,11 @@ Error: Device Core Service is not running. Run 'dutchmate start' first.
 # finite UART capture
 dutchmate capture --seconds 10
 
-# hardware configuration (required before first reset/boot-mode)
+# hardware configuration (required before first reset/boot-test)
 dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
+
+# reset and capture boot evidence
+dutchmate boot-test --seconds 15
 
 # hardware control
 dutchmate dut reset
@@ -468,7 +471,6 @@ dutchmate dut boot-mode bootloader
 ```bash
 dutchmate logs --last 200
 dutchmate wait "BOOT_OK" --timeout 5
-dutchmate boot-test --seconds 15
 dutchmate send "reboot"
 dutchmate send "reboot" --force
 dutchmate mark-baseline <session_id> # designate session as known-good reference for compare_boot_log
@@ -1050,10 +1052,11 @@ The size is constrained by the RP2040's 264 KiB RAM, which is shared with firmwa
 
 The Device Core Service binds to `http://127.0.0.1:2040` by default with no
 authentication. Any local process or user on the machine can call the current
-hardware-control endpoints (`/gpio/mode`, `/dut/reset`, `/dut/boot-mode`) when
-the service is running. Planned UART injection and capture endpoints would share
-the same trusted-local exposure unless authentication is added. Loopback binding
-prevents remote access, so this is acceptable for a single-developer
-workstation. On shared workstations or CI servers it is a real exposure.
+hardware-control and capture endpoints (`/gpio/mode`, `/dut/reset`,
+`/dut/boot-mode`, `/dut/capture`, `/dut/boot-test`) when the service is running.
+Planned UART injection and observation endpoints would share the same
+trusted-local exposure unless authentication is added. Loopback binding prevents
+remote access, so this is acceptable for a single-developer workstation. On
+shared workstations or CI servers it is a real exposure.
 
 A simple API key (bearer token, configurable in `.dutchmate/config.toml`) is planned for Phase 3 when multi-user or CI use becomes relevant. Until then, treat the Device Core Service port as trusted-local only and do not expose it to the network.

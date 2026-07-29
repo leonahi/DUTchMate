@@ -419,8 +419,8 @@ Current unit tests cover:
 - Runtime active-session reporting, conflict guards, and failure cleanup.
 - Device Core Service endpoints for status, finite capture, boot-test, GPIO
   mode, reset, and boot-mode.
-- CLI HTTP client commands for service lifecycle, status, finite capture, GPIO
-  mode, reset, and boot-mode.
+- CLI HTTP client commands for service lifecycle, status, finite capture,
+  boot-test, GPIO mode, reset, and boot-mode.
 - Serial command transport, serial-port discovery, startup `hello` validation,
   and startup hardware mapping application.
 - CLI device listing and single-candidate startup selection.
@@ -441,7 +441,7 @@ architecture yet:
 - Background serial ingestion outside finite capture requests.
 - Reconnect/resume session mutation helpers.
 - Log/session, wait-pattern, and UART-send Device Core Service endpoints.
-- Boot-test, log/session, wait-pattern, and UART-send CLI commands.
+- Log/session, wait-pattern, and UART-send CLI commands.
 - MCP server runtime.
 - RP2040 firmware.
 - Hardware smoke tests.

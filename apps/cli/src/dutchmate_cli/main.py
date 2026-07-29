@@ -7,7 +7,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from dutchmate_cli.capture import format_capture_result
+from dutchmate_cli.capture import format_boot_test_result, format_capture_result
 from dutchmate_cli.client import (
     ServiceClientError,
     ServiceUnavailableError,
@@ -15,6 +15,7 @@ from dutchmate_cli.client import (
     configure_gpio_mode,
     fetch_status,
     reset_dut,
+    run_boot_test,
     set_boot_mode,
 )
 from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
@@ -44,7 +45,7 @@ def main() -> None:
     """DUTchMate command-line interface."""
 
 
-def _validate_capture_seconds(value: float) -> float:
+def _validate_positive_seconds(value: float) -> float:
     if not math.isfinite(value) or value <= 0:
         raise typer.BadParameter("must be a positive finite number")
     return value
@@ -143,7 +144,7 @@ def capture(
         float,
         typer.Option(
             "--seconds",
-            callback=_validate_capture_seconds,
+            callback=_validate_positive_seconds,
             help="Capture duration in seconds.",
         ),
     ],
@@ -168,6 +169,39 @@ def capture(
         _fail(str(exc))
 
     typer.echo(format_capture_result(payload))
+
+
+@app.command("boot-test")
+def boot_test(
+    seconds: Annotated[
+        float,
+        typer.Option(
+            "--seconds",
+            callback=_validate_positive_seconds,
+            help="Boot capture duration in seconds.",
+        ),
+    ],
+    service_url: Annotated[
+        str | None,
+        typer.Option(
+            "--service-url",
+            help="Base URL for the local Device Core Service.",
+        ),
+    ] = None,
+) -> None:
+    """Reset the DUT and capture boot evidence into a debug session."""
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = run_boot_test(
+            duration_s=seconds,
+            service_url=resolved_service_url,
+        )
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+    typer.echo(format_boot_test_result(payload))
 
 
 @gpio_app.command("mode")

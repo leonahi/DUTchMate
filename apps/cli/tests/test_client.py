@@ -10,6 +10,7 @@ from dutchmate_cli.client import (
     configure_gpio_mode,
     fetch_status,
     reset_dut,
+    run_boot_test,
     set_boot_mode,
 )
 
@@ -160,3 +161,33 @@ def test_capture_uart_maps_read_timeout_to_service_error() -> None:
 def test_capture_uart_rejects_invalid_duration(duration_s: float) -> None:
     with pytest.raises(ValueError, match="positive finite"):
         capture_uart(duration_s=duration_s)
+
+
+def test_run_boot_test_posts_duration_with_duration_aware_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/boot-test"
+        assert request.method == "POST"
+        assert request.read() == b'{"duration_s":5.0}'
+        assert request.extensions["timeout"]["read"] == 7.0
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "session_id": "20260729T100000Z-boot01",
+                "truncated": False,
+                "interrupted": False,
+                "resumed": False,
+                "overflow": False,
+                "segments": 1,
+            },
+        )
+
+    payload = run_boot_test(duration_s=5.0, transport=httpx.MockTransport(handler))
+
+    assert payload["session_id"] == "20260729T100000Z-boot01"
+
+
+@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan")])
+def test_run_boot_test_rejects_invalid_duration(duration_s: float) -> None:
+    with pytest.raises(ValueError, match="positive finite"):
+        run_boot_test(duration_s=duration_s)
