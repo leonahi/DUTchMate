@@ -1,8 +1,8 @@
 # DUTchMate Voltage-Domain GPIO and UART Interface
 
-**Status:** Proposed hardware architecture  
-**Revision:** 0.1  
-**Date:** 2026-07-16  
+**Status:** Proposed hardware architecture<br>
+**Revision:** 0.8<br>
+**Date:** 2026-08-09<br>
 **Scope:** Four debugger-to-DUT control signals, four DUT-to-debugger event signals, and one UART pair across different logic-voltage domains.
 
 ## 1. Purpose
@@ -74,7 +74,7 @@ A control signal named `POWER` must drive a logic-level power-enable input or an
             +---------------------+---------------------+
             |                     |                     |
       4 x CTRL_DATA         4 x EVENT_IN          UART TX / RX
-      4 x CTRL_nOE                |                     |
+      4 x CTRL_EN                 |                     |
             |                     |                     |
    +----------------+    +----------------+    +----------------+
    | SN74LV4T125    |    | TXU0104       |    | TXU0202       |
@@ -90,7 +90,20 @@ A control signal named `POWER` must drive a logic-level power-enable input or an
 
 This architecture intentionally uses fixed-direction paths. It avoids automatic-direction translators and avoids the complexity of providing independent drive and sense paths on every external GPIO.
 
-### 3.1 Hardware-to-software mapping
+### 3.1 Net naming and hardware-to-software mapping
+
+The prototype schematic uses three naming layers:
+
+| Layer | Example nets | Meaning |
+|---|---|---|
+| Connector side | `DUT_CTRL0`, `DUT_EVENT0`, `DUT_UART_TX` | External DUT header nets, protected by ESD parts. |
+| Translator side | `CTRL0`, `EVENT0`, `UART_TX` | Internal nets after the series-resistor arrays. |
+| Debugger side | `DBG_CTRL_DATA0`, `DBG_EVENT0`, `DBG_UART_RX` | Raspberry Pi Pico / 3.3 V domain nets. |
+
+The software-facing channel names remain `CTRL0` through `CTRL3` and `EVENT0`
+through `EVENT3`. In the schematic these channel names correspond to the
+internal translator-side nets, while the connector pins use the explicit
+`DUT_*` prefix.
 
 The hardware exposes generic physical channels. Software assigns meaning to
 those channels using user configuration. The user is responsible for mapping
@@ -98,11 +111,11 @@ physical DUTchMate channels to the DUT schematic signals they actually wired.
 
 | Hardware concept | Software concept | Meaning |
 |---|---|---|
-| `CTRL0` to `CTRL3` | Control channel or line | Physical DUTchMate-to-DUT output channels. |
+| `CTRL0` to `CTRL3` | Control channel or line | Physical DUTchMate-to-DUT output channels, exposed on connector nets `DUT_CTRL0` through `DUT_CTRL3`. |
 | Control role | `reset`, `boot`, `wake`, `power_enable`, or another configured role | The workflow meaning DUTchMate should assign to that channel. |
 | DUT signal name | `RESET_N`, `BOOT0`, `WAKE`, `PGOOD`, or another schematic name | The exact net or pin name from the user's DUT schematic. |
 | Control mode | `high_z`, `open_drain`, or `push_pull` | How DUTchMate may drive or release the assigned control channel. |
-| `EVENT0` to `EVENT3` | Event channel or line | Physical DUT-to-DUTchMate input channels. |
+| `EVENT0` to `EVENT3` | Event channel or line | Physical DUT-to-DUTchMate input channels, exposed on connector nets `DUT_EVENT0` through `DUT_EVENT3`. |
 | Event role | `interrupt`, `power_good`, `status`, or another configured role | The workflow/reporting meaning DUTchMate should assign to that event channel. |
 | UART pair | UART interface | Fixed debugger TX-to-DUT RX and DUT TX-to-debugger RX connection. |
 
@@ -151,44 +164,101 @@ GND  = common ground
 
 1A   <- DBG_CTRL_DATA0
 1OE  <- DBG_CTRL_nOE0
-1Y   -> DUT_CTRL0
+1Y   -> CTRL0 -> series resistor -> DUT_CTRL0
 
 2A   <- DBG_CTRL_DATA1
 2OE  <- DBG_CTRL_nOE1
-2Y   -> DUT_CTRL1
+2Y   -> CTRL1 -> series resistor -> DUT_CTRL1
 
 3A   <- DBG_CTRL_DATA2
 3OE  <- DBG_CTRL_nOE2
-3Y   -> DUT_CTRL2
+3Y   -> CTRL2 -> series resistor -> DUT_CTRL2
 
 4A   <- DBG_CTRL_DATA3
 4OE  <- DBG_CTRL_nOE3
-4Y   -> DUT_CTRL3
+4Y   -> CTRL3 -> series resistor -> DUT_CTRL3
 ```
 
-The exact pin numbers must be taken from the selected package datasheet during schematic capture.
+The debugger MCU does not drive the `SN74LV4T125` active-low output-enable pins
+directly. Each MCU-side `DBG_CTRL_ENx` signal drives one channel of a
+`SN74LVC2G06` open-drain inverter. The inverter output pulls the corresponding
+`SN74LV4T125` `/OE` pin low only when the MCU requests that channel to drive.
+Each `/OE` net has a pull-up to `DUT_VIO`, so the default state remains disabled
+even if the DUT is powered while the debugger 3.3 V rail is absent.
+
+The schematic may label these nets as `DBG_CTRL_OEx`; this document writes them
+as `DBG_CTRL_nOEx` only to make the active-low polarity explicit.
+
+```text
+DBG_CTRL_ENx -> SN74LVC2G06 input
+SN74LVC2G06 open-drain output -> DBG_CTRL_nOEx
+DBG_CTRL_nOEx -- 47 kOhm -- DUT_VIO
+DBG_CTRL_ENx -- 100 kOhm -- GND
+```
+
+For the selected `SN74LV4T125PWR` TSSOP-14 package:
+
+| Channel | IC pin | IC signal | Net |
+|---|---:|---|---|
+| Supply | 14 | `VCC` | `DUT_VIO` |
+| Ground | 7 | `GND` | Common ground |
+| `CTRL0` | 2 | `1A` | `DBG_CTRL_DATA0` |
+| `CTRL0` | 1 | `1OE` | `DBG_CTRL_nOE0` |
+| `CTRL0` | 3 | `1Y` | `CTRL0` |
+| `CTRL1` | 5 | `2A` | `DBG_CTRL_DATA1` |
+| `CTRL1` | 4 | `2OE` | `DBG_CTRL_nOE1` |
+| `CTRL1` | 6 | `2Y` | `CTRL1` |
+| `CTRL2` | 9 | `3A` | `DBG_CTRL_DATA2` |
+| `CTRL2` | 10 | `3OE` | `DBG_CTRL_nOE2` |
+| `CTRL2` | 8 | `3Y` | `CTRL2` |
+| `CTRL3` | 12 | `4A` | `DBG_CTRL_DATA3` |
+| `CTRL3` | 13 | `4OE` | `DBG_CTRL_nOE3` |
+| `CTRL3` | 11 | `4Y` | `CTRL3` |
+
+For the selected `SN74LVC2G06DBVR` SOT-23-6 package:
+
+| IC | IC pin | IC signal | Net |
+|---|---:|---|---|
+| `U5` | 5 | `VCC` | Debugger 3.3 V |
+| `U5` | 2 | `GND` | Common ground |
+| `U5` | 1 | `1A` | `DBG_CTRL_EN1` |
+| `U5` | 6 | `1Y` | `DBG_CTRL_nOE1` |
+| `U5` | 3 | `2A` | `DBG_CTRL_EN0` |
+| `U5` | 4 | `2Y` | `DBG_CTRL_nOE0` |
+| `U6` | 5 | `VCC` | Debugger 3.3 V |
+| `U6` | 2 | `GND` | Common ground |
+| `U6` | 1 | `1A` | `DBG_CTRL_EN3` |
+| `U6` | 6 | `1Y` | `DBG_CTRL_nOE3` |
+| `U6` | 3 | `2A` | `DBG_CTRL_EN2` |
+| `U6` | 4 | `2Y` | `DBG_CTRL_nOE2` |
+
+The four buffers are electrically equivalent. The logical `CTRL0` through
+`CTRL3` labels may be permuted among the four physical buffers during PCB
+layout if that removes crossings; update the schematic net labels and firmware
+pin table together.
 
 ### 4.3 Supported output modes
 
 Each control channel uses two debugger MCU signals:
 
 - `CTRL_DATAx`: value presented to the translator input.
-- `CTRL_nOEx`: active-low output enable.
+- `CTRL_ENx`: active-high firmware enable for the open-drain inverter stage.
 
-| Software mode | `CTRL_DATAx` | `CTRL_nOEx` | DUT-side electrical state |
-|---|---:|---:|---|
-| High impedance | X | 1 | Released / Hi-Z |
-| Push-pull low | 0 | 0 | Actively driven low |
-| Push-pull high | 1 | 0 | Actively driven to `DUT_VIO` |
-| Open-drain asserted | 0 | 0 | Actively pulled low |
-| Open-drain released | 0 | 1 | Released / Hi-Z |
+| Software mode | `CTRL_DATAx` | `CTRL_ENx` | SN74 `/OE` | DUT-side electrical state |
+|---|---:|---:|---:|---|
+| High impedance | X | 0 | 1 | Released / Hi-Z |
+| Push-pull low | 0 | 1 | 0 | Actively driven low |
+| Push-pull high | 1 | 1 | 0 | Actively driven to `DUT_VIO` |
+| Open-drain asserted | 0 | 1 | 0 | Actively pulled low |
+| Open-drain released | 0 | 0 | 1 | Released / Hi-Z |
 
 Open-drain operation is implemented by the translator output-enable control,
 not by configuring the debugger MCU pin itself as open-drain. For open-drain
-mode, firmware holds `CTRL_DATAx = 0` at all times. Assertion enables the
-translator output so the DUT line is pulled low. Release disables the translator
-output so the DUT line becomes high-impedance and the DUT-side pull-up defines
-the high level.
+mode, firmware holds `CTRL_DATAx = 0` at all times. Assertion drives
+`CTRL_ENx = 1`, causing the open-drain inverter to pull the `SN74LV4T125` `/OE`
+pin low so the DUT line is pulled low. Release drives `CTRL_ENx = 0`, allowing
+the `/OE` pull-up to disable the translator output so the DUT line becomes
+high-impedance and the DUT-side pull-up defines the high level.
 
 ### 4.4 Reset example
 
@@ -199,10 +269,10 @@ Initial configuration:
     CTRL_DATA_RESET = 0
 
 Assert reset:
-    CTRL_nOE_RESET = 0
+    CTRL_EN_RESET = 1
 
 Release reset:
-    CTRL_nOE_RESET = 1
+    CTRL_EN_RESET = 0
 ```
 
 When released, the translator output is high-impedance and the DUT's reset pull-up determines the line voltage.
@@ -214,36 +284,53 @@ For a normal active-high wakeup input:
 ```text
 Drive wakeup low:
     CTRL_DATA_WAKE = 0
-    CTRL_nOE_WAKE  = 0
+    CTRL_EN_WAKE   = 1
 
 Drive wakeup high:
     CTRL_DATA_WAKE = 1
-    CTRL_nOE_WAKE  = 0
+    CTRL_EN_WAKE   = 1
 
 Disconnect from wakeup pin:
-    CTRL_nOE_WAKE  = 1
+    CTRL_EN_WAKE   = 0
 ```
 
 ### 4.6 Safe startup state
 
-Each `CTRL_nOEx` input must have an external pull-up to the debugger 3.3 V rail:
+Each `DBG_CTRL_nOEx` net must have an external pull-up to `DUT_VIO`:
 
 ```text
-CTRL_nOE0 -- 10 kOhm -- 3.3 V
-CTRL_nOE1 -- 10 kOhm -- 3.3 V
-CTRL_nOE2 -- 10 kOhm -- 3.3 V
-CTRL_nOE3 -- 10 kOhm -- 3.3 V
+DBG_CTRL_nOE0 -- 47 kOhm -- DUT_VIO
+DBG_CTRL_nOE1 -- 47 kOhm -- DUT_VIO
+DBG_CTRL_nOE2 -- 47 kOhm -- DUT_VIO
+DBG_CTRL_nOE3 -- 47 kOhm -- DUT_VIO
 ```
 
-This keeps every DUT control output high-impedance while the debugger MCU is in reset, unconfigured, or starting firmware.
+Each `DBG_CTRL_ENx` input to the `SN74LVC2G06` stage must have an external
+pull-down to ground:
+
+```text
+DBG_CTRL_EN0 -- 100 kOhm -- GND
+DBG_CTRL_EN1 -- 100 kOhm -- GND
+DBG_CTRL_EN2 -- 100 kOhm -- GND
+DBG_CTRL_EN3 -- 100 kOhm -- GND
+```
+
+Together these keep every DUT control output high-impedance while the debugger
+MCU is in reset, unconfigured, starting firmware, or unpowered while `DUT_VIO`
+is present.
+
+Each `CTRL_DATAx` input should also have a weak pull-down, for example 100 kOhm
+to ground, so the SN74LV4T125 inputs do not float while the debugger MCU pins
+are high-impedance during reset. The `DBG_CTRL_nOEx` pull-ups still define the
+DUT-facing safe state.
 
 Recommended firmware sequence:
 
-1. Keep `CTRL_nOE` high.
+1. Keep `CTRL_EN` low.
 2. Configure `CTRL_DATA` to the required value.
 3. Configure the channel mode in software.
-4. Pull `CTRL_nOE` low only when the signal must be actively driven.
-5. Return `CTRL_nOE` high before reconfiguring the channel.
+4. Drive `CTRL_EN` high only when the signal must be actively driven.
+5. Return `CTRL_EN` low before reconfiguring the channel.
 
 ### 4.7 Control-channel limitations
 
@@ -282,13 +369,32 @@ VCCA = DUT_VIO
 VCCB = 3.3 V
 GND  = common ground
 
-A1 <- DUT_EVENT0     B1 -> DBG_EVENT0
-A2 <- DUT_EVENT1     B2 -> DBG_EVENT1
-A3 <- DUT_EVENT2     B3 -> DBG_EVENT2
-A4 <- DUT_EVENT3     B4 -> DBG_EVENT3
+A1 <- EVENT0 <- series resistor <- DUT_EVENT0     B1 -> DBG_EVENT0
+A2 <- EVENT1 <- series resistor <- DUT_EVENT1     B2 -> DBG_EVENT1
+A3 <- EVENT2 <- series resistor <- DUT_EVENT2     B3 -> DBG_EVENT2
+A4 <- EVENT3 <- series resistor <- DUT_EVENT3     B4 -> DBG_EVENT3
 
-OE <- DBG_INPUT_IF_ENABLE
+OE <- DBG_INPUT_IF_EN
 ```
+
+For the selected `TXU0104PWR` TSSOP-14 package:
+
+| Channel | IC pin | IC signal | Net |
+|---|---:|---|---|
+| Supply | 1 | `VCCA` | `DUT_VIO` |
+| Supply | 14 | `VCCB` | Debugger 3.3 V |
+| Ground | 7 | `GND` | Common ground |
+| Enable | 8 | `OE` | `DBG_INPUT_IF_EN` |
+| No connect | 6 | `NC` | Leave unconnected |
+| No connect | 9 | `NC` | Leave unconnected |
+| `EVENT0` | 2 | `A1` | `EVENT0` |
+| `EVENT0` | 13 | `B1Y` | `DBG_EVENT0` |
+| `EVENT1` | 3 | `A2` | `EVENT1` |
+| `EVENT1` | 12 | `B2Y` | `DBG_EVENT1` |
+| `EVENT2` | 4 | `A3` | `EVENT2` |
+| `EVENT2` | 11 | `B3Y` | `DBG_EVENT2` |
+| `EVENT3` | 5 | `A4` | `EVENT3` |
+| `EVENT3` | 10 | `B4Y` | `DBG_EVENT3` |
 
 The debugger MCU configures `DBG_EVENT[0:3]` as digital inputs, interrupt inputs, edge-capture inputs, or timer-capture inputs according to the required function.
 
@@ -319,7 +425,7 @@ The final pull-up value must consider DUT requirements, cable capacitance, event
 
 ### 5.4 Event interface enable
 
-Use a 10 kOhm pull-down on `DBG_INPUT_IF_ENABLE`, keeping the translator disabled during debugger startup.
+Use a 10 kOhm pull-down on `DBG_INPUT_IF_EN`, keeping the translator disabled during debugger startup.
 
 Firmware enables the event translator only after the 3.3 V rail and `DUT_VIO` are valid.
 
@@ -356,17 +462,28 @@ VCCA = 3.3 V
 VCCB = DUT_VIO
 GND  = common ground
 
-Debugger UART_TX -> A-to-B channel -> DUT UART_RX
-Debugger UART_RX <- B-to-A channel <- DUT UART_TX
+Debugger UART_TX -> A-to-B channel -> UART_RX -> series resistor -> DUT UART_RX
+Debugger UART_RX <- B-to-A channel <- UART_TX <- series resistor <- DUT UART_TX
 
-OE <- DBG_UART_IF_ENABLE
+OE <- DBG_UART_IF_EN
 ```
 
-Verify the exact channel and pin mapping from the TXU0202 package datasheet during schematic capture.
+For the selected `TXU0202DCUR` VSSOP-8 package:
+
+| Direction | IC pin | IC signal | Net |
+|---|---:|---|---|
+| Ground | 2 | `GND` | Common ground |
+| Supply | 3 | `VCCA` | Debugger 3.3 V |
+| Supply | 7 | `VCCB` | `DUT_VIO` |
+| Enable | 6 | `OE` | `DBG_UART_IF_EN` |
+| Debugger to DUT | 5 | `A1` | `DBG_UART_TX` |
+| Debugger to DUT | 8 | `B1Y` | `UART_RX` |
+| DUT to debugger | 1 | `B2` | `UART_TX` |
+| DUT to debugger | 4 | `A2Y` | `DBG_UART_RX` |
 
 ### 6.3 UART recommendations
 
-- Default `DBG_UART_IF_ENABLE` low using a 10 kOhm pull-down.
+- Default `DBG_UART_IF_EN` low using a 10 kOhm pull-down.
 - Enable the translator only after both voltage domains are valid.
 - Place optional series-resistor footprints close to the driving outputs.
 - A starting value of 22 to 47 Ohm may be evaluated for edge damping.
@@ -383,14 +500,15 @@ Do not use UART pull-ups or pull-downs unless required by the DUT or startup beh
 - `SN74LV4T125.VCC`
 - `TXU0104.VCCA`
 - `TXU0202.VCCB`
+- `DBG_CTRL_nOE[0:3]` pull-ups
 - Optional DUT-side event pull-ups
 
 The debugger's 3.3 V rail connects to:
 
 - Debugger MCU I/O
+- `SN74LVC2G06.VCC`
 - `TXU0104.VCCB`
 - `TXU0202.VCCA`
-- Control-output-enable pull-ups
 
 Firmware or the Device Core Service must treat `DUT_VIO` as valid before
 enabling translated interfaces or allowing control-output actions. Valid means
@@ -404,17 +522,61 @@ reject hardware actions with a clear fault. `DUT_VIO` is only a reference/supply
 input for translators and optional pull-ups; it must not be used to power the
 DUT.
 
-### 7.2 Decoupling
+### 7.2 DUT_VIO current budget
+
+With the recommended `DUT_VIO_SENSE` divider of 47 kOhm from `DUT_VIO` to the
+ADC node and 47 kOhm from the ADC node to ground, the divider is the dominant
+idle load on `DUT_VIO`.
+
+Approximate static `DUT_VIO` current, with event pull-ups not fitted and all
+control outputs released:
+
+| `DUT_VIO` | Sense-divider current | Approximate total idle current |
+|---:|---:|---:|
+| 1.8 V | 19 uA | less than 50 uA |
+| 2.5 V | 27 uA | less than 60 uA |
+| 3.3 V | 35 uA | less than 70 uA |
+| 5.0 V | 53 uA | less than 100 uA |
+
+The total idle estimate includes the `SN74LV4T125`, `TXU0104`, and `TXU0202`
+DUT-side supply currents plus the 47 kOhm + 47 kOhm sense divider. It does not
+include optional DUTchMate event pull-ups, external DUT pull-ups, control
+`DBG_CTRL_nOE` pull-up current while a channel is actively enabled, ESD
+leakage, or transient switching current.
+
+Each enabled control channel also sinks its `DBG_CTRL_nOEx` pull-up current
+through the `SN74LVC2G06` output:
+
+```text
+I_nOE_pullup = DUT_VIO / 47 kOhm
+```
+
+This is about 38 uA at 1.8 V or 106 uA at 5.0 V per enabled control channel.
+
+Any optional pull-up connected to `DUT_VIO` adds current when its line is driven
+low:
+
+```text
+I_pullup = DUT_VIO / R_pullup
+```
+
+For a 10 kOhm pull-up, budget 180 uA at 1.8 V, 330 uA at 3.3 V, or 500 uA at
+5.0 V per asserted low line. Use **1 mA minimum available from DUT_VIO** as a
+practical connector requirement for the prototype, and increase that budget if
+multiple optional pull-ups may be fitted and held low at the same time.
+
+### 7.3 Decoupling
 
 Use a 100 nF ceramic decoupling capacitor at every translator supply pin, placed close to the IC:
 
 - SN74LV4T125: one 100 nF capacitor.
+- SN74LVC2G06: one 100 nF capacitor per package.
 - TXU0104: one 100 nF capacitor on VCCA and one on VCCB.
 - TXU0202: one 100 nF capacitor on VCCA and one on VCCB.
 
 Additional local bulk capacitance may be added if the board's power-distribution analysis requires it.
 
-### 7.3 Default state
+### 7.4 Default state
 
 At hardware reset or debugger power-up:
 
@@ -423,7 +585,7 @@ At hardware reset or debugger power-up:
 - UART translator: disabled.
 - No DUT control line is actively driven until firmware has loaded the user's configuration.
 
-### 7.4 DUT removal or missing DUT power
+### 7.5 DUT removal or missing DUT power
 
 The selected devices provide partial-power-down or supply-disconnect behaviour appropriate to mixed-power-domain use. Nevertheless, the design must be validated for leakage and connector hot-plug behaviour across all expected combinations:
 
@@ -440,20 +602,41 @@ A minimum DUT interface may expose:
 |---|---|---|
 | `DUT_VIO` | Input | DUT digital-I/O reference voltage |
 | `GND` | Common | Shared signal ground |
-| `CTRL0` | Output | Configurable control output |
-| `CTRL1` | Output | Configurable control output |
-| `CTRL2` | Output | Configurable control output |
-| `CTRL3` | Output | Configurable control output |
-| `EVENT0` | Input | DUT event/status input |
-| `EVENT1` | Input | DUT event/status input |
-| `EVENT2` | Input | DUT event/status input |
-| `EVENT3` | Input | DUT event/status input |
-| `UART_TX_TO_DUT` | Output | Debugger UART TX to DUT RX |
-| `UART_RX_FROM_DUT` | Input | DUT UART TX to debugger RX |
+| `DUT_CTRL0` | Output | Configurable control output |
+| `DUT_CTRL1` | Output | Configurable control output |
+| `DUT_CTRL2` | Output | Configurable control output |
+| `DUT_CTRL3` | Output | Configurable control output |
+| `DUT_EVENT0` | Input | DUT event/status input |
+| `DUT_EVENT1` | Input | DUT event/status input |
+| `DUT_EVENT2` | Input | DUT event/status input |
+| `DUT_EVENT3` | Input | DUT event/status input |
+| `DUT_UART_RX` | Output | Debugger UART TX to DUT RX |
+| `DUT_UART_TX` | Input | DUT UART TX to debugger RX |
 
 Multiple ground pins are recommended when the signals are carried through a cable. Interleaving grounds with faster signals can improve return paths and signal integrity.
 
 The connector should clearly distinguish `DUT_VIO` from any optional DUT power-supply output.
+
+Prototype connector assignment:
+
+| Connector | Pin | Net | Notes |
+|---|---:|---|---|
+| `J1` | 1 | `GND` | Common ground |
+| `J1` | 2 | `DUT_CTRL0` | Protected external control output |
+| `J1` | 3 | `DUT_CTRL2` | Protected external control output |
+| `J1` | 4 | `DUT_UART_TX` | DUT TX into DUTchMate |
+| `J1` | 5 | `DUT_EVENT2` | Protected external event input |
+| `J1` | 6 | `DUT_EVENT0` | Protected external event input |
+| `J1` | 7 | `GND` | Common ground |
+| `J1` | 8 | `GND` | Common ground |
+| `J3` | 1 | `GND` | Common ground |
+| `J3` | 2 | `DUT_CTRL1` | Protected external control output |
+| `J3` | 3 | `DUT_CTRL3` | Protected external control output |
+| `J3` | 4 | `DUT_UART_RX` | DUT RX from DUTchMate |
+| `J3` | 5 | `DUT_EVENT3` | Protected external event input |
+| `J3` | 6 | `DUT_EVENT1` | Protected external event input |
+| `J3` | 7 | `GND` | Common ground |
+| `J3` | 8 | `DUT_VIO` / `VCC` | DUT I/O reference voltage |
 
 ## 9. Protection and signal integrity
 
@@ -475,20 +658,123 @@ Provisional resistor values for prototype evaluation:
 
 These values are starting points, not final requirements. Final values should be selected after checking edge rate, trace/cable impedance, capacitive loading, and maximum baud/event rate.
 
-ESD arrays must be selected for the maximum supported DUT voltage and must not add excessive capacitance to UART or event signals.
+ESD protection must be selected for the maximum supported DUT voltage and must
+not add excessive capacitance to UART or event signals. `DUT_VIO` should use a
+low-leakage TVS/ESD part with a working voltage compatible with 5.0 V operation.
+
+Prototype schematic implementation:
+
+| Ref. | Function | Protected or damped signals |
+|---|---|---|
+| `R13` | 4-channel isolated series resistor array | `DUT_CTRL0` through `DUT_CTRL3` |
+| `R14` | 4-channel isolated series resistor array | `DUT_EVENT0` through `DUT_EVENT3` |
+| `R16` | 2-channel isolated series resistor array | `DUT_UART_TX`, `DUT_UART_RX` |
+| `D1` through `D4` | Single-channel low-capacitance ESD diode | `DUT_CTRL0` through `DUT_CTRL3` |
+| `D5` through `D8` | Single-channel low-capacitance ESD diode | `DUT_EVENT0` through `DUT_EVENT3` |
+| `D9`, `D10` | Single-channel low-capacitance ESD diode | `DUT_UART_TX`, `DUT_UART_RX` |
+| `D11` | Single-channel low-leakage TVS/ESD diode | `DUT_VIO` / connector `VCC` |
+
+The signal ESD diodes should connect to the connector-side `DUT_*` nets. The
+series resistor arrays should sit between those protected `DUT_*` nets and the
+translator-side `CTRLx`, `EVENTx`, or `UART_x` nets. `D11` should connect from
+the connector-side `DUT_VIO` / `VCC` node to ground.
+
+Prototype protection and series-resistor net map:
+
+| External connector net | ESD part | Series path | Translator-side net | Translator pin |
+|---|---|---|---|---|
+| `DUT_CTRL0` | `D1` pin 1 to GND | `R13` pin 6 to pin 3 | `CTRL0` | `U3.1Y`, pin 3 |
+| `DUT_CTRL1` | `D3` pin 1 to GND | `R13` pin 5 to pin 4 | `CTRL1` | `U3.2Y`, pin 6 |
+| `DUT_CTRL2` | `D2` pin 1 to GND | `R13` pin 8 to pin 1 | `CTRL2` | `U3.3Y`, pin 8 |
+| `DUT_CTRL3` | `D4` pin 1 to GND | `R13` pin 7 to pin 2 | `CTRL3` | `U3.4Y`, pin 11 |
+| `DUT_EVENT0` | `D8` pin 1 to GND | `R14` pin 8 to pin 1 | `EVENT0` | `U2.A1`, pin 2 |
+| `DUT_EVENT1` | `D6` pin 1 to GND | `R14` pin 7 to pin 2 | `EVENT1` | `U2.A2`, pin 3 |
+| `DUT_EVENT2` | `D7` pin 1 to GND | `R14` pin 6 to pin 3 | `EVENT2` | `U2.A3`, pin 4 |
+| `DUT_EVENT3` | `D5` pin 1 to GND | `R14` pin 5 to pin 4 | `EVENT3` | `U2.A4`, pin 5 |
+| `DUT_UART_RX` | `D10` pin 1 to GND | `R16` pin 1 to pin 4 | `UART_RX` | `U1.B1Y`, pin 8 |
+| `DUT_UART_TX` | `D9` pin 1 to GND | `R16` pin 2 to pin 3 | `UART_TX` | `U1.B2`, pin 1 |
+| `DUT_VIO` / `VCC` | `D11` pin 1 to GND | Direct | `DUT_VIO` / `VCC` | Translator DUT-side supplies and sense divider |
 
 ## 10. Debugger MCU resource estimate
 
 | Function | MCU pins |
 |---|---:|
 | Four control data pins | 4 |
-| Four control output-enable pins | 4 |
+| Four control enable pins | 4 |
 | Four event inputs | 4 |
 | UART TX/RX | 2 |
 | Shared or separate TXU output enables | 1 or 2 |
 | Optional DUT_VIO ADC measurement | 1 |
 
 Expected total: approximately **15 to 17 MCU pins**, depending on whether enable signals are shared and whether `DUT_VIO` is measured.
+
+### 10.1 Suggested Raspberry Pi Pico pin assignment
+
+This assignment targets a standard Raspberry Pi Pico/Pico H header and is
+optimized for translators placed in the area between the Pico's two header
+rows, as shown in the preliminary PCB placement:
+
+```text
+Pico USB end
+             |    SN74LVC2G06DBVR x2   |
+pin 1-20 row |     SN74LV4T125PWR      | pin 40-21 row
+             |       TXU0202DCUR       |
+             |       TXU0104PWR        |
+Pico bottom end
+```
+
+This allocation intentionally uses both Pico header rows. It does not prescribe
+component rotation, footprint mirroring, or exact pad escape direction. Those
+choices should be made after placement is finalized.
+
+The `TXU0202` uses the primary `UART0` pair on `GP0/GP1`, with its interface
+enable on `GP2`. The five `TXU0104` debugger-side event signals are placed on a
+left-row group so the DUT-side `DUT_EVENTx` nets can escape toward the DUT
+connector cleanly. The `SN74LV4T125` control signals are split between nearby
+left-row and right-row Pico GPIOs, with the `SN74LVC2G06` devices converting
+active-high MCU enable signals into safe active-low `SN74LV4T125` output
+enables.
+
+| DUTchMate net | Pico GPIO | Pico physical pin | Connects to |
+|---|---|---:|---|
+| `DBG_UART_TX` | `GP0` / `UART0_TX` | 1 | `TXU0202.A1`, pin 5 |
+| `DBG_UART_RX` | `GP1` / `UART0_RX` | 2 | `TXU0202.A2Y`, pin 4 |
+| `DBG_UART_IF_EN` | `GP2` | 4 | `TXU0202.OE`, pin 6; 10 kOhm pull-down to ground |
+| `DBG_CTRL_EN1` | `GP7` | 10 | `SN74LVC2G06.U5.1A`, pin 1; 100 kOhm pull-down to ground |
+| `DBG_CTRL_EN0` | `GP8` | 11 | `SN74LVC2G06.U5.2A`, pin 3; 100 kOhm pull-down to ground |
+| `DBG_CTRL_DATA0` | `GP9` | 12 | `SN74LV4T125.1A`, pin 2 |
+| `DBG_CTRL_DATA1` | `GP10` | 14 | `SN74LV4T125.2A`, pin 5 |
+| `DBG_INPUT_IF_EN` | `GP11` | 15 | `TXU0104.OE`, pin 8; 10 kOhm pull-down to ground |
+| `DBG_EVENT3` | `GP12` | 16 | `TXU0104.B4Y`, pin 10 |
+| `DBG_EVENT2` | `GP13` | 17 | `TXU0104.B3Y`, pin 11 |
+| `DBG_EVENT1` | `GP14` | 19 | `TXU0104.B2Y`, pin 12 |
+| `DBG_EVENT0` | `GP15` | 20 | `TXU0104.B1Y`, pin 13 |
+| `DBG_CTRL_DATA2` | `GP20` | 26 | `SN74LV4T125.3A`, pin 9 |
+| `DBG_CTRL_DATA3` | `GP21` | 27 | `SN74LV4T125.4A`, pin 12 |
+| `DBG_CTRL_EN3` | `GP22` | 29 | `SN74LVC2G06.U6.1A`, pin 1; 100 kOhm pull-down to ground |
+| `DBG_CTRL_EN2` | `GP26` | 31 | `SN74LVC2G06.U6.2A`, pin 3; 100 kOhm pull-down to ground |
+| `DUT_VIO_SENSE` | `GP28_ADC2` | 34 | Divider from `DUT_VIO` for valid-voltage detection |
+
+Optional assignments:
+
+- `GP3` through `GP6`, `GP16` through `GP19`, and `GP27` remain
+  available for future functions.
+- `GP4/GP5` remain a complete `UART1` TX/RX pair and may be used for a separate
+  hardware diagnostic UART while the DUT UART uses `UART0` on `GP0/GP1`.
+- The `CTRL0` through `CTRL3` channel numbers may be swapped among equivalent
+  SN74LV4T125 buffers to suit the eventual package rotation without changing
+  the electrical architecture.
+
+### 10.2 Other required Raspberry Pi Pico connections
+
+| Net | Pico pin or rail | Notes |
+|---|---|---|
+| Debugger 3.3 V | `3V3(OUT)`, physical pin 36 | Powers `SN74LVC2G06.VCC`, `TXU0104.VCCB`, and `TXU0202.VCCA`. Confirm total load remains inside the Pico regulator budget. |
+| Common ground | Any Pico `GND`; use several pins for cable return | Connect to translator grounds and DUT connector ground. Interleave ground pins with UART and event/control signals on the external connector where practical. |
+| `DUT_VIO_SENSE` divider | `GP28_ADC2`, physical pin 34 | Use 47 kOhm from `DUT_VIO` to ADC and 47 kOhm from ADC to ground, plus an optional small capacitor at the ADC node. This maps 5.0 V to about 2.5 V and draws about 53 uA from `DUT_VIO` at 5.0 V. |
+| `ADC_VREF` | Physical pin 35 | Keep decoupled and quiet. Use the firmware's measured/calibrated 3.3 V reference tolerance when validating `DUT_VIO`. |
+| Pico `RUN` | Physical pin 30 | Optional local reset control for DUTchMate itself only; do not connect to DUT reset. |
+| `VBUS` / `VSYS` | Physical pins 40 / 39 | Use according to the Pico power design. Do not connect either rail to `DUT_VIO`. |
 
 ## 11. Suggested firmware model
 
@@ -508,26 +794,26 @@ Expected implementation:
 
 ```text
 DUT_CTRL_HIGH_Z:
-    nOE = 1
+    EN = 0
 
 DUT_CTRL_PUSH_PULL_LOW:
-    nOE = 1
+    EN = 0
     DATA = 0
-    nOE = 0
+    EN = 1
 
 DUT_CTRL_PUSH_PULL_HIGH:
-    nOE = 1
+    EN = 0
     DATA = 1
-    nOE = 0
+    EN = 1
 
 DUT_CTRL_OPEN_DRAIN_ASSERT:
-    nOE = 1
+    EN = 0
     DATA = 0
-    nOE = 0
+    EN = 1
 
 DUT_CTRL_OPEN_DRAIN_RELEASE:
     DATA = 0
-    nOE = 1
+    EN = 0
 ```
 
 ### 11.2 User configuration example
@@ -674,7 +960,7 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 - [ ] Test hot-plug and unplug behaviour.
 - [ ] Check for back-powering through every external signal.
 - [ ] Validate series-resistor values using oscilloscope measurements.
-- [ ] Validate ESD-array capacitance and clamping behaviour.
+- [ ] Validate ESD protection capacitance, leakage, and clamping behaviour.
 - [ ] Verify firmware prevents outputs from being enabled before configuration is loaded.
 - [ ] Verify firmware/service rejects invalid channel mappings, duplicate channel assignments, and known contention cases.
 
@@ -682,23 +968,37 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 
 | Ref. | Component | Suggested part | Notes |
 |---|---|---|---|
-| U1 | Quad translating three-state buffer | `SN74LV4T125PWR` | Four independent control outputs |
+| U1 | Opposite-direction dual translator | `TXU0202DCUR` | Full-duplex UART |
 | U2 | Four-channel fixed-direction translator | `TXU0104PWR` | Four DUT event inputs |
-| U3 | Opposite-direction dual translator | `TXU0202DCUR` | Full-duplex UART |
-| C1 | 100 nF ceramic | — | U1 decoupling |
-| C2, C3 | 100 nF ceramic | — | U2 VCCA/VCCB decoupling |
-| C4, C5 | 100 nF ceramic | — | U3 VCCA/VCCB decoupling |
-| R1–R4 | 10 kOhm | — | Pull `CTRL_nOE[0:3]` high |
-| R5 | 10 kOhm | — | Pull U2 OE low |
-| R6 | 10 kOhm | — | Pull U3 OE low, unless shared |
-| R7–R10 | 10 kOhm, optional | — | DUT-side event pull-ups; DNP by default |
-| RSx | Series resistors | — | Fit after signal-integrity validation |
-| D1… | ESD protection | TBD | Select for voltage and capacitance |
+| U3 | Quad translating three-state buffer | `SN74LV4T125PWR` | Four independent control outputs |
+| U5, U6 | Dual open-drain inverter | `SN74LVC2G06DBVR` | Safe active-high MCU enable to active-low control `/OE` |
+| D1–D10 | Single-channel low-capacitance ESD diode | `TPD1E05U06DPYR` | Connector-side ESD protection for control, UART, and event signals |
+| D11 | Single-channel low-leakage TVS/ESD diode | `TPD1E10B06DPYT` | Connector-side `DUT_VIO` / `VCC` ESD protection |
+| C1, C2 | 100 nF ceramic | — | U1 VCCA/VCCB decoupling |
+| C3, C4 | 100 nF ceramic | — | U2 VCCA/VCCB decoupling |
+| C5 | 100 nF ceramic | — | U3 decoupling |
+| C7, C8 | 100 nF ceramic | — | U5/U6 decoupling |
+| R1 | 10 kOhm | — | Pull U2 OE low |
+| R2 | 10 kOhm | — | Pull U1 OE low, unless shared |
+| R3–R6 | 47 kOhm | — | Pull `DBG_CTRL_nOE[0:3]` high to `DUT_VIO` |
+| R7, R8 | 47 kOhm | — | `DUT_VIO_SENSE` divider |
+| R9–R12 | 100 kOhm | — | Pull `DBG_CTRL_EN[0:3]` low |
+| R13 | 4-channel isolated resistor array | `EXB-N8V` or equivalent | Series resistors for `DUT_CTRL0` through `DUT_CTRL3` |
+| R14 | 4-channel isolated resistor array | `EXB-N8V` or equivalent | Series resistors for `DUT_EVENT0` through `DUT_EVENT3` |
+| R16 | 2-channel isolated resistor array | `EXB-V4V` or equivalent | Series resistors for `DUT_UART_TX` and `DUT_UART_RX` |
+| R17–R20 | 10 kOhm, optional | — | DUT-side event pull-ups; DNP by default |
+| C6 | 10 nF to 100 nF, optional | — | Optional `DUT_VIO_SENSE` ADC-node filter |
 
 ## 16. Source documents
 
 - Texas Instruments, **SN74LV4T125 product page and datasheet**:  
   <https://www.ti.com/product/SN74LV4T125>
+- Texas Instruments, **SN74LVC2G06 product page and datasheet**:  
+  <https://www.ti.com/product/SN74LVC2G06>
+- Texas Instruments, **TPD1E05U06 product page and datasheet**:  
+  <https://www.ti.com/product/TPD1E05U06>
+- Texas Instruments, **TPD1E10B06 product page and datasheet**:  
+  <https://www.ti.com/product/TPD1E10B06>
 - Texas Instruments, **TXU0104 product page and datasheet**:  
   <https://www.ti.com/product/TXU0104>
 - Texas Instruments, **TXU0202 product page and datasheet**:  
@@ -708,10 +1008,11 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 
 ## 17. Current recommendation
 
-Proceed with the following three-IC architecture for the first DUTchMate prototype:
+Proceed with the following five-IC implementation of the first DUTchMate prototype:
 
 ```text
 4 x configurable control outputs: SN74LV4T125
+4 x safe control-enable drivers:   2 x SN74LVC2G06
 4 x fixed DUT event inputs:       TXU0104
 1 x full-duplex UART pair:        TXU0202
 Supported DUT_VIO:                1.8 V to 5.0 V
