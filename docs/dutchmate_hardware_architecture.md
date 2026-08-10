@@ -1,8 +1,8 @@
 # DUTchMate Voltage-Domain GPIO and UART Interface
 
 **Status:** Proposed hardware architecture<br>
-**Revision:** 0.8<br>
-**Date:** 2026-08-09<br>
+**Revision:** 0.9<br>
+**Date:** 2026-08-10<br>
 **Scope:** Four debugger-to-DUT control signals, four DUT-to-debugger event signals, and one UART pair across different logic-voltage domains.
 
 ## 1. Purpose
@@ -485,8 +485,9 @@ For the selected `TXU0202DCUR` VSSOP-8 package:
 
 - Default `DBG_UART_IF_EN` low using a 10 kOhm pull-down.
 - Enable the translator only after both voltage domains are valid.
-- Place optional series-resistor footprints close to the driving outputs.
-- A starting value of 22 to 47 Ohm may be evaluated for edge damping.
+- Use `R16` as the 22 Ohm UART series-resistor array between the connector-side
+  `DUT_UART_RX` / `DUT_UART_TX` nets and the translator-side `UART_RX` /
+  `UART_TX` nets.
 - Validate UART operation at the maximum intended baud rate and cable length.
 
 Do not use UART pull-ups or pull-downs unless required by the DUT or startup behaviour.
@@ -648,15 +649,21 @@ Recommended provisions:
 - Short translator-to-connector routing where practical.
 - Clear silkscreen indicating voltage-domain and direction.
 
-Provisional resistor values for prototype evaluation:
+Prototype series-resistor values:
 
-| Signal class | Initial series-resistor range |
-|---|---:|
-| Control GPIO outputs | 47 to 220 Ohm |
-| Event GPIO inputs | 47 to 220 Ohm |
-| UART TX/RX | 22 to 47 Ohm |
+| Signal class | Schematic ref. | Selected value | Part marking |
+|---|---|---:|---|
+| Control GPIO outputs | `R15` | 180 Ohm | `EXB-V8V181JV` |
+| Event GPIO inputs | `R13` | 180 Ohm | `EXB-V8V181JV` |
+| UART TX/RX | `R16` | 22 Ohm | `EXB-V4V220JV` |
 
-These values are starting points, not final requirements. Final values should be selected after checking edge rate, trace/cable impedance, capacitive loading, and maximum baud/event rate.
+The 180 Ohm control and event resistors are intentionally conservative for the
+first prototype. They reduce edge rate, limit transient current during mistakes
+or ESD events, and are acceptable for low-to-moderate-speed GPIO control/status
+signals. The UART pair uses 22 Ohm because it is a push-pull serial interface
+where excessive series resistance can unnecessarily slow edges at higher baud
+rates. Final values should still be validated with the intended cable length,
+load capacitance, signal rates, and oscilloscope measurements.
 
 ESD protection must be selected for the maximum supported DUT voltage and must
 not add excessive capacitance to UART or event signals. `DUT_VIO` should use a
@@ -666,34 +673,49 @@ Prototype schematic implementation:
 
 | Ref. | Function | Protected or damped signals |
 |---|---|---|
-| `R13` | 4-channel isolated series resistor array | `DUT_CTRL0` through `DUT_CTRL3` |
-| `R14` | 4-channel isolated series resistor array | `DUT_EVENT0` through `DUT_EVENT3` |
-| `R16` | 2-channel isolated series resistor array | `DUT_UART_TX`, `DUT_UART_RX` |
-| `D1` through `D4` | Single-channel low-capacitance ESD diode | `DUT_CTRL0` through `DUT_CTRL3` |
-| `D5` through `D8` | Single-channel low-capacitance ESD diode | `DUT_EVENT0` through `DUT_EVENT3` |
-| `D9`, `D10` | Single-channel low-capacitance ESD diode | `DUT_UART_TX`, `DUT_UART_RX` |
-| `D11` | Single-channel low-leakage TVS/ESD diode | `DUT_VIO` / connector `VCC` |
+| `R15` | 4-channel isolated 180 Ohm series resistor array | `DUT_CTRL0` through `DUT_CTRL3` |
+| `R13` | 4-channel isolated 180 Ohm series resistor array | `DUT_EVENT0` through `DUT_EVENT3` |
+| `R16` | 2-channel isolated 22 Ohm series resistor array | `DUT_UART_TX`, `DUT_UART_RX` |
+| `D11`, `D13` through `D15` | Single-channel low-capacitance ESD diode | `DUT_CTRL0` through `DUT_CTRL3` |
+| `D16` through `D19` | Single-channel low-capacitance ESD diode | `DUT_EVENT0` through `DUT_EVENT3` |
+| `D20`, `D21` | Single-channel low-capacitance ESD diode | `DUT_UART_TX`, `DUT_UART_RX` |
+| `D12` | Single-channel low-leakage TVS/ESD diode | `DUT_VIO` / connector `VCC` |
 
 The signal ESD diodes should connect to the connector-side `DUT_*` nets. The
 series resistor arrays should sit between those protected `DUT_*` nets and the
-translator-side `CTRLx`, `EVENTx`, or `UART_x` nets. `D11` should connect from
+translator-side `CTRLx`, `EVENTx`, or `UART_x` nets. `D12` should connect from
 the connector-side `DUT_VIO` / `VCC` node to ground.
 
 Prototype protection and series-resistor net map:
 
 | External connector net | ESD part | Series path | Translator-side net | Translator pin |
 |---|---|---|---|---|
-| `DUT_CTRL0` | `D1` pin 1 to GND | `R13` pin 6 to pin 3 | `CTRL0` | `U3.1Y`, pin 3 |
-| `DUT_CTRL1` | `D3` pin 1 to GND | `R13` pin 5 to pin 4 | `CTRL1` | `U3.2Y`, pin 6 |
-| `DUT_CTRL2` | `D2` pin 1 to GND | `R13` pin 8 to pin 1 | `CTRL2` | `U3.3Y`, pin 8 |
-| `DUT_CTRL3` | `D4` pin 1 to GND | `R13` pin 7 to pin 2 | `CTRL3` | `U3.4Y`, pin 11 |
-| `DUT_EVENT0` | `D8` pin 1 to GND | `R14` pin 8 to pin 1 | `EVENT0` | `U2.A1`, pin 2 |
-| `DUT_EVENT1` | `D6` pin 1 to GND | `R14` pin 7 to pin 2 | `EVENT1` | `U2.A2`, pin 3 |
-| `DUT_EVENT2` | `D7` pin 1 to GND | `R14` pin 6 to pin 3 | `EVENT2` | `U2.A3`, pin 4 |
-| `DUT_EVENT3` | `D5` pin 1 to GND | `R14` pin 5 to pin 4 | `EVENT3` | `U2.A4`, pin 5 |
-| `DUT_UART_RX` | `D10` pin 1 to GND | `R16` pin 1 to pin 4 | `UART_RX` | `U1.B1Y`, pin 8 |
-| `DUT_UART_TX` | `D9` pin 1 to GND | `R16` pin 2 to pin 3 | `UART_TX` | `U1.B2`, pin 1 |
-| `DUT_VIO` / `VCC` | `D11` pin 1 to GND | Direct | `DUT_VIO` / `VCC` | Translator DUT-side supplies and sense divider |
+| `DUT_CTRL0` | `D11` pin 1 to GND | `R15`, 180 Ohm | `CTRL0` | `U3.1Y`, pin 3 |
+| `DUT_CTRL1` | `D14` pin 1 to GND | `R15`, 180 Ohm | `CTRL1` | `U3.2Y`, pin 6 |
+| `DUT_CTRL2` | `D13` pin 1 to GND | `R15`, 180 Ohm | `CTRL2` | `U3.3Y`, pin 8 |
+| `DUT_CTRL3` | `D15` pin 1 to GND | `R15`, 180 Ohm | `CTRL3` | `U3.4Y`, pin 11 |
+| `DUT_EVENT0` | `D19` pin 1 to GND | `R13`, 180 Ohm | `EVENT0` | `U2.A1`, pin 2 |
+| `DUT_EVENT1` | `D17` pin 1 to GND | `R13`, 180 Ohm | `EVENT1` | `U2.A2`, pin 3 |
+| `DUT_EVENT2` | `D18` pin 1 to GND | `R13`, 180 Ohm | `EVENT2` | `U2.A3`, pin 4 |
+| `DUT_EVENT3` | `D16` pin 1 to GND | `R13`, 180 Ohm | `EVENT3` | `U2.A4`, pin 5 |
+| `DUT_UART_RX` | `D21` pin 1 to GND | `R16` pin 1 to pin 4, 22 Ohm | `UART_RX` | `U1.B1Y`, pin 8 |
+| `DUT_UART_TX` | `D20` pin 1 to GND | `R16` pin 2 to pin 3, 22 Ohm | `UART_TX` | `U1.B2`, pin 1 |
+| `DUT_VIO` / `VCC` | `D12` to GND | Direct | `DUT_VIO` / `VCC` | Translator DUT-side supplies and sense divider |
+
+Detailed signal paths from the DUT connector to the active devices:
+
+| Channel | Connector net | Protection and damping | Active device connection |
+|---|---|---|---|
+| Control 0 | `DUT_CTRL0` | `D11` ESD to GND, then `R15` 180 Ohm to `CTRL0` | `CTRL0` driven by `U3.1Y`, pin 3 |
+| Control 1 | `DUT_CTRL1` | `D14` ESD to GND, then `R15` 180 Ohm to `CTRL1` | `CTRL1` driven by `U3.2Y`, pin 6 |
+| Control 2 | `DUT_CTRL2` | `D13` ESD to GND, then `R15` 180 Ohm to `CTRL2` | `CTRL2` driven by `U3.3Y`, pin 8 |
+| Control 3 | `DUT_CTRL3` | `D15` ESD to GND, then `R15` 180 Ohm to `CTRL3` | `CTRL3` driven by `U3.4Y`, pin 11 |
+| Event 0 | `DUT_EVENT0` | `D19` ESD to GND, then `R13` 180 Ohm to `EVENT0` | `EVENT0` read by `U2.A1`, pin 2 |
+| Event 1 | `DUT_EVENT1` | `D17` ESD to GND, then `R13` 180 Ohm to `EVENT1` | `EVENT1` read by `U2.A2`, pin 3 |
+| Event 2 | `DUT_EVENT2` | `D18` ESD to GND, then `R13` 180 Ohm to `EVENT2` | `EVENT2` read by `U2.A3`, pin 4 |
+| Event 3 | `DUT_EVENT3` | `D16` ESD to GND, then `R13` 180 Ohm to `EVENT3` | `EVENT3` read by `U2.A4`, pin 5 |
+| UART DUT RX | `DUT_UART_RX` | `D21` ESD to GND, then `R16` 22 Ohm to `UART_RX` | `UART_RX` driven by `U1.B1Y`, pin 8 |
+| UART DUT TX | `DUT_UART_TX` | `D20` ESD to GND, then `R16` 22 Ohm to `UART_TX` | `UART_TX` read by `U1.B2`, pin 1 |
 
 ## 10. Debugger MCU resource estimate
 
@@ -972,8 +994,8 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 | U2 | Four-channel fixed-direction translator | `TXU0104PWR` | Four DUT event inputs |
 | U3 | Quad translating three-state buffer | `SN74LV4T125PWR` | Four independent control outputs |
 | U5, U6 | Dual open-drain inverter | `SN74LVC2G06DBVR` | Safe active-high MCU enable to active-low control `/OE` |
-| D1–D10 | Single-channel low-capacitance ESD diode | `TPD1E05U06DPYR` | Connector-side ESD protection for control, UART, and event signals |
-| D11 | Single-channel low-leakage TVS/ESD diode | `TPD1E10B06DPYT` | Connector-side `DUT_VIO` / `VCC` ESD protection |
+| D11, D13-D21 | Single-channel low-capacitance ESD diode | `TPD1E05U06DPYR-X1SON-2N` | Connector-side ESD protection for control, UART, and event signals |
+| D12 | Single-channel low-leakage TVS/ESD diode | `TPD1E10B06DPYR` | Connector-side `DUT_VIO` / `VCC` ESD protection |
 | C1, C2 | 100 nF ceramic | — | U1 VCCA/VCCB decoupling |
 | C3, C4 | 100 nF ceramic | — | U2 VCCA/VCCB decoupling |
 | C5 | 100 nF ceramic | — | U3 decoupling |
@@ -983,9 +1005,9 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 | R3–R6 | 47 kOhm | — | Pull `DBG_CTRL_nOE[0:3]` high to `DUT_VIO` |
 | R7, R8 | 47 kOhm | — | `DUT_VIO_SENSE` divider |
 | R9–R12 | 100 kOhm | — | Pull `DBG_CTRL_EN[0:3]` low |
-| R13 | 4-channel isolated resistor array | `EXB-N8V` or equivalent | Series resistors for `DUT_CTRL0` through `DUT_CTRL3` |
-| R14 | 4-channel isolated resistor array | `EXB-N8V` or equivalent | Series resistors for `DUT_EVENT0` through `DUT_EVENT3` |
-| R16 | 2-channel isolated resistor array | `EXB-V4V` or equivalent | Series resistors for `DUT_UART_TX` and `DUT_UART_RX` |
+| R15 | 4-channel isolated resistor array, 180 Ohm | `EXB-V8V181JV` | Series resistors for `DUT_CTRL0` through `DUT_CTRL3` |
+| R13 | 4-channel isolated resistor array, 180 Ohm | `EXB-V8V181JV` | Series resistors for `DUT_EVENT0` through `DUT_EVENT3` |
+| R16 | 2-channel isolated resistor array, 22 Ohm | `EXB-V4V220JV` | Series resistors for `DUT_UART_TX` and `DUT_UART_RX` |
 | R17–R20 | 10 kOhm, optional | — | DUT-side event pull-ups; DNP by default |
 | C6 | 10 nF to 100 nF, optional | — | Optional `DUT_VIO_SENSE` ADC-node filter |
 
