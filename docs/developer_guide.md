@@ -1,14 +1,68 @@
 # Developer Guide
 
 > Status: current implementation guide
-> Scope: local development workflow, package boundaries, and contribution patterns.
+> Scope: workspace layout, local development, package boundaries, and contribution patterns.
 
-This guide is for contributors working on the current Python workspace. It
-describes what exists now, not the full Phase 1 roadmap.
+This guide is for contributors working on the current Python repository. Target
+Phase 1 behavior is defined in `docs/phase1_implementation_spec.md` rather than
+repeated here.
+
+## Workspace
+
+DUTchMate uses a `uv` workspace with one root lockfile. This keeps the core,
+CLI, service, and MCP packages independently testable while resolving them from
+one dependency set. Run package entrypoints from the repository root.
+
+```text
+apps/
+  cli/             Human CLI; owns `dutchmate` and `dm`.
+  service/         Local FastAPI Device Core Service.
+  mcp_server/      Phase 2 MCP stdio adapter scaffold.
+
+core/
+  src/             Reusable Python library.
+  tests/           Core package tests.
+
+hardware/
+  firmware/        RP2040/Zephyr firmware location.
+  protocol/        Versioned wire schemas and examples.
+  schematics/      Electrical design notes and schematic files.
+  validation/      Hardware acceptance records and unrun templates.
+
+docs/              Architecture, contracts, plans, and guides.
+
+tests/
+  unit/            Cross-package unit tests.
+  integration/     Service/API integration tests.
+  fixtures/        Protocol streams and expected session outputs.
+```
+
+Python packages:
+
+| Path | Package | Purpose |
+|---|---|---|
+| `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
+| `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
+| `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
+| `apps/mcp_server/` | `dutchmate-mcp-server` | Phase 2 scaffold; runtime is not implemented. |
+
+Current core modules:
+
+| Module | Ownership |
+|---|---|
+| `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
+| `uart_capture` | UART byte buffering, complete lines, and receive processing. |
+| `log_processing` | Case-sensitive pattern detection on complete lines. |
+| `session_store` | Filesystem sessions, evidence, summaries, and discovery. |
+| `gpio_config` | Control-channel mapping, validation, and accepted state. |
+| `workflows` | Fixture/transport capture and guarded reset/boot actions. |
+| `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |
+
+See `docs/software_architecture.md` for current data flow and ownership details.
 
 ## Local Setup
 
-DUTchMate uses a `uv` workspace with one lockfile at the repository root.
+Requirements are Python 3.10+ and `uv`.
 
 ```bash
 uv sync
@@ -16,14 +70,14 @@ uv run pytest
 uv run ruff check .
 ```
 
-Run package entrypoints from the repository root:
+Run package commands from the repository root:
 
 ```bash
 uv run --package dutchmate-cli dutchmate --help
 uv run --package dutchmate-service dutchmate-service --help
 ```
 
-The current service can be started through the CLI:
+Start and inspect the current local service:
 
 ```bash
 uv run --package dutchmate-cli dutchmate start
@@ -31,34 +85,30 @@ uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate stop
 ```
 
-Use `dutchmate devices` to inspect detected serial ports. `dutchmate start`
-uses an explicit `--serial-port` when provided, otherwise it auto-selects one
-DUTchMate candidate. Multiple candidates require `--serial-port`; no candidates
-starts the service in a disconnected state.
+`dutchmate start` currently uses an explicit `--serial-port` or auto-selects
+one metadata-hinted DUTchMate candidate. Multiple candidates require an explicit
+port; no candidate starts the service disconnected. The final Phase 1 startup
+contract instead requires explicit Basic/Enhanced mode and is not implemented
+yet.
 
-Candidate matching currently depends on serial metadata containing
-`DUTchMate`. Fixed USB VID/PID matching can be added after the firmware USB
-identity is finalized.
+Use `uv lock` after dependency declarations change. Commit the shared
+`uv.lock` update with those declarations.
 
-## Repository Boundaries
-
-Keep dependencies flowing in one direction:
+## Package Boundaries
 
 - `core` contains reusable protocol, capture, GPIO, workflow, runtime, and
   session logic. It must not import CLI, service, MCP, or AI packages.
-- `apps/service` exposes selected `core` behavior over FastAPI. It owns runtime
-  orchestration and the selected serial port.
-- `apps/cli` is a thin HTTP client for the Device Core Service. It must not
-  open serial ports or import low-level transport code.
-- `apps/mcp_server` is a Phase 2 scaffold. When implemented, it should call the
-  Device Core Service API and avoid direct serial/protocol ownership.
-- `hardware/protocol/v1` is the host-device contract. Protocol changes require
-  schemas, examples, parser/encoder tests, and firmware handling to move
-  together.
+- `apps/service` composes `core`, owns the selected serial connection, and
+  exposes HTTP. Endpoint handlers remain thin.
+- `apps/cli` calls the service over HTTP. It must not own serial transport.
+- `apps/mcp_server` will call the same service in Phase 2. It must not own
+  serial transport, session persistence, or AI logic.
+- `hardware/protocol/v1` is the Enhanced firmware/host wire contract. Its
+  schemas, examples, parser/encoder models, tests, and firmware change together.
 
-## Current Implemented Surface
+## Current Surface
 
-Current service endpoints:
+Service endpoints:
 
 - `GET /status`
 - `POST /dut/capture`
@@ -67,53 +117,45 @@ Current service endpoints:
 - `POST /dut/reset`
 - `POST /dut/boot-mode`
 
-Current CLI commands:
+CLI commands:
 
-- `dutchmate start`
-- `dutchmate stop`
-- `dutchmate devices [--all]`
-- `dutchmate status`
+- `dutchmate start`, `stop`, `devices [--all]`, and `status`
 - `dutchmate capture --seconds <seconds>`
 - `dutchmate boot-test --seconds <seconds>`
-- `dutchmate gpio mode <channel> <role> <dut_signal> --mode <mode> --active-level <level>`
+- `dutchmate gpio mode <channel> <role> <dut_signal> ...`
 - `dutchmate dut reset`
 - `dutchmate dut boot-mode <normal|bootloader>`
 
-The core runtime implements finite transport-backed capture plus reset-triggered
-boot-test orchestration and rejects overlapping hardware-changing operations
-with `capture_active`. Boot-test first-error extraction, log retrieval,
-wait-pattern, UART-send, session-listing HTTP/CLI exposure, background serial
-ingestion/reconnect, RP2040 firmware, and MCP runtime are not implemented yet.
+The runtime performs finite transport-backed capture and reset-triggered
+boot-test orchestration, with active-workflow conflict guards. Major remaining
+Phase 1 areas are the normalized backend package, Basic adapter, background
+ingestion/reconnect, versioned durable sessions and retention, bounded log and
+session retrieval, wait-pattern, UART-send exposure, generic Enhanced control
+actions, RP2040 firmware, and real HIL tests.
 
-## Adding a Service Endpoint
+## Adding A Service Endpoint
 
-Use this path for new HTTP behavior:
-
-1. Add or extend core behavior first, usually under `core/src/dutchmate_core/`.
-2. Cover the core behavior with unit tests under `tests/unit/...`.
-3. Add request/response models or serializers in
+1. Add or extend core behavior under `core/src/dutchmate_core/`.
+2. Cover deterministic behavior with core unit tests.
+3. Add request/response models in
    `apps/service/src/dutchmate_service/schemas.py`.
 4. Register the route in `apps/service/src/dutchmate_service/app.py`.
-5. Map expected exceptions in `apps/service/src/dutchmate_service/errors.py`.
+5. Map expected failures in `apps/service/src/dutchmate_service/errors.py`.
 6. Add service tests under `apps/service/tests/`.
-7. Update docs that list current endpoints.
+7. Update documents that list the current endpoint surface.
 
-Keep endpoint handlers thin. Validation and state transitions should live in
-core or in small service serialization helpers, not as inline route logic.
+Validation order and state transitions belong in core. Service handlers own
+HTTP serialization, not a parallel behavior implementation.
 
-## Adding a CLI Command
+## Adding A CLI Command
 
-Use this path after the service endpoint exists:
-
-1. Add an HTTP client helper in `apps/cli/src/dutchmate_cli/client.py`.
-2. Add output formatting in a focused module such as `status.py`, `gpio.py`, or
-   `dut.py`.
+1. Add an HTTP helper in `apps/cli/src/dutchmate_cli/client.py`.
+2. Add focused output formatting in the relevant CLI module.
 3. Register the Typer command in `apps/cli/src/dutchmate_cli/main.py`.
 4. Add CLI/client tests under `apps/cli/tests/`.
-5. Update docs that list current commands.
+5. Update documents that list current commands.
 
-The CLI should preserve service error messages. If the service cannot be
-reached, commands should fail with:
+Preserve service errors. When the service is unavailable, commands fail with:
 
 ```text
 Error: Device Core Service is not running. Run 'dutchmate start' first.
@@ -121,47 +163,49 @@ Error: Device Core Service is not running. Run 'dutchmate start' first.
 
 ## Protocol Changes
 
-For host-device protocol changes, update all of these in the same change:
+Update these as one coherent change:
 
 - `hardware/protocol/v1/*.schema.json`
 - `hardware/protocol/v1/examples/*.json`
 - `core/src/dutchmate_core/device_connection/messages.py`
 - `core/src/dutchmate_core/device_connection/parser.py`
-- `core/src/dutchmate_core/device_connection/commands.py`, when host commands change
-- protocol parser/encoder/example tests under `tests/unit/protocol/`
+- `core/src/dutchmate_core/device_connection/commands.py`, when commands change
+- protocol parser, encoder, and canonical-example tests
 - firmware handling, once firmware exists
 
-Do not add protocol fields that are accepted by code but absent from schemas or
-examples.
+Do not accept fields in code that are absent from schemas and examples. The
+Phase 1B rename to `uart_receive` and migration to generic channel actions must
+be atomic across this set.
 
-## Test Expectations
+## Testing
 
-Use focused tests while developing, then run the full suite before committing:
+Use focused tests while developing, then run the full suite:
 
 ```bash
 uv run pytest tests/unit/protocol
+uv run pytest tests/unit/uart_capture tests/unit/log_processing
+uv run pytest tests/unit/session_store tests/unit/workflows tests/unit/runtime
 uv run pytest apps/service/tests
 uv run pytest apps/cli/tests
 uv run pytest
 ```
 
-For behavior exposed through the CLI, expected coverage is:
+For CLI-visible behavior, expected coverage is core unit behavior, service
+request/response and error mapping, and CLI request/formatting behavior.
+Hardware smoke tests validate physical integration after deterministic behavior
+passes through fake backends.
 
-- core unit tests for deterministic behavior
-- service tests for HTTP request/response and error mapping
-- CLI tests for request shape, formatting, and unavailable-service behavior
+## Documentation
 
-Hardware smoke tests are future work and should not be the first place workflow
-correctness is established.
-
-## Documentation Rules
-
-Keep docs explicit about implementation state:
-
-- Use "current" for runnable behavior in this repository.
-- Use "target" or "planned" for Phase 1/Phase 2 behavior that is not
-  implemented.
-- Update command and endpoint lists in the same change that changes code.
-- Keep `docs/project_context.md` broad and roadmap-oriented.
-- Keep `README.md`, `docs/software_architecture.md`, and this guide aligned
-  with the current implementation.
+- `README.md` is the entry point and current status summary.
+- `docs/project_context.md` owns product architecture, scope, and roadmap.
+- `docs/software_architecture.md` owns current code structure and migration
+  boundaries.
+- `docs/phase1_implementation_spec.md` owns Phase 1 requirements and done
+  criteria.
+- Focused contract documents own their named subsystem and are referenced
+  rather than copied into broader documents.
+- Use **current** only for runnable repository behavior and **target** or
+  **planned** for unimplemented work.
+- Update current endpoint/command lists in the same change as code.
+- Keep links and protocol examples valid when moving or renaming content.

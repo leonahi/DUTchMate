@@ -1,32 +1,44 @@
 # DUTchMate
 
-DUTchMate is an AI-assisted embedded debugging system. A small RP2040-based Debug Helper captures real DUT evidence, while host-side Python services expose structured debug workflows to humans and coding agents.
+DUTchMate is an AI-assisted embedded debugging system. It receives real DUT
+evidence through one selected device backend, stores structured debug sessions,
+and exposes deterministic workflows to humans and coding agents.
 
-## Repository Layout
+Phase 1 supports two mutually exclusive backends:
 
-This is a monorepo containing hardware, protocol contracts, core Python libraries, and host apps.
+- **Basic:** a user-selected generic TTL/logic-level USB-to-UART adapter for
+  UART receive and optional UART send.
+- **Enhanced:** an RP2040 DUTchMate Debug Helper for UART receive/send,
+  device-side timestamps, buffer telemetry, and generic `CTRLn` control.
 
-```text
-apps/
-  cli/          Human command-line interface.
-  service/      Device Core Service.
-  mcp_server/   MCP adapter for coding agents.
+Both use one shared host processing and session pipeline. Hybrid operation is
+not supported.
 
-core/           Reusable Python core library.
-hardware/       Firmware, protocol schemas, and schematics.
-docs/           Project context and implementation specs.
-tests/          Cross-package tests and fixtures.
-```
+## Current Status
 
-See `docs/project_layout.md` for package boundaries and tooling details,
-`docs/software_architecture.md` for the current host-side Python architecture,
-`docs/developer_guide.md` for contribution workflow, and
-`docs/dutchmate_hardware_architecture.md` for the proposed voltage-domain
-GPIO/UART interface.
+The repository currently contains the first host-side Phase 1 foundation:
 
-## Python Tooling
+- Enhanced v1 NDJSON schemas, examples, parser, command encoders, discovery,
+  and synchronous serial transport
+- exact UART byte preservation, complete-line reconstruction, and keyword
+  pattern detection
+- filesystem sessions, incremental evidence writes, summaries, and discovery
+- GPIO control-channel configuration state and guarded reset/boot actions
+- finite capture and reset-triggered boot-test orchestration
+- FastAPI endpoints and CLI commands for service lifecycle, device listing,
+  status, capture, boot-test, GPIO mode, reset, and boot mode
 
-Use `uv`.
+The normalized backend package, Basic adapter, background ingestion/reconnect,
+versioned session lifecycle and retention, bounded log/session retrieval,
+wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
+RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
+
+The ordered Phase 1 backlog and acceptance criteria are in
+`docs/phase1_implementation_spec.md`.
+
+## Quick Start
+
+Requirements are Python 3.10+ and `uv`.
 
 ```bash
 uv sync
@@ -34,85 +46,43 @@ uv run pytest
 uv run ruff check .
 ```
 
-The workspace is defined in `pyproject.toml`, with the shared lockfile committed
-as `uv.lock`.
-
-## Current Implementation Status
-
-The current codebase contains the first host-side Phase 1 core pieces, a local
-FastAPI service, a CLI HTTP client, synchronous serial command transport, and a
-finite transport-backed core capture and reset-triggered boot-test workflow. It
-does not yet include RP2040 firmware, background serial event ingestion, log
-retrieval endpoints, session-listing endpoints, or the Phase 2 MCP server.
-
-Implemented in `core/src/dutchmate_core/`:
-
-```text
-device_connection/   v1 protocol, NDJSON parsing, serial discovery and command transport
-uart_capture/        UART byte buffering, complete-line extraction, capture processing
-log_processing/      Keyword pattern detection on completed UART lines
-session_store/       Filesystem-backed sessions, evidence, summaries, newest-first discovery
-workflows/           Mock/transport capture plus guarded reset/boot-test workflows
-gpio_config/         Hardware GPIO mapping validation plus reset/boot mode state
-```
-
-Implemented in `apps/`:
-
-```text
-service/      FastAPI app with serial startup plus status, capture, boot-test,
-              GPIO mode, reset, and boot-mode endpoints.
-cli/          `dutchmate`/`dm` commands for lifecycle, device discovery,
-              status, capture, boot-test, GPIO mode, reset, and boot-mode.
-mcp_server/   Package scaffold only; MCP runtime is not implemented yet.
-```
-
-The mock host-side capture path is:
-
-```text
-NDJSON bytes
-  -> NdjsonStreamParser
-  -> parse_device_message
-  -> CaptureStreamRecorder
-  -> UartCaptureProcessor
-  -> PatternDetector
-  -> SessionStore
-  -> SessionSummary
-```
-
-The finite transport-backed path is:
-
-```text
-SerialCommandTransport queued/new messages
-  -> DeviceCoreRuntime.capture_uart / run_boot_test
-  -> TransportCaptureRunner
-  -> CaptureRecorder
-  -> UartCaptureProcessor
-  -> PatternDetector
-  -> SessionStore
-  -> SessionSummary
-```
-
-Sessions are written under `.dutchmate/sessions/<session_id>/` and include:
-
-```text
-metadata.json
-uart_raw.log
-uart_events.jsonl
-hardware_events.jsonl
-detected_patterns.json
-```
-
-Useful focused test command while Phase 1 core is being built:
+Run the CLI from the repository root:
 
 ```bash
-uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run --package dutchmate-cli dutchmate --help
+uv run --package dutchmate-cli dutchmate start
+uv run --package dutchmate-cli dutchmate status
+uv run --package dutchmate-cli dutchmate stop
 ```
 
-Known next areas:
+## Repository
 
-- Background serial event ingestion and reconnect handling.
-- Boot-test first-error extraction.
-- Session-listing and recent-log HTTP/CLI exposure.
-- Phase 2 MCP server implementation.
-- RP2040 firmware implementation.
-- Real hardware smoke tests.
+```text
+apps/          CLI, Device Core Service, and Phase 2 MCP package.
+core/          Reusable protocol, capture, GPIO, session, and workflow logic.
+hardware/      Firmware, protocol schemas/examples, schematics, and validation.
+docs/          Architecture, implementation contracts, plans, and guides.
+tests/         Cross-package unit tests, integration tests, and fixtures.
+```
+
+The repository is a `uv` workspace with one committed `uv.lock`.
+
+## Documentation
+
+| Document | Canonical purpose |
+|---|---|
+| `docs/project_context.md` | Product architecture, scope, safety, roadmap, and known limitations. |
+| `docs/phase1_implementation_spec.md` | Normative Phase 1 order, backend/API/session/protocol requirements, tests, and done criteria. |
+| `docs/software_architecture.md` | Current Python data flow, module ownership, and migration boundaries. |
+| `docs/developer_guide.md` | Workspace layout, setup, package boundaries, and contribution workflow. |
+| `docs/dutchmate_hardware_architecture.md` | Revision A voltage-domain hardware, pin map, BOM, and validation checklist. |
+| `docs/gpio_configuration_semantics.md` | Control-channel identifiers, electrical modes, state, workflows, and reporting. |
+| `docs/reconnect_session_semantics.md` | Reconnect, segment, timestamp, resume, and restart behavior. |
+| `docs/ring_buffer_sizing_plan.md` | Phase 1B buffer baseline, telemetry, and validation method. |
+| `hardware/validation/phase1_ring_buffer.md` | Measurement record; currently an unvalidated template. |
+| `docs/mcp_integration_plan.md` | Phase 2 MCP transport, tool set, responses, and tests. |
+| `docs/debug_agent_context_contract.md` | Phase 4 bounded context, provider boundary, and report contract. |
+
+`hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
+Its schemas, examples, host models, tests, and firmware handling must change
+together.

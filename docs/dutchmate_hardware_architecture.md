@@ -1,13 +1,23 @@
 # DUTchMate Voltage-Domain GPIO and UART Interface
 
-**Status:** Proposed hardware architecture<br>
-**Revision:** 0.9<br>
-**Date:** 2026-08-10<br>
+**Status:** Phase 1 Revision A design baseline; prototype validation pending<br>
+**Revision:** 1.0<br>
+**Date:** 2026-08-11<br>
 **Scope:** Four debugger-to-DUT control signals, four DUT-to-debugger event signals, and one UART pair across different logic-voltage domains.
 
 ## 1. Purpose
 
 DUTchMate uses a 3.3 V debugger MCU, while a connected device under test (DUT) may use a different digital-I/O voltage such as 1.8 V, 2.5 V, 3.3 V, or 5 V.
+
+This document specifies the translated electrical interface of the Enhanced
+DUTchMate Debug Helper backend. Generic USB-to-UART adapters are the Basic
+backend and are outside this hardware design. DUTchMate software supports
+user-selected TTL/logic-level adapters that appear as standard host serial
+ports, but it does not detect or validate their electrical compatibility. The
+user is responsible for compatible adapter and DUT TX/RX logic levels, correct
+wiring, common ground, and any required voltage translation. RS-232-level
+adapters must not be connected directly to DUT logic pins and require external
+RS-232-to-logic-level translation.
 
 The interface must allow the user to read the DUT schematic and configure DUTchMate appropriately. Automatic detection of DUT pin direction or electrical mode is not required.
 
@@ -16,9 +26,15 @@ The agreed simplified interface provides:
 - Four fixed-direction control channels from DUTchMate to the DUT.
 - Four fixed-direction event channels from the DUT to DUTchMate.
 - One full-duplex UART interface with one channel in each direction.
-- Per-channel push-pull, open-drain, or high-impedance operation on the four control channels.
+- Per-channel `push_pull` or `open_drain` configuration, with a hardware
+  high-impedance drive state available for safety and open-drain release.
 - Capture of push-pull or open-drain DUT event outputs on the four event channels.
 - A common ground between DUTchMate and the DUT.
+
+Revision A physically provisions the `EVENTn` paths, but event-capture firmware,
+host APIs, and the `gpio_events` capability are deferred to Phase 5. Their
+presence in this electrical baseline does not make event observation a Phase 1
+software feature.
 
 ## 2. System requirements
 
@@ -30,7 +46,7 @@ The agreed simplified interface provides:
 
 ### 2.2 DUT domain
 
-- Target DUT digital-I/O voltage: **1.8 V to 5.0 V** for the complete proposed interface.
+- Target DUT digital-I/O voltage: **1.8 V to 5.0 V** for the complete Revision A interface.
 - The DUT must expose its I/O reference voltage as `DUT_VIO` on the DUTchMate connector.
 - `DUT_VIO` is used as a translator reference/supply. It is not intended to power the DUT.
 - The DUT and DUTchMate must share a common ground.
@@ -64,8 +80,14 @@ A control signal named `POWER` must drive a logic-level power-enable input or an
 | Interface block | Quantity | Selected IC | Direction |
 |---|---:|---|---|
 | Control GPIO translator | 1 | `SN74LV4T125PWR` | Debugger to DUT |
+| Control enable driver | 2 | `SN74LVC2G06DBVR` | MCU enable to active-low buffer `/OE` |
 | Event GPIO translator | 1 | `TXU0104PWR` | DUT to debugger |
 | UART translator | 1 | `TXU0202DCUR` | One channel in each direction |
+
+These exact orderable MPNs are the Phase 1 Revision A provisional logic BOM.
+They are frozen for schematic capture and prototype assembly. Replacing one
+requires an electrical review and a new hardware revision; package-compatible
+or same-family substitutions are not automatic.
 
 ```text
                               DUTchMate
@@ -114,17 +136,37 @@ physical DUTchMate channels to the DUT schematic signals they actually wired.
 | `CTRL0` to `CTRL3` | Control channel or line | Physical DUTchMate-to-DUT output channels, exposed on connector nets `DUT_CTRL0` through `DUT_CTRL3`. |
 | Control role | `reset`, `boot`, `wake`, `power_enable`, or another configured role | The workflow meaning DUTchMate should assign to that channel. |
 | DUT signal name | `RESET_N`, `BOOT0`, `WAKE`, `PGOOD`, or another schematic name | The exact net or pin name from the user's DUT schematic. |
-| Control mode | `high_z`, `open_drain`, or `push_pull` | How DUTchMate may drive or release the assigned control channel. |
+| Configured control mode | `open_drain` or `push_pull` | The Phase 1 behavior authorized for the assigned control channel. |
+| Control drive state | high impedance, driven low, or driven high | The instantaneous electrical output state selected by firmware within the configured mode and safety rules. |
 | `EVENT0` to `EVENT3` | Event channel or line | Physical DUT-to-DUTchMate input channels, exposed on connector nets `DUT_EVENT0` through `DUT_EVENT3`. |
 | Event role | `interrupt`, `power_good`, `status`, or another configured role | The workflow/reporting meaning DUTchMate should assign to that event channel. |
 | UART pair | UART interface | Fixed debugger TX-to-DUT RX and DUT TX-to-debugger RX connection. |
+
+The listed role names are an advisory catalog, not a hardware or protocol
+enumeration. Configuration interfaces may suggest control roles `reset`,
+`boot`, `power_enable`, and `wake`, and future event roles `interrupt`,
+`power_good`, and `status`. Custom names remain valid and are stored exactly;
+aliases such as `power_en` are not silently rewritten to `power_enable`.
+
+Software bounds both `role` and `dut_signal` to exact case-sensitive Unicode
+strings of 1..64 UTF-8 bytes, rejects leading/trailing whitespace and Unicode
+control characters, and performs no trimming, truncation, case folding, Unicode
+normalization, or aliasing. Only exact lowercase `reset` and `boot` select those
+built-in workflows. These are software metadata rules and do not change the
+generic electrical channel design.
 
 The intended software model separates:
 
 - `channel`: the physical DUTchMate connector line, such as `CTRL0` or `EVENT1`
 - `role`: the software/workflow meaning, such as `reset`, `boot`, or `power_good`
 - `dut_signal`: the user's DUT schematic signal name, such as `RESET_N` or `BOOT0`
-- `mode`: the electrical behavior DUTchMate is allowed to use on a control channel
+- `mode`: `open_drain` or `push_pull`, the configured electrical behavior
+  DUTchMate is allowed to use on a control channel
+
+High impedance is an instantaneous drive state, not a Phase 1 configuration
+mode. Unconfigured, rejected, startup, unpowered-domain, and fault conditions
+keep the channel high impedance. Releasing an `open_drain` channel also enters
+the high-impedance drive state without changing its configured mode.
 
 Phase 1 host software currently exposes `reset` and `boot` as configured DUT
 signal roles. That is a role-level API, not a hardware limitation. The hardware
@@ -232,19 +274,18 @@ For the selected `SN74LVC2G06DBVR` SOT-23-6 package:
 | `U6` | 3 | `2A` | `DBG_CTRL_EN2` |
 | `U6` | 4 | `2Y` | `DBG_CTRL_nOE2` |
 
-The four buffers are electrically equivalent. The logical `CTRL0` through
-`CTRL3` labels may be permuted among the four physical buffers during PCB
-layout if that removes crossings; update the schematic net labels and firmware
-pin table together.
+The four buffers are electrically equivalent, but Revision A fixes their
+logical `CTRL0` through `CTRL3` assignments. PCB routing must preserve the net,
+package-pin, and Pico-pin mapping rather than permuting channels.
 
-### 4.3 Supported output modes
+### 4.3 Configured modes and output drive states
 
 Each control channel uses two debugger MCU signals:
 
 - `CTRL_DATAx`: value presented to the translator input.
 - `CTRL_ENx`: active-high firmware enable for the open-drain inverter stage.
 
-| Software mode | `CTRL_DATAx` | `CTRL_ENx` | SN74 `/OE` | DUT-side electrical state |
+| Firmware drive state | `CTRL_DATAx` | `CTRL_ENx` | SN74 `/OE` | DUT-side electrical state |
 |---|---:|---:|---:|---|
 | High impedance | X | 0 | 1 | Released / Hi-Z |
 | Push-pull low | 0 | 1 | 0 | Actively driven low |
@@ -259,6 +300,25 @@ mode, firmware holds `CTRL_DATAx = 0` at all times. Assertion drives
 pin low so the DUT line is pulled low. Release drives `CTRL_ENx = 0`, allowing
 the `/OE` pull-up to disable the translator output so the DUT line becomes
 high-impedance and the DUT-side pull-up defines the high level.
+
+Phase 1 configuration uses this mode/level matrix:
+
+| Configured mode | Active level | Idle behavior |
+|---|---|---|
+| `open_drain` | `low` only | Released/high impedance; `idle_level` is omitted |
+| `push_pull` | `low` or `high` | Explicit opposite `idle_level` is required |
+
+Firmware keeps the channel high impedance while validating or replacing a
+mapping. Once accepted, it enters the mode's idle behavior before the mapping
+is made available to workflows. Active-high open drain is unsupported because
+the circuit does not implement open-source/high-side-only drive.
+
+For a channel assigned the `boot` role, `set_boot_mode("normal")` selects this
+configured idle behavior and `set_boot_mode("bootloader")` selects the active
+behavior. Replacing/reapplying the mapping returns the channel to idle. A
+disconnect or safety fault forces high impedance regardless of the last
+command. Device Core's `commanded_boot_mode` status is therefore command-state
+bookkeeping, not electrical feedback from the DUT-side signal.
 
 ### 4.4 Reset example
 
@@ -489,6 +549,19 @@ For the selected `TXU0202DCUR` VSSOP-8 package:
   `DUT_UART_RX` / `DUT_UART_TX` nets and the translator-side `UART_RX` /
   `UART_TX` nets.
 - Validate UART operation at the maximum intended baud rate and cable length.
+
+Revision A has one `TXU0202` OE shared by both fixed-direction channels.
+Enabling `DBG_UART_IF_EN` to receive DUT UART therefore also enables the
+debugger-to-DUT channel. The debugger TX output may actively present the normal
+UART idle level at `DUT_UART_RX`; receive-enabled operation is not an
+electrically receive-only or high-impedance TX mode.
+
+Host configuration `hardware.uart.tx_enabled` is deliberately a software-send
+permission. Setting it false prevents DUTchMate from submitting UART bytes but
+does not deassert shared `DBG_UART_IF_EN`, provide electrical readback, or
+guarantee high impedance at DUT RX. Independent electrical TX disable would
+require a reviewed hardware revision with separate direction enables or an
+additional isolation stage.
 
 Do not use UART pull-ups or pull-downs unless required by the DUT or startup behaviour.
 
@@ -728,13 +801,16 @@ Detailed signal paths from the DUT connector to the active devices:
 | Shared or separate TXU output enables | 1 or 2 |
 | Optional DUT_VIO ADC measurement | 1 |
 
-Expected total: approximately **15 to 17 MCU pins**, depending on whether enable signals are shared and whether `DUT_VIO` is measured.
+The Revision A baseline uses **17 MCU pins**: separate UART/event interface
+enables and the provisioned `DUT_VIO_SENSE` ADC input are included.
 
-### 10.1 Suggested Raspberry Pi Pico pin assignment
+### 10.1 Phase 1 Revision A Raspberry Pi Pico pin assignment
 
-This assignment targets a standard Raspberry Pi Pico/Pico H header and is
-optimized for translators placed in the area between the Pico's two header
-rows, as shown in the preliminary PCB placement:
+This table is the normative Phase 1 Revision A mapping for schematic capture,
+PCB net assignment, firmware pin configuration, and hardware tests. It targets
+a standard Raspberry Pi Pico/Pico H header and is optimized for translators
+placed in the area between the Pico's two header rows, as shown in the
+preliminary PCB placement:
 
 ```text
 Pico USB end
@@ -745,9 +821,9 @@ pin 1-20 row |     SN74LV4T125PWR      | pin 40-21 row
 Pico bottom end
 ```
 
-This allocation intentionally uses both Pico header rows. It does not prescribe
-component rotation, footprint mirroring, or exact pad escape direction. Those
-choices should be made after placement is finalized.
+This allocation intentionally uses both Pico header rows. Component rotation,
+footprint mirroring, and exact pad escape direction remain PCB-layout choices,
+but they must preserve every logical-net-to-Pico-pin assignment in the table.
 
 The `TXU0202` uses the primary `UART0` pair on `GP0/GP1`, with its interface
 enable on `GP2`. The five `TXU0104` debugger-side event signals are placed on a
@@ -777,15 +853,21 @@ enables.
 | `DBG_CTRL_EN2` | `GP26` | 31 | `SN74LVC2G06.U6.2A`, pin 3; 100 kOhm pull-down to ground |
 | `DUT_VIO_SENSE` | `GP28_ADC2` | 34 | Divider from `DUT_VIO` for valid-voltage detection |
 
-Optional assignments:
+`CTRL0` through `CTRL3` are physical channels. No Pico pin is intrinsically a
+reset or boot pin for the DUT; user configuration assigns roles such as
+`reset`, `boot`, `wake`, or `power_enable` to these channels.
+
+Reserved resources:
 
 - `GP3` through `GP6`, `GP16` through `GP19`, and `GP27` remain
   available for future functions.
 - `GP4/GP5` remain a complete `UART1` TX/RX pair and may be used for a separate
   hardware diagnostic UART while the DUT UART uses `UART0` on `GP0/GP1`.
-- The `CTRL0` through `CTRL3` channel numbers may be swapped among equivalent
-  SN74LV4T125 buffers to suit the eventual package rotation without changing
-  the electrical architecture.
+
+Channel numbers must not be silently swapped to simplify routing. Any mapping
+change requires the architecture table, schematic/net labels, firmware pin
+configuration, and mapping tests to change together and creates a new hardware
+revision.
 
 ### 10.2 Other required Raspberry Pi Pico connections
 
@@ -809,7 +891,7 @@ typedef enum {
     DUT_CTRL_PUSH_PULL_HIGH,
     DUT_CTRL_OPEN_DRAIN_ASSERT,
     DUT_CTRL_OPEN_DRAIN_RELEASE,
-} dut_ctrl_mode_t;
+} dut_ctrl_drive_state_t;
 ```
 
 Expected implementation:
@@ -871,6 +953,7 @@ mode = "push_pull"
 active_level = "high"
 idle_level = "low"
 
+# Phase 5 examples below; not parsed or applied by Phase 1 software.
 [hardware.event.interrupt]
 channel = "EVENT0"
 dut_signal = "IRQ_N"
@@ -899,29 +982,47 @@ stop_bits = 1
 
 ### 11.3 Configuration validation rules
 
-The software must reject configurations that could create known contention, such
-as assigning a control output to a net documented as a DUT push-pull output. It
-must also reject duplicate physical channel assignments unless the specific
-hardware feature explicitly supports sharing that line.
+Software must reject structural conflicts it can prove from configuration, such
+as assigning a control role to an `EVENTn` channel or assigning one physical
+channel more than once. The current schema does not carry authoritative DUT net
+direction and cannot prove that a schematic signal is safe to drive. The user
+remains responsible for mapping `CTRLn` only to DUT inputs or safely drivable
+open-drain nets and `EVENTn` only to DUT outputs; configuration tools must show
+this requirement without claiming automatic electrical validation.
 
 Required validation rules:
 
 - Unknown control channels must be rejected. Phase 1 control channels are
   `CTRL0`, `CTRL1`, `CTRL2`, and `CTRL3`.
-- Unknown event channels must be rejected. Phase 1 event channels are `EVENT0`,
-  `EVENT1`, `EVENT2`, and `EVENT3`.
+- When Phase 5 event configuration is implemented, unknown event channels must
+  be rejected. Revision A physically provides `EVENT0`, `EVENT1`, `EVENT2`, and
+  `EVENT3`.
 - A control role must map to a `CTRLx` channel, not an `EVENTx` channel.
-- An event role must map to an `EVENTx` channel, not a `CTRLx` channel.
+- A Phase 5 event role must map to an `EVENTx` channel, not a `CTRLx` channel.
+- Control roles and DUT signal identifiers must satisfy the shared exact 1..64
+  UTF-8 byte contract; Phase 5 event identifiers will use the same rule. Role
+  equality and workflow lookup are case-sensitive.
 - Each physical channel may be assigned at most once in the active
   configuration.
 - Required workflow roles, such as `reset` for reset actions, must be mapped
   before that workflow can run.
-- A role may be custom only when the workflow treats it as a named signal and
-  does not assume reset/boot semantics.
-- Control modes must match the channel type and supported hardware behavior:
-  `high_z`, `open_drain`, or `push_pull`.
+- Custom roles are accepted as exact project metadata. Only a workflow that
+  explicitly recognizes a role may assign behavior to it; built-in Phase 1
+  behavior recognizes exact lowercase `reset` and `boot` only.
+- Configured control modes are exactly `open_drain` and `push_pull` in Phase 1.
+  Firmware uses the high-impedance drive state for startup, unconfigured,
+  rejected, disabled-by-safety, and fault handling, and when an open-drain
+  output is released.
+- Open drain is active-low and has no configured `idle_level`; release is the
+  high-impedance idle state. Push pull requires different explicit active and
+  idle levels.
 - `power_enable` and similar roles are logic-level enables only. They must not
   be interpreted as DUT power-output channels.
+
+Phase 1 does not define a persistent disable/unconfigure API. A future command
+may remove an accepted mapping and leave its channel high impedance, but it
+must be specified as a state-transition operation rather than adding `high_z`
+to the `configure_gpio_mode` mode vocabulary.
 
 ## 12. Design decisions and rationale
 
@@ -951,6 +1052,15 @@ This is required for reset and boot signals that are normally pulled up on the D
 
 UART is a fixed-direction push-pull interface with simultaneous traffic in opposite directions. TXU0202 directly matches this topology and avoids the loading and edge-behaviour concerns associated with auto-direction translators.
 
+### 12.5 Why control enable uses an open-drain logic driver
+
+Revision A uses two `SN74LVC2G06DBVR` dual open-drain inverters, not discrete
+transistors. Each channel converts an active-high 3.3 V MCU enable into a
+pull-low action on one `SN74LV4T125` active-low `/OE` input. The `/OE` pull-up to
+`DUT_VIO` keeps the control output disabled when the MCU-side driver is
+unpowered or inactive and avoids a direct push-pull connection between the
+3.3 V and DUT voltage domains.
+
 ## 13. Known limitations
 
 1. The complete design is specified for DUT logic domains from 1.8 V to 5.0 V.
@@ -961,7 +1071,7 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 6. Unknown industrial, analog, or high-voltage signals must not be connected directly.
 7. The interface does not automatically protect against every possible user misconfiguration or output contention.
 8. The interface does not implement open-source outputs.
-9. Final component values, ESD protection, connector pinout, and maximum cable length require prototype validation.
+9. Final passive values, ESD protection, connector pinout, and maximum cable length require prototype validation. The Revision A logic-device MPNs are fixed unless validation forces a new hardware revision.
 
 ## 14. Prototype validation checklist
 
@@ -979,6 +1089,9 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 - [ ] Verify UART at all required baud rates and cable lengths.
 - [ ] Test debugger-powered/DUT-unpowered leakage.
 - [ ] Test DUT-powered/debugger-unpowered leakage.
+- [ ] Verify `SN74LVC2G06DBVR` leaves every `SN74LV4T125PWR` `/OE` pulled high and disabled through all debugger/DUT power-up and power-down orderings.
+- [ ] Verify `SN74LV4T125PWR` input thresholds and output levels at every supported `DUT_VIO` using 3.3 V Pico control inputs.
+- [ ] Verify `TXU0104PWR` and `TXU0202DCUR` isolation/high-impedance behavior when either supply is absent.
 - [ ] Test hot-plug and unplug behaviour.
 - [ ] Check for back-powering through every external signal.
 - [ ] Validate series-resistor values using oscilloscope measurements.
@@ -986,9 +1099,9 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 - [ ] Verify firmware prevents outputs from being enabled before configuration is loaded.
 - [ ] Verify firmware/service rejects invalid channel mappings, duplicate channel assignments, and known contention cases.
 
-## 15. Preliminary BOM
+## 15. Revision A provisional BOM
 
-| Ref. | Component | Suggested part | Notes |
+| Ref. | Component | Revision A part | Notes |
 |---|---|---|---|
 | U1 | Opposite-direction dual translator | `TXU0202DCUR` | Full-duplex UART |
 | U2 | Four-channel fixed-direction translator | `TXU0104PWR` | Four DUT event inputs |
@@ -1011,6 +1124,11 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 | R17–R20 | 10 kOhm, optional | — | DUT-side event pull-ups; DNP by default |
 | C6 | 10 nF to 100 nF, optional | — | Optional `DUT_VIO_SENSE` ADC-node filter |
 
+`U1`, `U2`, `U3`, `U5`, and `U6` are frozen orderable MPNs for the Revision A
+prototype. The BOM remains provisional because the validation checklist can
+still require a controlled Revision B change. Passive values, ESD parts, and
+optional pull-ups remain subject to measurement and layout review.
+
 ## 16. Source documents
 
 - Texas Instruments, **SN74LV4T125 product page and datasheet**:  
@@ -1030,14 +1148,15 @@ UART is a fixed-direction push-pull interface with simultaneous traffic in oppos
 
 ## 17. Current recommendation
 
-Proceed with the following five-IC implementation of the first DUTchMate prototype:
+Proceed with the following five-IC implementation and the Revision A Pico pin
+mapping in section 10.1 for the first DUTchMate prototype:
 
 ```text
-4 x configurable control outputs: SN74LV4T125
-4 x safe control-enable drivers:   2 x SN74LVC2G06
-4 x fixed DUT event inputs:       TXU0104
-1 x full-duplex UART pair:        TXU0202
-Supported DUT_VIO:                1.8 V to 5.0 V
+4 x configurable control outputs: SN74LV4T125PWR
+4 x safe control-enable drivers:   2 x SN74LVC2G06DBVR
+4 x fixed DUT event inputs:        TXU0104PWR
+1 x full-duplex UART pair:         TXU0202DCUR
+Supported DUT_VIO:                 1.8 V to 5.0 V
 ```
 
-This is a deliberately simplified design. It retains the key required behaviour—push-pull and true high-impedance/open-drain control outputs, fixed event capture inputs, and reliable UART translation—without implementing a universal bidirectional cell on every GPIO.
+This is a deliberately simplified design. It retains the key required behaviour—push-pull and true high-impedance/open-drain control outputs, fixed event-input paths, and reliable UART translation—without implementing a universal bidirectional cell on every GPIO.

@@ -1,449 +1,292 @@
 # Software Architecture
 
-> Status: current-state reference
-> Scope: host-side Python architecture implemented so far for Phase 1.
+> Status: current implementation with Phase 1 migration boundaries
+> Scope: host-side Python layers, dependency direction, data flow, and code ownership.
 
-This document explains how the current DUTchMate Python core is organized, how
-data flows through it, and which dependencies are allowed. It describes the
-code that exists now. It is not a roadmap.
+This document describes how the repository is organized today. It records
+target behavior only when needed to explain a current migration boundary.
+`docs/phase1_implementation_spec.md` owns the complete target contracts and done
+criteria.
 
 ## Goals
 
-- Keep protocol parsing, UART processing, session storage, and workflows in
-  separate layers.
-- Preserve raw hardware evidence before deriving higher-level views from it.
-- Make the host-side capture flow testable without real serial hardware.
-- Keep `core` independent from CLI, service, MCP, and AI/LLM code.
+- Keep protocol parsing, UART processing, persistence, and workflows separate.
+- Preserve raw evidence before deriving text, lines, patterns, or summaries.
+- Test the host pipeline without physical serial hardware.
+- Keep `core` independent from CLI, service, MCP, and AI packages.
+- Place Basic and Enhanced backends behind one normalized event boundary.
 
-## Layer Overview
-
-```text
-workflows
-  coordinates capture flows and returns workflow/session results
-
-session_store
-  persists evidence and metadata to filesystem sessions
-
-gpio_config
-  sends GPIO mode configuration commands through an injected transport and tracks accepted/rejected state
-
-uart_capture
-  turns UART byte chunks into complete lines and capture results
-
-log_processing
-  detects configured patterns on complete UART lines
-
-device_connection
-  owns host-device protocol models, parsing, encoding, NDJSON framing,
-  serial discovery, and synchronous command transport
-```
-
-The main implemented host-side capture path is:
+## Current Layers
 
 ```text
-NDJSON byte chunks
-  -> device_connection.NdjsonStreamParser
-  -> device_connection.parse_device_message
-  -> workflows.CaptureStreamRecorder
-  -> workflows.CaptureRecorder
-  -> uart_capture.UartCaptureProcessor
-  -> uart_capture.UartLineBuffer
-  -> log_processing.PatternDetector
-  -> session_store.SessionStore
-  -> session_store.SessionSummary
-```
+apps/cli
+  -> HTTP client for apps/service
 
-The finite transport-backed capture path is:
+apps/service
+  -> process/runtime ownership
+  -> core
 
-```text
-device_connection.SerialCommandTransport queued/new messages
-  -> runtime.DeviceCoreRuntime.capture_uart / run_boot_test
-  -> workflows.TransportCaptureRunner
-  -> workflows.CaptureRecorder
-  -> uart_capture.UartCaptureProcessor
-  -> log_processing.PatternDetector
-  -> session_store.SessionStore
-  -> session_store.SessionSummary
-```
+core/runtime
+  -> workflows
+  -> gpio_config
+  -> device_connection
 
-## Dependency Direction
-
-Dependencies should point from higher-level orchestration toward lower-level
-building blocks.
-
-```text
-workflows
+core/workflows
   -> session_store
   -> uart_capture
   -> gpio_config
   -> device_connection
 
-session_store
+core/uart_capture
+  -> log_processing
   -> device_connection message models
-  -> uart_capture capture result model
 
-gpio_config
-  -> device_connection GPIO command encoder and command response models
+core/session_store
+  -> uart_capture results
+  -> device_connection message models
 
-uart_capture
-  -> device_connection UART message model
-  -> log_processing pattern detector
-
-log_processing
-  -> uart_capture UartLine model
-
-device_connection
-  -> no DUTchMate core layers below it
+core/device_connection
+  -> no higher DUTchMate layer
 ```
 
-Boundary rules:
+The current dependency on `device_connection` message models in shared capture
+and storage code is the main Phase 1 migration boundary. The target graph is:
 
-- `core` must not import `apps/cli`, `apps/service`, `apps/mcp_server`, or AI
-  packages.
-- `device_connection` should stay protocol-focused. It should not know about
-  sessions, files, workflows, HTTP, CLI, or MCP.
-- `log_processing` should remain pure text/line processing.
-- `uart_capture` may hold buffering state, but should not write files.
-- `session_store` owns filesystem persistence, not serial parsing.
-- `gpio_config` owns GPIO hardware mapping validation and GPIO mode
-  configuration workflow/state. It sends encoded commands through an injected
-  transport, but does not open serial ports or toggle physical pins directly.
-- `workflows` may coordinate lower layers, but should not contain low-level
-  protocol validation logic.
+```text
+workflows, uart_capture, session_store
+  -> backends.contracts
 
-## Module Responsibilities
+backends.basic
+  -> serial primitives
+  -> backends.contracts
+
+backends.enhanced
+  -> device_connection
+  -> backends.contracts
+
+device_connection
+  -> Enhanced wire protocol only
+```
+
+Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
+responses, and telemetry messages. Shared layers consume the normalized
+`BackendEventSource` contract defined in
+`docs/phase1_implementation_spec.md`.
+
+## Data Flow
+
+The implemented fixture/mock path is:
+
+```text
+NDJSON bytes
+  -> NdjsonStreamParser
+  -> parse_device_message
+  -> CaptureStreamRecorder
+  -> CaptureRecorder
+  -> UartCaptureProcessor
+  -> UartLineBuffer
+  -> PatternDetector
+  -> SessionStore
+  -> SessionSummary
+```
+
+The implemented finite serial path is:
+
+```text
+SerialCommandTransport queued/new messages
+  -> DeviceCoreRuntime.capture_uart / run_boot_test
+  -> TransportCaptureRunner
+  -> CaptureRecorder
+  -> UartCaptureProcessor
+  -> PatternDetector
+  -> SessionStore
+  -> SessionSummary
+```
+
+`DeviceCoreRuntime` publishes the active session while a finite workflow runs
+and rejects conflicting capture or hardware-changing operations. The current
+serial path is synchronous and Debug Helper-oriented. Phase 1 replaces its
+input edge with one continuous reader and a FIFO normalized event source for
+either backend; downstream processing remains shared.
+
+## Module Ownership
 
 ### `device_connection`
 
-Owns the v1 host-device protocol.
+Owns the current Enhanced v1 wire protocol and serial primitives:
 
-Implemented responsibilities:
+- typed `hello`, UART, buffer telemetry, and command-response messages
+- host command encoders for GPIO mode, reset, boot mode, and UART send
+- base64 decoding and lossy UART display projection
+- NDJSON chunk buffering and message validation
+- serial-port discovery and the synchronous command transport
+- queuing non-response UART/telemetry messages while waiting for a command
+  response, then returning them in FIFO order
 
-- Typed device-to-host messages:
-  - `HelloMessage`
-  - `UartMessage`
-  - `BufferOverflowMessage`
-  - `BufferStatusMessage`
-  - command success/error responses
-- Host-to-device command encoders:
-  - `configure_gpio_mode`
-  - `reset`
-  - `set_boot_mode`
-  - `uart_send`
-- `parse_device_message(...)` for one complete JSON message.
-- `NdjsonStreamParser` for buffering serial byte chunks into complete NDJSON
-  messages.
-- Serial-port discovery with normalized USB metadata and DUTchMate text-hint
-  filtering.
-- `SerialCommandTransport` for newline-terminated command exchange over a
-  pyserial port.
-- `open_serial_command_transport(...)` for opening the selected device.
+Current limitations that move together in Phase 1B:
 
-Important behavior:
+- the capability is still named `uart_capture` rather than `uart_receive`
+- wire actions are role-specific `reset`/`set_boot_mode` rather than generic
+  configured-channel actions
+- `configure_gpio_mode` still sends host role metadata
+- receive framing is unbounded and uses generic surrounding-whitespace removal
+- schemas and runtime validators do not yet enforce all target byte limits
+- the transport does not yet prove complete acceptance of short serial writes
 
-- `data_b64` is decoded to raw bytes.
-- UART display text is derived with lossy UTF-8 replacement.
-- Protocol validation errors are raised before data reaches higher layers.
-- Command requests queue intervening non-response messages in FIFO order until
-  a command success or error is received.
-- `read_message()` returns queued messages before reading new serial data, and
-  `drain_pending_messages()` provides non-blocking access to the current queue.
-- Serial read timeouts and incomplete lines raise transport errors.
+Schemas, examples, parser/encoder models, tests, and firmware must change
+atomically. `hardware/protocol/v1/` is the wire authority.
 
 ### `uart_capture`
 
-Owns UART byte-to-line processing.
+Owns raw UART byte-to-line processing:
 
-Implemented responsibilities:
+- `UartLineBuffer` assembles newline-terminated lines
+- buffers are independent per UART channel
+- `UartLine` retains raw bytes and lossy display text
+- `UartCaptureProcessor` sends complete lines to pattern detection
 
-- `UartLineBuffer` buffers raw UART bytes until newline-terminated lines are
-  available.
-- `UartLine` carries both raw line bytes and lossy display text.
-- `UartCaptureProcessor` processes `UartMessage` objects into:
-  - completed UART lines
-  - detected pattern matches
-  - channel/timestamp context
-
-Important behavior:
-
-- Raw UART chunks may split log lines; line buffering prevents pattern detection
-  from missing split patterns.
-- Buffers are kept per UART channel, so different channels cannot be joined
-  accidentally.
-- `message.data` is the source of truth for capture bytes.
+It does not write files. It currently consumes Enhanced `UartMessage` objects
+and has no line-size limit. Phase 1 changes the input to normalized UART events
+and adds bounded per-segment/channel line assembly while keeping raw session
+evidence intact.
 
 ### `log_processing`
 
-Owns pattern detection on completed UART lines.
+Owns case-sensitive pattern detection on complete lossy-display lines. Current
+defaults are `ERROR`, `ASSERT`, `PANIC`, `HardFault`, and `BOOT_OK`.
 
-Implemented responsibilities:
-
-- `PatternDetector` scans `UartLine.text`.
-- `PatternMatch` records the matched pattern plus the source line text/raw
-  bytes.
-- Default patterns:
-  - `ERROR`
-  - `ASSERT`
-  - `PANIC`
-  - `HardFault`
-  - `BOOT_OK`
-
-Important behavior:
-
-- Pattern matching is case-sensitive.
-- Pattern detection uses complete decoded lines, not partial UART chunks.
-- Pattern detection uses text, while raw bytes remain preserved separately.
+Current `PatternMatch` records the complete source line. Phase 1 classifies
+failure versus success patterns, chooses deterministic `first_error`, retains
+raw byte offsets, and stores a bounded excerpt. It remains pure processing and
+does not own persistence or backend I/O.
 
 ### `session_store`
 
-Owns filesystem-backed session persistence.
+Owns filesystem-backed sessions under
+`.dutchmate/sessions/<session_id>/`. It currently:
 
-Implemented responsibilities:
+- creates `metadata.json`, `uart_raw.log`, `uart_events.jsonl`,
+  `hardware_events.jsonl`, and `detected_patterns.json`
+- appends exact UART bytes and structured events incrementally
+- stores buffer overflow/status telemetry and detected patterns
+- summarizes one session, lists valid sessions newest-first, and resolves the
+  latest session
+- rejects path-unsafe session IDs
 
-- Creates session directories under `.dutchmate/sessions/<session_id>/`.
-- Initializes required Phase 1 files:
-
-```text
-metadata.json
-uart_raw.log
-uart_events.jsonl
-hardware_events.jsonl
-detected_patterns.json
-```
-
-- Appends UART evidence incrementally:
-  - raw bytes to `uart_raw.log`
-  - structured UART events to `uart_events.jsonl`
-  - detected pattern records to `detected_patterns.json`
-- Appends hardware telemetry:
-  - `buffer_overflow`
-  - `buffer_status`
-- Updates metadata:
-  - `overflow`
-  - segment first/last device timestamps
-- Provides `SessionSummary` via `summarize_session(...)`.
-- Lists valid stored sessions newest-first and provides latest-session lookup.
-- Rejects path-unsafe session IDs before filesystem access.
-
-Important behavior:
-
-- Raw UART bytes are preserved losslessly.
-- JSONL event files are append-only for incoming events.
-- UART events include `segment_id` and `timestamp_epoch`.
-- Buffer telemetry with drops or overflow events marks the session as overflowed.
+Current metadata is unversioned and lacks the target lifecycle, quota,
+retention, baseline, reconnect, backend identity, timestamp provenance, and
+bounded replay contracts. Those rules are centralized in the Phase 1 spec and
+`docs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
 
-Owns current Debug Helper GPIO mapping validation and mode configuration
-workflow/state.
+Owns host control-channel mapping, validation, and accepted/rejected state. It:
 
-Implemented responsibilities:
+- loads `[hardware.control.*]` mappings
+- tracks `CTRL0` through `CTRL3` as `unconfigured`, `configured`, or `rejected`
+- sends configuration through an injected transport
+- changes accepted state only after firmware acknowledgement
+- preserves a prior accepted state when an override is rejected
+- records role, channel, DUT signal, mode/levels, source, host configuration
+  time, optional raw device timestamp, and rejection detail
+- resolves roles for reset and boot workflows
 
-- Loads and validates `[hardware.control.*]` TOML mappings for Phase 1 control
-  roles.
-- Builds and sends `configure_gpio_mode` commands through a caller-provided
-  transport.
-- Updates state only after a command success or command error response.
-- Tracks Phase 1 physical control channels:
-  - `CTRL0`
-  - `CTRL1`
-  - `CTRL2`
-  - `CTRL3`
-- Tracks whether each channel is:
-  - `unconfigured`
-  - `configured`
-  - `rejected`
-- Records role, physical channel, DUT schematic signal name, accepted mode,
-  active/idle levels, source, host timestamp, optional device timestamp, and
-  last rejection detail.
-- Preserves the previous accepted mode when a later runtime override is
-  rejected.
-- Provides role lookup helpers for reset/boot workflows.
-
-Important behavior:
-
-- Invalid channel/role/mode/level values are rejected before a transport
-  request is made.
-- Config-file mappings reject unknown fields, missing required fields, invalid
-  DUT I/O voltage, and duplicate physical channels.
-- A configured role can be moved to another channel without leaving a duplicate
-  role assignment behind.
-- `accept_mode(...)` records that firmware already accepted a GPIO mode request.
-- `reject_mode(...)` records that firmware or Device Core rejected a GPIO mode
-  request.
-- Unexpected non-command responses raise `GpioConfigurationError` and do not
-  update registry state.
-- This package does not own the real serial transport and does not toggle
-  physical pins directly.
-- Debug Helper channel identity is separate from DUT signal role. For example,
-  `channel="CTRL0"` and `role="reset"` are stored as different fields.
+The current validators accept broadly non-empty identifiers and inconsistently
+trim them. Phase 1 introduces one exact shared identifier validator and the
+mode-specific electrical matrix. The canonical state, validation order, and
+workflow rules live in `docs/gpio_configuration_semantics.md`.
 
 ### `workflows`
 
-Owns current host-side workflow coordination.
+Owns deterministic orchestration, not serial-port discovery or low-level
+protocol validation. Current behavior includes:
 
-Implemented responsibilities:
+- capture from parsed messages or NDJSON fixtures
+- finite transport-backed capture using a host-monotonic deadline
+- reset and boot-mode actions through an injected transport
+- reset-triggered boot-test recording
+- active-session publication and conflict cleanup in `DeviceCoreRuntime`
+- required accepted `reset`/`boot` role checks
 
-- `CaptureRecorder` records already-parsed capture messages:
-  - `UartMessage`
-  - `BufferOverflowMessage`
-  - `BufferStatusMessage`
-- `CaptureStreamRecorder` accepts raw NDJSON byte chunks and routes supported
-  capture messages into `CaptureRecorder`.
-- `run_mock_capture(...)` records a finite mocked NDJSON stream and returns a
-  `SessionSummary`.
-- `run_transport_capture(...)` reads parsed transport messages until a
-  host-monotonic deadline, records supported capture messages, and returns a
-  `SessionSummary`.
-- `TransportCaptureRunner` lets the service-facing runtime reserve the active
-  session before the finite transport read loop begins.
-- `DeviceActionRunner` sends reset and boot-mode commands through a
-  caller-provided transport.
-- Reset actions require the `reset` role to be configured.
-- Boot-mode actions require the `boot` role to be configured.
-- `DeviceCoreRuntime.run_boot_test(...)` reserves a session, resets through the
-  configured `reset` role, and records queued and subsequent boot messages.
+Current duration validation rejects invalid/non-positive values but does not
+enforce the target 300-second maximum. Wait-pattern, UART-send exposure,
+reconnect/resume, and durable lifecycle handling remain Phase 1 work.
 
-Important behavior:
+### `backends` (Target)
 
-- `hello` and command response messages are ignored by capture recorders for
-  now.
-- Transport read timeouts do not end a quiet capture before its requested
-  duration.
-- `DeviceCoreRuntime.capture_uart(...)` and `run_boot_test(...)` report the
-  active session in status and clear it after success or failure.
-- Runtime GPIO, reset, boot-mode, and overlapping capture operations return
-  `capture_active` while a capture owns the serial message stream.
-- Reset/boot command arguments are validated before checking configuration
-  state or sending transport requests.
-- Firmware command errors are raised as `DeviceActionError`.
-- The workflow layer is hardware-free; it does not open serial ports.
-- Tests exercise the current workflow paths using mocked NDJSON bytes and mock
-  command transports.
+This package does not exist yet. It will own:
 
-## Session File Contract
+- normalized event, backend identity, segment context, and error contracts
+- Basic raw-serial adaptation with host timestamp provenance
+- Enhanced NDJSON adaptation with device timestamp and telemetry provenance
+- one reader and FIFO event queue per selected backend
+- backend support versus effective host-policy capabilities
+- separate capability-gated UART send, control, and future event interfaces
 
-### `metadata.json`
+It will not decode lines, detect patterns, persist sessions, handle HTTP, or
+format CLI output.
 
-Current required fields:
+## Application Boundaries
 
-```json
-{
-  "session_id": "...",
-  "started_at": "...",
-  "command": "...",
-  "truncated": false,
-  "interrupted": false,
-  "resumed": false,
-  "overflow": false,
-  "baseline": false,
-  "firmware": null,
-  "device": null,
-  "segments": []
-}
-```
+### Device Core Service
 
-Segments represent continuous device timestamp epochs. The current
-implementation initializes segment `0` and updates its first/last device
-timestamps as UART or telemetry messages are recorded.
+`apps/service` owns the local FastAPI process, selected serial connection, and
+runtime composition. Current endpoints cover status, finite capture, boot-test,
+GPIO mode, reset, and boot mode. Handlers should remain thin: core code owns
+validation order, state transitions, and deterministic behavior; service code
+owns request/response serialization and HTTP error mapping.
 
-Reconnect and multi-segment mutation helpers are not implemented yet.
+The service currently treats selected devices as Enhanced and validates a
+`hello`. Explicit Basic/Enhanced startup, background ingestion, reconnect,
+bounded log/session retrieval, wait-pattern, UART send, baseline operations,
+and the complete target error projection remain Phase 1 work.
 
-### `uart_raw.log`
+### CLI
 
-Append-only raw UART bytes exactly as received after base64 decoding.
+`apps/cli` is an HTTP client for the Device Core Service. It owns process
+lifecycle commands, request construction, and human-readable output. It must
+not import low-level transport code or open serial ports for debug workflows.
 
-This file is the primary evidence file for UART capture. Higher-level decoded
-views must not replace it.
+Current commands cover service lifecycle, device listing, status, capture,
+boot-test, GPIO mode, reset, and boot mode. Target Basic/Enhanced selection,
+logs, sessions, wait-pattern, UART send, and baseline commands remain pending.
 
-### `uart_events.jsonl`
+### MCP Server
 
-One JSON object per UART protocol event.
+`apps/mcp_server` is a Phase 2 package scaffold. The future stdio server calls
+the same Device Core Service API as the CLI and owns no serial, session, GPIO,
+or AI logic. See `docs/mcp_integration_plan.md`.
 
-Current shape:
+## Boundary Rules
 
-```json
-{
-  "type": "uart",
-  "segment_id": 0,
-  "timestamp_epoch": 0,
-  "timestamp_us": 100,
-  "channel": 0,
-  "data_b64": "...",
-  "text": "..."
-}
-```
+- `core` does not import any app or AI package.
+- `device_connection` knows the Enhanced protocol, not sessions or workflows.
+- `backends` owns device-specific adaptation, not line or session processing.
+- `uart_capture` owns bounded derived buffering, not persistence.
+- `log_processing` remains deterministic and hardware-free.
+- `session_store` owns durable evidence, not serial parsing.
+- `gpio_config` owns accepted mapping state, not physical transport ownership.
+- `workflows` coordinate lower layers but do not duplicate wire validation.
+- Service and CLI layers do not reinterpret core state or error semantics.
 
-### `hardware_events.jsonl`
+## Current Verification Surface
 
-One JSON object per hardware/session telemetry event.
+The test suite currently covers protocol parsing/encoding and NDJSON buffering;
+UART line processing and patterns; session creation, evidence writes, telemetry,
+summaries, and discovery; GPIO configuration state; fixture and finite transport
+capture; reset/boot-mode and boot-test orchestration; runtime conflict cleanup;
+service endpoints; CLI clients; serial discovery; startup `hello` validation;
+and startup hardware mapping.
 
-Currently implemented event types:
-
-- `buffer_overflow`
-- `buffer_status`
-
-### `detected_patterns.json`
-
-JSON array of detected pattern records.
-
-Current shape:
-
-```json
-{
-  "pattern": "ERROR",
-  "segment_id": 0,
-  "timestamp_epoch": 0,
-  "timestamp_us": 100,
-  "channel": 0,
-  "line_text": "ERROR\n",
-  "line_raw_b64": "RVJST1IK"
-}
-```
-
-## Current Test Coverage
-
-Current unit tests cover:
-
-- Protocol parsing and host command encoding.
-- NDJSON stream buffering.
-- UART line buffering.
-- Pattern detection.
-- UART capture processing.
-- Session creation, incremental evidence writes, and newest-first discovery.
-- Buffer overflow and buffer status persistence.
-- GPIO configuration workflow/state tracking.
-- Session summaries.
-- Capture recorders from typed messages and NDJSON byte chunks.
-- Reset and boot-mode workflow enforcement.
-- Mock capture summary generation.
-- Finite transport-backed capture deadlines and timeout handling.
-- Runtime active-session reporting, conflict guards, and failure cleanup.
-- Device Core Service endpoints for status, finite capture, boot-test, GPIO
-  mode, reset, and boot-mode.
-- CLI HTTP client commands for service lifecycle, status, finite capture,
-  boot-test, GPIO mode, reset, and boot-mode.
-- Serial command transport, serial-port discovery, startup `hello` validation,
-  and startup hardware mapping application.
-- CLI device listing and single-candidate startup selection.
-
-Focused host-side core test command:
+Use focused tests during development and the full suite before a commit:
 
 ```bash
-uv run pytest tests/unit/gpio_config tests/unit/runtime tests/unit/workflows tests/unit/session_store tests/unit/log_processing tests/unit/uart_capture tests/unit/protocol
+uv run pytest tests/unit/protocol
+uv run pytest tests/unit/uart_capture tests/unit/log_processing
+uv run pytest tests/unit/session_store tests/unit/workflows tests/unit/runtime
+uv run pytest apps/service/tests apps/cli/tests
+uv run pytest
 ```
 
-## Not Implemented Yet
-
-The following layers or behaviors are not part of the current implemented
-architecture yet:
-
-- Built-in workflow semantics for control roles beyond Phase 1 `reset` and
-  `boot`.
-- Background serial ingestion outside finite capture requests.
-- Reconnect/resume session mutation helpers.
-- Log/session, wait-pattern, and UART-send Device Core Service endpoints.
-- Log/session, wait-pattern, and UART-send CLI commands.
-- MCP server runtime.
-- RP2040 firmware.
-- Hardware smoke tests.
+Phase 1 test requirements, backend-specific coverage, HIL fixture behavior, and
+done criteria are maintained only in `docs/phase1_implementation_spec.md`.
