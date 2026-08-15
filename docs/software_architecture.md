@@ -212,11 +212,13 @@ Current duration validation rejects invalid/non-positive values but does not
 enforce the target 300-second maximum. Wait-pattern, UART-send exposure,
 reconnect/resume, and durable lifecycle handling remain Phase 1 work.
 
-### `backends` (Target)
+### `backends` (Contract Foundation)
 
-This package does not exist yet. It will own:
+This package now defines backend-neutral identity, timestamp provenance,
+normalized UART/telemetry events, the asynchronous event-source protocol, and
+distinct disconnect/input errors. Shared fake Basic and Enhanced sources verify
+the same FIFO/timeout/error contract. It will additionally own:
 
-- normalized event, backend identity, segment context, and error contracts
 - Basic raw-serial adaptation with host timestamp provenance
 - Enhanced NDJSON adaptation with device timestamp and telemetry provenance
 - one reader and FIFO event queue per selected backend

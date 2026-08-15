@@ -57,8 +57,9 @@ then connected to each real backend in milestone order.
 ### Phase 1A: Basic Backend
 
 1. Define the normalized UART receive interface and backend capability model.
-   **Specified in "Normalized Backend Contract" below; not implemented. The
-   current capture workflow consumes parsed Debug Helper messages.**
+   **Implemented in `dutchmate_core.backends.contracts` with shared fake Basic
+   and Enhanced source contract tests. The current capture workflow still
+   consumes parsed Debug Helper messages.**
 2. Refactor the shared UART processing/session path to consume normalized UART
    events independent of backend framing. **Partially implemented downstream;
    the backend boundary remains.**
@@ -104,6 +105,8 @@ then connected to each real backend in milestone order.
 
 The repository already contains:
 
+- Backend-neutral identity, timestamp provenance, normalized UART/telemetry
+  event, asynchronous event-source, disconnect, and invalid-input contracts.
 - Channel-aware Debug Helper v1 schemas, canonical examples, parser, and event
   models using the legacy `uart_capture` capability name.
 - UART byte preservation, lossy UTF-8 display text, complete-line buffering,

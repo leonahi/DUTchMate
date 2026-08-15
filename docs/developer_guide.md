@@ -50,6 +50,7 @@ Current core modules:
 
 | Module | Ownership |
 |---|---|
+| `backends` | Backend-neutral identity, segment timing, normalized events, event-source, and error contracts; adapters remain pending. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
 | `uart_capture` | UART byte buffering, complete lines, and receive processing. |
 | `log_processing` | Case-sensitive pattern detection on complete lines. |
@@ -127,11 +128,13 @@ CLI commands:
 - `dutchmate dut boot-mode <normal|bootloader>`
 
 The runtime performs finite transport-backed capture and reset-triggered
-boot-test orchestration, with active-workflow conflict guards. Major remaining
-Phase 1 areas are the normalized backend package, Basic adapter, background
-ingestion/reconnect, versioned durable sessions and retention, bounded log and
-session retrieval, wait-pattern, UART-send exposure, generic Enhanced control
-actions, RP2040 firmware, and real HIL tests.
+boot-test orchestration, with active-workflow conflict guards. Backend-neutral
+contracts now exist, but the shared pipeline still consumes Enhanced wire
+messages. Major remaining Phase 1 areas are the Basic and Enhanced adapters,
+shared-pipeline migration, background ingestion/reconnect, versioned durable
+sessions and retention, bounded log and session retrieval, wait-pattern,
+UART-send exposure, generic Enhanced control actions, RP2040 firmware, and real
+HIL tests.
 
 ## Adding A Service Endpoint
 
