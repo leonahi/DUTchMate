@@ -58,11 +58,12 @@ then connected to each real backend in milestone order.
 
 1. Define the normalized UART receive interface and backend capability model.
    **Implemented in `dutchmate_core.backends.contracts` with shared fake Basic
-   and Enhanced source contract tests. The current capture workflow still
-   consumes parsed Debug Helper messages.**
+   and Enhanced source contract tests.**
 2. Refactor the shared UART processing/session path to consume normalized UART
-   events independent of backend framing. **Partially implemented downstream;
-   the backend boundary remains.**
+   events independent of backend framing. **Implemented for UART processing,
+   capture recording, and legacy session evidence writes. Enhanced NDJSON and
+   synchronous transport messages are translated at explicit compatibility
+   adapters before entering the shared path.**
 3. Implement explicit Basic-backend selection and serial settings without a
    DUTchMate `hello` requirement. **Selection/discovery contract specified;
    implementation not started.**
@@ -84,7 +85,10 @@ then connected to each real backend in milestone order.
    `uart_receive` atomically across schemas, examples, parser, tests, and future
    firmware. **Not started.**
 9. Adapt the implemented Debug Helper NDJSON parser/transport to the same UART
-   receive interface used by Phase 1A. **Not started.**
+   receive interface used by Phase 1A. **An interim synchronous adapter and
+   fixture-stream adapter now normalize UART and telemetry messages. The target
+   asynchronous background reader, complete framing limits, and segment-origin
+   coordination remain.**
 10. Preserve the existing channel-aware `CTRLn` configuration and guarded
     reset/boot workflows behind Enhanced-backend capability checks. Replace
     the legacy role-specific wire actions with generic configured-channel pulse
@@ -107,6 +111,8 @@ The repository already contains:
 
 - Backend-neutral identity, timestamp provenance, normalized UART/telemetry
   event, asynchronous event-source, disconnect, and invalid-input contracts.
+- Shared UART processing, capture recording, and session evidence writes that
+  consume normalized events, plus interim Enhanced transport/NDJSON adapters.
 - Channel-aware Debug Helper v1 schemas, canonical examples, parser, and event
   models using the legacy `uart_capture` capability name.
 - UART byte preservation, lossy UTF-8 display text, complete-line buffering,
@@ -130,22 +136,28 @@ The implemented mock capture path is:
 NDJSON byte chunks
   -> device_connection.NdjsonStreamParser
   -> device_connection.parse_device_message
-  -> workflows.CaptureStreamRecorder
+  -> backends.enhanced.EnhancedNdjsonEventStream
+  -> normalized backend events
+  -> workflows.enhanced_capture.CaptureStreamRecorder
+  -> workflows.CaptureRecorder
   -> uart_capture.UartCaptureProcessor
   -> log_processing.PatternDetector
   -> session_store.SessionStore
   -> session_store.SessionSummary
 ```
 
-The mock runner `run_mock_capture(...)` records finite NDJSON byte chunks into
-a session. The transport runner `run_transport_capture(...)` reads parsed
-messages until a host-monotonic deadline. Both return a `SessionSummary`; the
-workflow layer accepts injected transports and does not open a serial port.
+The Enhanced-only mock runner `run_mock_capture(...)` adapts finite NDJSON byte
+chunks before shared recording. The shared transport runner
+`run_transport_capture(...)` reads normalized events until a host-monotonic
+deadline. Both return a `SessionSummary`; the workflow layer accepts injected
+sources and does not open a serial port.
 
 The service-facing core path currently reaches the same recorder through:
 
 ```text
 device_connection.SerialCommandTransport
+  -> backends.enhanced.EnhancedCaptureEventSource
+  -> normalized backend events
   -> runtime.DeviceCoreRuntime.capture_uart
   -> workflows.TransportCaptureRunner
   -> workflows.CaptureRecorder

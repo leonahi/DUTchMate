@@ -21,7 +21,7 @@ from dutchmate_core.gpio_config.modes import (
 )
 from dutchmate_core.session_store.store import SessionStore, SessionSummary
 from dutchmate_core.workflows.capture import (
-    CaptureMessageSource,
+    CaptureEventSource,
     CaptureRecorder,
     TransportCaptureRunner,
 )
@@ -61,7 +61,7 @@ class DeviceCoreRuntime:
         session_store: SessionStore | None = None,
         session_root: Path | str = Path(".dutchmate/sessions"),
         gpio_registry: GpioModeRegistry | None = None,
-        message_source: CaptureMessageSource | None = None,
+        message_source: CaptureEventSource | None = None,
         capture_clock: Callable[[], float] | None = None,
         port: str | None = None,
     ) -> None:

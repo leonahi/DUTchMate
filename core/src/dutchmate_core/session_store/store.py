@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from dutchmate_core.device_connection.messages import (
-    BufferOverflowMessage,
-    BufferStatusMessage,
-    UartMessage,
+from dutchmate_core.backends.contracts import (
+    BufferOverflowEvent,
+    BufferStatusEvent,
+    UartReceiveEvent,
 )
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 
@@ -166,41 +166,41 @@ class SessionStore:
         self,
         handle: SessionHandle,
         *,
-        message: UartMessage,
+        event: UartReceiveEvent,
         result: UartCaptureResult,
-        segment_id: int = 0,
         timestamp_epoch: int = 0,
     ) -> None:
-        """Append one processed UART capture message to a session."""
+        """Append one processed normalized UART event to a session."""
 
-        if message.channel != result.channel:
-            raise ValueError("UART message and capture result channels must match")
-        if message.timestamp_us != result.timestamp_us:
-            raise ValueError("UART message and capture result timestamps must match")
+        if event.segment_id != result.segment_id:
+            raise ValueError("UART event and capture result segments must match")
+        if event.channel != result.channel:
+            raise ValueError("UART event and capture result channels must match")
+        if event.timestamp_us != result.timestamp_us:
+            raise ValueError("UART event and capture result timestamps must match")
 
-        _append_bytes(handle.paths.uart_raw, message.data)
+        _append_bytes(handle.paths.uart_raw, event.data)
         _append_jsonl(
             handle.paths.uart_events,
-            _uart_event_json(message, segment_id, timestamp_epoch),
+            _uart_event_json(event, timestamp_epoch),
         )
         _append_detected_patterns(
             handle.paths.detected_patterns,
             result,
-            segment_id=segment_id,
+            segment_id=event.segment_id,
             timestamp_epoch=timestamp_epoch,
         )
         self._record_segment_timestamp(
             handle,
-            segment_id=segment_id,
-            timestamp_us=message.timestamp_us,
+            segment_id=event.segment_id,
+            timestamp_us=event.timestamp_us,
         )
 
     def append_buffer_overflow(
         self,
         handle: SessionHandle,
         *,
-        message: BufferOverflowMessage,
-        segment_id: int = 0,
+        event: BufferOverflowEvent,
         timestamp_epoch: int = 0,
     ) -> None:
         """Append one buffer overflow event to a session."""
@@ -208,14 +208,14 @@ class SessionStore:
         metadata = _read_json_object(handle.paths.metadata)
         _record_metadata_segment_timestamp(
             metadata,
-            segment_id=segment_id,
-            timestamp_us=message.timestamp_us,
+            segment_id=event.segment_id,
+            timestamp_us=event.timestamp_us,
         )
         metadata["overflow"] = True
 
         _append_jsonl(
             handle.paths.hardware_events,
-            _buffer_overflow_event_json(message, segment_id, timestamp_epoch),
+            _buffer_overflow_event_json(event, timestamp_epoch),
         )
         _write_json(handle.paths.metadata, metadata)
 
@@ -223,8 +223,7 @@ class SessionStore:
         self,
         handle: SessionHandle,
         *,
-        message: BufferStatusMessage,
-        segment_id: int = 0,
+        event: BufferStatusEvent,
         timestamp_epoch: int = 0,
     ) -> None:
         """Append one buffer status telemetry event to a session."""
@@ -232,15 +231,15 @@ class SessionStore:
         metadata = _read_json_object(handle.paths.metadata)
         _record_metadata_segment_timestamp(
             metadata,
-            segment_id=segment_id,
-            timestamp_us=message.timestamp_us,
+            segment_id=event.segment_id,
+            timestamp_us=event.timestamp_us,
         )
-        if message.dropped_bytes_total > 0 or message.overflow_events > 0:
+        if event.dropped_bytes_total > 0 or event.overflow_events > 0:
             metadata["overflow"] = True
 
         _append_jsonl(
             handle.paths.hardware_events,
-            _buffer_status_event_json(message, segment_id, timestamp_epoch),
+            _buffer_status_event_json(event, timestamp_epoch),
         )
         _write_json(handle.paths.metadata, metadata)
 
@@ -429,51 +428,48 @@ def _append_detected_patterns(
 
 
 def _uart_event_json(
-    message: UartMessage,
-    segment_id: int,
+    event: UartReceiveEvent,
     timestamp_epoch: int,
 ) -> dict[str, object]:
     return {
         "type": "uart",
-        "segment_id": segment_id,
+        "segment_id": event.segment_id,
         "timestamp_epoch": timestamp_epoch,
-        "timestamp_us": message.timestamp_us,
-        "channel": message.channel,
-        "data_b64": _bytes_to_b64(message.data),
-        "text": message.text,
+        "timestamp_us": event.timestamp_us,
+        "channel": event.channel,
+        "data_b64": _bytes_to_b64(event.data),
+        "text": event.data.decode("utf-8", errors="replace"),
     }
 
 
 def _buffer_overflow_event_json(
-    message: BufferOverflowMessage,
-    segment_id: int,
+    event: BufferOverflowEvent,
     timestamp_epoch: int,
 ) -> dict[str, object]:
     return {
         "type": "buffer_overflow",
-        "segment_id": segment_id,
+        "segment_id": event.segment_id,
         "timestamp_epoch": timestamp_epoch,
-        "timestamp_us": message.timestamp_us,
-        "channel": message.channel,
-        "dropped_bytes": message.dropped_bytes,
+        "timestamp_us": event.timestamp_us,
+        "channel": event.channel,
+        "dropped_bytes": event.dropped_bytes,
     }
 
 
 def _buffer_status_event_json(
-    message: BufferStatusMessage,
-    segment_id: int,
+    event: BufferStatusEvent,
     timestamp_epoch: int,
 ) -> dict[str, object]:
     return {
         "type": "buffer_status",
-        "segment_id": segment_id,
+        "segment_id": event.segment_id,
         "timestamp_epoch": timestamp_epoch,
-        "timestamp_us": message.timestamp_us,
-        "uart_rx_size_bytes": message.uart_rx_size_bytes,
-        "uart_rx_used_bytes": message.uart_rx_used_bytes,
-        "uart_rx_high_water_bytes": message.uart_rx_high_water_bytes,
-        "dropped_bytes_total": message.dropped_bytes_total,
-        "overflow_events": message.overflow_events,
+        "timestamp_us": event.timestamp_us,
+        "uart_rx_size_bytes": event.size_bytes,
+        "uart_rx_used_bytes": event.used_bytes,
+        "uart_rx_high_water_bytes": event.high_water_bytes,
+        "dropped_bytes_total": event.dropped_bytes_total,
+        "overflow_events": event.overflow_events,
     }
 
 

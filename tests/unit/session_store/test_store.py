@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from dutchmate_core.device_connection.messages import (
-    BufferOverflowMessage,
-    BufferStatusMessage,
-    UartMessage,
+from dutchmate_core.backends import (
+    BufferOverflowEvent,
+    BufferStatusEvent,
+    UartReceiveEvent,
 )
 from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
@@ -132,7 +132,12 @@ def test_summarize_session_reflects_metadata_updates(tmp_path: Path) -> None:
     handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
     store.append_buffer_overflow(
         handle,
-        message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
+        event=BufferOverflowEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=100,
+            dropped_bytes=10,
+        ),
     )
 
     summary = store.summarize_session(handle.session_id)
@@ -196,10 +201,10 @@ def test_append_uart_capture_preserves_raw_bytes_and_writes_uart_event(tmp_path:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    message = UartMessage(channel=0, timestamp_us=1234, data=b"BOOT_OK\n", text="BOOT_OK\n")
-    result = processor.process_message(message)
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=1234, data=b"BOOT_OK\n")
+    result = processor.process_event(event)
 
-    store.append_uart_capture(handle, message=message, result=result)
+    store.append_uart_capture(handle, event=event, result=result)
 
     assert handle.paths.uart_raw.read_bytes() == b"BOOT_OK\n"
     assert _read_jsonl(handle.paths.uart_events) == [
@@ -219,11 +224,11 @@ def test_append_uart_capture_appends_multiple_uart_events(tmp_path: Path) -> Non
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    first = UartMessage(channel=0, timestamp_us=100, data=b"one\n", text="one\n")
-    second = UartMessage(channel=0, timestamp_us=200, data=b"two\n", text="two\n")
+    first = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"one\n")
+    second = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"two\n")
 
-    store.append_uart_capture(handle, message=first, result=processor.process_message(first))
-    store.append_uart_capture(handle, message=second, result=processor.process_message(second))
+    store.append_uart_capture(handle, event=first, result=processor.process_event(first))
+    store.append_uart_capture(handle, event=second, result=processor.process_event(second))
 
     assert handle.paths.uart_raw.read_bytes() == b"one\ntwo\n"
     assert [event["timestamp_us"] for event in _read_jsonl(handle.paths.uart_events)] == [100, 200]
@@ -233,17 +238,17 @@ def test_append_uart_capture_writes_detected_patterns(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    message = UartMessage(
+    event = UartReceiveEvent(
+        segment_id=0,
         channel=1,
         timestamp_us=500,
         data=b"ERROR: failed\n",
-        text="ERROR: failed\n",
     )
-    result = processor.process_message(message)
+    result = processor.process_event(event)
 
     store.append_uart_capture(
         handle,
-        message=message,
+        event=event,
         result=result,
     )
 
@@ -264,9 +269,9 @@ def test_append_uart_capture_leaves_detected_patterns_empty_when_no_match(tmp_pa
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    message = UartMessage(channel=0, timestamp_us=500, data=b"idle\n", text="idle\n")
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=500, data=b"idle\n")
 
-    store.append_uart_capture(handle, message=message, result=processor.process_message(message))
+    store.append_uart_capture(handle, event=event, result=processor.process_event(event))
 
     assert json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8")) == []
 
@@ -275,11 +280,11 @@ def test_append_uart_capture_updates_segment_device_timestamps(tmp_path: Path) -
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    first = UartMessage(channel=0, timestamp_us=100, data=b"one\n", text="one\n")
-    second = UartMessage(channel=0, timestamp_us=250, data=b"two\n", text="two\n")
+    first = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"one\n")
+    second = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=250, data=b"two\n")
 
-    store.append_uart_capture(handle, message=first, result=processor.process_message(first))
-    store.append_uart_capture(handle, message=second, result=processor.process_message(second))
+    store.append_uart_capture(handle, event=first, result=processor.process_event(first))
+    store.append_uart_capture(handle, event=second, result=processor.process_event(second))
 
     segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][0]
     assert segment["first_device_timestamp_us"] == 100
@@ -290,7 +295,7 @@ def test_append_uart_capture_can_write_nonzero_segment_and_epoch(tmp_path: Path)
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
-    message = UartMessage(channel=0, timestamp_us=100, data=b"idle\n", text="idle\n")
+    event = UartReceiveEvent(segment_id=1, channel=0, timestamp_us=100, data=b"idle\n")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["segments"].append(
         {
@@ -308,9 +313,8 @@ def test_append_uart_capture_can_write_nonzero_segment_and_epoch(tmp_path: Path)
 
     store.append_uart_capture(
         handle,
-        message=message,
-        result=processor.process_message(message),
-        segment_id=1,
+        event=event,
+        result=processor.process_event(event),
         timestamp_epoch=1,
     )
 
@@ -325,29 +329,62 @@ def test_append_uart_capture_can_write_nonzero_segment_and_epoch(tmp_path: Path)
 def test_append_uart_capture_rejects_channel_mismatch(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
-    message = UartMessage(channel=0, timestamp_us=100, data=b"idle\n", text="idle\n")
-    result = UartCaptureResult(channel=1, timestamp_us=100, lines=(), matches=())
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
+    result = UartCaptureResult(
+        segment_id=0,
+        channel=1,
+        timestamp_us=100,
+        lines=(),
+        matches=(),
+    )
 
     with pytest.raises(ValueError):
-        store.append_uart_capture(handle, message=message, result=result)
+        store.append_uart_capture(handle, event=event, result=result)
+
+
+def test_append_uart_capture_rejects_segment_mismatch(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
+    result = UartCaptureResult(
+        segment_id=1,
+        channel=0,
+        timestamp_us=100,
+        lines=(),
+        matches=(),
+    )
+
+    with pytest.raises(ValueError, match="segments"):
+        store.append_uart_capture(handle, event=event, result=result)
 
 
 def test_append_uart_capture_rejects_timestamp_mismatch(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
-    message = UartMessage(channel=0, timestamp_us=100, data=b"idle\n", text="idle\n")
-    result = UartCaptureResult(channel=0, timestamp_us=200, lines=(), matches=())
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
+    result = UartCaptureResult(
+        segment_id=0,
+        channel=0,
+        timestamp_us=200,
+        lines=(),
+        matches=(),
+    )
 
     with pytest.raises(ValueError):
-        store.append_uart_capture(handle, message=message, result=result)
+        store.append_uart_capture(handle, event=event, result=result)
 
 
 def test_append_buffer_overflow_writes_hardware_event_and_marks_metadata(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
-    message = BufferOverflowMessage(channel=0, timestamp_us=1234, dropped_bytes=512)
+    event = BufferOverflowEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=1234,
+        dropped_bytes=512,
+    )
 
-    store.append_buffer_overflow(handle, message=message)
+    store.append_buffer_overflow(handle, event=event)
 
     assert _read_jsonl(handle.paths.hardware_events) == [
         {
@@ -369,11 +406,21 @@ def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path
 
     store.append_buffer_overflow(
         handle,
-        message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
+        event=BufferOverflowEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=100,
+            dropped_bytes=10,
+        ),
     )
     store.append_buffer_overflow(
         handle,
-        message=BufferOverflowMessage(channel=0, timestamp_us=250, dropped_bytes=20),
+        event=BufferOverflowEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=250,
+            dropped_bytes=20,
+        ),
     )
 
     segment = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))["segments"][0]
@@ -401,8 +448,12 @@ def test_append_buffer_overflow_can_write_nonzero_segment_and_epoch(tmp_path: Pa
 
     store.append_buffer_overflow(
         handle,
-        message=BufferOverflowMessage(channel=1, timestamp_us=500, dropped_bytes=64),
-        segment_id=1,
+        event=BufferOverflowEvent(
+            segment_id=1,
+            channel=1,
+            timestamp_us=500,
+            dropped_bytes=64,
+        ),
         timestamp_epoch=1,
     )
 
@@ -421,8 +472,12 @@ def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         store.append_buffer_overflow(
             handle,
-            message=BufferOverflowMessage(channel=0, timestamp_us=100, dropped_bytes=10),
-            segment_id=99,
+            event=BufferOverflowEvent(
+                segment_id=99,
+                channel=0,
+                timestamp_us=100,
+                dropped_bytes=10,
+            ),
             timestamp_epoch=99,
         )
 
@@ -433,16 +488,17 @@ def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
 def test_append_buffer_status_writes_hardware_event(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
-    message = BufferStatusMessage(
+    event = BufferStatusEvent(
+        segment_id=0,
         timestamp_us=1234,
-        uart_rx_size_bytes=32768,
-        uart_rx_used_bytes=1200,
-        uart_rx_high_water_bytes=8000,
+        size_bytes=32768,
+        used_bytes=1200,
+        high_water_bytes=8000,
         dropped_bytes_total=0,
         overflow_events=0,
     )
 
-    store.append_buffer_status(handle, message=message)
+    store.append_buffer_status(handle, event=event)
 
     assert _read_jsonl(handle.paths.hardware_events) == [
         {
@@ -466,16 +522,17 @@ def test_append_buffer_status_marks_overflow_when_telemetry_reports_drops(
 ) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
-    message = BufferStatusMessage(
+    event = BufferStatusEvent(
+        segment_id=0,
         timestamp_us=1234,
-        uart_rx_size_bytes=32768,
-        uart_rx_used_bytes=32768,
-        uart_rx_high_water_bytes=32768,
+        size_bytes=32768,
+        used_bytes=32768,
+        high_water_bytes=32768,
         dropped_bytes_total=10,
         overflow_events=1,
     )
 
-    store.append_buffer_status(handle, message=message)
+    store.append_buffer_status(handle, event=event)
 
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     assert metadata["overflow"] is True
@@ -487,22 +544,24 @@ def test_append_buffer_status_updates_segment_device_timestamps(tmp_path: Path) 
 
     store.append_buffer_status(
         handle,
-        message=BufferStatusMessage(
+        event=BufferStatusEvent(
+            segment_id=0,
             timestamp_us=100,
-            uart_rx_size_bytes=32768,
-            uart_rx_used_bytes=10,
-            uart_rx_high_water_bytes=100,
+            size_bytes=32768,
+            used_bytes=10,
+            high_water_bytes=100,
             dropped_bytes_total=0,
             overflow_events=0,
         ),
     )
     store.append_buffer_status(
         handle,
-        message=BufferStatusMessage(
+        event=BufferStatusEvent(
+            segment_id=0,
             timestamp_us=250,
-            uart_rx_size_bytes=32768,
-            uart_rx_used_bytes=20,
-            uart_rx_high_water_bytes=200,
+            size_bytes=32768,
+            used_bytes=20,
+            high_water_bytes=200,
             dropped_bytes_total=0,
             overflow_events=0,
         ),
@@ -533,15 +592,15 @@ def test_append_buffer_status_can_write_nonzero_segment_and_epoch(tmp_path: Path
 
     store.append_buffer_status(
         handle,
-        message=BufferStatusMessage(
+        event=BufferStatusEvent(
+            segment_id=1,
             timestamp_us=500,
-            uart_rx_size_bytes=32768,
-            uart_rx_used_bytes=25,
-            uart_rx_high_water_bytes=400,
+            size_bytes=32768,
+            used_bytes=25,
+            high_water_bytes=400,
             dropped_bytes_total=0,
             overflow_events=0,
         ),
-        segment_id=1,
         timestamp_epoch=1,
     )
 
@@ -560,15 +619,15 @@ def test_append_buffer_status_rejects_missing_segment(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         store.append_buffer_status(
             handle,
-            message=BufferStatusMessage(
+            event=BufferStatusEvent(
+                segment_id=99,
                 timestamp_us=100,
-                uart_rx_size_bytes=32768,
-                uart_rx_used_bytes=10,
-                uart_rx_high_water_bytes=100,
+                size_bytes=32768,
+                used_bytes=10,
+                high_water_bytes=100,
                 dropped_bytes_total=1,
                 overflow_events=1,
             ),
-            segment_id=99,
             timestamp_epoch=99,
         )
 

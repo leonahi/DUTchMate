@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final, Protocol
 
+from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.serial_transport import (
@@ -72,7 +73,11 @@ def build_startup_runtime(
     transport = open_serial_command_transport(port=serial_port)
     runtime = DeviceCoreRuntime(
         transport=transport,
-        message_source=transport,
+        message_source=EnhancedCaptureEventSource(
+            transport,
+            segment_id=0,
+            source_origin_us=0,
+        ),
         session_root=session_root,
         port=serial_port,
     )

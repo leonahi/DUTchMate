@@ -1,8 +1,8 @@
-"""UART capture processing from protocol messages to log lines and matches."""
+"""Backend-independent UART receive processing to log lines and matches."""
 
 from dataclasses import dataclass
 
-from dutchmate_core.device_connection.messages import UartMessage
+from dutchmate_core.backends.contracts import UartReceiveEvent
 from dutchmate_core.log_processing.patterns import PatternDetector, PatternMatch
 from dutchmate_core.uart_capture.line_buffer import UartLine, UartLineBuffer
 
@@ -11,6 +11,7 @@ from dutchmate_core.uart_capture.line_buffer import UartLine, UartLineBuffer
 class UartCaptureResult:
     """Completed UART lines and pattern matches produced from one processing step."""
 
+    segment_id: int
     channel: int
     timestamp_us: int | None
     lines: tuple[UartLine, ...]
@@ -22,37 +23,38 @@ class UartCaptureProcessor:
 
     def __init__(self, pattern_detector: PatternDetector | None = None) -> None:
         self._pattern_detector = pattern_detector or PatternDetector()
-        self._line_buffers: dict[int, UartLineBuffer] = {}
+        self._line_buffers: dict[tuple[int, int], UartLineBuffer] = {}
 
-    def process_message(self, message: UartMessage) -> UartCaptureResult:
-        """Process one UART protocol message."""
+    def process_event(self, event: UartReceiveEvent) -> UartCaptureResult:
+        """Process one normalized UART receive event."""
 
-        if not isinstance(message, UartMessage):
-            raise TypeError("UART capture processor input must be a UartMessage")
+        if not isinstance(event, UartReceiveEvent):
+            raise TypeError("UART capture processor input must be a UartReceiveEvent")
 
-        buffer = self._line_buffer_for_channel(message.channel)
-        lines = tuple(buffer.feed(message.data))
+        buffer = self._line_buffer_for_channel(event.segment_id, event.channel)
+        lines = tuple(buffer.feed(event.data))
         matches = tuple(self._pattern_detector.scan_lines(lines))
 
         return UartCaptureResult(
-            channel=message.channel,
-            timestamp_us=message.timestamp_us,
+            segment_id=event.segment_id,
+            channel=event.channel,
+            timestamp_us=event.timestamp_us,
             lines=lines,
             matches=matches,
         )
 
-    def pending_bytes(self, channel: int) -> bytes:
-        """Raw bytes buffered for a channel while waiting for a line terminator."""
+    def pending_bytes(self, channel: int, *, segment_id: int = 0) -> bytes:
+        """Return bytes awaiting a line terminator for one segment and channel."""
 
-        buffer = self._line_buffers.get(channel)
+        buffer = self._line_buffers.get((segment_id, channel))
         if buffer is None:
             return b""
         return buffer.pending_bytes
 
-    def flush_channel(self, channel: int) -> UartCaptureResult | None:
-        """Flush a channel's trailing partial line, if any."""
+    def flush_channel(self, channel: int, *, segment_id: int = 0) -> UartCaptureResult | None:
+        """Flush one segment/channel's trailing partial line, if any."""
 
-        buffer = self._line_buffers.get(channel)
+        buffer = self._line_buffers.get((segment_id, channel))
         if buffer is None:
             return None
 
@@ -63,15 +65,17 @@ class UartCaptureProcessor:
         lines = (line,)
         matches = tuple(self._pattern_detector.scan_lines(lines))
         return UartCaptureResult(
+            segment_id=segment_id,
             channel=channel,
             timestamp_us=None,
             lines=lines,
             matches=matches,
         )
 
-    def _line_buffer_for_channel(self, channel: int) -> UartLineBuffer:
-        buffer = self._line_buffers.get(channel)
+    def _line_buffer_for_channel(self, segment_id: int, channel: int) -> UartLineBuffer:
+        key = (segment_id, channel)
+        buffer = self._line_buffers.get(key)
         if buffer is None:
             buffer = UartLineBuffer()
-            self._line_buffers[channel] = buffer
+            self._line_buffers[key] = buffer
         return buffer

@@ -29,28 +29,35 @@ apps/service
 core/runtime
   -> workflows
   -> gpio_config
+  -> backends contracts/adapters
   -> device_connection
 
-core/workflows
+core/workflows.capture
   -> session_store
   -> uart_capture
-  -> gpio_config
-  -> device_connection
+  -> backends.contracts
+
+core/workflows.enhanced_capture
+  -> workflows.capture
+  -> backends.enhanced
 
 core/uart_capture
   -> log_processing
-  -> device_connection message models
+  -> backends.contracts
 
 core/session_store
   -> uart_capture results
-  -> device_connection message models
+  -> backends.contracts
+
+core/workflows.device_actions, gpio_config
+  -> device_connection commands/responses
 
 core/device_connection
   -> no higher DUTchMate layer
 ```
 
-The current dependency on `device_connection` message models in shared capture
-and storage code is the main Phase 1 migration boundary. The target graph is:
+Shared capture, UART processing, and storage now use the target normalized event
+dependency direction:
 
 ```text
 workflows, uart_capture, session_store
@@ -71,7 +78,9 @@ device_connection
 Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
-`docs/phase1_implementation_spec.md`.
+`docs/phase1_implementation_spec.md`. The remaining migration boundary is the
+synchronous interim source: Phase 1 replaces it with one asynchronous
+background reader and complete connection/segment coordinator.
 
 ## Data Flow
 
@@ -81,7 +90,9 @@ The implemented fixture/mock path is:
 NDJSON bytes
   -> NdjsonStreamParser
   -> parse_device_message
-  -> CaptureStreamRecorder
+  -> EnhancedNdjsonEventStream
+  -> normalized backend events
+  -> enhanced_capture.CaptureStreamRecorder
   -> CaptureRecorder
   -> UartCaptureProcessor
   -> UartLineBuffer
@@ -94,6 +105,8 @@ The implemented finite serial path is:
 
 ```text
 SerialCommandTransport queued/new messages
+  -> EnhancedCaptureEventSource
+  -> normalized backend events
   -> DeviceCoreRuntime.capture_uart / run_boot_test
   -> TransportCaptureRunner
   -> CaptureRecorder
@@ -141,14 +154,13 @@ atomically. `hardware/protocol/v1/` is the wire authority.
 Owns raw UART byte-to-line processing:
 
 - `UartLineBuffer` assembles newline-terminated lines
-- buffers are independent per UART channel
+- buffers are independent per segment and UART channel
 - `UartLine` retains raw bytes and lossy display text
 - `UartCaptureProcessor` sends complete lines to pattern detection
 
-It does not write files. It currently consumes Enhanced `UartMessage` objects
-and has no line-size limit. Phase 1 changes the input to normalized UART events
-and adds bounded per-segment/channel line assembly while keeping raw session
-evidence intact.
+It does not write files. It consumes normalized `UartReceiveEvent` objects and
+already isolates line assembly by segment/channel. The target 65536-byte
+derived-line limit remains pending and will not truncate raw session evidence.
 
 ### `log_processing`
 
@@ -168,6 +180,8 @@ Owns filesystem-backed sessions under
 - creates `metadata.json`, `uart_raw.log`, `uart_events.jsonl`,
   `hardware_events.jsonl`, and `detected_patterns.json`
 - appends exact UART bytes and structured events incrementally
+- consumes normalized UART and buffer-telemetry events rather than Enhanced
+  wire-message models
 - stores buffer overflow/status telemetry and detected patterns
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
@@ -214,10 +228,12 @@ reconnect/resume, and durable lifecycle handling remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 
-This package now defines backend-neutral identity, timestamp provenance,
-normalized UART/telemetry events, the asynchronous event-source protocol, and
-distinct disconnect/input errors. Shared fake Basic and Enhanced sources verify
-the same FIFO/timeout/error contract. It will additionally own:
+This package defines backend-neutral identity, timestamp provenance, normalized
+UART/telemetry events, the asynchronous event-source protocol, and distinct
+disconnect/input errors. Shared fake Basic and Enhanced sources verify the same
+FIFO/timeout/error contract. An interim Enhanced adapter translates parsed v1
+messages and synchronous read timeouts before shared capture. It will
+additionally own:
 
 - Basic raw-serial adaptation with host timestamp provenance
 - Enhanced NDJSON adaptation with device timestamp and telemetry provenance

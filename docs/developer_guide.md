@@ -50,13 +50,13 @@ Current core modules:
 
 | Module | Ownership |
 |---|---|
-| `backends` | Backend-neutral identity, segment timing, normalized events, event-source, and error contracts; adapters remain pending. |
+| `backends` | Backend-neutral identity, segment timing, normalized events, event-source/errors, and interim Enhanced wire adapters. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
-| `uart_capture` | UART byte buffering, complete lines, and receive processing. |
+| `uart_capture` | Backend-independent UART byte buffering by segment/channel, complete lines, and receive processing. |
 | `log_processing` | Case-sensitive pattern detection on complete lines. |
 | `session_store` | Filesystem sessions, evidence, summaries, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
-| `workflows` | Fixture/transport capture and guarded reset/boot actions. |
+| `workflows` | Shared normalized-event capture, Enhanced fixture compatibility, and guarded reset/boot actions. |
 | `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |
 
 See `docs/software_architecture.md` for current data flow and ownership details.
@@ -129,12 +129,12 @@ CLI commands:
 
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
-contracts now exist, but the shared pipeline still consumes Enhanced wire
-messages. Major remaining Phase 1 areas are the Basic and Enhanced adapters,
-shared-pipeline migration, background ingestion/reconnect, versioned durable
-sessions and retention, bounded log and session retrieval, wait-pattern,
-UART-send exposure, generic Enhanced control actions, RP2040 firmware, and real
-HIL tests.
+contracts and shared event processing now exist; Enhanced wire messages are
+translated at an interim compatibility boundary. Major remaining Phase 1 areas
+are the Basic adapter, full asynchronous Enhanced adapter, background
+ingestion/reconnect, versioned durable sessions and retention, bounded log and
+session retrieval, wait-pattern, UART-send exposure, generic Enhanced control
+actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint
 

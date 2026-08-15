@@ -4,16 +4,15 @@ from pathlib import Path
 
 import pytest
 
+from dutchmate_core.backends import BackendEvent, BufferStatusEvent, UartReceiveEvent
+from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource
 from dutchmate_core.device_connection.messages import (
-    BufferStatusMessage,
     CommandErrorMessage,
     CommandSuccessMessage,
     HelloMessage,
-    UartMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
-from dutchmate_core.device_connection.transport import TransportTimeoutError
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import (
@@ -90,7 +89,7 @@ class AdvancingMonotonicClock:
 class FakeCaptureSource:
     def __init__(
         self,
-        script: list[DeviceMessage | Exception],
+        script: list[BackendEvent | Exception | None],
         *,
         clock: FakeMonotonicClock,
         on_read: Callable[[], None] | None = None,
@@ -101,14 +100,14 @@ class FakeCaptureSource:
         self._on_read = on_read
         self._read_duration_s = read_duration_s
 
-    def read_message(self) -> DeviceMessage:
+    def read_event(self) -> BackendEvent | None:
         if self._on_read is not None:
             on_read = self._on_read
             self._on_read = None
             on_read()
         self._clock.advance(self._read_duration_s)
         if not self._script:
-            raise TransportTimeoutError("no message")
+            return None
 
         result = self._script.pop(0)
         if isinstance(result, Exception):
@@ -270,17 +269,18 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
     clock = FakeMonotonicClock()
     source = FakeCaptureSource(
         [
-            UartMessage(
+            UartReceiveEvent(
+                segment_id=0,
                 channel=0,
                 timestamp_us=100,
                 data=b"BOOT_OK\n",
-                text="BOOT_OK\n",
             ),
-            BufferStatusMessage(
+            BufferStatusEvent(
+                segment_id=0,
                 timestamp_us=200,
-                uart_rx_size_bytes=32768,
-                uart_rx_used_bytes=10,
-                uart_rx_high_water_bytes=100,
+                size_bytes=32768,
+                used_bytes=10,
+                high_water_bytes=100,
                 dropped_bytes_total=0,
                 overflow_events=0,
             ),
@@ -433,7 +433,11 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     )
     runtime = DeviceCoreRuntime(
         transport=transport,
-        message_source=transport,
+        message_source=EnhancedCaptureEventSource(
+            transport,
+            segment_id=0,
+            source_origin_us=0,
+        ),
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
     )

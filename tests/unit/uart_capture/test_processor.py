@@ -1,23 +1,24 @@
 import pytest
 
-from dutchmate_core.device_connection.messages import UartMessage
+from dutchmate_core.backends import UartReceiveEvent
 from dutchmate_core.log_processing.patterns import PatternDetector, PatternMatch
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 
 
-def test_process_message_returns_completed_lines_and_matches() -> None:
+def test_process_event_returns_completed_lines_and_matches() -> None:
     processor = UartCaptureProcessor()
-    message = UartMessage(
+    event = UartReceiveEvent(
+        segment_id=0,
         channel=0,
         timestamp_us=100,
         data=b"BOOT_OK\n",
-        text="BOOT_OK\n",
     )
 
-    result = processor.process_message(message)
+    result = processor.process_event(event)
 
     assert result == UartCaptureResult(
+        segment_id=0,
         channel=0,
         timestamp_us=100,
         lines=(UartLine(raw=b"BOOT_OK\n", text="BOOT_OK\n"),),
@@ -27,18 +28,18 @@ def test_process_message_returns_completed_lines_and_matches() -> None:
     )
 
 
-def test_process_message_buffers_split_lines_until_complete() -> None:
+def test_process_event_buffers_split_lines_until_complete() -> None:
     processor = UartCaptureProcessor()
 
-    first = processor.process_message(
-        UartMessage(channel=0, timestamp_us=100, data=b"ERR", text="ERR")
+    first = processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"ERR")
     )
-    second = processor.process_message(
-        UartMessage(
+    second = processor.process_event(
+        UartReceiveEvent(
+            segment_id=0,
             channel=0,
             timestamp_us=200,
             data=b"OR: sensor failed\n",
-            text="OR: sensor failed\n",
         )
     )
 
@@ -51,21 +52,21 @@ def test_process_message_buffers_split_lines_until_complete() -> None:
     assert [match.pattern for match in second.matches] == ["ERROR"]
 
 
-def test_process_message_keeps_channel_buffers_separate() -> None:
+def test_process_event_keeps_channel_buffers_separate() -> None:
     processor = UartCaptureProcessor()
 
-    assert processor.process_message(
-        UartMessage(channel=0, timestamp_us=100, data=b"ERR", text="ERR")
+    assert processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"ERR")
     ).lines == ()
-    assert processor.process_message(
-        UartMessage(channel=1, timestamp_us=110, data=b"BOOT_", text="BOOT_")
+    assert processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=1, timestamp_us=110, data=b"BOOT_")
     ).lines == ()
 
-    channel_zero = processor.process_message(
-        UartMessage(channel=0, timestamp_us=200, data=b"OR\n", text="OR\n")
+    channel_zero = processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"OR\n")
     )
-    channel_one = processor.process_message(
-        UartMessage(channel=1, timestamp_us=210, data=b"OK\n", text="OK\n")
+    channel_one = processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=1, timestamp_us=210, data=b"OK\n")
     )
 
     assert channel_zero.lines == (UartLine(raw=b"ERROR\n", text="ERROR\n"),)
@@ -74,26 +75,26 @@ def test_process_message_keeps_channel_buffers_separate() -> None:
     assert [match.pattern for match in channel_one.matches] == ["BOOT_OK"]
 
 
-def test_process_message_uses_uart_data_not_message_text() -> None:
+def test_process_event_derives_text_from_raw_uart_data() -> None:
     processor = UartCaptureProcessor()
-    message = UartMessage(
+    event = UartReceiveEvent(
+        segment_id=0,
         channel=0,
         timestamp_us=100,
         data=b"system idle\n",
-        text="ERROR\n",
     )
 
-    result = processor.process_message(message)
+    result = processor.process_event(event)
 
     assert result.lines == (UartLine(raw=b"system idle\n", text="system idle\n"),)
     assert result.matches == ()
 
 
-def test_process_message_supports_custom_pattern_detector() -> None:
+def test_process_event_supports_custom_pattern_detector() -> None:
     processor = UartCaptureProcessor(pattern_detector=PatternDetector(patterns=("READY",)))
-    message = UartMessage(channel=0, timestamp_us=100, data=b"READY\n", text="READY\n")
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"READY\n")
 
-    result = processor.process_message(message)
+    result = processor.process_event(event)
 
     assert [match.pattern for match in result.matches] == ["READY"]
 
@@ -106,13 +107,19 @@ def test_pending_bytes_returns_empty_bytes_for_unused_channel() -> None:
 
 def test_flush_channel_returns_partial_line_and_matches() -> None:
     processor = UartCaptureProcessor()
-    processor.process_message(
-        UartMessage(channel=0, timestamp_us=100, data=b"PANIC: stopped", text="PANIC: stopped")
+    processor.process_event(
+        UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=100,
+            data=b"PANIC: stopped",
+        )
     )
 
     result = processor.flush_channel(0)
 
     assert result == UartCaptureResult(
+        segment_id=0,
         channel=0,
         timestamp_us=None,
         lines=(UartLine(raw=b"PANIC: stopped", text="PANIC: stopped"),),
@@ -135,15 +142,29 @@ def test_flush_channel_returns_none_for_empty_channel() -> None:
 
 def test_flush_channel_returns_none_when_channel_has_no_pending_line() -> None:
     processor = UartCaptureProcessor()
-    processor.process_message(
-        UartMessage(channel=0, timestamp_us=100, data=b"BOOT_OK\n", text="BOOT_OK\n")
+    processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"BOOT_OK\n")
     )
 
     assert processor.flush_channel(0) is None
 
 
-def test_process_message_requires_uart_message() -> None:
+def test_process_event_requires_uart_receive_event() -> None:
     processor = UartCaptureProcessor()
 
     with pytest.raises(TypeError):
-        processor.process_message("BOOT_OK")  # type: ignore[arg-type]
+        processor.process_event("BOOT_OK")  # type: ignore[arg-type]
+
+
+def test_process_event_keeps_segment_buffers_separate() -> None:
+    processor = UartCaptureProcessor()
+
+    processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"ERR")
+    )
+    result = processor.process_event(
+        UartReceiveEvent(segment_id=1, channel=0, timestamp_us=0, data=b"OR\n")
+    )
+
+    assert result.lines == (UartLine(raw=b"OR\n", text="OR\n"),)
+    assert processor.pending_bytes(0, segment_id=0) == b"ERR"
