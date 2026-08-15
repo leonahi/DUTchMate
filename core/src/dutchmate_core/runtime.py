@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import RLock
 from typing import TypeAlias
 
+from dutchmate_core.backends.contracts import BackendInfo, BackendMode
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
@@ -54,6 +55,7 @@ class DeviceCoreStatus:
     capabilities: tuple[str, ...]
     active_session_id: str | None
     control_channels: dict[GpioControlChannel, GpioControlChannelState]
+    backend_mode: BackendMode | None = None
 
 
 class DeviceCoreRuntime:
@@ -69,6 +71,7 @@ class DeviceCoreRuntime:
         message_source: CaptureEventSource | None = None,
         capture_clock: Callable[[], float] | None = None,
         port: str | None = None,
+        backend_mode: BackendMode | None = None,
     ) -> None:
         self._transport = transport
         self._message_source = message_source
@@ -85,6 +88,9 @@ class DeviceCoreRuntime:
         )
         self._port = port
         self._hello: HelloMessage | None = None
+        self._connected = False
+        self._backend_mode = backend_mode
+        self._basic_info: BackendInfo | None = None
         self._active_session_id: str | None = None
         self._operation_lock = RLock()
 
@@ -105,8 +111,24 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             self._hello = hello
+            self._connected = True
+            self._backend_mode = "enhanced"
+            self._basic_info = None
             if port is not None:
                 self._port = port
+        return self.status()
+
+    def record_basic_connection(self, info: BackendInfo) -> DeviceCoreStatus:
+        """Record an opened Basic backend without requiring a hello message."""
+
+        if info.mode != "basic" or info.device is not None or info.firmware is not None:
+            raise ValueError("Basic backend identity must omit device and firmware")
+        with self._operation_lock:
+            self._hello = None
+            self._connected = True
+            self._backend_mode = "basic"
+            self._basic_info = info
+            self._port = info.port
         return self.status()
 
     def disconnect(self) -> DeviceCoreStatus:
@@ -114,6 +136,8 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             self._hello = None
+            self._connected = False
+            self._basic_info = None
         return self.status()
 
     def status(self) -> DeviceCoreStatus:
@@ -121,13 +145,20 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             return DeviceCoreStatus(
-                connected=self._hello is not None,
+                connected=self._connected,
                 port=self._port,
                 firmware=self._hello.firmware if self._hello is not None else None,
                 device=self._hello.device if self._hello is not None else None,
-                capabilities=self._hello.capabilities if self._hello is not None else (),
+                capabilities=(
+                    self._hello.capabilities
+                    if self._hello is not None
+                    else tuple(sorted(self._basic_info.capabilities))
+                    if self._basic_info is not None
+                    else ()
+                ),
                 active_session_id=self._active_session_id,
                 control_channels=self._gpio_registry.snapshot(),
+                backend_mode=self._backend_mode,
             )
 
     def apply_hardware_config(
@@ -247,12 +278,11 @@ class DeviceCoreRuntime:
                 if required_role is not None:
                     self._gpio_registry.require_role_configured(required_role)
 
-                assert self._hello is not None
                 recorder = CaptureRecorder.start(
                     session_store=self._session_store,
                     command=command,
-                    firmware=self._hello.firmware,
-                    device=self._hello.device,
+                    firmware=self._hello.firmware if self._hello is not None else None,
+                    device=self._hello.device if self._hello is not None else None,
                 )
                 active_session_id = recorder.session_id
                 self._active_session_id = active_session_id
@@ -269,7 +299,7 @@ class DeviceCoreRuntime:
                         self._active_session_id = None
 
     def _require_connected(self) -> None:
-        if self._hello is None:
+        if not self._connected:
             raise DeviceCoreRuntimeError("Debug Helper is not connected")
 
     def _require_no_active_capture(self) -> None:

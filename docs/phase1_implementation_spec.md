@@ -65,10 +65,17 @@ then connected to each real backend in milestone order.
    synchronous transport messages are translated at explicit compatibility
    adapters before entering the shared path.**
 3. Implement explicit Basic-backend selection and serial settings without a
-   DUTchMate `hello` requirement. **Selection/discovery contract specified;
-   implementation not started.**
+   DUTchMate `hello` requirement. **Implemented across shared config parsing,
+   CLI/service startup, Enhanced candidate resolution, and raw Basic 8-N-1
+   connection setup. Basic requires an explicit port; Enhanced may remain
+   selected but disconnected when no candidate exists.**
 4. Implement generic USB-to-UART receive using raw serial bytes and host
-   timestamp provenance. Add UART send when TX is enabled. **Not started.**
+   timestamp provenance. Add UART send when TX is enabled. **Implemented for
+   the Basic backend adapter: one lazy-started reader owns raw serial reads,
+   publishes FIFO normalized chunks with host-monotonic provenance, and drains
+   accepted evidence before disconnect errors. Capability-gated writes retry
+   short writes to completion and report partial acceptance on failure. Public
+   Device Core/service/CLI UART-send exposure remains step 6 work.**
 5. Expose backend mode, capabilities, timestamp provenance, and the UART
    loss-observation object through status, sessions, service responses, and CLI output.
    **Not started.**
@@ -111,6 +118,12 @@ The repository already contains:
 
 - Backend-neutral identity, timestamp provenance, normalized UART/telemetry
   event, asynchronous event-source, disconnect, and invalid-input contracts.
+- Explicit Basic/Enhanced startup selection, exact serial-port validation,
+  backend-specific baudrate defaults, 8-N-1 validation, and raw Basic opening
+  without a Debug Helper `hello` probe.
+- Basic raw-byte ingestion through one FIFO reader, per-read host-monotonic
+  timestamps, and a TX-policy-gated full-write primitive that reports partial
+  acceptance on failure.
 - Shared UART processing, capture recording, and session evidence writes that
   consume normalized events, plus interim Enhanced transport/NDJSON adapters.
 - Channel-aware Debug Helper v1 schemas, canonical examples, parser, and event
@@ -125,8 +138,9 @@ The repository already contains:
 - Service endpoints and CLI commands for status, finite capture, boot-test,
   GPIO mode, reset, and boot-mode.
 
-Log/session retrieval, wait-pattern, reconnect, UART-send, backend selection,
-the Basic backend, RP2040 firmware, and both HIL paths remain incomplete.
+Log/session retrieval, wait-pattern, reconnect, public UART-send workflows,
+complete Basic reporting/session semantics, RP2040 firmware, and both HIL paths
+remain incomplete.
 
 ### Current Host-Side Core Flow
 
@@ -152,11 +166,12 @@ chunks before shared recording. The shared transport runner
 deadline. Both return a `SessionSummary`; the workflow layer accepts injected
 sources and does not open a serial port.
 
-The service-facing core path currently reaches the same recorder through:
+The service-facing core path currently reaches the same recorder through one
+of the selected backend adapters:
 
 ```text
-device_connection.SerialCommandTransport
-  -> backends.enhanced.EnhancedCaptureEventSource
+Basic raw serial -> backends.basic.BasicBackendEventSource
+Enhanced serial -> backends.enhanced.EnhancedCaptureEventSource
   -> normalized backend events
   -> runtime.DeviceCoreRuntime.capture_uart
   -> workflows.TransportCaptureRunner

@@ -19,9 +19,11 @@ def format_devices(candidates: Sequence[SerialPortCandidate]) -> str:
 
     lines = ["Serial ports:"]
     for candidate in candidates:
-        hint = " dutchmate_hint" if candidate.is_dutchmate_hint else ""
+        backend_kind = "enhanced_candidate" if candidate.is_dutchmate_hint else "generic"
         metadata = _format_metadata(candidate)
-        lines.append(f"  {candidate.device}{hint}: {candidate.description}{metadata}")
+        lines.append(
+            f"  {candidate.device} [{backend_kind}]: {candidate.description}{metadata}"
+        )
     return "\n".join(lines)
 
 

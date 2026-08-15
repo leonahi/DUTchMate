@@ -1,31 +1,63 @@
 """Normalized Device Core backend contracts and adapters."""
 
+from dutchmate_core.backends.basic import (
+    BasicBackendConnection,
+    BasicBackendEventSource,
+    BasicSerialPort,
+    open_basic_backend_connection,
+)
 from dutchmate_core.backends.contracts import (
     BackendCapability,
+    BackendCapabilityError,
     BackendDisconnectedError,
     BackendEvent,
     BackendEventSource,
     BackendInfo,
     BackendInputError,
     BackendMode,
+    BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
 )
+from dutchmate_core.backends.settings import (
+    BackendConfig,
+    BackendConfigError,
+    BackendSettings,
+    UartConfig,
+    load_backend_config,
+    parse_backend_config,
+    resolve_backend_mode,
+    resolve_backend_settings,
+)
 
 __all__ = [
     "BackendCapability",
+    "BackendCapabilityError",
+    "BackendConfig",
+    "BackendConfigError",
     "BackendDisconnectedError",
     "BackendEvent",
     "BackendEventSource",
     "BackendInfo",
     "BackendInputError",
     "BackendMode",
+    "BackendSettings",
+    "BasicBackendConnection",
+    "BasicBackendEventSource",
+    "BasicSerialPort",
     "BufferOverflowEvent",
     "BufferStatusEvent",
+    "BackendWriteError",
     "SegmentContext",
     "SegmentTimestamp",
     "UartReceiveEvent",
+    "UartConfig",
+    "load_backend_config",
+    "open_basic_backend_connection",
+    "parse_backend_config",
+    "resolve_backend_mode",
+    "resolve_backend_settings",
 ]

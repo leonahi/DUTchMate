@@ -6,6 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
+from dutchmate_core.backends.basic import BasicBackendConnection
+from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
@@ -43,6 +45,9 @@ class FakeSerial:
     def write(self, data: bytes) -> int:
         return len(data)
 
+    def read(self, size: int = 1) -> bytes:
+        raise AssertionError("Basic startup must not read or wait for hello")
+
     def flush(self) -> None:
         pass
 
@@ -53,6 +58,25 @@ class FakeSerial:
 
     def close(self) -> None:
         pass
+
+
+def backend_settings(
+    mode: str,
+    *,
+    serial_port: str | None,
+    baudrate: int,
+    tx_enabled: bool = False,
+) -> BackendSettings:
+    return BackendSettings(
+        mode=mode,  # type: ignore[arg-type]
+        serial_port=serial_port,
+        reconnect_timeout_s=5.0,
+        baudrate=baudrate,
+        data_bits=8,
+        parity="none",
+        stop_bits=1,
+        tx_enabled=tx_enabled,
+    )
 
 
 def test_load_startup_hardware_config_returns_empty_config_when_missing(tmp_path: Path) -> None:
@@ -120,12 +144,35 @@ def test_build_startup_runtime_without_serial_port_is_disconnected(tmp_path: Pat
     assert runtime.session_store.root == tmp_path
 
 
+def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
+    tmp_path: Path,
+) -> None:
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port=None,
+            baudrate=460800,
+        ),
+    )
+
+    status = runtime.status()
+    assert status.connected is False
+    assert status.backend_mode == "enhanced"
+    assert status.port is None
+
+
 def test_build_startup_runtime_with_serial_port_records_hello(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    def fake_open_serial_command_transport(*, port: str) -> SerialCommandTransport:
+    def fake_open_serial_command_transport(
+        *,
+        port: str,
+        baudrate: int,
+    ) -> SerialCommandTransport:
         assert port == "/dev/ttyACM0"
+        assert baudrate == 460800
         return SerialCommandTransport(
             FakeSerial(
                 [
@@ -140,13 +187,72 @@ def test_build_startup_runtime_with_serial_port_records_hello(
         fake_open_serial_command_transport,
     )
 
-    runtime = build_startup_runtime(session_root=tmp_path, serial_port="/dev/ttyACM0")
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+        ),
+    )
 
     status = runtime.status()
     assert status.connected is True
     assert status.port == "/dev/ttyACM0"
     assert status.firmware == "0.1.0"
     assert status.device == "dutchmate-rp2040"
+    assert status.backend_mode == "enhanced"
+
+
+def test_build_startup_runtime_opens_basic_without_hello(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "basic",
+        serial_port="/dev/ttyUSB0",
+        baudrate=115200,
+        tx_enabled=True,
+    )
+    serial = FakeSerial([])
+
+    def fake_open_basic_backend_connection(
+        received_settings: BackendSettings,
+    ) -> BasicBackendConnection:
+        assert received_settings == settings
+        return BasicBackendConnection(serial_port=serial, settings=settings)
+
+    monkeypatch.setattr(
+        "dutchmate_service.startup.open_basic_backend_connection",
+        fake_open_basic_backend_connection,
+    )
+
+    runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+
+    status = runtime.status()
+    assert status.connected is True
+    assert status.backend_mode == "basic"
+    assert status.port == "/dev/ttyUSB0"
+    assert status.device is None
+    assert status.firmware is None
+    assert status.capabilities == ("uart_receive", "uart_send")
+
+    config = parse_hardware_gpio_config(
+        {
+            "hardware": {
+                "control": {
+                    "reset": {
+                        "channel": "CTRL0",
+                        "dut_signal": "RESET_N",
+                        "mode": "open_drain",
+                        "active_level": "low",
+                    }
+                }
+            }
+        }
+    )
+    assert apply_startup_hardware_config(runtime, config) is False
+    assert runtime.gpio_registry.get("CTRL0").state == "unconfigured"
 
 
 def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(

@@ -25,6 +25,7 @@ VALID_GPIO_LEVELS: Final = frozenset({"low", "high"})
 WELL_KNOWN_GPIO_ROLES: Final = frozenset({"reset", "boot", "power_enable", "wake"})
 
 MAX_GPIO_IDENTIFIER_BYTES: Final = 64
+MAX_SERIAL_PORT_BYTES: Final = 4096
 MAX_CAPTURE_DURATION_S: Final = 300.0
 
 IdentifierValidationReason: TypeAlias = Literal[
@@ -89,6 +90,26 @@ def validate_capture_duration(duration_s: object) -> float:
             f"{MAX_CAPTURE_DURATION_S:g} seconds"
         )
     return float(duration_s)
+
+
+def validate_serial_port(port: object) -> str:
+    """Validate and preserve an exact serial-port identifier."""
+
+    if not isinstance(port, str):
+        raise ValueError("serial port must be a string")
+    try:
+        actual_bytes = len(port.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ValueError("serial port must be valid Unicode") from exc
+    if not 1 <= actual_bytes <= MAX_SERIAL_PORT_BYTES:
+        raise ValueError(
+            f"serial port must encode to 1..{MAX_SERIAL_PORT_BYTES} UTF-8 bytes"
+        )
+    if _is_unicode_whitespace(port[0]) or _is_unicode_whitespace(port[-1]):
+        raise ValueError("serial port must not have leading or trailing Unicode whitespace")
+    if any(unicodedata.category(character) == "Cc" for character in port):
+        raise ValueError("serial port must not contain Unicode control characters")
+    return port
 
 
 def validate_gpio_identifier(value: object, *, field: str) -> str:

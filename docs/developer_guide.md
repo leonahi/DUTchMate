@@ -50,7 +50,7 @@ Current core modules:
 
 | Module | Ownership |
 |---|---|
-| `backends` | Backend-neutral identity, segment timing, normalized events, event-source/errors, and interim Enhanced wire adapters. |
+| `backends` | Backend-neutral identity/contracts, Basic raw serial event/send adapter, and interim Enhanced wire adapters. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
 | `uart_capture` | Backend-independent UART byte buffering by segment/channel, complete lines, and receive processing. |
 | `log_processing` | Case-sensitive pattern detection on complete lines. |
@@ -82,16 +82,17 @@ uv run --package dutchmate-service dutchmate-service --help
 Start and inspect the current local service:
 
 ```bash
-uv run --package dutchmate-cli dutchmate start
+uv run --package dutchmate-cli dutchmate start --backend enhanced
 uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate stop
 ```
 
-`dutchmate start` currently uses an explicit `--serial-port` or auto-selects
-one metadata-hinted DUTchMate candidate. Multiple candidates require an explicit
-port; no candidate starts the service disconnected. The final Phase 1 startup
-contract instead requires explicit Basic/Enhanced mode and is not implemented
-yet.
+`dutchmate start` requires `--backend basic|enhanced` or `[backend].mode`.
+Basic also requires an explicit/configured serial port and opens it directly as
+validated 8-N-1 UART without waiting for a DUTchMate `hello`. Enhanced accepts
+an explicit port or auto-selects one metadata-hinted DUTchMate candidate;
+multiple candidates require an explicit port, while no candidate starts the
+service disconnected in Enhanced mode.
 
 Use `uv lock` after dependency declarations change. Commit the shared
 `uv.lock` update with those declarations.
@@ -132,10 +133,11 @@ The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
 contracts and shared event processing now exist; Enhanced wire messages are
 translated at an interim compatibility boundary. Major remaining Phase 1 areas
-are the Basic adapter, full asynchronous Enhanced adapter, background
-ingestion/reconnect, versioned durable sessions and retention, bounded log and
-session retrieval, wait-pattern, UART-send exposure, generic Enhanced control
-actions, RP2040 firmware, and real HIL tests.
+are complete Basic reporting/session semantics, the full asynchronous Enhanced
+adapter, background ingestion/reconnect, versioned durable sessions and
+retention, bounded log and session retrieval, wait-pattern, UART-send public
+workflows, generic Enhanced control actions, RP2040 firmware, and real HIL
+tests.
 
 ## Adding A Service Endpoint
 

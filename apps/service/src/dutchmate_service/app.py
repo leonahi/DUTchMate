@@ -7,6 +7,7 @@ from typing import Protocol
 
 from fastapi import FastAPI
 
+from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
@@ -71,7 +72,7 @@ def create_app(
     *,
     session_root: Path | str = Path(".dutchmate/sessions"),
     hardware_config: HardwareGpioConfig | None = None,
-    serial_port: str | None = None,
+    backend_settings: BackendSettings | None = None,
 ) -> FastAPI:
     """Create the Device Core Service application."""
 
@@ -79,7 +80,7 @@ def create_app(
     register_error_handlers(app)
     runtime_provider = runtime or build_startup_runtime(
         session_root=session_root,
-        serial_port=serial_port,
+        backend_settings=backend_settings,
     )
     if hardware_config is not None:
         apply_startup_hardware_config(runtime_provider, hardware_config)

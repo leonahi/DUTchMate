@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_service import main
 
 
@@ -16,6 +17,9 @@ def test_service_main_passes_config_to_app_and_host_port_to_uvicorn(
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
+[backend]
+mode = "enhanced"
+
 [hardware.control.reset]
 channel = "CTRL0"
 dut_signal = "RESET_N"
@@ -29,11 +33,13 @@ active_level = "low"
         *,
         session_root: object,
         hardware_config: object,
-        serial_port: str | None,
+        backend_settings: BackendSettings,
     ) -> object:
         session_roots.append(session_root)
         hardware_configs.append(hardware_config)
-        assert serial_port == "/dev/ttyACM0"
+        assert backend_settings.mode == "enhanced"
+        assert backend_settings.serial_port == "/dev/ttyACM0"
+        assert backend_settings.baudrate == 460800
         return object()
 
     def fake_run(app: object, *, host: str, port: int) -> None:

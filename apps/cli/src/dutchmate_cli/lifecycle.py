@@ -19,6 +19,7 @@ from dutchmate_cli.config import (
     DEFAULT_DAEMON_PORT,
     DEFAULT_SESSION_PATH,
 )
+from dutchmate_core.backends.settings import BackendSettings
 
 DEFAULT_HOST: Final = DEFAULT_DAEMON_HOST
 DEFAULT_PORT: Final = DEFAULT_DAEMON_PORT
@@ -60,11 +61,11 @@ class ServiceStopResult:
 
 def start_service(
     *,
+    backend_settings: BackendSettings,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     config_path: Path = DEFAULT_CONFIG_PATH,
     session_root: Path = DEFAULT_SESSION_ROOT,
-    serial_port: str | None = None,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
     command: Sequence[str] | None = None,
@@ -96,9 +97,22 @@ def start_service(
             str(session_root),
             "--config",
             str(config_path),
+            "--backend",
+            backend_settings.mode,
+            "--baudrate",
+            str(backend_settings.baudrate),
+            "--data-bits",
+            str(backend_settings.data_bits),
+            "--parity",
+            backend_settings.parity,
+            "--stop-bits",
+            str(backend_settings.stop_bits),
+            "--reconnect-timeout-s",
+            str(backend_settings.reconnect_timeout_s),
+            "--tx-enabled" if backend_settings.tx_enabled else "--no-tx-enabled",
         ]
-        if serial_port is not None:
-            service_command.extend(["--serial-port", serial_port])
+        if backend_settings.serial_port is not None:
+            service_command.extend(["--serial-port", backend_settings.serial_port])
     else:
         service_command = list(command)
 

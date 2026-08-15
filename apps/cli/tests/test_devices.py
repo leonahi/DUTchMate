@@ -31,9 +31,23 @@ def test_format_devices_renders_serial_metadata() -> None:
 
     assert output == (
         "Serial ports:\n"
-        "  /dev/ttyACM0 dutchmate_hint: DUTchMate Debug Helper "
+        "  /dev/ttyACM0 [enhanced_candidate]: DUTchMate Debug Helper "
         "(vid:pid=2E8A:000A, manufacturer=DUTchMate, product=Debug Helper, serial=ABC123)"
     )
+
+
+def test_format_devices_labels_unverified_generic_port() -> None:
+    output = format_devices(
+        [
+            SerialPortCandidate(
+                device="/dev/ttyUSB0",
+                description="Generic USB Serial",
+                hwid="USB VID:PID=1234:5678",
+            )
+        ]
+    )
+
+    assert output == "Serial ports:\n  /dev/ttyUSB0 [generic]: Generic USB Serial"
 
 
 def test_resolve_start_serial_port_uses_explicit_port() -> None:

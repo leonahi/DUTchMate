@@ -234,15 +234,21 @@ reconnect/resume, and durable lifecycle handling remain Phase 1 work.
 This package defines backend-neutral identity, timestamp provenance, normalized
 UART/telemetry events, the asynchronous event-source protocol, and distinct
 disconnect/input errors. Shared fake Basic and Enhanced sources verify the same
-FIFO/timeout/error contract. An interim Enhanced adapter translates parsed v1
-messages and synchronous read timeouts before shared capture. It will
-additionally own:
+FIFO/timeout/error contract. Shared settings resolve explicit Basic/Enhanced
+selection, exact serial ports, backend-specific baudrates, 8-N-1 framing, TX
+policy, and reconnect timeout. Basic connection setup opens raw serial without
+reading a `hello`. Its event source lazily starts one serial-reader thread,
+converts each delivered byte chunk to one FIFO normalized event with
+host-monotonic provenance, and exposes a blocking compatibility read to the
+current shared capture runner. Basic UART writes are capability-gated and retry
+ordered short writes to completion. An interim Enhanced adapter translates
+parsed v1 messages and synchronous read timeouts before shared capture. The
+package will additionally own:
 
-- Basic raw-serial adaptation with host timestamp provenance
 - Enhanced NDJSON adaptation with device timestamp and telemetry provenance
-- one reader and FIFO event queue per selected backend
+- continuous background ingestion and lifecycle ownership beyond finite captures
 - backend support versus effective host-policy capabilities
-- separate capability-gated UART send, control, and future event interfaces
+- normalized UART-send completion results plus control and future event interfaces
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
 format CLI output.
@@ -257,10 +263,13 @@ GPIO mode, reset, and boot mode. Handlers should remain thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
 
-The service currently treats selected devices as Enhanced and validates a
-`hello`. Explicit Basic/Enhanced startup, background ingestion, reconnect,
-bounded log/session retrieval, wait-pattern, UART send, baseline operations,
-and the complete target error projection remain Phase 1 work.
+The service accepts one explicit Basic/Enhanced selection. Basic requires and
+opens a raw serial port without `hello`, wiring its normalized source into the
+same finite capture path. Enhanced validates `hello` when a port is selected
+and may start disconnected without one. Continuous background ingestion,
+reconnect, bounded log/session retrieval, wait-pattern, public UART send,
+baseline operations, and the complete target error projection remain Phase 1
+work.
 
 ### CLI
 
@@ -268,9 +277,10 @@ and the complete target error projection remain Phase 1 work.
 lifecycle commands, request construction, and human-readable output. It must
 not import low-level transport code or open serial ports for debug workflows.
 
-Current commands cover service lifecycle, device listing, status, capture,
-boot-test, GPIO mode, reset, and boot mode. Target Basic/Enhanced selection,
-logs, sessions, wait-pattern, UART send, and baseline commands remain pending.
+Current commands cover explicit Basic/Enhanced startup selection, service
+lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
+reset, and boot mode. Logs, sessions, wait-pattern, UART send, and baseline
+commands remain pending.
 
 ### MCP Server
 
@@ -296,8 +306,10 @@ The test suite currently covers protocol parsing/encoding and NDJSON buffering;
 UART line processing and patterns; session creation, evidence writes, telemetry,
 summaries, and discovery; GPIO configuration state; fixture and finite transport
 capture; reset/boot-mode and boot-test orchestration; runtime conflict cleanup;
-service endpoints; CLI clients; serial discovery; startup `hello` validation;
-and startup hardware mapping.
+service endpoints; CLI clients; serial discovery and backend selection; Basic
+no-hello raw opening, normalized FIFO receive/provenance, shared capture, and
+full-write behavior; Enhanced startup `hello` validation; and startup hardware
+mapping.
 
 Use focused tests during development and the full suite before a commit:
 

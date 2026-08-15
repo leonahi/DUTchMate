@@ -30,16 +30,21 @@ The repository currently contains the first host-side Phase 1 foundation:
 - GPIO control-channel configuration state and guarded reset/boot actions
 - shared exact GPIO identifier/electrical validation across config, core,
   service, CLI, and the Enhanced v1 command schema
+- explicit Basic/Enhanced startup selection with validated backend-specific
+  serial settings and Basic raw-port opening without a `hello` probe
+- Basic raw-byte FIFO ingestion with per-read host-monotonic provenance, shared
+  capture recording, and TX-gated ordered writes that cannot report partial
+  success
 - finite capture and reset-triggered boot-test orchestration with an explicit
   `0 < duration_s <= 300` boundary
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
-The Basic adapter, full asynchronous Enhanced adapter, background
-ingestion/reconnect, versioned session lifecycle and retention, bounded
-log/session retrieval, wait-pattern, UART-send service/CLI exposure, generic
-Enhanced control actions, RP2040 firmware, MCP runtime, and HIL validation are
-not implemented yet.
+The full asynchronous Enhanced adapter, continuous background ingestion and
+reconnect, complete backend/session reporting, versioned session lifecycle and
+retention, bounded log/session retrieval, wait-pattern, UART-send service/CLI
+exposure, generic Enhanced control actions, RP2040 firmware, MCP runtime, and
+HIL validation are not implemented yet.
 
 The ordered Phase 1 backlog and acceptance criteria are in
 `docs/phase1_implementation_spec.md`.
@@ -58,7 +63,7 @@ Run the CLI from the repository root:
 
 ```bash
 uv run --package dutchmate-cli dutchmate --help
-uv run --package dutchmate-cli dutchmate start
+uv run --package dutchmate-cli dutchmate start --backend enhanced
 uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate stop
 ```

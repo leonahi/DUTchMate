@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, cast
 
+from dutchmate_core.backends.settings import (
+    BackendConfig,
+    BackendConfigError,
+    parse_backend_config,
+)
+
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
 DEFAULT_DAEMON_HOST: Final = "127.0.0.1"
 DEFAULT_DAEMON_PORT: Final = 2040
@@ -43,6 +49,7 @@ class CliConfig:
 
     daemon: DaemonConfig = DaemonConfig()
     sessions: SessionsConfig = SessionsConfig()
+    backend: BackendConfig = BackendConfig()
 
     @property
     def service_url(self) -> str:
@@ -68,7 +75,11 @@ def parse_cli_config(raw_config: Mapping[str, object]) -> CliConfig:
 
     daemon = _parse_daemon_config(_optional_table(raw_config, "daemon"))
     sessions = _parse_sessions_config(_optional_table(raw_config, "sessions"))
-    return CliConfig(daemon=daemon, sessions=sessions)
+    try:
+        backend = parse_backend_config(raw_config)
+    except BackendConfigError as exc:
+        raise CliConfigError(str(exc)) from exc
+    return CliConfig(daemon=daemon, sessions=sessions, backend=backend)
 
 
 def _parse_daemon_config(raw_daemon: Mapping[str, object]) -> DaemonConfig:

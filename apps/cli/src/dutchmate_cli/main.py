@@ -27,6 +27,11 @@ from dutchmate_cli.lifecycle import (
     stop_service,
 )
 from dutchmate_cli.status import format_status
+from dutchmate_core.backends.settings import (
+    BackendConfigError,
+    resolve_backend_mode,
+    resolve_backend_settings,
+)
 from dutchmate_core.device_connection.discovery import (
     list_dutchmate_candidates,
     list_serial_ports,
@@ -64,7 +69,15 @@ def start(
     ] = None,
     serial_port: Annotated[
         str | None,
-        typer.Option("--serial-port", help="Debug Helper serial device path."),
+        typer.Option("--serial-port", help="Selected backend serial device path."),
+    ] = None,
+    backend: Annotated[
+        str | None,
+        typer.Option("--backend", help="Required backend mode: basic or enhanced."),
+    ] = None,
+    baudrate: Annotated[
+        int | None,
+        typer.Option("--baudrate", help="DUT UART baudrate."),
     ] = None,
 ) -> None:
     """Start the Device Core Service."""
@@ -72,11 +85,23 @@ def start(
     resolved_host = host or config.daemon.host
     resolved_port = port or config.daemon.port
     try:
-        resolved_serial_port = resolve_start_serial_port(
-            serial_port,
-            list_dutchmate_candidates(),
+        resolved_mode = resolve_backend_mode(config.backend, backend)
+        configured_serial_port = serial_port or config.backend.serial_port
+        resolved_serial_port = (
+            resolve_start_serial_port(
+                configured_serial_port,
+                list_dutchmate_candidates(),
+            )
+            if resolved_mode == "enhanced"
+            else configured_serial_port
         )
-    except DeviceSelectionError as exc:
+        backend_settings = resolve_backend_settings(
+            config.backend,
+            mode=resolved_mode,
+            serial_port=resolved_serial_port,
+            baudrate=baudrate,
+        )
+    except (BackendConfigError, DeviceSelectionError) as exc:
         _fail(str(exc))
 
     try:
@@ -84,7 +109,7 @@ def start(
             host=resolved_host,
             port=resolved_port,
             session_root=config.sessions.path,
-            serial_port=resolved_serial_port,
+            backend_settings=backend_settings,
         )
     except LifecycleError as exc:
         _fail(str(exc))

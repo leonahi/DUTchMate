@@ -92,6 +92,18 @@ class BackendInputError(RuntimeError):
     """Raised when a backend emits malformed or otherwise invalid input."""
 
 
+class BackendCapabilityError(RuntimeError):
+    """Raised when an operation is disabled or unsupported by the backend."""
+
+
+class BackendWriteError(RuntimeError):
+    """Raised when a backend cannot accept a complete UART payload."""
+
+    def __init__(self, message: str, *, bytes_accepted: int | None) -> None:
+        super().__init__(message)
+        self.bytes_accepted = bytes_accepted
+
+
 class BackendEventSource(Protocol):
     """Asynchronous FIFO source of normalized events from one backend connection."""
 

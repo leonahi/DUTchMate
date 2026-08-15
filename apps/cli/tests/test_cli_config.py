@@ -12,6 +12,7 @@ from dutchmate_cli.config import (
     load_cli_config,
     parse_cli_config,
 )
+from dutchmate_core.backends.settings import BackendConfig, UartConfig
 
 
 def test_parse_empty_cli_config_uses_defaults() -> None:
@@ -42,6 +43,31 @@ def test_parse_daemon_and_sessions_config() -> None:
         ),
     )
     assert config.service_url == "http://localhost:2041"
+
+
+def test_parse_backend_and_uart_config_for_startup() -> None:
+    config = parse_cli_config(
+        {
+            "backend": {
+                "mode": "basic",
+                "serial_port": "/dev/ttyUSB0",
+                "reconnect_timeout_s": 3.0,
+            },
+            "hardware": {
+                "uart": {
+                    "baudrate": 230400,
+                    "tx_enabled": True,
+                }
+            },
+        }
+    )
+
+    assert config.backend == BackendConfig(
+        mode="basic",
+        serial_port="/dev/ttyUSB0",
+        reconnect_timeout_s=3.0,
+        uart=UartConfig(baudrate=230400, tx_enabled=True),
+    )
 
 
 def test_load_cli_config_reads_toml_file(tmp_path: Path) -> None:
