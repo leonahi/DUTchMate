@@ -99,6 +99,38 @@ def test_configure_gpio_mode_maps_connection_failure_to_service_unavailable() ->
     assert "Run 'dutchmate start' first" in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ("role", "dut_signal", "mode", "active_level", "idle_level"),
+    [
+        (" reset", "RESET_N", "open_drain", "low", None),
+        ("reset", "RESET\x00N", "open_drain", "low", None),
+        ("reset", "RESET_N", "open_drain", "high", None),
+        ("reset", "RESET_N", "push_pull", "high", None),
+        ("reset", "RESET_N", "push_pull", "high", "high"),
+    ],
+)
+def test_configure_gpio_mode_rejects_invalid_request_before_http(
+    role: str,
+    dut_signal: str,
+    mode: str,
+    active_level: str,
+    idle_level: str | None,
+) -> None:
+    def unexpected_request(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("invalid GPIO configuration reached HTTP transport")
+
+    with pytest.raises(ValueError):
+        configure_gpio_mode(
+            channel="CTRL0",
+            role=role,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+            transport=httpx.MockTransport(unexpected_request),
+        )
+
+
 def test_reset_dut_posts_pulse_width() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/dut/reset"
@@ -157,8 +189,11 @@ def test_capture_uart_maps_read_timeout_to_service_error() -> None:
     assert str(error.value) == "Device Core Service request timed out."
 
 
-@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan")])
-def test_capture_uart_rejects_invalid_duration(duration_s: float) -> None:
+@pytest.mark.parametrize(
+    "duration_s",
+    [0.0, -1.0, 300.1, float("inf"), float("nan"), True],
+)
+def test_capture_uart_rejects_invalid_duration(duration_s: object) -> None:
     with pytest.raises(ValueError, match="positive finite"):
         capture_uart(duration_s=duration_s)
 
@@ -187,7 +222,10 @@ def test_run_boot_test_posts_duration_with_duration_aware_timeout() -> None:
     assert payload["session_id"] == "20260729T100000Z-boot01"
 
 
-@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan")])
-def test_run_boot_test_rejects_invalid_duration(duration_s: float) -> None:
+@pytest.mark.parametrize(
+    "duration_s",
+    [0.0, -1.0, 300.1, float("inf"), float("nan"), True],
+)
+def test_run_boot_test_rejects_invalid_duration(duration_s: object) -> None:
     with pytest.raises(ValueError, match="positive finite"):
         run_boot_test(duration_s=duration_s)

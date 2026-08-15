@@ -3,21 +3,32 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, TypeAlias, cast
+from typing import Literal, TypeAlias
 
-from dutchmate_core.device_connection.commands import (
-    VALID_GPIO_CONTROL_CHANNELS,
-    VALID_GPIO_LEVELS,
-    VALID_GPIO_MODES,
+from dutchmate_core.validation import (
+    ALL_CONTROL_CHANNELS,
+    validate_gpio_channel,
+    validate_gpio_configuration,
+    validate_gpio_role,
+    validate_gpio_source,
+)
+from dutchmate_core.validation import (
+    GpioControlChannel as GpioControlChannel,
+)
+from dutchmate_core.validation import (
+    GpioControlMode as GpioControlMode,
+)
+from dutchmate_core.validation import (
+    GpioLevel as GpioLevel,
+)
+from dutchmate_core.validation import (
+    GpioModeRequestSource as GpioModeRequestSource,
+)
+from dutchmate_core.validation import (
+    GpioRoleName as GpioRoleName,
 )
 
-GpioControlChannel: TypeAlias = Literal["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
-GpioRoleName: TypeAlias = str
-GpioControlMode: TypeAlias = Literal["open_drain", "push_pull"]
-GpioLevel: TypeAlias = Literal["low", "high"]
-GpioModeRequestSource: TypeAlias = Literal["config", "runtime"]
 GpioModeState: TypeAlias = Literal["unconfigured", "configured", "rejected"]
-ALL_CONTROL_CHANNELS: tuple[GpioControlChannel, ...] = ("CTRL0", "CTRL1", "CTRL2", "CTRL3")
 
 
 class GpioConfigurationError(RuntimeError):
@@ -74,7 +85,7 @@ class GpioModeRegistry:
     def get(self, channel: str) -> GpioControlChannelState:
         """Return the current state for a physical control channel."""
 
-        channel_name = _validate_channel(channel)
+        channel_name = validate_gpio_channel(channel)
         return self._states[channel_name]
 
     def snapshot(self) -> dict[GpioControlChannel, GpioControlChannelState]:
@@ -85,7 +96,7 @@ class GpioModeRegistry:
     def find_by_role(self, role: str) -> GpioControlChannelState | None:
         """Return the configured channel state for a role, if one exists."""
 
-        role_name = _validate_role(role)
+        role_name = validate_gpio_role(role)
         for state in self._states.values():
             if state.role == role_name and state.state == "configured":
                 return state
@@ -105,28 +116,30 @@ class GpioModeRegistry:
     ) -> GpioControlChannelState:
         """Record a firmware-accepted GPIO control channel mode."""
 
-        role_name = _validate_role(role)
-        channel_name = _validate_channel(channel)
-        dut_signal_name = _validate_dut_signal(dut_signal)
-        mode_name = _validate_mode(mode)
-        active_level_name = _validate_level(active_level, "active_level")
-        idle_level_name = _validate_optional_level(idle_level, "idle_level")
-        _validate_source(source)
-        self._clear_role_from_other_channels(role=role_name, channel=channel_name)
+        request = validate_gpio_configuration(
+            role=role,
+            channel=channel,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+        source_name = validate_gpio_source(source)
+        self._clear_role_from_other_channels(role=request.role, channel=request.channel)
 
         state = GpioControlChannelState(
-            channel=channel_name,
+            channel=request.channel,
             state="configured",
-            role=role_name,
-            dut_signal=dut_signal_name,
-            mode=mode_name,
-            active_level=active_level_name,
-            idle_level=idle_level_name,
-            source=source,
+            role=request.role,
+            dut_signal=request.dut_signal,
+            mode=request.mode,
+            active_level=request.active_level,
+            idle_level=request.idle_level,
+            source=source_name,
             configured_at=_format_utc_timestamp(self._clock()),
             device_timestamp_us=device_timestamp_us,
         )
-        self._states[channel_name] = state
+        self._states[request.channel] = state
         return state
 
     def reject_mode(
@@ -145,27 +158,29 @@ class GpioModeRegistry:
     ) -> GpioControlChannelState:
         """Record a firmware- or host-rejected GPIO control channel mode request."""
 
-        role_name = _validate_role(role)
-        channel_name = _validate_channel(channel)
-        dut_signal_name = _validate_dut_signal(dut_signal)
-        mode_name = _validate_mode(mode)
-        active_level_name = _validate_level(active_level, "active_level")
-        idle_level_name = _validate_optional_level(idle_level, "idle_level")
-        _validate_source(source)
+        request = validate_gpio_configuration(
+            role=role,
+            channel=channel,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+        source_name = validate_gpio_source(source)
         if not error:
             raise ValueError("GPIO mode rejection error must not be empty")
         if not detail:
             raise ValueError("GPIO mode rejection detail must not be empty")
 
-        current = self._states[channel_name]
+        current = self._states[request.channel]
         rejection = GpioModeRejection(
-            role=role_name,
-            channel=channel_name,
-            dut_signal=dut_signal_name,
-            mode=mode_name,
-            active_level=active_level_name,
-            idle_level=idle_level_name,
-            source=source,
+            role=request.role,
+            channel=request.channel,
+            dut_signal=request.dut_signal,
+            mode=request.mode,
+            active_level=request.active_level,
+            idle_level=request.idle_level,
+            source=source_name,
             error=error,
             detail=detail,
             rejected_at=_format_utc_timestamp(self._clock()),
@@ -188,19 +203,19 @@ class GpioModeRegistry:
             )
         else:
             state = GpioControlChannelState(
-                channel=channel_name,
+                channel=request.channel,
                 state="rejected",
-                role=role_name,
+                role=request.role,
                 last_rejected=rejection,
             )
 
-        self._states[channel_name] = state
+        self._states[request.channel] = state
         return state
 
     def require_role_configured(self, role: str) -> GpioControlChannelState:
         """Return configured channel state for a role or raise a workflow-facing error."""
 
-        role_name = _validate_role(role)
+        role_name = validate_gpio_role(role)
         state = self.find_by_role(role_name)
         if state is not None:
             return state
@@ -239,47 +254,6 @@ class GpioModeRegistry:
                 continue
             latest = rejection
         return latest
-
-
-def _validate_role(role: str) -> GpioRoleName:
-    if not isinstance(role, str) or not role.strip():
-        raise ValueError("GPIO role must be a non-empty string")
-    return role.strip()
-
-
-def _validate_channel(channel: str) -> GpioControlChannel:
-    if channel not in VALID_GPIO_CONTROL_CHANNELS:
-        raise ValueError("GPIO control channel must be 'CTRL0', 'CTRL1', 'CTRL2', or 'CTRL3'")
-    return cast(GpioControlChannel, channel)
-
-
-def _validate_dut_signal(dut_signal: str) -> str:
-    if not isinstance(dut_signal, str) or not dut_signal.strip():
-        raise ValueError("GPIO dut_signal must be a non-empty string")
-    return dut_signal
-
-
-def _validate_mode(mode: str) -> GpioControlMode:
-    if mode not in VALID_GPIO_MODES:
-        raise ValueError("GPIO mode must be 'open_drain' or 'push_pull'")
-    return cast(GpioControlMode, mode)
-
-
-def _validate_level(level: str, field_name: str) -> GpioLevel:
-    if level not in VALID_GPIO_LEVELS:
-        raise ValueError(f"GPIO {field_name} must be 'low' or 'high'")
-    return cast(GpioLevel, level)
-
-
-def _validate_optional_level(level: str | None, field_name: str) -> GpioLevel | None:
-    if level is None:
-        return None
-    return _validate_level(level, field_name)
-
-
-def _validate_source(source: str) -> None:
-    if source not in {"config", "runtime"}:
-        raise ValueError("GPIO mode source must be 'config' or 'runtime'")
 
 
 def _utc_now() -> datetime:

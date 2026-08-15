@@ -73,7 +73,7 @@ def test_boot_test_command_reports_service_error(monkeypatch: pytest.MonkeyPatch
     assert "Error: GPIO role 'reset' is not configured" in result.output
 
 
-@pytest.mark.parametrize("seconds", ["0", "-1", "inf", "nan"])
+@pytest.mark.parametrize("seconds", ["0", "-1", "301", "inf", "nan"])
 def test_boot_test_command_rejects_invalid_duration(seconds: str) -> None:
     result = CliRunner().invoke(main.app, ["boot-test", "--seconds", seconds])
 

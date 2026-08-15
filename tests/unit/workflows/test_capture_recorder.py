@@ -445,7 +445,10 @@ def test_run_transport_capture_does_not_record_event_after_deadline(
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b""
 
 
-@pytest.mark.parametrize("duration_s", [0.0, -1.0, float("inf"), float("nan"), True])
+@pytest.mark.parametrize(
+    "duration_s",
+    [0.0, -1.0, 300.1, float("inf"), float("nan"), True],
+)
 def test_run_transport_capture_rejects_invalid_duration(
     tmp_path: Path,
     duration_s: float,

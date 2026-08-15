@@ -58,6 +58,7 @@ Current core modules:
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture, Enhanced fixture compatibility, and guarded reset/boot actions. |
 | `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |
+| `validation.py` | Shared public duration and exact GPIO input contracts used by core and app entry points. |
 
 See `docs/software_architecture.md` for current data flow and ownership details.
 

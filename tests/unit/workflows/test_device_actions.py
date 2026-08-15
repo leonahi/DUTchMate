@@ -62,6 +62,7 @@ def test_reset_rejected_state_uses_rejection_detail() -> None:
         dut_signal="RESET_N",
         mode="push_pull",
         active_level="low",
+        idle_level="high",
         source="runtime",
         error="invalid_argument",
         detail="push_pull is not supported for reset",
@@ -104,7 +105,7 @@ def test_boot_mode_sends_command_after_boot_role_is_configured() -> None:
         channel="CTRL1",
         dut_signal="BOOT0",
         mode="open_drain",
-        active_level="high",
+        active_level="low",
         source="runtime",
     )
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=99))

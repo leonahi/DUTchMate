@@ -205,10 +205,12 @@ Owns host control-channel mapping, validation, and accepted/rejected state. It:
   time, optional raw device timestamp, and rejection detail
 - resolves roles for reset and boot workflows
 
-The current validators accept broadly non-empty identifiers and inconsistently
-trim them. Phase 1 introduces one exact shared identifier validator and the
-mode-specific electrical matrix. The canonical state, validation order, and
-workflow rules live in `docs/gpio_configuration_semantics.md`.
+The shared validator preserves exact 1..64-byte UTF-8 role and DUT-signal
+identifiers, rejects edge whitespace and Unicode control characters, and
+enforces the open-drain/push-pull electrical matrix. Config loading, runtime
+state, Enhanced command encoding, service schemas, and CLI dispatch use the
+same contract. The canonical state, validation order, and workflow rules live
+in `docs/gpio_configuration_semantics.md`.
 
 ### `workflows`
 
@@ -222,8 +224,9 @@ protocol validation. Current behavior includes:
 - active-session publication and conflict cleanup in `DeviceCoreRuntime`
 - required accepted `reset`/`boot` role checks
 
-Current duration validation rejects invalid/non-positive values but does not
-enforce the target 300-second maximum. Wait-pattern, UART-send exposure,
+Capture and boot-test validation consistently enforces the Phase 1
+`0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
+Persisting and echoing the accepted duration, wait-pattern, UART-send exposure,
 reconnect/resume, and durable lifecycle handling remain Phase 1 work.
 
 ### `backends` (Contract Foundation)

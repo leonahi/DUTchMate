@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Annotated, NoReturn
 
 import typer
@@ -32,6 +31,7 @@ from dutchmate_core.device_connection.discovery import (
     list_dutchmate_candidates,
     list_serial_ports,
 )
+from dutchmate_core.validation import validate_capture_duration, validate_gpio_configuration
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
 dut_app = typer.Typer(help="Run DUT-level workflows through configured control roles.")
@@ -46,9 +46,10 @@ def main() -> None:
 
 
 def _validate_positive_seconds(value: float) -> float:
-    if not math.isfinite(value) or value <= 0:
-        raise typer.BadParameter("must be a positive finite number")
-    return value
+    try:
+        return validate_capture_duration(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @app.command()
@@ -212,7 +213,7 @@ def gpio_mode(
     ],
     role: Annotated[
         str,
-        typer.Argument(help="User-facing role name, for example reset or power_en."),
+        typer.Argument(help="User-facing role name, for example reset or power_enable."),
     ],
     dut_signal: Annotated[
         str,
@@ -239,15 +240,27 @@ def gpio_mode(
     ] = None,
 ) -> None:
     """Configure a DUT control GPIO channel."""
-    resolved_service_url = _resolve_service_url(service_url)
     try:
-        payload = configure_gpio_mode(
+        request = validate_gpio_configuration(
             channel=channel,
             role=role,
             dut_signal=dut_signal,
             mode=mode,
             active_level=active_level,
             idle_level=idle_level,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = configure_gpio_mode(
+            channel=request.channel,
+            role=request.role,
+            dut_signal=request.dut_signal,
+            mode=request.mode,
+            active_level=request.active_level,
+            idle_level=request.idle_level,
             service_url=resolved_service_url,
         )
     except ServiceUnavailableError as exc:

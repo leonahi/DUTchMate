@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, connected_status
 
@@ -60,10 +61,12 @@ def test_boot_test_serializes_incomplete_evidence_flags() -> None:
     }
 
 
-def test_boot_test_rejects_invalid_duration() -> None:
-    app = create_app(FakeRuntime(connected_status()))
+@pytest.mark.parametrize("duration_s", [0, 300.1, True, "1"])
+def test_boot_test_rejects_invalid_duration(duration_s: object) -> None:
+    runtime = FakeRuntime(connected_status())
+    app = create_app(runtime)
 
-    response = TestClient(app).post("/dut/boot-test", json={"duration_s": 0})
+    response = TestClient(app).post("/dut/boot-test", json={"duration_s": duration_s})
 
     assert response.status_code == 400
     assert response.json() == {
@@ -71,6 +74,7 @@ def test_boot_test_rejects_invalid_duration() -> None:
         "error": "invalid_argument",
         "detail": "Request validation failed",
     }
+    assert runtime.boot_test_requests == []
 
 
 def test_boot_test_requires_configured_reset_role() -> None:

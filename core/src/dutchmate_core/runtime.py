@@ -20,6 +20,11 @@ from dutchmate_core.gpio_config.modes import (
     GpioRoleName,
 )
 from dutchmate_core.session_store.store import SessionStore, SessionSummary
+from dutchmate_core.validation import (
+    validate_capture_duration,
+    validate_gpio_configuration,
+    validate_gpio_source,
+)
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
     CaptureRecorder,
@@ -160,21 +165,26 @@ class DeviceCoreRuntime:
     ) -> GpioControlChannelState:
         """Configure one GPIO role through firmware and update runtime state."""
 
+        request = validate_gpio_configuration(
+            role=role,
+            channel=channel,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+        source_name = validate_gpio_source(source)
         with self._operation_lock:
             self._require_connected()
             self._require_no_active_capture()
-            if source not in {"config", "runtime"}:
-                raise DeviceCoreRuntimeError(
-                    "GPIO configuration source must be 'config' or 'runtime'"
-                )
             return self._gpio_configurator.configure_mode(
-                role=role,
-                channel=channel,
-                dut_signal=dut_signal,
-                mode=mode,
-                active_level=active_level,
-                idle_level=idle_level,
-                source=source,
+                role=request.role,
+                channel=request.channel,
+                dut_signal=request.dut_signal,
+                mode=request.mode,
+                active_level=request.active_level,
+                idle_level=request.idle_level,
+                source=source_name,
             )
 
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
@@ -196,6 +206,7 @@ class DeviceCoreRuntime:
     def capture_uart(self, *, duration_s: float) -> SessionSummary:
         """Capture UART and telemetry messages into one filesystem session."""
 
+        duration_s = validate_capture_duration(duration_s)
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"capture --seconds {duration_s:g}",
@@ -204,6 +215,7 @@ class DeviceCoreRuntime:
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
         """Reset the DUT and capture its boot UART into one session."""
 
+        duration_s = validate_capture_duration(duration_s)
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"boot-test --seconds {duration_s:g}",

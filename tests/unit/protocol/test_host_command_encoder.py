@@ -157,6 +157,30 @@ def test_rejects_unknown_gpio_idle_level() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("mode", "active_level", "idle_level"),
+    [
+        ("open_drain", "high", None),
+        ("open_drain", "low", "high"),
+        ("push_pull", "high", None),
+        ("push_pull", "high", "high"),
+    ],
+)
+def test_rejects_unsafe_gpio_electrical_combinations(
+    mode: str,
+    active_level: str,
+    idle_level: str | None,
+) -> None:
+    with pytest.raises(ProtocolValidationError):
+        configure_gpio_mode_command(
+            channel="CTRL0",
+            role="reset",
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+
+
 def test_build_reset_command() -> None:
     command = reset_command()
 

@@ -1,6 +1,5 @@
 """Backend-independent capture workflow coordination."""
 
-import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from dutchmate_core.log_processing.patterns import PatternMatch
 from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
+from dutchmate_core.validation import validate_capture_duration
 
 
 class CaptureEventSource(Protocol):
@@ -35,9 +35,9 @@ class TransportCaptureRunner:
         duration_s: float,
         monotonic_clock: Callable[[], float] | None = None,
     ) -> None:
-        _validate_capture_duration(duration_s)
+        validated_duration_s = validate_capture_duration(duration_s)
         self._transport = transport
-        self._duration_s = duration_s
+        self._duration_s = validated_duration_s
         self._clock = monotonic_clock or time.monotonic
 
     def run(self, recorder: "CaptureRecorder") -> None:
@@ -188,13 +188,3 @@ def run_transport_capture(
     )
     runner.run(recorder)
     return session_store.summarize_session(recorder.session_id)
-
-
-def _validate_capture_duration(duration_s: float) -> None:
-    if (
-        isinstance(duration_s, bool)
-        or not isinstance(duration_s, int | float)
-        or not math.isfinite(duration_s)
-        or duration_s <= 0
-    ):
-        raise ValueError("capture duration must be a positive finite number")

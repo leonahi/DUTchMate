@@ -88,7 +88,7 @@ def test_gpio_mode_command_reports_service_error(monkeypatch: pytest.MonkeyPatch
         [
             "gpio",
             "mode",
-            "GPIO0",
+            "CTRL0",
             "reset",
             "RESET_N",
             "--mode",
@@ -100,3 +100,26 @@ def test_gpio_mode_command_reports_service_error(monkeypatch: pytest.MonkeyPatch
 
     assert result.exit_code == 1
     assert "Error: Request validation failed" in result.output
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["CTRL0", " reset", "RESET_N", "--mode", "open_drain", "--active-level", "low"],
+        ["CTRL0", "reset", "RESET_N", "--mode", "open_drain", "--active-level", "high"],
+        ["CTRL0", "reset", "RESET_N", "--mode", "push_pull", "--active-level", "high"],
+    ],
+)
+def test_gpio_mode_command_rejects_invalid_input_before_client(
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: list[str],
+) -> None:
+    def unexpected_client_call(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("invalid GPIO configuration reached service client")
+
+    monkeypatch.setattr(main, "configure_gpio_mode", unexpected_client_call)
+
+    result = CliRunner().invoke(main.app, ["gpio", "mode", *arguments])
+
+    assert result.exit_code == 2
+    assert "Invalid value" in result.output

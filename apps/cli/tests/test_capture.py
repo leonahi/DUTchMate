@@ -69,7 +69,7 @@ def test_capture_command_reports_service_error(monkeypatch: pytest.MonkeyPatch) 
     assert "Error: capture is already active" in result.output
 
 
-@pytest.mark.parametrize("seconds", ["0", "-1", "inf", "nan"])
+@pytest.mark.parametrize("seconds", ["0", "-1", "301", "inf", "nan"])
 def test_capture_command_rejects_invalid_duration(seconds: str) -> None:
     result = CliRunner().invoke(main.app, ["capture", "--seconds", seconds])
 

@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import importlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from dutchmate_core.device_connection.commands import (
-    VALID_GPIO_CONTROL_CHANNELS,
-    VALID_GPIO_LEVELS,
-    VALID_GPIO_MODES,
-)
 from dutchmate_core.gpio_config.modes import (
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
     GpioRoleName,
+)
+from dutchmate_core.validation import (
+    validate_gpio_configuration,
+    validate_gpio_role,
 )
 
 
@@ -46,7 +46,7 @@ class HardwareGpioConfig:
     def require_control(self, role: str) -> HardwareControlMapping:
         """Return a required control mapping or raise a configuration error."""
 
-        role_name = _validate_role_name(role)
+        role_name = _validate_role_name(role, context="GPIO role")
         try:
             return self.controls[role_name]
         except KeyError as exc:
@@ -84,7 +84,7 @@ def parse_hardware_gpio_config(data: dict[str, Any]) -> HardwareGpioConfig:
     assigned_channels: dict[GpioControlChannel, GpioRoleName] = {}
 
     for role, raw_mapping in control_table.items():
-        role_name = _validate_role_name(role)
+        role_name = _validate_role_name(role, context=f"hardware.control.{role}")
         if not isinstance(raw_mapping, dict):
             raise GpioConfigError(f"[hardware.control.{role}] must be a TOML table")
 
@@ -125,18 +125,25 @@ def _parse_control_mapping(
     active_level = _required_string(raw_mapping, "active_level", f"hardware.control.{role}")
     idle_level = _optional_string(raw_mapping, "idle_level", f"hardware.control.{role}")
 
-    channel_name = _validate_channel(channel)
-    mode_name = _validate_mode(mode)
-    active_level_name = _validate_level(active_level, "active_level")
-    idle_level_name = _validate_optional_level(idle_level, "idle_level")
+    try:
+        request = validate_gpio_configuration(
+            role=role,
+            channel=channel,
+            dut_signal=dut_signal,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+    except ValueError as exc:
+        raise GpioConfigError(f"hardware.control.{role}: {exc}") from exc
 
     return HardwareControlMapping(
-        role=role,
-        channel=channel_name,
-        dut_signal=dut_signal,
-        mode=mode_name,
-        active_level=active_level_name,
-        idle_level=idle_level_name,
+        role=request.role,
+        channel=request.channel,
+        dut_signal=request.dut_signal,
+        mode=request.mode,
+        active_level=request.active_level,
+        idle_level=request.idle_level,
     )
 
 
@@ -146,7 +153,7 @@ def _optional_voltage(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise GpioConfigError("hardware.dut_io_voltage must be a number")
     voltage = float(value)
-    if voltage < 1.8 or voltage > 5.0:
+    if not math.isfinite(voltage) or voltage < 1.8 or voltage > 5.0:
         raise GpioConfigError("hardware.dut_io_voltage must be between 1.8 and 5.0")
     return voltage
 
@@ -155,7 +162,7 @@ def _required_string(raw_mapping: dict[str, Any], field_name: str, context: str)
     if field_name not in raw_mapping:
         raise GpioConfigError(f"{context}.{field_name} is required")
     value = raw_mapping[field_name]
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
         raise GpioConfigError(f"{context}.{field_name} must be a non-empty string")
     return value
 
@@ -170,41 +177,16 @@ def _optional_string(
     value = raw_mapping[field_name]
     if value is None:
         return None
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
         raise GpioConfigError(f"{context}.{field_name} must be a non-empty string")
     return value
 
 
-def _validate_role_name(role: str) -> GpioRoleName:
-    if not isinstance(role, str) or not role.strip():
-        raise GpioConfigError("GPIO role must be a non-empty string")
-    return role.strip()
-
-
-def _validate_channel(channel: str) -> GpioControlChannel:
-    if channel not in VALID_GPIO_CONTROL_CHANNELS:
-        raise GpioConfigError(
-            "GPIO control channel must be 'CTRL0', 'CTRL1', 'CTRL2', or 'CTRL3'"
-        )
-    return cast(GpioControlChannel, channel)
-
-
-def _validate_mode(mode: str) -> GpioControlMode:
-    if mode not in VALID_GPIO_MODES:
-        raise GpioConfigError("GPIO mode must be 'open_drain' or 'push_pull'")
-    return cast(GpioControlMode, mode)
-
-
-def _validate_level(level: str, field_name: str) -> GpioLevel:
-    if level not in VALID_GPIO_LEVELS:
-        raise GpioConfigError(f"GPIO {field_name} must be 'low' or 'high'")
-    return cast(GpioLevel, level)
-
-
-def _validate_optional_level(level: str | None, field_name: str) -> GpioLevel | None:
-    if level is None:
-        return None
-    return _validate_level(level, field_name)
+def _validate_role_name(role: object, *, context: str) -> GpioRoleName:
+    try:
+        return validate_gpio_role(role)
+    except ValueError as exc:
+        raise GpioConfigError(f"{context}: {exc}") from exc
 
 
 def _toml_module() -> Any:

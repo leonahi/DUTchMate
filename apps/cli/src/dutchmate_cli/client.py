@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from typing import Final, cast
 
 import httpx
+
+from dutchmate_core.validation import validate_capture_duration, validate_gpio_configuration
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
@@ -57,15 +58,23 @@ def configure_gpio_mode(
 ) -> dict[str, object]:
     """Configure one Device Core Service GPIO control channel."""
 
+    request = validate_gpio_configuration(
+        channel=channel,
+        role=role,
+        dut_signal=dut_signal,
+        mode=mode,
+        active_level=active_level,
+        idle_level=idle_level,
+    )
     request_payload: dict[str, object] = {
-        "channel": channel,
-        "role": role,
-        "dut_signal": dut_signal,
-        "mode": mode,
-        "active_level": active_level,
+        "channel": request.channel,
+        "role": request.role,
+        "dut_signal": request.dut_signal,
+        "mode": request.mode,
+        "active_level": request.active_level,
     }
-    if idle_level is not None:
-        request_payload["idle_level"] = idle_level
+    if request.idle_level is not None:
+        request_payload["idle_level"] = request.idle_level
 
     response = _request_service(
         method="POST",
@@ -155,8 +164,10 @@ def _run_timed_capture_request(
     service_url: str,
     transport: httpx.BaseTransport | None,
 ) -> dict[str, object]:
-    if not math.isfinite(duration_s) or duration_s <= 0:
-        raise ValueError(f"{description} duration must be a positive finite number")
+    try:
+        duration_s = validate_capture_duration(duration_s)
+    except ValueError as exc:
+        raise ValueError(f"{description} {exc}") from exc
 
     response = _request_service(
         method="POST",

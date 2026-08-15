@@ -424,10 +424,11 @@ Current implementation status:
 
 - Runtime state is already channel-first, startup applies configured mappings
   after Enhanced `hello`, and rejected overrides preserve accepted state.
-- Identifier validators are still inconsistent and sometimes trim values; one
-  exact shared validator remains Phase 1 work.
-- The current mode validators do not enforce the complete open-drain/push-pull
-  matrix, and suggestions still include legacy `power_en`.
+- One shared validator now enforces and preserves the exact 1..64-byte UTF-8
+  role/DUT-signal contract across config, runtime, service, and CLI paths.
+- Host validators and the v1 command schema enforce the complete
+  open-drain/push-pull matrix; suggestions use `power_enable` while legacy
+  `power_en` remains a valid custom role.
 - Current wire schemas and encoders still send role-specific actions and a
   configuration `role`. Phase 1B migrates them atomically to the generic control
   contract below while preserving semantic host APIs.
@@ -994,9 +995,9 @@ Current implementation notes:
   pointer, evidence/metadata quotas, terminal reserve, restart recovery, and
   retention remain to be implemented.
 - Reconnect/resume mutation helpers are not implemented yet.
-- Capture and boot-test currently reject non-positive/non-finite duration values
-  but have no 300-second ceiling and do not consistently persist/echo the
-  accepted duration.
+- Capture and boot-test now reject non-numeric, boolean, non-finite,
+  non-positive, and over-300-second durations consistently across core,
+  service, and CLI. They do not yet persist or echo the accepted duration.
 
 ## Device Core Service Requirements
 

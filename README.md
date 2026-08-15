@@ -28,7 +28,10 @@ The repository currently contains the first host-side Phase 1 foundation:
   pattern detection
 - filesystem sessions, incremental evidence writes, summaries, and discovery
 - GPIO control-channel configuration state and guarded reset/boot actions
-- finite capture and reset-triggered boot-test orchestration
+- shared exact GPIO identifier/electrical validation across config, core,
+  service, CLI, and the Enhanced v1 command schema
+- finite capture and reset-triggered boot-test orchestration with an explicit
+  `0 < duration_s <= 300` boundary
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 

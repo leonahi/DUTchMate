@@ -130,6 +130,7 @@ def test_parse_custom_role_mapping() -> None:
                         "dut_signal": "WAKE_N",
                         "mode": "push_pull",
                         "active_level": "low",
+                        "idle_level": "high",
                     }
                 }
             }
@@ -142,6 +143,7 @@ def test_parse_custom_role_mapping() -> None:
         dut_signal="WAKE_N",
         mode="push_pull",
         active_level="low",
+        idle_level="high",
     )
 
 
@@ -198,6 +200,7 @@ def test_rejects_duplicate_channel_assignments() -> None:
                             "dut_signal": "BOOT0",
                             "mode": "push_pull",
                             "active_level": "high",
+                            "idle_level": "low",
                         },
                     }
                 }
@@ -219,8 +222,8 @@ def test_rejects_missing_required_control_fields(field_name: str) -> None:
         parse_hardware_gpio_config({"hardware": {"control": {"reset": raw_mapping}}})
 
 
-def test_rejects_empty_dut_signal() -> None:
-    with pytest.raises(GpioConfigError, match="dut_signal must be a non-empty string"):
+def test_rejects_whitespace_dut_signal() -> None:
+    with pytest.raises(GpioConfigError, match="dut_signal must not have leading or trailing"):
         parse_hardware_gpio_config(
             {
                 "hardware": {
@@ -275,7 +278,7 @@ def test_rejects_non_numeric_dut_io_voltage(dut_io_voltage: object) -> None:
         parse_hardware_gpio_config({"hardware": {"dut_io_voltage": dut_io_voltage}})
 
 
-@pytest.mark.parametrize("dut_io_voltage", [1.7, 5.1])
+@pytest.mark.parametrize("dut_io_voltage", [1.7, 5.1, float("inf"), float("nan")])
 def test_rejects_out_of_range_dut_io_voltage(dut_io_voltage: float) -> None:
     with pytest.raises(GpioConfigError, match="between 1.8 and 5.0"):
         parse_hardware_gpio_config({"hardware": {"dut_io_voltage": dut_io_voltage}})

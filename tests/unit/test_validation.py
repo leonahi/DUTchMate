@@ -1,0 +1,95 @@
+import pytest
+
+from dutchmate_core.validation import (
+    GpioIdentifierValidationError,
+    validate_capture_duration,
+    validate_gpio_configuration,
+    validate_gpio_identifier,
+    validate_gpio_mode_configuration,
+)
+
+
+@pytest.mark.parametrize("duration_s", [1, 0.1, 300])
+def test_capture_duration_accepts_phase_one_range(duration_s: int | float) -> None:
+    assert validate_capture_duration(duration_s) == float(duration_s)
+
+
+@pytest.mark.parametrize(
+    "duration_s",
+    [0, -1, 300.0001, float("inf"), float("-inf"), float("nan"), True, "1"],
+)
+def test_capture_duration_rejects_values_outside_exact_contract(duration_s: object) -> None:
+    with pytest.raises(ValueError, match="positive finite.*300"):
+        validate_capture_duration(duration_s)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["r", "r" * 64, "é" * 32, "reset role", "Reset"],
+)
+def test_gpio_identifier_accepts_and_preserves_exact_utf8_value(value: str) -> None:
+    assert validate_gpio_identifier(value, field="role") == value
+
+
+def test_gpio_identifier_counts_utf8_bytes_instead_of_characters() -> None:
+    with pytest.raises(GpioIdentifierValidationError) as error:
+        validate_gpio_identifier("é" * 33, field="role")
+
+    assert error.value.field == "role"
+    assert error.value.reason == "invalid_length"
+    assert error.value.actual_bytes == 66
+    assert error.value.max_bytes == 64
+
+
+@pytest.mark.parametrize("value", [" reset", "reset\u00a0", "\u2003reset"])
+def test_gpio_identifier_rejects_unicode_edge_whitespace(value: str) -> None:
+    with pytest.raises(GpioIdentifierValidationError) as error:
+        validate_gpio_identifier(value, field="role")
+
+    assert error.value.reason == "edge_whitespace"
+
+
+@pytest.mark.parametrize("value", ["re\x00set", "reset\x7f", "re\u0080set"])
+def test_gpio_identifier_rejects_unicode_control_characters(value: str) -> None:
+    with pytest.raises(GpioIdentifierValidationError) as error:
+        validate_gpio_identifier(value, field="role")
+
+    assert error.value.reason == "control_character"
+
+
+def test_gpio_configuration_preserves_canonically_distinct_identifiers() -> None:
+    request = validate_gpio_configuration(
+        channel="CTRL2",
+        role="Re\u0301set",
+        dut_signal="RÉSET_N",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+
+    assert request.role == "Re\u0301set"
+    assert request.dut_signal == "RÉSET_N"
+
+
+@pytest.mark.parametrize(
+    ("mode", "active_level", "idle_level", "message"),
+    [
+        ("open_drain", "high", None, "active_level must be 'low'"),
+        ("open_drain", "low", "high", "idle_level must be omitted"),
+        ("push_pull", "high", None, "idle_level is required"),
+        ("push_pull", "high", "high", "idle_level must be opposite"),
+        ("push_pull", "low", "low", "idle_level must be opposite"),
+    ],
+)
+def test_gpio_mode_matrix_rejects_unsafe_combinations(
+    mode: str,
+    active_level: str,
+    idle_level: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        validate_gpio_mode_configuration(
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )

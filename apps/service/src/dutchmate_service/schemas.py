@@ -5,11 +5,20 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.store import SessionSummary
+from dutchmate_core.validation import (
+    MAX_CAPTURE_DURATION_S,
+    GpioControlChannel,
+    GpioControlMode,
+    GpioLevel,
+    validate_capture_duration,
+    validate_gpio_configuration,
+    validate_gpio_identifier,
+)
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
@@ -33,20 +42,29 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
 class GpioModeRequest(BaseModel):
     """Request body for configuring a control channel mode."""
 
-    channel: Literal["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
-    role: str = Field(min_length=1)
-    dut_signal: str = Field(min_length=1)
-    mode: Literal["open_drain", "push_pull"]
-    active_level: Literal["low", "high"]
-    idle_level: Literal["low", "high"] | None = None
+    channel: GpioControlChannel
+    role: str
+    dut_signal: str
+    mode: GpioControlMode
+    active_level: GpioLevel
+    idle_level: GpioLevel | None = None
 
     @field_validator("role", "dut_signal")
     @classmethod
-    def strip_required_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("must be a non-empty string")
-        return stripped
+    def validate_required_identifier(cls, value: str, info: ValidationInfo) -> str:
+        return validate_gpio_identifier(value, field=info.field_name or "identifier")
+
+    @model_validator(mode="after")
+    def validate_electrical_configuration(self) -> GpioModeRequest:
+        validate_gpio_configuration(
+            channel=self.channel,
+            role=self.role,
+            dut_signal=self.dut_signal,
+            mode=self.mode,
+            active_level=self.active_level,
+            idle_level=self.idle_level,
+        )
+        return self
 
 
 def gpio_mode_payload(state: GpioControlChannelState) -> dict[str, object]:
@@ -77,16 +95,21 @@ class BootModeRequest(BaseModel):
     mode: Literal["normal", "bootloader"]
 
 
-class CaptureRequest(BaseModel):
+class _TimedCaptureRequest(BaseModel):
+    duration_s: float = Field(gt=0, le=MAX_CAPTURE_DURATION_S, allow_inf_nan=False)
+
+    @field_validator("duration_s", mode="before")
+    @classmethod
+    def validate_duration(cls, value: object) -> float:
+        return validate_capture_duration(value)
+
+
+class CaptureRequest(_TimedCaptureRequest):
     """Request body for a finite UART capture."""
 
-    duration_s: float = Field(gt=0, allow_inf_nan=False)
 
-
-class BootTestRequest(BaseModel):
+class BootTestRequest(_TimedCaptureRequest):
     """Request body for a reset-triggered boot capture."""
-
-    duration_s: float = Field(gt=0, allow_inf_nan=False)
 
 
 def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:

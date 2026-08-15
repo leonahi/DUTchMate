@@ -332,6 +332,7 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
                 dut_signal="POWER_EN",
                 mode="push_pull",
                 active_level="high",
+                idle_level="low",
             )
 
     source = FakeCaptureSource([], clock=clock, on_read=assert_capture_guards)
@@ -386,8 +387,10 @@ def test_capture_uart_clears_active_session_after_transport_failure(tmp_path: Pa
     assert runtime.status().active_session_id is None
 
 
+@pytest.mark.parametrize("duration_s", [0, 300.1, True])
 def test_capture_uart_rejects_invalid_duration_before_creating_session(
     tmp_path: Path,
+    duration_s: object,
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
@@ -399,7 +402,7 @@ def test_capture_uart_rejects_invalid_duration_before_creating_session(
     runtime.record_hello(hello())
 
     with pytest.raises(ValueError, match="positive finite"):
-        runtime.capture_uart(duration_s=0)
+        runtime.capture_uart(duration_s=duration_s)  # type: ignore[arg-type]
 
     assert list(tmp_path.iterdir()) == []
 
@@ -516,8 +519,10 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
     assert len(list(tmp_path.iterdir())) == 1
 
 
+@pytest.mark.parametrize("duration_s", [0, 300.1, True])
 def test_run_boot_test_rejects_invalid_duration_before_creating_session(
     tmp_path: Path,
+    duration_s: object,
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
@@ -529,7 +534,7 @@ def test_run_boot_test_rejects_invalid_duration_before_creating_session(
     runtime.record_hello(hello())
 
     with pytest.raises(ValueError, match="positive finite"):
-        runtime.run_boot_test(duration_s=0)
+        runtime.run_boot_test(duration_s=duration_s)  # type: ignore[arg-type]
 
     assert list(tmp_path.iterdir()) == []
 

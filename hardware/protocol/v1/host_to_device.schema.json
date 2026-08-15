@@ -32,7 +32,50 @@
           "type": "string",
           "enum": ["low", "high"]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {"const": "open_drain"}
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "active_level": {"const": "low"}
+            },
+            "not": {
+              "required": ["idle_level"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {"const": "push_pull"}
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "required": ["idle_level"],
+            "oneOf": [
+              {
+                "properties": {
+                  "active_level": {"const": "low"},
+                  "idle_level": {"const": "high"}
+                }
+              },
+              {
+                "properties": {
+                  "active_level": {"const": "high"},
+                  "idle_level": {"const": "low"}
+                }
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "title": "Reset Command",

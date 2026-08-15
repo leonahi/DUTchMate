@@ -9,17 +9,31 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.validation import (
+    VALID_GPIO_CONTROL_CHANNELS as VALID_GPIO_CONTROL_CHANNELS,
+)
+from dutchmate_core.validation import (
+    VALID_GPIO_LEVELS as VALID_GPIO_LEVELS,
+)
+from dutchmate_core.validation import (
+    VALID_GPIO_MODES as VALID_GPIO_MODES,
+)
+from dutchmate_core.validation import (
+    WELL_KNOWN_GPIO_ROLES as WELL_KNOWN_GPIO_ROLES,
+)
+from dutchmate_core.validation import (
+    GpioControlChannel,
+    GpioControlMode,
+    GpioLevel,
+    validate_gpio_channel,
+    validate_gpio_mode_configuration,
+    validate_gpio_role,
+)
 
-GpioControlChannel = Literal["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
 GpioRole: TypeAlias = str
-GpioMode = Literal["open_drain", "push_pull"]
-GpioLevel = Literal["low", "high"]
+GpioMode: TypeAlias = GpioControlMode
 BootMode = Literal["normal", "bootloader"]
 
-VALID_GPIO_CONTROL_CHANNELS = frozenset({"CTRL0", "CTRL1", "CTRL2", "CTRL3"})
-WELL_KNOWN_GPIO_ROLES = frozenset({"reset", "boot", "power_en", "wake"})
-VALID_GPIO_MODES = frozenset({"open_drain", "push_pull"})
-VALID_GPIO_LEVELS = frozenset({"low", "high"})
 VALID_BOOT_MODES = frozenset({"normal", "bootloader"})
 
 
@@ -107,24 +121,23 @@ def configure_gpio_mode_command(
 ) -> ConfigureGpioModeCommand:
     """Build a validated `configure_gpio_mode` command."""
 
-    if channel not in VALID_GPIO_CONTROL_CHANNELS:
-        raise ProtocolValidationError(
-            "GPIO control channel must be 'CTRL0', 'CTRL1', 'CTRL2', or 'CTRL3'"
+    try:
+        channel_name = validate_gpio_channel(channel)
+        role_name = validate_gpio_role(role)
+        mode_name, active_level_name, idle_level_name = validate_gpio_mode_configuration(
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
         )
-    role_name = _validate_gpio_role(role)
-    if mode not in VALID_GPIO_MODES:
-        raise ProtocolValidationError("GPIO mode must be 'open_drain' or 'push_pull'")
-    if active_level not in VALID_GPIO_LEVELS:
-        raise ProtocolValidationError("GPIO active_level must be 'low' or 'high'")
-    if idle_level is not None and idle_level not in VALID_GPIO_LEVELS:
-        raise ProtocolValidationError("GPIO idle_level must be 'low' or 'high'")
+    except ValueError as exc:
+        raise ProtocolValidationError(str(exc)) from exc
 
     return ConfigureGpioModeCommand(
-        channel=cast(GpioControlChannel, channel),
+        channel=channel_name,
         role=role_name,
-        mode=cast(GpioMode, mode),
-        active_level=cast(GpioLevel, active_level),
-        idle_level=cast(GpioLevel, idle_level) if idle_level is not None else None,
+        mode=mode_name,
+        active_level=active_level_name,
+        idle_level=idle_level_name,
     )
 
 
@@ -176,9 +189,3 @@ def _encode_payload(payload: Mapping[str, object]) -> bytes:
 
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _validate_gpio_role(role: str) -> GpioRole:
-    if not isinstance(role, str) or not role.strip():
-        raise ProtocolValidationError("GPIO role must be a non-empty string")
-    return role.strip()

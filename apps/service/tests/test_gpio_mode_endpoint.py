@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, connected_status, disconnected_status
 
@@ -129,3 +130,57 @@ def test_configure_gpio_mode_validation_error_uses_service_error_contract() -> N
         "error": "invalid_argument",
         "detail": "Request validation failed",
     }
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"role": " reset"},
+        {"dut_signal": "RESET\x00N"},
+        {"mode": "open_drain", "active_level": "high"},
+        {"mode": "open_drain", "active_level": "low", "idle_level": "high"},
+        {"mode": "push_pull", "active_level": "high"},
+        {"mode": "push_pull", "active_level": "high", "idle_level": "high"},
+    ],
+)
+def test_configure_gpio_mode_rejects_exact_contract_violations(
+    overrides: dict[str, object],
+) -> None:
+    runtime = FakeRuntime(connected_status())
+    app = create_app(runtime)
+    request = {
+        "channel": "CTRL0",
+        "role": "reset",
+        "dut_signal": "RESET_N",
+        "mode": "open_drain",
+        "active_level": "low",
+        **overrides,
+    }
+
+    response = TestClient(app).post("/gpio/mode", json=request)
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_argument"
+    assert runtime.gpio_mode_requests == []
+
+
+def test_configure_gpio_mode_preserves_exact_unicode_identifiers() -> None:
+    runtime = FakeRuntime(connected_status())
+    app = create_app(runtime)
+
+    response = TestClient(app).post(
+        "/gpio/mode",
+        json={
+            "channel": "CTRL0",
+            "role": "Re\u0301set",
+            "dut_signal": "RÉSET_N",
+            "mode": "open_drain",
+            "active_level": "low",
+        },
+    )
+
+    assert response.status_code == 200
+    assert runtime.gpio_mode_requests[0]["role"] == "Re\u0301set"
+    assert runtime.gpio_mode_requests[0]["dut_signal"] == "RÉSET_N"
+    assert response.json()["role"] == "Re\u0301set"
+    assert response.json()["dut_signal"] == "RÉSET_N"

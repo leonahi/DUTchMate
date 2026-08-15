@@ -95,12 +95,13 @@ def test_configure_mode_records_firmware_rejection() -> None:
         dut_signal="RESET_N",
         mode="push_pull",
         active_level="low",
+        idle_level="high",
         source="runtime",
     )
 
     assert transport.requests == [
         b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
-        b'"mode":"push_pull","active_level":"low"}\n'
+        b'"mode":"push_pull","active_level":"low","idle_level":"high"}\n'
     ]
     assert state.state == "rejected"
     assert state.last_rejected is not None
@@ -135,6 +136,7 @@ def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
         dut_signal="RESET_N",
         mode="push_pull",
         active_level="low",
+        idle_level="high",
         source="runtime",
     )
 
@@ -209,6 +211,24 @@ def test_empty_role_is_rejected_before_transport_request() -> None:
     assert transport.requests == []
     assert registry.get("CTRL0").state == "unconfigured"
     assert registry.get("CTRL1").state == "unconfigured"
+
+
+def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
+    registry = GpioModeRegistry()
+    transport = FakeTransport(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, transport=transport)
+
+    with pytest.raises(ProtocolValidationError, match="dut_signal"):
+        configurator.configure_mode(
+            role="reset",
+            channel="CTRL0",
+            dut_signal="RESET\x00N",
+            mode="open_drain",
+            active_level="low",
+            source="runtime",
+        )
+
+    assert transport.requests == []
 
 
 def test_invalid_mode_is_rejected_before_transport_request() -> None:

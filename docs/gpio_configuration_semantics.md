@@ -175,16 +175,11 @@ selected. The service-facing runtime rejects GPIO configuration with
 `capture_active` while a finite capture, boot-test, or target wait-pattern
 session owns the serial message stream.
 
-Current implementation note: the v1 JSON Schema and host validators allow
-`idle_level` for either mode, allow active-high `open_drain`, and allow
-`push_pull` without an idle level. Tightening those validators and their tests
-to the matrix above remains Phase 1 implementation work.
-
-The current config/runtime/command validators also accept unbounded identifiers,
-and several paths silently strip surrounding whitespace before storing a role or
-DUT signal. Phase 1 must replace that behavior with exact rejection and shared
-UTF-8 byte/control validation; existing persisted configuration is validated
-when loaded and is never silently rewritten.
+Current host implementation: one shared validator enforces the identifier and
+electrical contracts above for config loading, runtime state, command encoding,
+service requests, and CLI dispatch. The v1 host-to-device JSON Schema enforces
+the same electrical matrix. Accepted identifiers remain byte-for-byte exact;
+no layer trims or normalizes them.
 
 Recommended error mapping:
 
