@@ -85,6 +85,13 @@ class FakeRuntime:
             capability_policy=_tx_policy(),
             integrity=_enhanced_integrity(),
             segment_contexts=(_enhanced_segment(),),
+            schema_version=1,
+            state="completed",
+            workflow="capture",
+            duration_s=duration_s,
+            reconnect_timeout_s=5.0,
+            ended_at="2026-07-29T10:00:03Z",
+            end_reason="duration_elapsed",
         )
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
@@ -108,6 +115,13 @@ class FakeRuntime:
             capability_policy=_tx_policy(),
             integrity=_enhanced_integrity(),
             segment_contexts=(_enhanced_segment(),),
+            schema_version=1,
+            state="completed",
+            workflow="boot_test",
+            duration_s=duration_s,
+            reconnect_timeout_s=5.0,
+            ended_at="2026-07-29T10:00:03Z",
+            end_reason="duration_elapsed",
         )
 
     def apply_hardware_config(
@@ -154,9 +168,7 @@ def disconnected_status() -> DeviceCoreStatus:
 
 
 def _tx_policy() -> BackendCapabilityPolicy:
-    return BackendCapabilityPolicy(
-        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
-    )
+    return BackendCapabilityPolicy(uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False))
 
 
 def _enhanced_integrity() -> UartIntegrity:

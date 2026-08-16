@@ -190,16 +190,22 @@ Owns filesystem-backed sessions under
   reference-bearing `first_error` summaries in segment/event order
 - stores `line_processing` status/counts and finalized `line_limit_exceeded`
   descriptors without changing UART integrity or session truncation
+- creates native runtime sessions with versioned workflow/lifecycle fields and
+  a terminal reserve, then transitions them once to completed or failed
+- performs schema-aware startup recovery before backend opening, abandoning
+  stale native active sessions while preserving legacy/unsupported evidence
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
 - rejects path-unsafe session IDs
 
-Current metadata is unversioned and lacks the target lifecycle, quota,
-retention, baseline, reconnect, and bounded replay contracts. Runtime-created
-sessions already snapshot backend identity, raw/effective capabilities,
-TX-policy source, per-segment timestamp provenance, and backend-specific UART
-integrity; older direct-store fixtures retain their legacy shape. The remaining
-rules are centralized in the Phase 1 spec and
+Runtime capture/boot-test sessions with complete backend identity now use schema
+version 1 and snapshot backend facts, accepted timing policy, integrity, line
+processing, storage accounting, and one-way lifecycle state. Older direct-store
+fixtures retain their recognized unversioned legacy shape. Admission quotas,
+retention, baseline, reconnect, and bounded replay remain. Startup recovery
+retains structured diagnostics for malformed/reserve conditions and treats a
+failed terminal metadata replacement as a startup error.
+The remaining rules are centralized in the Phase 1 spec and
 `docs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
@@ -236,8 +242,10 @@ protocol validation. Current behavior includes:
 
 Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
-Persisting and echoing the accepted duration, wait-pattern, UART-send exposure,
-reconnect/resume, and durable lifecycle handling remain Phase 1 work.
+Native workflows persist and echo accepted duration/reconnect policy and
+terminal lifecycle state, and startup abandons stale active sessions before
+opening a backend. Wait-pattern, UART-send exposure, reconnect/resume, and full
+durability guarantees remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 

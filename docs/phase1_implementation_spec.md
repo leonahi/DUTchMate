@@ -83,7 +83,9 @@ then connected to each real backend in milestone order.
    per-segment provenance remains attached to its segment ID, Basic reports
    `not_observable`, and Enhanced telemetry promotes integrity to
    `loss_reported`. Status and capture/boot-test CLI output expose the same
-   facts. Native schema-v1 lifecycle/session retrieval remains step 6 work.**
+   facts. Runtime capture/boot-test sessions with a complete backend snapshot
+   now use native schema-v1 lifecycle metadata; bounded retrieval remains step
+   6 work.**
 6. Complete deterministic `first_error` selection plus shared log/session,
    wait-pattern, UART-send, reconnect, and retention work required by the Phase
    1 done criteria. **In progress: admitted complete lines now retain event/byte
@@ -92,8 +94,13 @@ then connected to each real backend in milestone order.
    deterministic `first_error` while excluding `BOOT_OK`. Derived line state is
    now independently capped at 65536 bytes per segment/channel, with exact
    oversized descriptors, persistent status/counts, and recovery after LF.
-   Native schema-v1 retrieval, wait-pattern, public UART send, reconnect, and
-   retention remain.**
+   Native capture/boot-test sessions now publish `active` metadata with a
+   terminal reserve and transition once to `completed` or bounded-error
+   `failed`, while recognized unversioned sessions remain v0. Startup now
+   abandons stale native active sessions before backend opening and reports
+   reserve/schema diagnostics without mutating legacy or unsupported schemas.
+   Quota enforcement, schema-v1 retrieval, wait-pattern, public UART send,
+   reconnect, and retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -1021,19 +1028,23 @@ Current implementation notes:
   source event/byte boundaries; detected-pattern records retain first-occurrence
   raw offsets and at-most-4096-byte exact excerpts, and session summaries select
   the earliest failure by segment/event order while excluding `BOOT_OK`.
-- `metadata.json` remains unversioned and retains existing compatibility flags,
-  including `overflow: bool` and legacy `baseline: false`. Runtime-created
-  sessions now additionally snapshot exact backend identity, raw/effective
-  capabilities, TX-policy provenance, per-segment timing provenance, and the
-  `integrity` object; direct legacy store fixtures without a backend snapshot
-  retain the prior shape. The bounded native `schema_version: 1` lifecycle,
-  removal of redundant `timestamp_epoch`, command/identity validation,
-  project baseline pointer, evidence/metadata quotas, terminal reserve,
-  restart recovery, and retention remain to be implemented.
+- Runtime-created capture/boot-test sessions with complete backend snapshots now
+  write `schema_version: 1`, typed workflow/duration/reconnect policy, one-way
+  active/terminal state, bounded failure details, storage accounting, and an
+  allocated terminal reserve that is removed on atomic metadata replacement.
+  Capture responses and CLI output expose lifecycle state/end reason. Direct
+  store fixtures without workflow facts remain recognized unversioned v0 rather
+  than receiving inferred lifecycle data. Before backend opening, startup scans
+  stored metadata, atomically abandons stale native active sessions with
+  `service_restart`, retains recovery diagnostics, and leaves terminal, legacy,
+  malformed, and unsupported-schema evidence unmodified as appropriate. Removal
+  of redundant `timestamp_epoch`, full identity validation, complete fsync
+  guarantees, project baseline pointer, admission quota enforcement, and
+  retention remain to be implemented.
 - Reconnect/resume mutation helpers are not implemented yet.
-- Capture and boot-test now reject non-numeric, boolean, non-finite,
-  non-positive, and over-300-second durations consistently across core,
-  service, and CLI. They do not yet persist or echo the accepted duration.
+- Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
+  and over-300-second durations consistently across core, service, and CLI.
+  Native sessions persist and echo the accepted duration and reconnect policy.
 
 ## Device Core Service Requirements
 

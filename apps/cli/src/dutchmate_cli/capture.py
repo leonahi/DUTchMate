@@ -23,6 +23,8 @@ def _format_capture_summary(label: str, payload: Mapping[str, object]) -> str:
     flags = ", ".join(
         (
             f"backend={_display(payload.get('backend_mode'))}",
+            f"state={_display(payload.get('state'))}",
+            f"end={_display(payload.get('end_reason'))}",
             f"loss={_loss_status(payload.get('integrity'))}",
             f"timestamp={_timestamp_source(payload.get('timestamp_provenance'))}",
             f"first_error={_first_error(payload.get('first_error'))}",

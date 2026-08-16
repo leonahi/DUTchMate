@@ -20,6 +20,7 @@ from dutchmate_core.backends.contracts import (
     apply_capability_policy,
     integrity_for_backend,
 )
+from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
@@ -31,7 +32,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
-from dutchmate_core.session_store.store import SessionStore, SessionSummary
+from dutchmate_core.session_store.store import SessionStore, SessionSummary, SessionWorkflow
 from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
@@ -89,6 +90,7 @@ class DeviceCoreRuntime:
         backend_mode: BackendMode | None = None,
         tx_policy_enabled: bool = False,
         segment_context: SegmentContext | None = None,
+        reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
     ) -> None:
         self._transport = transport
         self._message_source = message_source
@@ -124,6 +126,7 @@ class DeviceCoreRuntime:
             else None
         )
         self._active_session_id: str | None = None
+        self._reconnect_timeout_s = reconnect_timeout_s
         self._operation_lock = RLock()
 
     @property
@@ -218,9 +221,7 @@ class DeviceCoreRuntime:
                 capability_policy=(
                     self._capability_policy if self._backend_mode is not None else None
                 ),
-                timestamp_provenance=(
-                    self._segment_context
-                ),
+                timestamp_provenance=(self._segment_context),
                 integrity=self._integrity,
             )
 
@@ -304,6 +305,7 @@ class DeviceCoreRuntime:
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"capture --seconds {duration_s:g}",
+            workflow="capture",
         )
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
@@ -313,6 +315,7 @@ class DeviceCoreRuntime:
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"boot-test --seconds {duration_s:g}",
+            workflow="boot_test",
             required_role="reset",
             start_action=self._action_runner.reset_dut,
         )
@@ -322,10 +325,14 @@ class DeviceCoreRuntime:
         *,
         duration_s: float,
         command: str,
+        workflow: SessionWorkflow,
         required_role: str | None = None,
         start_action: Callable[[], DeviceActionResult] | None = None,
     ) -> SessionSummary:
         active_session_id: str | None = None
+        recorder: CaptureRecorder | None = None
+        terminalized = False
+        native_session = False
         try:
             with self._operation_lock:
                 self._require_connected()
@@ -341,12 +348,17 @@ class DeviceCoreRuntime:
                 if required_role is not None:
                     self._gpio_registry.require_role_configured(required_role)
 
+                backend_snapshot = self._backend_snapshot()
+                native_session = backend_snapshot is not None
                 recorder = CaptureRecorder.start(
                     session_store=self._session_store,
                     command=command,
                     firmware=self._hello.firmware if self._hello is not None else None,
                     device=self._hello.device if self._hello is not None else None,
-                    backend_snapshot=self._backend_snapshot(),
+                    backend_snapshot=backend_snapshot,
+                    workflow=workflow if native_session else None,
+                    duration_s=duration_s if native_session else None,
+                    reconnect_timeout_s=(self._reconnect_timeout_s if native_session else None),
                 )
                 active_session_id = recorder.session_id
                 self._active_session_id = active_session_id
@@ -355,11 +367,27 @@ class DeviceCoreRuntime:
                     start_action()
 
             runner.run(recorder)
+            recorder.finalize()
+            if native_session:
+                self._session_store.complete_session(recorder.session_handle)
+            terminalized = True
             summary = self._session_store.summarize_session(recorder.session_id)
             if summary.integrity is not None:
                 with self._operation_lock:
                     self._integrity = summary.integrity
             return summary
+        except Exception as exc:
+            if recorder is not None and native_session and not terminalized:
+                recorder.finalize()
+                self._session_store.fail_session(
+                    recorder.session_handle,
+                    end_reason="backend_error",
+                    error_code=(
+                        exc.error if isinstance(exc, DeviceActionError) else "internal_error"
+                    ),
+                    detail=str(exc),
+                )
+            raise
         finally:
             if active_session_id is not None:
                 with self._operation_lock:

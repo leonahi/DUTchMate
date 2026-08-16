@@ -14,6 +14,8 @@ def test_format_capture_result_renders_session_summary() -> None:
             {
                 "session_id": "20260729T100000Z-capture01",
                 "backend_mode": "basic",
+                "state": "completed",
+                "end_reason": "duration_elapsed",
                 "integrity": {"loss_status": "not_observable"},
                 "timestamp_provenance": [
                     {
@@ -38,7 +40,7 @@ def test_format_capture_result_renders_session_summary() -> None:
             }
         )
         == "Capture complete: 20260729T100000Z-capture01 "
-        "(backend=basic, loss=not_observable, "
+        "(backend=basic, state=completed, end=duration_elapsed, loss=not_observable, "
         "timestamp=host/monotonic:host_serial_read/serial_read_chunk, "
         "first_error=none, lines=complete/oversized:0, segments=2, "
         "overflow=yes, interrupted=no, resumed=no, truncated=yes)"

@@ -17,6 +17,7 @@ from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.runtime import DeviceCoreRuntime
+from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
 from dutchmate_service.app import create_app
 from dutchmate_service.startup import (
     apply_startup_hardware_config,
@@ -263,6 +264,38 @@ def test_build_startup_runtime_opens_basic_without_hello(
     )
     assert apply_startup_hardware_config(runtime, config) is False
     assert runtime.gpio_registry.get("CTRL0").state == "unconfigured"
+
+
+def test_build_startup_runtime_recovers_sessions_before_opening_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "basic",
+        serial_port="/dev/ttyUSB0",
+        baudrate=115200,
+    )
+    order: list[str] = []
+
+    def fake_recover(store: SessionStore) -> SessionRecoveryResult:
+        order.append("recover")
+        return SessionRecoveryResult()
+
+    def fake_open(received_settings: BackendSettings) -> BasicBackendConnection:
+        assert received_settings == settings
+        assert order == ["recover"]
+        order.append("open")
+        return BasicBackendConnection(serial_port=FakeSerial([]), settings=settings)
+
+    monkeypatch.setattr(SessionStore, "recover_stale_sessions", fake_recover)
+    monkeypatch.setattr(
+        "dutchmate_service.startup.open_basic_backend_connection",
+        fake_open,
+    )
+
+    build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+
+    assert order == ["recover", "open"]
 
 
 def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(

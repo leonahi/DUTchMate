@@ -45,14 +45,18 @@ The repository currently contains the first host-side Phase 1 foundation:
   runtime sessions, service status/capture responses, and CLI output
 - finite capture and reset-triggered boot-test orchestration with an explicit
   `0 < duration_s <= 300` boundary
+- schema-v1 runtime capture/boot-test lifecycle metadata with active ownership,
+  terminal completion/failure, bounded errors, and legacy-v0 separation
+- pre-backend startup recovery that abandons stale native active sessions while
+  preserving legacy and unsupported-schema evidence
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, native versioned session lifecycle and retention, bounded
-log/session retrieval, wait-pattern, UART-send service/CLI exposure, generic
-Enhanced control actions, RP2040 firmware, MCP runtime, and HIL validation are
-not implemented yet.
+reconnect, session admission quotas and retention, bounded log/session
+retrieval, wait-pattern, UART-send service/CLI exposure, generic Enhanced
+control actions, RP2040 firmware, MCP runtime, and HIL validation are not
+implemented yet.
 
 The ordered Phase 1 backlog and acceptance criteria are in
 `docs/phase1_implementation_spec.md`.

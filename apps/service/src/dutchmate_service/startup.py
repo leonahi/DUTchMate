@@ -25,6 +25,7 @@ from dutchmate_core.gpio_config.config import (
 )
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioRoleName
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus
+from dutchmate_core.session_store.store import SessionStore
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
 
@@ -74,18 +75,25 @@ def build_startup_runtime(
 ) -> DeviceCoreRuntime:
     """Build the service runtime for one explicitly selected backend."""
 
+    session_store = SessionStore(root=session_root)
+    session_store.recover_stale_sessions()
+
     if backend_settings is None:
-        return DeviceCoreRuntime(transport=_UnavailableTransport(), session_root=session_root)
+        return DeviceCoreRuntime(
+            transport=_UnavailableTransport(),
+            session_store=session_store,
+        )
 
     if backend_settings.mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         runtime = DeviceCoreRuntime(
             transport=_UnavailableTransport(connection),
             message_source=BasicBackendEventSource(connection, segment_id=0),
-            session_root=session_root,
+            session_store=session_store,
             port=connection.info.port,
             backend_mode="basic",
             tx_policy_enabled=backend_settings.tx_enabled,
+            reconnect_timeout_s=backend_settings.reconnect_timeout_s,
         )
         runtime.record_basic_connection(connection.info)
         return runtime
@@ -94,7 +102,7 @@ def build_startup_runtime(
     if serial_port is None:
         return DeviceCoreRuntime(
             transport=_UnavailableTransport(),
-            session_root=session_root,
+            session_store=session_store,
             backend_mode="enhanced",
         )
 
@@ -109,10 +117,11 @@ def build_startup_runtime(
             segment_id=0,
             source_origin_us=None,
         ),
-        session_root=session_root,
+        session_store=session_store,
         port=serial_port,
         backend_mode="enhanced",
         tx_policy_enabled=backend_settings.tx_enabled,
+        reconnect_timeout_s=backend_settings.reconnect_timeout_s,
     )
     hello = read_startup_hello(transport)
     runtime.record_hello(hello, port=serial_port)

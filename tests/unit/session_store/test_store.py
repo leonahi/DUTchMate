@@ -172,6 +172,105 @@ def test_create_session_writes_backend_identity_policy_and_provenance(
     assert summary.segment_contexts == (enhanced_snapshot().segment,)
 
 
+def test_create_native_session_writes_active_schema_v1_and_terminal_reserve(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    handle = store.create_session(
+        command="capture --seconds 2.5",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=2.5,
+        reconnect_timeout_s=4.0,
+    )
+    metadata = store.load_metadata(handle.session_id)
+    summary = store.summarize_session(handle.session_id)
+
+    assert metadata["schema_version"] == 1
+    assert metadata["state"] == "active"
+    assert metadata["workflow"] == "capture"
+    assert metadata["duration_s"] == 2.5
+    assert metadata["reconnect_timeout_s"] == 4.0
+    assert metadata["ended_at"] is None
+    assert metadata["end_reason"] is None
+    assert metadata["error"] is None
+    assert metadata["commanded_boot_mode"] is None
+    assert "firmware" not in metadata
+    assert "device" not in metadata
+    assert metadata["storage"] == {
+        "evidence_budget_bytes": 50 * 1024 * 1024,
+        "evidence_bytes_written": 3,
+        "metadata_max_bytes": 262144,
+    }
+    assert handle.paths.terminal_reserve.stat().st_size == 262144
+    assert summary.schema_version == 1
+    assert summary.state == "active"
+    assert summary.workflow == "capture"
+
+
+def test_complete_native_session_is_terminal_and_one_way(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    store.complete_session(handle)
+    summary = store.summarize_session(handle.session_id)
+
+    assert summary.state == "completed"
+    assert summary.end_reason == "duration_elapsed"
+    assert summary.ended_at == "2026-07-14T12:30:45Z"
+    assert summary.error is None
+    assert not handle.paths.terminal_reserve.exists()
+    with pytest.raises(ValueError, match="requires active"):
+        store.complete_session(handle)
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=1,
+        data=b"late\n",
+    )
+    with pytest.raises(ValueError, match="only append while active"):
+        store.append_uart_capture(
+            handle,
+            event=event,
+            result=UartCaptureProcessor().process_event(event),
+        )
+
+
+def test_failed_native_session_sanitizes_and_bounds_error_detail(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    store.fail_session(
+        handle,
+        end_reason="backend_error",
+        error_code="hardware_fault",
+        detail=("failed\n\t" + ("\u00e9" * 600)),
+    )
+    summary = store.summarize_session(handle.session_id)
+
+    assert summary.state == "failed"
+    assert summary.error is not None
+    assert summary.error["code"] == "hardware_fault"
+    assert summary.error["detail_truncated"] is True
+    detail = summary.error["detail"]
+    assert isinstance(detail, str)
+    assert "\n" not in detail and "\t" not in detail
+    assert len(detail.encode("utf-8")) <= 1024
+
+
 def test_load_metadata_reads_metadata_json(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")

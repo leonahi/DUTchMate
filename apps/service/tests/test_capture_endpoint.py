@@ -99,6 +99,14 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-capture01",
+        "schema_version": 1,
+        "state": "completed",
+        "workflow": "capture",
+        "duration_s": 2.5,
+        "reconnect_timeout_s": 5.0,
+        "ended_at": "2026-07-29T10:00:03Z",
+        "end_reason": "duration_elapsed",
+        "error": None,
         "backend_mode": "enhanced",
         "backend_identity": {
             "port": "/dev/ttyACM0",
@@ -171,6 +179,14 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-capture02",
+        "schema_version": 0,
+        "state": None,
+        "workflow": None,
+        "duration_s": None,
+        "reconnect_timeout_s": None,
+        "ended_at": None,
+        "end_reason": None,
+        "error": None,
         "backend_mode": None,
         "backend_identity": {
             "port": None,

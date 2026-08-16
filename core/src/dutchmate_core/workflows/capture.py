@@ -13,8 +13,14 @@ from dutchmate_core.backends.contracts import (
     SegmentContext,
     UartReceiveEvent,
 )
+from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.log_processing.patterns import PatternMatch
-from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
+from dutchmate_core.session_store.store import (
+    SessionHandle,
+    SessionStore,
+    SessionSummary,
+    SessionWorkflow,
+)
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import validate_capture_duration
@@ -99,6 +105,9 @@ class CaptureRecorder:
         baseline: bool = False,
         uart_processor: UartCaptureProcessor | None = None,
         backend_snapshot: BackendSnapshot | None = None,
+        workflow: SessionWorkflow | None = None,
+        duration_s: float | None = None,
+        reconnect_timeout_s: float | None = None,
     ) -> "CaptureRecorder":
         """Create a capture session and return a recorder for it."""
 
@@ -108,6 +117,9 @@ class CaptureRecorder:
             device=device,
             baseline=baseline,
             backend_snapshot=backend_snapshot,
+            workflow=workflow,
+            duration_s=duration_s,
+            reconnect_timeout_s=reconnect_timeout_s,
         )
         return cls(
             session_store=session_store,
@@ -203,6 +215,7 @@ def run_transport_capture(
     baseline: bool = False,
     uart_processor: UartCaptureProcessor | None = None,
     monotonic_clock: Callable[[], float] | None = None,
+    reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
 ) -> SessionSummary:
     """Record transport messages until the host-side capture deadline."""
 
@@ -222,9 +235,26 @@ def run_transport_capture(
         backend_snapshot=(
             source_snapshot if isinstance(source_snapshot, BackendSnapshot) else None
         ),
+        workflow="capture" if isinstance(source_snapshot, BackendSnapshot) else None,
+        duration_s=duration_s if isinstance(source_snapshot, BackendSnapshot) else None,
+        reconnect_timeout_s=(
+            reconnect_timeout_s if isinstance(source_snapshot, BackendSnapshot) else None
+        ),
     )
+    native_session = isinstance(source_snapshot, BackendSnapshot)
     try:
         runner.run(recorder)
-    finally:
+    except Exception as exc:
         recorder.finalize()
+        if native_session:
+            session_store.fail_session(
+                recorder.session_handle,
+                end_reason="backend_error",
+                error_code="internal_error",
+                detail=str(exc),
+            )
+        raise
+    recorder.finalize()
+    if native_session:
+        session_store.complete_session(recorder.session_handle)
     return session_store.summarize_session(recorder.session_id)

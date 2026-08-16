@@ -6,8 +6,13 @@ from dutchmate_core.session_store.store import (
     MatchExcerpt,
     SessionHandle,
     SessionPaths,
+    SessionRecoveryDiagnostic,
+    SessionRecoveryError,
+    SessionRecoveryResult,
+    SessionState,
     SessionStore,
     SessionSummary,
+    SessionWorkflow,
 )
 
 __all__ = [
@@ -16,6 +21,11 @@ __all__ = [
     "MatchExcerpt",
     "SessionHandle",
     "SessionPaths",
+    "SessionRecoveryDiagnostic",
+    "SessionRecoveryError",
+    "SessionRecoveryResult",
     "SessionStore",
     "SessionSummary",
+    "SessionState",
+    "SessionWorkflow",
 ]

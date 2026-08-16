@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -220,7 +221,7 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
         ]
     )
     runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
     config = parse_hardware_gpio_config(
         {
             "hardware": {
@@ -364,11 +365,29 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
     assert summary.capability_policy.uart_send.tx_policy_enabled is False
     assert summary.integrity is not None
     assert summary.integrity.loss_status == "none_reported"
-    assert summary.segment_contexts[0].timestamp.observation_point == (
-        "debug_helper_uart_receive"
-    )
+    assert summary.segment_contexts[0].timestamp.observation_point == ("debug_helper_uart_receive")
+    assert summary.schema_version == 1
+    assert summary.state == "completed"
+    assert summary.workflow == "capture"
+    assert summary.duration_s == 0.4
+    assert summary.reconnect_timeout_s == 5.0
+    assert summary.end_reason == "duration_elapsed"
+    assert summary.ended_at == "2026-07-27T12:00:00Z"
     assert runtime.status().active_session_id is None
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    session_root = tmp_path / summary.session_id
+    assert (session_root / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    assert not (session_root / ".terminal-reserve").exists()
+    metadata = store.load_metadata(summary.session_id)
+    evidence_bytes = sum(
+        session_root.joinpath(name).stat().st_size
+        for name in (
+            "uart_raw.log",
+            "uart_events.jsonl",
+            "hardware_events.jsonl",
+            "detected_patterns.json",
+        )
+    )
+    assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes  # type: ignore[index]
 
 
 def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
@@ -476,12 +495,21 @@ def test_capture_uart_clears_active_session_after_transport_failure(tmp_path: Pa
         capture_clock=clock,
         session_root=tmp_path,
     )
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
 
     with pytest.raises(RuntimeError, match="serial failed"):
         runtime.capture_uart(duration_s=0.2)
 
     assert runtime.status().active_session_id is None
+    session_id = next(tmp_path.iterdir()).name
+    summary = runtime.session_store.summarize_session(session_id)
+    assert summary.state == "failed"
+    assert summary.end_reason == "backend_error"
+    assert summary.error == {
+        "code": "internal_error",
+        "detail": "serial failed",
+        "detail_truncated": False,
+    }
 
 
 @pytest.mark.parametrize("duration_s", [0, 300.1, True])
@@ -496,7 +524,7 @@ def test_capture_uart_rejects_invalid_duration_before_creating_session(
         capture_clock=clock,
         session_root=tmp_path,
     )
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
 
     with pytest.raises(ValueError, match="positive finite"):
         runtime.capture_uart(duration_s=duration_s)  # type: ignore[arg-type]
@@ -514,13 +542,14 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
             return
         active_session_id = runtime.status().active_session_id
         assert active_session_id is not None
-        assert (tmp_path / active_session_id / "metadata.json").is_file()
+        session_root = tmp_path / active_session_id
+        assert json.loads(session_root.joinpath("metadata.json").read_text())["state"] == "active"
+        assert session_root.joinpath(".terminal-reserve").stat().st_size == 262144
 
     serial = FakeSerial(
         [
             b'{"ok":true,"timestamp_us":10}\n',
-            b'{"type":"uart","channel":0,"timestamp_us":20,'
-            b'"data_b64":"Qk9PVF9PSwo="}\n',
+            b'{"type":"uart","channel":0,"timestamp_us":20,"data_b64":"Qk9PVF9PSwo="}\n',
             b'{"ok":true,"timestamp_us":30}\n',
         ],
         on_write=assert_session_reserved_before_reset,
@@ -541,7 +570,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
     )
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
     runtime.configure_gpio_mode(
         role="reset",
         channel="CTRL2",
@@ -553,6 +582,9 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     summary = runtime.run_boot_test(duration_s=0.4)
 
     assert summary.command == "boot-test --seconds 0.4"
+    assert summary.schema_version == 1
+    assert summary.state == "completed"
+    assert summary.workflow == "boot_test"
     assert serial.writes == [
         b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"reset",'
         b'"mode":"open_drain","active_level":"low"}\n',
@@ -573,7 +605,7 @@ def test_run_boot_test_requires_reset_role_before_creating_session(
         capture_clock=clock,
         session_root=tmp_path,
     )
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
 
     with pytest.raises(GpioConfigurationError, match="'reset'.*not configured"):
         runtime.run_boot_test(duration_s=0.2)
@@ -598,7 +630,7 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
         capture_clock=clock,
         session_root=tmp_path,
     )
-    runtime.record_hello(hello())
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
     runtime.gpio_registry.accept_mode(
         role="reset",
         channel="CTRL0",
@@ -614,6 +646,14 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
     assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
     assert runtime.status().active_session_id is None
     assert len(list(tmp_path.iterdir())) == 1
+    session_id = next(tmp_path.iterdir()).name
+    summary = runtime.session_store.summarize_session(session_id)
+    assert summary.state == "failed"
+    assert summary.error == {
+        "code": "hardware_fault",
+        "detail": "reset pulse failed",
+        "detail_truncated": False,
+    }
 
 
 @pytest.mark.parametrize("duration_s", [0, 300.1, True])

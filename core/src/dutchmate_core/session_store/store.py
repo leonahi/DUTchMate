@@ -2,6 +2,9 @@
 
 import base64
 import json
+import math
+import os
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -26,6 +29,11 @@ from dutchmate_core.uart_capture.processor import UartCaptureResult
 
 _FAILURE_PATTERNS = frozenset({"ERROR", "ASSERT", "PANIC", "HardFault"})
 _MAX_MATCH_EXCERPT_BYTES = 4096
+_DEFAULT_EVIDENCE_BUDGET_BYTES = 50 * 1024 * 1024
+_METADATA_MAX_BYTES = 262144
+
+SessionState = Literal["active", "completed", "failed", "abandoned"]
+SessionWorkflow = Literal["capture", "boot_test", "wait_pattern"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +46,7 @@ class SessionPaths:
     uart_events: Path
     hardware_events: Path
     detected_patterns: Path
+    terminal_reserve: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +55,27 @@ class SessionHandle:
 
     session_id: str
     paths: SessionPaths
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRecoveryDiagnostic:
+    """One non-fatal startup-recovery observation for a stored session."""
+
+    session_id: str
+    code: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRecoveryResult:
+    """Sessions abandoned at startup plus non-fatal compatibility diagnostics."""
+
+    recovered_session_ids: tuple[str, ...] = ()
+    diagnostics: tuple[SessionRecoveryDiagnostic, ...] = ()
+
+
+class SessionRecoveryError(RuntimeError):
+    """Raised when stale native session metadata cannot be safely replaced."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +155,14 @@ class SessionSummary:
     segment_contexts: tuple[SegmentContext, ...] = ()
     first_error: FirstError | None = None
     line_processing: LineProcessing = LineProcessing()
+    schema_version: int = 0
+    state: SessionState | None = None
+    workflow: SessionWorkflow | None = None
+    duration_s: float | None = None
+    reconnect_timeout_s: float | None = None
+    ended_at: str | None = None
+    end_reason: str | None = None
+    error: dict[str, object] | None = None
 
 
 class SessionStore:
@@ -136,16 +174,166 @@ class SessionStore:
         *,
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
+        evidence_budget_bytes: int = _DEFAULT_EVIDENCE_BUDGET_BYTES,
     ) -> None:
         self._root = Path(root)
         self._clock = clock or _utc_now
         self._id_factory = id_factory or _random_suffix
+        if (
+            isinstance(evidence_budget_bytes, bool)
+            or not isinstance(evidence_budget_bytes, int)
+            or evidence_budget_bytes <= 0
+        ):
+            raise ValueError("session evidence budget must be a positive integer")
+        self._evidence_budget_bytes = evidence_budget_bytes
+        self._last_recovery = SessionRecoveryResult()
 
     @property
     def root(self) -> Path:
         """Directory containing all sessions."""
 
         return self._root
+
+    @property
+    def last_recovery(self) -> SessionRecoveryResult:
+        """Most recent startup-recovery result for this store instance."""
+
+        return self._last_recovery
+
+    def recover_stale_sessions(self) -> SessionRecoveryResult:
+        """Abandon stale native active sessions without mutating other schemas."""
+
+        if not self._root.exists():
+            self._last_recovery = SessionRecoveryResult()
+            return self._last_recovery
+
+        recovered: list[str] = []
+        diagnostics: list[SessionRecoveryDiagnostic] = []
+        for session_root in sorted(self._root.iterdir(), key=lambda path: path.name):
+            if session_root.is_symlink() or not session_root.is_dir():
+                continue
+            paths = _session_paths(session_root)
+            if not paths.metadata.is_file():
+                continue
+            session_id = session_root.name
+            try:
+                _validate_session_id(session_id)
+                metadata = _read_json_object(paths.metadata)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="persistence_fault",
+                        detail=str(exc),
+                    )
+                )
+                continue
+
+            schema_version = metadata.get("schema_version", 0)
+            if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="persistence_fault",
+                        detail="session schema_version is malformed",
+                    )
+                )
+                continue
+            if schema_version == 0:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="legacy_session_skipped",
+                        detail="unversioned schema-v0 session was not mutated",
+                    )
+                )
+                continue
+            if schema_version != 1:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="unsupported_session_schema",
+                        detail=f"session schema version {schema_version} was not mutated",
+                    )
+                )
+                continue
+            if metadata.get("session_id") != session_id:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="persistence_fault",
+                        detail="session metadata ID does not match its directory",
+                    )
+                )
+                continue
+            state = metadata.get("state")
+            if state not in {"active", "completed", "failed", "abandoned"}:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="persistence_fault",
+                        detail="native session lifecycle state is malformed",
+                    )
+                )
+                continue
+            try:
+                _validate_native_lifecycle_metadata(
+                    state=state,
+                    ended_at=_optional_str(metadata, "ended_at"),
+                    end_reason=_optional_str(metadata, "end_reason"),
+                    error=_optional_object(metadata.get("error"), "error"),
+                )
+            except ValueError as exc:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="persistence_fault",
+                        detail=str(exc),
+                    )
+                )
+                continue
+            if state != "active":
+                continue
+
+            if paths.terminal_reserve.is_symlink():
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="terminal_reserve_invalid",
+                        detail="stale active session terminal reserve is a symbolic link",
+                    )
+                )
+            elif not paths.terminal_reserve.is_file():
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="terminal_reserve_missing",
+                        detail="stale active session terminal reserve is missing",
+                    )
+                )
+            elif paths.terminal_reserve.stat().st_size != _METADATA_MAX_BYTES:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_id,
+                        code="terminal_reserve_invalid",
+                        detail="stale active session terminal reserve has an invalid size",
+                    )
+                )
+
+            handle = SessionHandle(session_id=session_id, paths=paths)
+            try:
+                self.abandon_session(handle)
+            except (OSError, ValueError) as exc:
+                raise SessionRecoveryError(
+                    f"failed to recover stale session {session_id}: {exc}"
+                ) from exc
+            recovered.append(session_id)
+
+        self._last_recovery = SessionRecoveryResult(
+            recovered_session_ids=tuple(recovered),
+            diagnostics=tuple(diagnostics),
+        )
+        return self._last_recovery
 
     def create_session(
         self,
@@ -155,11 +343,19 @@ class SessionStore:
         device: str | None = None,
         baseline: bool = False,
         backend_snapshot: BackendSnapshot | None = None,
+        workflow: SessionWorkflow | None = None,
+        duration_s: float | None = None,
+        reconnect_timeout_s: float | None = None,
     ) -> SessionHandle:
         """Create a new session directory and initialize required files."""
 
-        if not command:
-            raise ValueError("session command must not be empty")
+        _validate_session_command(command)
+        _validate_native_lifecycle_inputs(
+            workflow=workflow,
+            duration_s=duration_s,
+            reconnect_timeout_s=reconnect_timeout_s,
+            backend_snapshot=backend_snapshot,
+        )
 
         started_at = self._clock()
         session_id = _validate_session_id(
@@ -176,15 +372,90 @@ class SessionStore:
             device=device,
             baseline=baseline,
             backend_snapshot=backend_snapshot,
+            workflow=workflow,
+            duration_s=duration_s,
+            reconnect_timeout_s=reconnect_timeout_s,
+            evidence_budget_bytes=self._evidence_budget_bytes,
         )
 
-        _write_json(paths.metadata, metadata)
+        if workflow is not None:
+            paths.terminal_reserve.write_bytes(b"\0" * _METADATA_MAX_BYTES)
         paths.uart_raw.write_bytes(b"")
         paths.uart_events.write_text("", encoding="utf-8")
         paths.hardware_events.write_text("", encoding="utf-8")
         _write_json(paths.detected_patterns, [])
+        _write_json(paths.metadata, metadata)
 
         return SessionHandle(session_id=session_id, paths=paths)
+
+    def complete_session(
+        self,
+        handle: SessionHandle,
+        *,
+        end_reason: str = "duration_elapsed",
+    ) -> None:
+        """Transition one active native session to completed exactly once."""
+
+        self._terminalize_session(
+            handle,
+            state="completed",
+            end_reason=end_reason,
+            error=None,
+        )
+
+    def fail_session(
+        self,
+        handle: SessionHandle,
+        *,
+        end_reason: str,
+        error_code: str,
+        detail: str,
+    ) -> None:
+        """Transition one active native session to failed with bounded detail."""
+
+        self._terminalize_session(
+            handle,
+            state="failed",
+            end_reason=end_reason,
+            error=_bounded_error(error_code, detail),
+        )
+
+    def abandon_session(self, handle: SessionHandle) -> None:
+        """Transition one stale active native session during startup recovery."""
+
+        self._terminalize_session(
+            handle,
+            state="abandoned",
+            end_reason="service_restart",
+            error=None,
+        )
+
+    def _terminalize_session(
+        self,
+        handle: SessionHandle,
+        *,
+        state: Literal["completed", "failed", "abandoned"],
+        end_reason: str,
+        error: dict[str, object] | None,
+    ) -> None:
+        metadata = _read_json_object(handle.paths.metadata)
+        if metadata.get("schema_version") != 1:
+            raise ValueError("only native schema-v1 sessions can be terminalized")
+        if metadata.get("state") != "active":
+            raise ValueError("session lifecycle transition requires active state")
+        ended_at = _format_utc_timestamp(self._clock())
+        metadata["state"] = state
+        metadata["ended_at"] = ended_at
+        metadata["end_reason"] = end_reason
+        metadata["error"] = error
+        segments = metadata.get("segments")
+        if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
+            raise ValueError("native session must contain a current segment")
+        segments[-1]["ended_at"] = ended_at
+        segments[-1]["end_reason"] = end_reason
+        _refresh_storage_accounting(metadata, handle.paths)
+        handle.paths.terminal_reserve.unlink(missing_ok=True)
+        _write_json_atomic(handle.paths.metadata, metadata)
 
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
@@ -252,6 +523,7 @@ class SessionStore:
     ) -> None:
         """Append one processed normalized UART event to a session."""
 
+        _require_session_appendable(handle)
         if event.segment_id != result.segment_id:
             raise ValueError("UART event and capture result segments must match")
         if event.channel != result.channel:
@@ -285,6 +557,7 @@ class SessionStore:
                 metadata,
                 newly_oversized_line_count=result.newly_oversized_line_count,
             )
+            _refresh_storage_accounting(metadata, handle.paths)
             _write_json(handle.paths.metadata, metadata)
         self._record_segment_timestamp(
             handle,
@@ -301,6 +574,7 @@ class SessionStore:
     ) -> None:
         """Persist derived records finalized at segment or session close."""
 
+        _require_session_appendable(handle)
         for oversized_line in result.oversized_lines:
             _append_jsonl(
                 handle.paths.hardware_events,
@@ -310,6 +584,10 @@ class SessionStore:
                     timestamp_epoch=timestamp_epoch,
                 ),
             )
+        if result.oversized_lines:
+            metadata = _read_json_object(handle.paths.metadata)
+            _refresh_storage_accounting(metadata, handle.paths)
+            _write_json(handle.paths.metadata, metadata)
 
     def append_buffer_overflow(
         self,
@@ -320,6 +598,7 @@ class SessionStore:
     ) -> None:
         """Append one buffer overflow event to a session."""
 
+        _require_session_appendable(handle)
         metadata = _read_json_object(handle.paths.metadata)
         _record_metadata_segment_timestamp(
             metadata,
@@ -333,6 +612,7 @@ class SessionStore:
             handle.paths.hardware_events,
             _buffer_overflow_event_json(event, timestamp_epoch),
         )
+        _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 
     def append_buffer_status(
@@ -344,6 +624,7 @@ class SessionStore:
     ) -> None:
         """Append one buffer status telemetry event to a session."""
 
+        _require_session_appendable(handle)
         metadata = _read_json_object(handle.paths.metadata)
         _record_metadata_segment_timestamp(
             metadata,
@@ -362,6 +643,7 @@ class SessionStore:
             handle.paths.hardware_events,
             _buffer_status_event_json(event, timestamp_epoch),
         )
+        _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 
     def record_segment_context(
@@ -371,6 +653,7 @@ class SessionStore:
     ) -> None:
         """Persist timing provenance before the segment's first evidence event."""
 
+        _require_session_appendable(handle)
         metadata = _read_json_object(handle.paths.metadata)
         segment = _metadata_segment(metadata, context.segment_id)
         timestamp = _timestamp_json(context.timestamp)
@@ -394,6 +677,7 @@ class SessionStore:
             segment_id=segment_id,
             timestamp_us=timestamp_us,
         )
+        _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 
 
@@ -405,6 +689,7 @@ def _session_paths(root: Path) -> SessionPaths:
         uart_events=root / "uart_events.jsonl",
         hardware_events=root / "hardware_events.jsonl",
         detected_patterns=root / "detected_patterns.json",
+        terminal_reserve=root / ".terminal-reserve",
     )
 
 
@@ -426,6 +711,46 @@ def _validate_session_limit(limit: int | None) -> None:
         raise ValueError("session limit must be a positive integer")
 
 
+def _validate_session_command(command: str) -> None:
+    if not isinstance(command, str) or not command:
+        raise ValueError("session command must not be empty")
+    if len(command.encode("utf-8")) > 256:
+        raise ValueError("session command must contain at most 256 UTF-8 bytes")
+    if any(unicodedata.category(character) == "Cc" for character in command):
+        raise ValueError("session command must not contain control characters")
+
+
+def _validate_native_lifecycle_inputs(
+    *,
+    workflow: SessionWorkflow | None,
+    duration_s: float | None,
+    reconnect_timeout_s: float | None,
+    backend_snapshot: BackendSnapshot | None,
+) -> None:
+    if workflow is None:
+        if duration_s is not None or reconnect_timeout_s is not None:
+            raise ValueError("native lifecycle values require a workflow")
+        return
+    if backend_snapshot is None:
+        raise ValueError("native sessions require a backend snapshot")
+    if workflow in {"capture", "boot_test"}:
+        _require_positive_number(duration_s, "duration_s")
+    elif duration_s is not None:
+        raise ValueError("wait-pattern duration_s must be null")
+    _require_positive_number(reconnect_timeout_s, "reconnect_timeout_s")
+
+
+def _require_positive_number(value: object, field: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        or float(value) <= 0
+    ):
+        raise ValueError(f"native session {field} must be a positive finite number")
+    return float(value)
+
+
 def _initial_metadata(
     *,
     session_id: str,
@@ -435,6 +760,10 @@ def _initial_metadata(
     device: str | None,
     baseline: bool,
     backend_snapshot: BackendSnapshot | None,
+    workflow: SessionWorkflow | None,
+    duration_s: float | None,
+    reconnect_timeout_s: float | None,
+    evidence_budget_bytes: int,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "session_id": session_id,
@@ -484,6 +813,43 @@ def _initial_metadata(
             ],
         }
     )
+    if workflow is not None:
+        metadata = {
+            "schema_version": 1,
+            "session_id": session_id,
+            "started_at": started_at,
+            "state": "active",
+            "workflow": workflow,
+            "duration_s": duration_s,
+            "reconnect_timeout_s": reconnect_timeout_s,
+            "ended_at": None,
+            "end_reason": None,
+            "error": None,
+            "command": command,
+            "backend_mode": backend_snapshot.info.mode,
+            "backend_identity": {
+                "port": backend_snapshot.info.port,
+                "device": backend_snapshot.info.device,
+                "firmware": backend_snapshot.info.firmware,
+            },
+            "backend_capabilities": sorted(backend_snapshot.info.capabilities),
+            "capabilities": sorted(backend_snapshot.capabilities),
+            "capability_policy": _capability_policy_json(backend_snapshot.capability_policy),
+            "commanded_boot_mode": None,
+            "integrity": _integrity_json(backend_snapshot.integrity),
+            "line_processing": _line_processing_json(LineProcessing()),
+            "storage": {
+                "evidence_budget_bytes": evidence_budget_bytes,
+                "evidence_bytes_written": 3,
+                "metadata_max_bytes": _METADATA_MAX_BYTES,
+            },
+            "truncated": False,
+            "truncation": None,
+            "interrupted": False,
+            "resumed": False,
+            "overflow": False,
+            "segments": [_backend_segment_json(backend_snapshot, started_at=started_at)],
+        }
     return metadata
 
 
@@ -496,8 +862,38 @@ def _summary_from_metadata(
     if not isinstance(segments, list):
         raise ValueError("session metadata segments must be a JSON array")
 
+    schema_version = metadata.get("schema_version", 0)
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+        raise ValueError("session metadata schema_version must be an integer")
+    if schema_version not in {0, 1}:
+        raise ValueError(f"unsupported session schema version: {schema_version}")
+    native = schema_version == 1
     backend_mode = _optional_backend_mode(metadata.get("backend_mode"))
     backend_identity = _optional_object(metadata.get("backend_identity"), "backend_identity")
+    state = _native_state(metadata.get("state")) if native else None
+    workflow = _native_workflow(metadata.get("workflow")) if native else None
+    duration_s = _optional_positive_number(metadata.get("duration_s")) if native else None
+    reconnect_timeout_s = (
+        _optional_positive_number(metadata.get("reconnect_timeout_s")) if native else None
+    )
+    ended_at = _optional_str(metadata, "ended_at") if native else None
+    end_reason = _optional_str(metadata, "end_reason") if native else None
+    error = _optional_object(metadata.get("error"), "error") if native else None
+    if native:
+        if backend_mode is None or backend_identity is None:
+            raise ValueError("native session backend identity is required")
+        if not 1 <= len(segments) <= 32:
+            raise ValueError("native session must contain 1..32 segments")
+        if workflow in {"capture", "boot_test"} and duration_s is None:
+            raise ValueError("native capture-like session duration_s is required")
+        if reconnect_timeout_s is None:
+            raise ValueError("native session reconnect_timeout_s is required")
+        _validate_native_lifecycle_metadata(
+            state=state,
+            ended_at=ended_at,
+            end_reason=end_reason,
+            error=error,
+        )
     return SessionSummary(
         session_id=_required_str(metadata, "session_id"),
         started_at=_required_str(metadata, "started_at"),
@@ -506,9 +902,17 @@ def _summary_from_metadata(
         interrupted=_required_bool(metadata, "interrupted"),
         resumed=_required_bool(metadata, "resumed"),
         overflow=_required_bool(metadata, "overflow"),
-        baseline=_required_bool(metadata, "baseline"),
-        firmware=_optional_str(metadata, "firmware"),
-        device=_optional_str(metadata, "device"),
+        baseline=False if native else _required_bool(metadata, "baseline"),
+        firmware=(
+            _optional_str(backend_identity, "firmware")
+            if native and backend_identity is not None
+            else _optional_str(metadata, "firmware")
+        ),
+        device=(
+            _optional_str(backend_identity, "device")
+            if native and backend_identity is not None
+            else _optional_str(metadata, "device")
+        ),
         segment_count=len(segments),
         backend_mode=backend_mode,
         port=(_optional_str(backend_identity, "port") if backend_identity is not None else None),
@@ -519,6 +923,14 @@ def _summary_from_metadata(
         segment_contexts=_segment_contexts(segments),
         first_error=_first_error(detected_patterns, segments),
         line_processing=_optional_line_processing(metadata.get("line_processing")),
+        schema_version=schema_version,
+        state=state,
+        workflow=workflow,
+        duration_s=duration_s,
+        reconnect_timeout_s=reconnect_timeout_s,
+        ended_at=ended_at,
+        end_reason=end_reason,
+        error=error,
     )
 
 
@@ -617,6 +1029,44 @@ def _optional_backend_mode(value: object) -> BackendMode | None:
     if value not in {"basic", "enhanced"}:
         raise ValueError("session metadata 'backend_mode' must be basic or enhanced")
     return value
+
+
+def _native_state(value: object) -> SessionState:
+    if value not in {"active", "completed", "failed", "abandoned"}:
+        raise ValueError("native session state is invalid")
+    return value
+
+
+def _native_workflow(value: object) -> SessionWorkflow:
+    if value not in {"capture", "boot_test", "wait_pattern"}:
+        raise ValueError("native session workflow is invalid")
+    return value
+
+
+def _validate_native_lifecycle_metadata(
+    *,
+    state: SessionState | None,
+    ended_at: str | None,
+    end_reason: str | None,
+    error: dict[str, object] | None,
+) -> None:
+    if state == "active":
+        if ended_at is not None or end_reason is not None or error is not None:
+            raise ValueError("active session terminal fields must be null")
+        return
+    if ended_at is None or end_reason is None:
+        raise ValueError("terminal session must contain ended_at and end_reason")
+    if state == "failed":
+        if error is None:
+            raise ValueError("failed session must contain an error")
+    elif error is not None:
+        raise ValueError("completed or abandoned session error must be null")
+
+
+def _optional_positive_number(value: object) -> float | None:
+    if value is None:
+        return None
+    return _require_positive_number(value, "numeric lifecycle value")
 
 
 def _optional_string_tuple(metadata: dict[str, object], key: str) -> tuple[str, ...]:
@@ -760,6 +1210,65 @@ def _write_json(path: Path, value: object) -> None:
         file.write("\n")
 
 
+def _write_json_atomic(path: Path, value: object) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        _write_json(temporary, value)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _refresh_storage_accounting(
+    metadata: dict[str, object],
+    paths: SessionPaths,
+) -> None:
+    storage = _optional_object(metadata.get("storage"), "storage")
+    if storage is None:
+        return
+    storage["evidence_bytes_written"] = sum(
+        path.stat().st_size
+        for path in (
+            paths.uart_raw,
+            paths.uart_events,
+            paths.hardware_events,
+            paths.detected_patterns,
+        )
+    )
+
+
+def _bounded_error(code: str, detail: str) -> dict[str, object]:
+    if not isinstance(code, str) or not code:
+        raise ValueError("session error code must be a non-empty string")
+    if not isinstance(detail, str):
+        raise TypeError("session error detail must be a string")
+    cleaned = "".join(
+        " "
+        if character in {"\r", "\n", "\t"}
+        else "\ufffd"
+        if unicodedata.category(character) == "Cc"
+        else character
+        for character in detail
+    )
+    if not cleaned:
+        cleaned = code.replace("_", " ")
+    encoded = cleaned.encode("utf-8")
+    truncated = len(encoded) > 1024
+    if truncated:
+        prefix = encoded[:1024]
+        while True:
+            try:
+                cleaned = prefix.decode("utf-8")
+                break
+            except UnicodeDecodeError:
+                prefix = prefix[:-1]
+    return {
+        "code": code,
+        "detail": cleaned,
+        "detail_truncated": truncated,
+    }
+
+
 def _read_json_object(path: Path) -> dict[str, object]:
     with path.open("r", encoding="utf-8") as file:
         loaded = json.load(file)
@@ -774,6 +1283,13 @@ def _read_json_list(path: Path) -> list[object]:
     if not isinstance(loaded, list):
         raise ValueError(f"{path.name} must contain a JSON array")
     return cast(list[object], loaded)
+
+
+def _require_session_appendable(handle: SessionHandle) -> None:
+    metadata = _read_json_object(handle.paths.metadata)
+    schema_version = metadata.get("schema_version", 0)
+    if schema_version == 1 and metadata.get("state") != "active":
+        raise ValueError("native session evidence can only append while active")
 
 
 def _append_bytes(path: Path, data: bytes) -> None:

@@ -14,6 +14,8 @@ def test_format_boot_test_result_renders_session_summary() -> None:
             {
                 "session_id": "20260729T100000Z-boot01",
                 "backend_mode": "enhanced",
+                "state": "completed",
+                "end_reason": "duration_elapsed",
                 "integrity": {
                     "loss_status": "none_reported",
                 },
@@ -40,7 +42,7 @@ def test_format_boot_test_result_renders_session_summary() -> None:
             }
         )
         == "Boot test complete: 20260729T100000Z-boot01 "
-        "(backend=enhanced, loss=none_reported, "
+        "(backend=enhanced, state=completed, end=duration_elapsed, loss=none_reported, "
         "timestamp=device/rp2040_timer:debug_helper_uart_receive/uart_event, "
         "first_error=none, lines=limit_exceeded/oversized:2, segments=2, "
         "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
