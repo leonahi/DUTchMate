@@ -16,7 +16,7 @@ from dutchmate_core.backends.basic import (
 )
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.session_store.store import SessionStore
-from dutchmate_core.workflows.capture import run_transport_capture
+from dutchmate_core.workflows.capture import CaptureWorkflow
 
 
 class FakeRawSerial:
@@ -251,10 +251,9 @@ def test_basic_source_records_raw_bytes_through_shared_capture_pipeline(tmp_path
     )
     store = SessionStore(root=tmp_path)
 
-    summary = run_transport_capture(
-        transport=source,
+    summary = CaptureWorkflow(session_store=store).run(
+        source=source,
         duration_s=1.0,
-        session_store=store,
         command="capture --seconds 1",
         monotonic_clock=lambda: next(workflow_clock),
     )

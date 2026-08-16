@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Protocol
 
 from dutchmate_core.backends.contracts import (
@@ -160,15 +161,14 @@ class CaptureRecorder:
         if isinstance(event, UartReceiveEvent):
             candidate_processor = self._uart_processor.clone()
             result = candidate_processor.process_event(event)
-            try:
-                self._session_store.append_uart_capture(
+            if not self._record_with_quota(
+                lambda: self._session_store.append_uart_capture(
                     self._session_handle,
                     event=event,
                     result=result,
                     timestamp_epoch=self._timestamp_epoch,
                 )
-            except EvidenceQuotaExceeded:
-                self._terminalized = True
+            ):
                 return CaptureRecordResult(
                     session_id=self.session_id,
                     event_type="size_limit",
@@ -182,14 +182,13 @@ class CaptureRecorder:
             )
 
         if isinstance(event, BufferOverflowEvent):
-            try:
-                self._session_store.append_buffer_overflow(
+            if not self._record_with_quota(
+                lambda: self._session_store.append_buffer_overflow(
                     self._session_handle,
                     event=event,
                     timestamp_epoch=self._timestamp_epoch,
                 )
-            except EvidenceQuotaExceeded:
-                self._terminalized = True
+            ):
                 return CaptureRecordResult(
                     session_id=self.session_id,
                     event_type="size_limit",
@@ -200,14 +199,13 @@ class CaptureRecorder:
             )
 
         if isinstance(event, BufferStatusEvent):
-            try:
-                self._session_store.append_buffer_status(
+            if not self._record_with_quota(
+                lambda: self._session_store.append_buffer_status(
                     self._session_handle,
                     event=event,
                     timestamp_epoch=self._timestamp_epoch,
                 )
-            except EvidenceQuotaExceeded:
-                self._terminalized = True
+            ):
                 return CaptureRecordResult(
                     session_id=self.session_id,
                     event_type="size_limit",
@@ -237,71 +235,101 @@ class CaptureRecorder:
             return
 
         for result in self._uart_processor.flush_all():
-            try:
-                self._session_store.append_uart_processing_result(
+            if not self._record_with_quota(
+                partial(
+                    self._session_store.append_uart_processing_result,
                     self._session_handle,
                     result=result,
                     timestamp_epoch=self._timestamp_epoch,
                 )
-            except EvidenceQuotaExceeded:
-                self._terminalized = True
+            ):
                 break
         self._finalized = True
 
+    def _record_with_quota(self, operation: Callable[[], None]) -> bool:
+        try:
+            operation()
+        except EvidenceQuotaExceeded:
+            self._terminalized = True
+            return False
+        return True
 
-def run_transport_capture(
-    *,
-    transport: CaptureEventSource,
-    duration_s: float,
-    session_store: SessionStore,
-    command: str,
-    firmware: str | None = None,
-    device: str | None = None,
-    baseline: bool = False,
-    uart_processor: UartCaptureProcessor | None = None,
-    monotonic_clock: Callable[[], float] | None = None,
-    reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
-) -> SessionSummary:
-    """Record transport messages until the host-side capture deadline."""
 
-    runner = TransportCaptureRunner(
-        transport=transport,
-        duration_s=duration_s,
-        monotonic_clock=monotonic_clock,
-    )
-    source_snapshot = getattr(transport, "snapshot", None)
-    recorder = CaptureRecorder.start(
-        session_store=session_store,
-        command=command,
-        firmware=firmware,
-        device=device,
-        baseline=baseline,
-        uart_processor=uart_processor,
-        backend_snapshot=(
-            source_snapshot if isinstance(source_snapshot, BackendSnapshot) else None
-        ),
-        workflow="capture" if isinstance(source_snapshot, BackendSnapshot) else None,
-        duration_s=duration_s if isinstance(source_snapshot, BackendSnapshot) else None,
-        reconnect_timeout_s=(
-            reconnect_timeout_s if isinstance(source_snapshot, BackendSnapshot) else None
-        ),
-    )
-    native_session = isinstance(source_snapshot, BackendSnapshot)
-    try:
-        runner.run(recorder)
-    except Exception as exc:
-        recorder.finalize()
-        if recorder.terminalized:
-            return session_store.summarize_session(recorder.session_id)
-        if native_session:
-            session_store.fail_session(
-                recorder.session_handle,
-                end_reason="backend_error",
-                error_code="internal_error",
-                detail=str(exc),
-            )
-        raise
-    recorder.finalize()
-    if native_session and not recorder.terminalized:
-        session_store.complete_session(recorder.session_handle)
-    return session_store.summarize_session(recorder.session_id)
+class CaptureWorkflow:
+    """Own the complete lifecycle of one finite capture session."""
+
+    def __init__(self, *, session_store: SessionStore) -> None:
+        self._session_store = session_store
+
+    def run(
+        self,
+        *,
+        source: CaptureEventSource,
+        duration_s: float,
+        command: str,
+        firmware: str | None = None,
+        device: str | None = None,
+        baseline: bool = False,
+        uart_processor: UartCaptureProcessor | None = None,
+        monotonic_clock: Callable[[], float] | None = None,
+        reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
+        backend_snapshot: BackendSnapshot | None = None,
+        workflow: SessionWorkflow = "capture",
+        start_action: Callable[[], object] | None = None,
+        on_session_started: Callable[[str], None] | None = None,
+    ) -> SessionSummary:
+        """Create, record, terminalize, and summarize one capture session."""
+
+        runner = TransportCaptureRunner(
+            transport=source,
+            duration_s=duration_s,
+            monotonic_clock=monotonic_clock,
+        )
+        source_snapshot = getattr(source, "snapshot", None)
+        snapshot = (
+            backend_snapshot
+            if backend_snapshot is not None
+            else source_snapshot
+            if isinstance(source_snapshot, BackendSnapshot)
+            else None
+        )
+        native_session = snapshot is not None
+        recorder = CaptureRecorder.start(
+            session_store=self._session_store,
+            command=command,
+            firmware=firmware,
+            device=device,
+            baseline=baseline,
+            uart_processor=uart_processor,
+            backend_snapshot=snapshot,
+            workflow=workflow if native_session else None,
+            duration_s=duration_s if native_session else None,
+            reconnect_timeout_s=reconnect_timeout_s if native_session else None,
+        )
+        try:
+            if on_session_started is not None:
+                on_session_started(recorder.session_id)
+            if start_action is not None:
+                start_action()
+            runner.run(recorder)
+            recorder.finalize()
+            if native_session and not recorder.terminalized:
+                self._session_store.complete_session(recorder.session_handle)
+        except Exception as exc:
+            recorder.finalize()
+            if recorder.terminalized:
+                return self._session_store.summarize_session(recorder.session_id)
+            if native_session:
+                self._session_store.fail_session(
+                    recorder.session_handle,
+                    end_reason="backend_error",
+                    error_code=self._failure_code(exc),
+                    detail=str(exc),
+                )
+            raise
+        return self._session_store.summarize_session(recorder.session_id)
+
+    @staticmethod
+    def _failure_code(exc: Exception) -> str:
+        code = getattr(exc, "error", None)
+        return code if isinstance(code, str) and code else "internal_error"

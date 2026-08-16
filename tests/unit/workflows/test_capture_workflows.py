@@ -17,7 +17,7 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
 )
 from dutchmate_core.session_store.store import SessionStore
-from dutchmate_core.workflows.capture import run_transport_capture
+from dutchmate_core.workflows.capture import CaptureWorkflow
 from dutchmate_core.workflows.enhanced_capture import CaptureStreamRecorder, run_mock_capture
 
 
@@ -178,7 +178,7 @@ def test_run_mock_capture_persists_capture_evidence(tmp_path: Path) -> None:
     ]
 
 
-def test_run_transport_capture_records_capture_messages_until_deadline(
+def test_capture_workflow_records_capture_messages_until_deadline(
     tmp_path: Path,
 ) -> None:
     clock = FakeMonotonicClock()
@@ -205,10 +205,9 @@ def test_run_transport_capture_records_capture_messages_until_deadline(
     )
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_transport_capture(
-        transport=transport,
+    summary = CaptureWorkflow(session_store=store).run(
+        source=transport,
         duration_s=0.6,
-        session_store=store,
         command="capture --seconds 0.6",
         firmware="0.1.0",
         device="dutchmate-rp2040",
@@ -247,10 +246,9 @@ def test_transport_capture_persists_source_segment_context_before_event(
     )
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_transport_capture(
-        transport=transport,
+    summary = CaptureWorkflow(session_store=store).run(
+        source=transport,
         duration_s=0.3,
-        session_store=store,
         command="capture",
         monotonic_clock=clock,
     )
@@ -260,7 +258,7 @@ def test_transport_capture_persists_source_segment_context_before_event(
     assert metadata["segments"][0]["timestamp"]["source_origin_us"] == 8_500  # type: ignore[index]
 
 
-def test_run_transport_capture_continues_after_read_timeout(tmp_path: Path) -> None:
+def test_capture_workflow_continues_after_read_timeout(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     transport = FakeCaptureEventSource(
         [
@@ -271,10 +269,9 @@ def test_run_transport_capture_continues_after_read_timeout(tmp_path: Path) -> N
     )
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_transport_capture(
-        transport=transport,
+    summary = CaptureWorkflow(session_store=store).run(
+        source=transport,
         duration_s=0.4,
-        session_store=store,
         command="capture",
         monotonic_clock=clock,
     )
@@ -283,7 +280,7 @@ def test_run_transport_capture_continues_after_read_timeout(tmp_path: Path) -> N
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
 
 
-def test_run_transport_capture_does_not_record_event_after_deadline(
+def test_capture_workflow_does_not_record_event_after_deadline(
     tmp_path: Path,
 ) -> None:
     clock = FakeMonotonicClock()
@@ -294,10 +291,9 @@ def test_run_transport_capture_does_not_record_event_after_deadline(
     )
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_transport_capture(
-        transport=transport,
+    summary = CaptureWorkflow(session_store=store).run(
+        source=transport,
         duration_s=0.1,
-        session_store=store,
         command="capture",
         monotonic_clock=clock,
     )
@@ -309,7 +305,7 @@ def test_run_transport_capture_does_not_record_event_after_deadline(
     "duration_s",
     [0.0, -1.0, 300.1, float("inf"), float("nan"), True],
 )
-def test_run_transport_capture_rejects_invalid_duration(
+def test_capture_workflow_rejects_invalid_duration(
     tmp_path: Path,
     duration_s: float,
 ) -> None:
@@ -318,10 +314,9 @@ def test_run_transport_capture_rejects_invalid_duration(
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     with pytest.raises(ValueError, match="positive finite"):
-        run_transport_capture(
-            transport=transport,
+        CaptureWorkflow(session_store=store).run(
+            source=transport,
             duration_s=duration_s,
-            session_store=store,
             command="capture",
             monotonic_clock=clock,
         )

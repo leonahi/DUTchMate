@@ -40,8 +40,7 @@ from dutchmate_core.validation import (
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
-    CaptureRecorder,
-    TransportCaptureRunner,
+    CaptureWorkflow,
 )
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
@@ -96,6 +95,7 @@ class DeviceCoreRuntime:
         self._message_source = message_source
         self._capture_clock = capture_clock
         self._session_store = session_store or SessionStore(root=session_root)
+        self._capture_workflow = CaptureWorkflow(session_store=self._session_store)
         self._gpio_registry = gpio_registry or GpioModeRegistry()
         self._gpio_configurator = GpioConfigurator(
             registry=self._gpio_registry,
@@ -126,6 +126,7 @@ class DeviceCoreRuntime:
             else None
         )
         self._active_session_id: str | None = None
+        self._capture_in_progress = False
         self._reconnect_timeout_s = reconnect_timeout_s
         self._operation_lock = RLock()
 
@@ -329,89 +330,52 @@ class DeviceCoreRuntime:
         required_role: str | None = None,
         start_action: Callable[[], DeviceActionResult] | None = None,
     ) -> SessionSummary:
-        active_session_id: str | None = None
-        recorder: CaptureRecorder | None = None
-        terminalized = False
-        native_session = False
+        with self._operation_lock:
+            self._require_connected()
+            self._require_no_active_capture()
+            if self._message_source is None:
+                raise DeviceCoreRuntimeError("Capture message source is not configured")
+            if required_role is not None:
+                self._gpio_registry.require_role_configured(required_role)
+            source = self._message_source
+            backend_snapshot = self._backend_snapshot()
+            firmware = self._hello.firmware if self._hello is not None else None
+            device = self._hello.device if self._hello is not None else None
+            self._capture_in_progress = True
+
         try:
-            with self._operation_lock:
-                self._require_connected()
-                self._require_no_active_capture()
-                if self._message_source is None:
-                    raise DeviceCoreRuntimeError("Capture message source is not configured")
-
-                runner = TransportCaptureRunner(
-                    transport=self._message_source,
-                    duration_s=duration_s,
-                    monotonic_clock=self._capture_clock,
-                )
-                if required_role is not None:
-                    self._gpio_registry.require_role_configured(required_role)
-
-                backend_snapshot = self._backend_snapshot()
-                native_session = backend_snapshot is not None
-                recorder = CaptureRecorder.start(
-                    session_store=self._session_store,
-                    command=command,
-                    firmware=self._hello.firmware if self._hello is not None else None,
-                    device=self._hello.device if self._hello is not None else None,
-                    backend_snapshot=backend_snapshot,
-                    workflow=workflow if native_session else None,
-                    duration_s=duration_s if native_session else None,
-                    reconnect_timeout_s=(self._reconnect_timeout_s if native_session else None),
-                )
-                active_session_id = recorder.session_id
-                self._active_session_id = active_session_id
-
-                if start_action is not None:
-                    start_action()
-
-            runner.run(recorder)
-            recorder.finalize()
-            if native_session and not recorder.terminalized:
-                self._session_store.complete_session(recorder.session_handle)
-            terminalized = True
-            summary = self._session_store.summarize_session(recorder.session_id)
+            summary = self._capture_workflow.run(
+                source=source,
+                duration_s=duration_s,
+                command=command,
+                firmware=firmware,
+                device=device,
+                monotonic_clock=self._capture_clock,
+                reconnect_timeout_s=self._reconnect_timeout_s,
+                backend_snapshot=backend_snapshot,
+                workflow=workflow,
+                start_action=start_action,
+                on_session_started=self._set_active_session,
+            )
             if summary.integrity is not None:
                 with self._operation_lock:
                     self._integrity = summary.integrity
             return summary
-        except Exception as exc:
-            if (
-                recorder is not None
-                and native_session
-                and not terminalized
-                and not recorder.terminalized
-            ):
-                recorder.finalize()
-                if recorder.terminalized:
-                    terminalized = True
-                    summary = self._session_store.summarize_session(recorder.session_id)
-                    if summary.integrity is not None:
-                        with self._operation_lock:
-                            self._integrity = summary.integrity
-                    return summary
-                self._session_store.fail_session(
-                    recorder.session_handle,
-                    end_reason="backend_error",
-                    error_code=(
-                        exc.error if isinstance(exc, DeviceActionError) else "internal_error"
-                    ),
-                    detail=str(exc),
-                )
-            raise
         finally:
-            if active_session_id is not None:
-                with self._operation_lock:
-                    if self._active_session_id == active_session_id:
-                        self._active_session_id = None
+            with self._operation_lock:
+                self._capture_in_progress = False
+                self._active_session_id = None
+
+    def _set_active_session(self, session_id: str) -> None:
+        with self._operation_lock:
+            self._active_session_id = session_id
 
     def _require_connected(self) -> None:
         if not self._connected:
             raise DeviceCoreRuntimeError("Debug Helper is not connected")
 
     def _require_no_active_capture(self) -> None:
-        if self._active_session_id is not None:
+        if self._capture_in_progress:
             raise DeviceActionError(
                 error="capture_active",
                 detail="capture is already active",
