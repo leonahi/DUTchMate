@@ -54,6 +54,11 @@ def test_boot_test_passes_duration_to_runtime_and_returns_summary() -> None:
             "dropped_bytes": 0,
         },
         "first_error": None,
+        "line_processing": {
+            "status": "complete",
+            "max_line_bytes": 65536,
+            "oversized_line_count": 0,
+        },
         "truncated": False,
         "interrupted": False,
         "resumed": False,
@@ -99,6 +104,11 @@ def test_boot_test_serializes_incomplete_evidence_flags() -> None:
         "timestamp_provenance": [],
         "integrity": None,
         "first_error": None,
+        "line_processing": {
+            "status": "complete",
+            "max_line_bytes": 65536,
+            "oversized_line_count": 0,
+        },
         "truncated": True,
         "interrupted": True,
         "resumed": True,

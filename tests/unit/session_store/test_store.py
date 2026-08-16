@@ -99,6 +99,11 @@ def test_create_session_writes_initial_metadata(tmp_path: Path) -> None:
         "baseline": True,
         "firmware": "0.1.0",
         "device": "dutchmate-rp2040",
+        "line_processing": {
+            "status": "complete",
+            "max_line_bytes": 65536,
+            "oversized_line_count": 0,
+        },
         "segments": [
             {
                 "segment_id": 0,
@@ -510,6 +515,53 @@ def test_detected_pattern_excerpt_is_bounded_and_contains_match(tmp_path: Path) 
     assert b"ERROR" in excerpt_raw
     assert excerpt.end_byte - excerpt.start_byte == 4096
     assert excerpt.excerpt_truncated is True
+
+
+def test_oversized_line_updates_metadata_without_omitting_raw_evidence(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(command="capture")
+    processor = UartCaptureProcessor()
+    chunks = (
+        b"a" * 65536,
+        b"x",
+        b"ERROR\n",
+    )
+    for index, chunk in enumerate(chunks):
+        event = UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=index + 1,
+            data=chunk,
+        )
+        store.append_uart_capture(handle, event=event, result=processor.process_event(event))
+
+    summary = store.summarize_session(handle.session_id)
+
+    assert handle.paths.uart_raw.read_bytes() == b"".join(chunks)
+    assert summary.truncated is False
+    assert summary.line_processing.status == "limit_exceeded"
+    assert summary.line_processing.max_line_bytes == 65536
+    assert summary.line_processing.oversized_line_count == 1
+    assert json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8")) == []
+    assert _read_jsonl(handle.paths.hardware_events) == [
+        {
+            "type": "line_limit_exceeded",
+            "segment_id": 0,
+            "timestamp_epoch": 0,
+            "timestamp_us": 3,
+            "channel": 0,
+            "ingestion_index": 2,
+            "line_index_in_event": 0,
+            "line_start_ingestion_index": 0,
+            "line_start_event_offset": 0,
+            "line_end_ingestion_index": 2,
+            "line_end_event_offset": 6,
+            "total_line_bytes": 65543,
+            "terminated": True,
+        }
+    ]
 
 
 def test_append_uart_capture_updates_segment_device_timestamps(tmp_path: Path) -> None:

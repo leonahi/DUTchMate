@@ -26,6 +26,10 @@ def test_format_capture_result_renders_session_summary() -> None:
                         },
                     }
                 ],
+                "line_processing": {
+                    "status": "complete",
+                    "oversized_line_count": 0,
+                },
                 "segments": 2,
                 "overflow": True,
                 "interrupted": False,
@@ -36,7 +40,7 @@ def test_format_capture_result_renders_session_summary() -> None:
         == "Capture complete: 20260729T100000Z-capture01 "
         "(backend=basic, loss=not_observable, "
         "timestamp=host/monotonic:host_serial_read/serial_read_chunk, "
-        "first_error=none, segments=2, "
+        "first_error=none, lines=complete/oversized:0, segments=2, "
         "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
     )
 

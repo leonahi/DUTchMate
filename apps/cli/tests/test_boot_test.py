@@ -28,6 +28,10 @@ def test_format_boot_test_result_renders_session_summary() -> None:
                         },
                     }
                 ],
+                "line_processing": {
+                    "status": "limit_exceeded",
+                    "oversized_line_count": 2,
+                },
                 "segments": 2,
                 "overflow": True,
                 "interrupted": False,
@@ -38,7 +42,7 @@ def test_format_boot_test_result_renders_session_summary() -> None:
         == "Boot test complete: 20260729T100000Z-boot01 "
         "(backend=enhanced, loss=none_reported, "
         "timestamp=device/rp2040_timer:debug_helper_uart_receive/uart_event, "
-        "first_error=none, segments=2, "
+        "first_error=none, lines=limit_exceeded/oversized:2, segments=2, "
         "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
     )
 

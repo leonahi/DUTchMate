@@ -52,9 +52,9 @@ Current core modules:
 |---|---|
 | `backends` | Backend-neutral identity/contracts, Basic raw serial event/send adapter, and interim Enhanced wire adapters. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
-| `uart_capture` | Backend-independent UART byte buffering by segment/channel, complete lines with event/byte boundaries, and receive processing. |
+| `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
-| `session_store` | Filesystem sessions, bounded pattern evidence, deterministic first-error summaries, and discovery. |
+| `session_store` | Filesystem sessions, bounded pattern/line-limit evidence, deterministic first-error summaries, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture, Enhanced fixture compatibility, and guarded reset/boot actions. |
 | `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |

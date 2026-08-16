@@ -206,3 +206,20 @@ def test_process_event_keeps_segment_buffers_separate() -> None:
 
     assert result.lines == (UartLine(raw=b"OR\n", text="OR\n"),)
     assert processor.pending_bytes(0, segment_id=0) == b"ERR"
+
+
+def test_process_event_never_matches_an_oversized_physical_line() -> None:
+    processor = UartCaptureProcessor()
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=100,
+        data=(b"a" * 65536) + b"ERROR\nBOOT_OK\n",
+    )
+
+    result = processor.process_event(event)
+
+    assert result.newly_oversized_line_count == 1
+    assert result.oversized_lines[0].total_bytes == 65542
+    assert [line.raw for line in result.lines] == [b"BOOT_OK\n"]
+    assert [match.pattern for match in result.matches] == ["BOOT_OK"]

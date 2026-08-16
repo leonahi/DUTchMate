@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 from dutchmate_core.backends.contracts import UartReceiveEvent
 from dutchmate_core.log_processing.patterns import PatternDetector, PatternMatch
-from dutchmate_core.uart_capture.line_buffer import UartLine, UartLineBuffer
+from dutchmate_core.uart_capture.line_buffer import (
+    OversizedUartLine,
+    UartLine,
+    UartLineBuffer,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +20,8 @@ class UartCaptureResult:
     timestamp_us: int | None
     lines: tuple[UartLine, ...]
     matches: tuple[PatternMatch, ...]
+    oversized_lines: tuple[OversizedUartLine, ...] = ()
+    newly_oversized_line_count: int = 0
 
 
 class UartCaptureProcessor:
@@ -35,7 +41,12 @@ class UartCaptureProcessor:
         ingestion_index = self._next_ingestion_index
         self._next_ingestion_index += 1
         buffer = self._line_buffer_for_channel(event.segment_id, event.channel)
-        lines = tuple(buffer.feed(event.data, ingestion_index=ingestion_index))
+        buffered = buffer.feed_result(
+            event.data,
+            ingestion_index=ingestion_index,
+            timestamp_us=event.timestamp_us,
+        )
+        lines = buffered.lines
         matches = tuple(self._pattern_detector.scan_lines(lines))
 
         return UartCaptureResult(
@@ -44,6 +55,8 @@ class UartCaptureProcessor:
             timestamp_us=event.timestamp_us,
             lines=lines,
             matches=matches,
+            oversized_lines=buffered.oversized_lines,
+            newly_oversized_line_count=buffered.newly_oversized_line_count,
         )
 
     def pending_bytes(self, channel: int, *, segment_id: int = 0) -> bytes:
@@ -61,11 +74,11 @@ class UartCaptureProcessor:
         if buffer is None:
             return None
 
-        line = buffer.flush()
-        if line is None:
+        buffered = buffer.flush_result()
+        if not buffered.lines and not buffered.oversized_lines:
             return None
 
-        lines = (line,)
+        lines = buffered.lines
         matches = tuple(self._pattern_detector.scan_lines(lines))
         return UartCaptureResult(
             segment_id=segment_id,
@@ -73,7 +86,18 @@ class UartCaptureProcessor:
             timestamp_us=None,
             lines=lines,
             matches=matches,
+            oversized_lines=buffered.oversized_lines,
         )
+
+    def flush_all(self) -> tuple[UartCaptureResult, ...]:
+        """Finalize trailing derived state for every segment/channel."""
+
+        results: list[UartCaptureResult] = []
+        for segment_id, channel in tuple(self._line_buffers):
+            result = self.flush_channel(channel, segment_id=segment_id)
+            if result is not None:
+                results.append(result)
+        return tuple(results)
 
     def _line_buffer_for_channel(self, segment_id: int, channel: int) -> UartLineBuffer:
         key = (segment_id, channel)

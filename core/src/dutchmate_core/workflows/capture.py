@@ -84,9 +84,7 @@ class CaptureRecorder:
         self._session_handle = session_handle
         self._uart_processor = uart_processor or UartCaptureProcessor()
         self._segment_contexts = (
-            {segment_context.segment_id: segment_context}
-            if segment_context is not None
-            else {}
+            {segment_context.segment_id: segment_context} if segment_context is not None else {}
         )
         self._timestamp_epoch = timestamp_epoch
 
@@ -115,9 +113,7 @@ class CaptureRecorder:
             session_store=session_store,
             session_handle=session_handle,
             uart_processor=uart_processor,
-            segment_context=(
-                backend_snapshot.segment if backend_snapshot is not None else None
-            ),
+            segment_context=(backend_snapshot.segment if backend_snapshot is not None else None),
         )
 
     @property
@@ -185,6 +181,16 @@ class CaptureRecorder:
         self._session_store.record_segment_context(self._session_handle, context)
         self._segment_contexts[context.segment_id] = context
 
+    def finalize(self) -> None:
+        """Finalize bounded derived state at the end of this capture segment."""
+
+        for result in self._uart_processor.flush_all():
+            self._session_store.append_uart_processing_result(
+                self._session_handle,
+                result=result,
+                timestamp_epoch=self._timestamp_epoch,
+            )
+
 
 def run_transport_capture(
     *,
@@ -217,5 +223,8 @@ def run_transport_capture(
             source_snapshot if isinstance(source_snapshot, BackendSnapshot) else None
         ),
     )
-    runner.run(recorder)
+    try:
+        runner.run(recorder)
+    finally:
+        recorder.finalize()
     return session_store.summarize_session(recorder.session_id)

@@ -2,6 +2,7 @@
 
 from dutchmate_core.session_store.store import (
     FirstError,
+    LineProcessing,
     MatchExcerpt,
     SessionHandle,
     SessionPaths,
@@ -11,6 +12,7 @@ from dutchmate_core.session_store.store import (
 
 __all__ = [
     "FirstError",
+    "LineProcessing",
     "MatchExcerpt",
     "SessionHandle",
     "SessionPaths",

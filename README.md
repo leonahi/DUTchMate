@@ -29,6 +29,8 @@ The repository currently contains the first host-side Phase 1 foundation:
   excerpts
 - deterministic capture/boot-test `first_error` summaries that exclude the
   `BOOT_OK` success marker
+- independently bounded derived UART lines with exact oversized-line
+  descriptors while preserving all admitted raw evidence
 - filesystem sessions, incremental evidence writes, summaries, and discovery
 - GPIO control-channel configuration state and guarded reset/boot actions
 - shared exact GPIO identifier/electrical validation across config, core,

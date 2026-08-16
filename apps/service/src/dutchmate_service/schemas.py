@@ -146,6 +146,7 @@ def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
         "timestamp_provenance": [asdict(segment) for segment in summary.segment_contexts],
         "integrity": asdict(summary.integrity) if summary.integrity is not None else None,
         "first_error": (asdict(summary.first_error) if summary.first_error is not None else None),
+        "line_processing": asdict(summary.line_processing),
         "truncated": summary.truncated,
         "interrupted": summary.interrupted,
         "resumed": summary.resumed,

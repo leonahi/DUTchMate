@@ -89,8 +89,10 @@ then connected to each real backend in milestone order.
    1 done criteria. **In progress: admitted complete lines now retain event/byte
    boundaries, detected records carry first-occurrence raw offsets and bounded
    exact-byte excerpts, and capture/boot-test summaries select and expose
-   deterministic `first_error` while excluding `BOOT_OK`. Derived-line limits,
-   native schema-v1 retrieval, wait-pattern, public UART send, reconnect, and
+   deterministic `first_error` while excluding `BOOT_OK`. Derived line state is
+   now independently capped at 65536 bytes per segment/channel, with exact
+   oversized descriptors, persistent status/counts, and recovery after LF.
+   Native schema-v1 retrieval, wait-pattern, public UART send, reconnect, and
    retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
@@ -1010,12 +1012,15 @@ Current implementation notes:
 - `hardware_events.jsonl` records `buffer_overflow` and `buffer_status` events.
   Target `uart_tx_attempt` / `uart_tx_result` perturbation recording is not
   implemented.
-- `UartLineBuffer` currently grows without a line limit. Normal completed lines
-  retain their source event/byte boundaries; detected-pattern records retain
-  first-occurrence raw offsets and at-most-4096-byte exact excerpts, and session
-  summaries deterministically select the earliest failure by segment/event
-  order while excluding `BOOT_OK`. The 65536-byte line state and oversized
-  descriptors/events remain target Phase 1 behavior.
+- `UartLineBuffer` enforces the 65536-byte derived-line limit independently per
+  segment/channel. Byte 65537 discards only the derived copy, switches to
+  constant-memory counting, and yields one exact boundary/count descriptor at
+  LF or session close; raw logs and UART events remain complete. Persistent
+  `line_processing` status/counts and `line_limit_exceeded` session events expose
+  the limitation, and processing resumes after LF. Normal completed lines retain
+  source event/byte boundaries; detected-pattern records retain first-occurrence
+  raw offsets and at-most-4096-byte exact excerpts, and session summaries select
+  the earliest failure by segment/event order while excluding `BOOT_OK`.
 - `metadata.json` remains unversioned and retains existing compatibility flags,
   including `overflow: bool` and legacy `baseline: false`. Runtime-created
   sessions now additionally snapshot exact backend identity, raw/effective

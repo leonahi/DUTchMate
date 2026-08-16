@@ -128,6 +128,49 @@ def test_record_uart_event_processes_lines_patterns_and_session_files(tmp_path: 
     ]
 
 
+def test_finalize_persists_unterminated_oversized_line_descriptor(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    recorder = CaptureRecorder.start(session_store=store, command="capture")
+    recorder.record_event(
+        UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=1,
+            data=b"a" * 65536,
+        )
+    )
+    recorder.record_event(
+        UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=2,
+            data=b"x",
+        )
+    )
+
+    recorder.finalize()
+
+    assert store.summarize_session(recorder.session_id).line_processing.oversized_line_count == 1
+    assert _read_jsonl(recorder.session_handle.paths.hardware_events) == [
+        {
+            "type": "line_limit_exceeded",
+            "segment_id": 0,
+            "timestamp_epoch": 0,
+            "timestamp_us": 2,
+            "channel": 0,
+            "ingestion_index": 1,
+            "line_index_in_event": 0,
+            "line_start_ingestion_index": 0,
+            "line_start_event_offset": 0,
+            "line_end_ingestion_index": 1,
+            "line_end_event_offset": 1,
+            "total_line_bytes": 65537,
+            "terminated": False,
+        }
+    ]
+    assert json.loads(recorder.session_handle.paths.detected_patterns.read_text()) == []
+
+
 def test_record_uart_event_buffers_split_pattern_across_events(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     recorder = CaptureRecorder.start(session_store=store, command="capture")

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from dutchmate_core.backends.contracts import (
@@ -21,6 +21,7 @@ from dutchmate_core.backends.contracts import (
     UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
+from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES, OversizedUartLine
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 
 _FAILURE_PATTERNS = frozenset({"ERROR", "ASSERT", "PANIC", "HardFault"})
@@ -80,6 +81,27 @@ class FirstError:
 
 
 @dataclass(frozen=True, slots=True)
+class LineProcessing:
+    """Bounded derived-line processing status for one session."""
+
+    status: Literal["complete", "limit_exceeded"] = "complete"
+    max_line_bytes: int = MAX_UART_LINE_BYTES
+    oversized_line_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.max_line_bytes != MAX_UART_LINE_BYTES:
+            raise ValueError("line-processing max_line_bytes must be 65536")
+        if (
+            isinstance(self.oversized_line_count, bool)
+            or not isinstance(self.oversized_line_count, int)
+            or self.oversized_line_count < 0
+        ):
+            raise ValueError("oversized-line count must be a non-negative integer")
+        if (self.status == "complete") != (self.oversized_line_count == 0):
+            raise ValueError("line-processing status/count must agree")
+
+
+@dataclass(frozen=True, slots=True)
 class SessionSummary:
     """Compact summary of a debug session for workflow/API responses."""
 
@@ -102,6 +124,7 @@ class SessionSummary:
     integrity: UartIntegrity | None = None
     segment_contexts: tuple[SegmentContext, ...] = ()
     first_error: FirstError | None = None
+    line_processing: LineProcessing = LineProcessing()
 
 
 class SessionStore:
@@ -247,11 +270,46 @@ class SessionStore:
             segment_id=event.segment_id,
             timestamp_epoch=timestamp_epoch,
         )
+        for oversized_line in result.oversized_lines:
+            _append_jsonl(
+                handle.paths.hardware_events,
+                _line_limit_exceeded_event_json(
+                    result,
+                    oversized_line,
+                    timestamp_epoch=timestamp_epoch,
+                ),
+            )
+        if result.newly_oversized_line_count:
+            metadata = _read_json_object(handle.paths.metadata)
+            _record_line_processing(
+                metadata,
+                newly_oversized_line_count=result.newly_oversized_line_count,
+            )
+            _write_json(handle.paths.metadata, metadata)
         self._record_segment_timestamp(
             handle,
             segment_id=event.segment_id,
             timestamp_us=event.timestamp_us,
         )
+
+    def append_uart_processing_result(
+        self,
+        handle: SessionHandle,
+        *,
+        result: UartCaptureResult,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Persist derived records finalized at segment or session close."""
+
+        for oversized_line in result.oversized_lines:
+            _append_jsonl(
+                handle.paths.hardware_events,
+                _line_limit_exceeded_event_json(
+                    result,
+                    oversized_line,
+                    timestamp_epoch=timestamp_epoch,
+                ),
+            )
 
     def append_buffer_overflow(
         self,
@@ -389,6 +447,7 @@ def _initial_metadata(
         "baseline": baseline,
         "firmware": firmware,
         "device": device,
+        "line_processing": _line_processing_json(LineProcessing()),
         "segments": [
             {
                 "segment_id": 0,
@@ -459,6 +518,7 @@ def _summary_from_metadata(
         integrity=_optional_integrity(metadata.get("integrity")),
         segment_contexts=_segment_contexts(segments),
         first_error=_first_error(detected_patterns, segments),
+        line_processing=_optional_line_processing(metadata.get("line_processing")),
     )
 
 
@@ -504,6 +564,14 @@ def _integrity_json(integrity: UartIntegrity) -> dict[str, object]:
         "loss_status": integrity.loss_status,
         "observation_scope": integrity.observation_scope,
         "dropped_bytes": integrity.dropped_bytes,
+    }
+
+
+def _line_processing_json(line_processing: LineProcessing) -> dict[str, object]:
+    return {
+        "status": line_processing.status,
+        "max_line_bytes": line_processing.max_line_bytes,
+        "oversized_line_count": line_processing.oversized_line_count,
     }
 
 
@@ -595,6 +663,34 @@ def _optional_integrity(value: object) -> UartIntegrity | None:
         loss_status=loss_status,
         observation_scope=observation_scope,
         dropped_bytes=dropped_bytes,
+    )
+
+
+def _optional_line_processing(value: object) -> LineProcessing:
+    if value is None:
+        return LineProcessing()
+    line_processing = _optional_object(value, "line_processing")
+    if line_processing is None:
+        return LineProcessing()
+    status = line_processing.get("status")
+    max_line_bytes = line_processing.get("max_line_bytes")
+    oversized_line_count = line_processing.get("oversized_line_count")
+    if status not in {"complete", "limit_exceeded"}:
+        raise ValueError("session metadata line-processing status is invalid")
+    if max_line_bytes != MAX_UART_LINE_BYTES:
+        raise ValueError("session metadata max_line_bytes is invalid")
+    if (
+        isinstance(oversized_line_count, bool)
+        or not isinstance(oversized_line_count, int)
+        or oversized_line_count < 0
+    ):
+        raise ValueError("session metadata oversized_line_count is invalid")
+    if (status == "complete") != (oversized_line_count == 0):
+        raise ValueError("session metadata line-processing status/count disagree")
+    return LineProcessing(
+        status=status,
+        max_line_bytes=max_line_bytes,
+        oversized_line_count=oversized_line_count,
     )
 
 
@@ -909,6 +1005,50 @@ def _buffer_status_event_json(
         "dropped_bytes_total": event.dropped_bytes_total,
         "overflow_events": event.overflow_events,
     }
+
+
+def _line_limit_exceeded_event_json(
+    result: UartCaptureResult,
+    line: OversizedUartLine,
+    *,
+    timestamp_epoch: int,
+) -> dict[str, object]:
+    return {
+        "type": "line_limit_exceeded",
+        "segment_id": result.segment_id,
+        "timestamp_epoch": timestamp_epoch,
+        "timestamp_us": line.timestamp_us,
+        "channel": result.channel,
+        "ingestion_index": _match_coordinate(line.ingestion_index, "ingestion_index"),
+        "line_index_in_event": _match_coordinate(line.line_index_in_event, "line_index_in_event"),
+        "line_start_ingestion_index": _match_coordinate(
+            line.start_ingestion_index, "line_start_ingestion_index"
+        ),
+        "line_start_event_offset": _match_coordinate(
+            line.start_event_offset, "line_start_event_offset"
+        ),
+        "line_end_ingestion_index": _match_coordinate(
+            line.end_ingestion_index, "line_end_ingestion_index"
+        ),
+        "line_end_event_offset": _match_coordinate(line.end_event_offset, "line_end_event_offset"),
+        "total_line_bytes": line.total_bytes,
+        "terminated": line.terminated,
+    }
+
+
+def _record_line_processing(
+    metadata: dict[str, object],
+    *,
+    newly_oversized_line_count: int,
+) -> None:
+    current = _optional_line_processing(metadata.get("line_processing"))
+    count = current.oversized_line_count + newly_oversized_line_count
+    metadata["line_processing"] = _line_processing_json(
+        LineProcessing(
+            status="limit_exceeded" if count else "complete",
+            oversized_line_count=count,
+        )
+    )
 
 
 def _record_metadata_segment_timestamp(

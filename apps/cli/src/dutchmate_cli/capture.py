@@ -26,6 +26,7 @@ def _format_capture_summary(label: str, payload: Mapping[str, object]) -> str:
             f"loss={_loss_status(payload.get('integrity'))}",
             f"timestamp={_timestamp_source(payload.get('timestamp_provenance'))}",
             f"first_error={_first_error(payload.get('first_error'))}",
+            f"lines={_line_processing(payload.get('line_processing'))}",
             f"segments={segments}",
             f"overflow={_flag(payload.get('overflow'))}",
             f"interrupted={_flag(payload.get('interrupted'))}",
@@ -81,3 +82,11 @@ def _first_error(value: object) -> str:
     segment_id = _display(value.get("segment_id"))
     ingestion_index = _display(value.get("ingestion_index"))
     return f"{pattern}@segment:{segment_id}/event:{ingestion_index}"
+
+
+def _line_processing(value: object) -> str:
+    if not isinstance(value, Mapping):
+        return "unknown"
+    status = _display(value.get("status"))
+    oversized = _display(value.get("oversized_line_count"))
+    return f"{status}/oversized:{oversized}"

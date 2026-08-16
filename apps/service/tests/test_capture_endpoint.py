@@ -3,7 +3,12 @@ from fastapi.testclient import TestClient
 from helpers import FakeRuntime, connected_status
 
 from dutchmate_core.runtime import DeviceCoreRuntimeError
-from dutchmate_core.session_store.store import FirstError, MatchExcerpt, SessionSummary
+from dutchmate_core.session_store.store import (
+    FirstError,
+    LineProcessing,
+    MatchExcerpt,
+    SessionSummary,
+)
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
 from dutchmate_service.schemas import capture_summary_payload
@@ -22,6 +27,10 @@ def test_capture_summary_serializes_bounded_first_error_evidence() -> None:
         firmware=None,
         device=None,
         segment_count=1,
+        line_processing=LineProcessing(
+            status="limit_exceeded",
+            oversized_line_count=2,
+        ),
         first_error=FirstError(
             pattern="ERROR",
             detected_pattern_index=3,
@@ -72,6 +81,11 @@ def test_capture_summary_serializes_bounded_first_error_evidence() -> None:
             "excerpt_truncated": False,
         },
     }
+    assert payload["line_processing"] == {
+        "status": "limit_exceeded",
+        "max_line_bytes": 65536,
+        "oversized_line_count": 2,
+    }
 
 
 def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
@@ -119,6 +133,11 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
             "dropped_bytes": 0,
         },
         "first_error": None,
+        "line_processing": {
+            "status": "complete",
+            "max_line_bytes": 65536,
+            "oversized_line_count": 0,
+        },
         "truncated": False,
         "interrupted": False,
         "resumed": False,
@@ -164,6 +183,11 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
         "timestamp_provenance": [],
         "integrity": None,
         "first_error": None,
+        "line_processing": {
+            "status": "complete",
+            "max_line_bytes": 65536,
+            "oversized_line_count": 0,
+        },
         "truncated": True,
         "interrupted": True,
         "resumed": True,

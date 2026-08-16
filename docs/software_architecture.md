@@ -157,10 +157,12 @@ Owns raw UART byte-to-line processing:
 - buffers are independent per segment and UART channel
 - `UartLine` retains raw bytes, lossy display text, and source event/byte boundaries
 - `UartCaptureProcessor` sends complete lines to pattern detection
+- derived state is capped at 65536 exact bytes per physical line; oversized
+  lines switch to constant-memory counting and produce boundary-only descriptors
 
 It does not write files. It consumes normalized `UartReceiveEvent` objects and
-already isolates line assembly by segment/channel. The target 65536-byte
-derived-line limit remains pending and will not truncate raw session evidence.
+isolates line assembly and limit state by segment/channel. The limit never
+truncates raw session evidence and matching resumes with the next physical line.
 
 ### `log_processing`
 
@@ -186,6 +188,8 @@ Owns filesystem-backed sessions under
 - stores buffer overflow/status telemetry and detected patterns
 - stores bounded detected-pattern excerpts and derives deterministic
   reference-bearing `first_error` summaries in segment/event order
+- stores `line_processing` status/counts and finalized `line_limit_exceeded`
+  descriptors without changing UART integrity or session truncation
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
 - rejects path-unsafe session IDs
