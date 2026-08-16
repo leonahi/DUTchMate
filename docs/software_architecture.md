@@ -190,6 +190,9 @@ Owns filesystem-backed sessions under
   reference-bearing `first_error` summaries in segment/event order
 - stores `line_processing` status/counts and finalized `line_limit_exceeded`
   descriptors without changing UART integrity or session truncation
+- preflights exact whole-unit evidence for UART receive, buffer telemetry, and
+  finalized line-limit events; over-budget units are omitted atomically and
+  terminalize native sessions as successful `size_limit` truncations
 - creates native runtime sessions with versioned workflow/lifecycle fields and
   a terminal reserve, then transitions them once to completed or failed
 - performs schema-aware startup recovery before backend opening, abandoning
@@ -201,8 +204,9 @@ Owns filesystem-backed sessions under
 Runtime capture/boot-test sessions with complete backend identity now use schema
 version 1 and snapshot backend facts, accepted timing policy, integrity, line
 processing, storage accounting, and one-way lifecycle state. Older direct-store
-fixtures retain their recognized unversioned legacy shape. Admission quotas,
-retention, baseline, reconnect, and bounded replay remain. Startup recovery
+fixtures retain their recognized unversioned legacy shape. Quota admission for
+future reconnect/control/TX events, retention, baseline, reconnect, and bounded
+replay remain. Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement as a startup error.
 The remaining rules are centralized in the Phase 1 spec and

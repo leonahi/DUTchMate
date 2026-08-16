@@ -450,12 +450,15 @@ class SessionStore:
         end_reason: str,
         error: dict[str, object] | None,
         truncation: dict[str, object] | None,
+        metadata_mutator: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         metadata = _read_json_object(handle.paths.metadata)
         if metadata.get("schema_version") != 1:
             raise ValueError("only native schema-v1 sessions can be terminalized")
         if metadata.get("state") != "active":
             raise ValueError("session lifecycle transition requires active state")
+        if metadata_mutator is not None:
+            metadata_mutator(metadata)
         ended_at = _format_utc_timestamp(self._clock())
         metadata["state"] = state
         metadata["ended_at"] = ended_at
@@ -578,10 +581,14 @@ class SessionStore:
             + detected_patterns_delta
             + sum(len(record) for record in hardware_event_bytes)
         )
-        self._preflight_uart_evidence(
+        self._preflight_evidence(
             handle,
-            event=event,
             evidence_bytes=evidence_bytes,
+            rejected_unit_type="uart_receive",
+            rejected_uart_payload_bytes=len(event.data),
+            segment_id=event.segment_id,
+            channel=event.channel,
+            timestamp_us=event.timestamp_us,
         )
 
         _append_bytes(handle.paths.uart_raw, event.data)
@@ -605,12 +612,19 @@ class SessionStore:
         _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 
-    def _preflight_uart_evidence(
+    def _preflight_evidence(
         self,
         handle: SessionHandle,
         *,
-        event: UartReceiveEvent,
         evidence_bytes: int,
+        rejected_unit_type: Literal[
+            "uart_receive", "hardware_event", "session_event", "uart_tx_attempt"
+        ],
+        rejected_uart_payload_bytes: int | None,
+        segment_id: int | None,
+        channel: int | None,
+        timestamp_us: int | None,
+        rejected_metadata_mutator: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         metadata = _read_json_object(handle.paths.metadata)
         if metadata.get("schema_version") != 1:
@@ -628,13 +642,13 @@ class SessionStore:
 
         truncation: dict[str, object] = {
             "reason": "size_limit",
-            "rejected_unit_type": "uart_receive",
+            "rejected_unit_type": rejected_unit_type,
             "rejected_unit_evidence_bytes": evidence_bytes,
             "projected_evidence_bytes": projected_bytes,
-            "rejected_uart_payload_bytes": len(event.data),
-            "segment_id": event.segment_id,
-            "channel": event.channel,
-            "timestamp_us": event.timestamp_us,
+            "rejected_uart_payload_bytes": rejected_uart_payload_bytes,
+            "segment_id": segment_id,
+            "channel": channel,
+            "timestamp_us": timestamp_us,
             "occurred_at": _format_utc_timestamp(self._clock()),
         }
         self._terminalize_session(
@@ -643,6 +657,7 @@ class SessionStore:
             end_reason="size_limit",
             error=None,
             truncation=truncation,
+            metadata_mutator=rejected_metadata_mutator,
         )
         raise EvidenceQuotaExceeded(truncation)
 
@@ -657,14 +672,23 @@ class SessionStore:
 
         _require_session_appendable(handle)
         for oversized_line in result.oversized_lines:
-            _append_jsonl(
-                handle.paths.hardware_events,
+            event_bytes = _serialize_jsonl(
                 _line_limit_exceeded_event_json(
                     result,
                     oversized_line,
                     timestamp_epoch=timestamp_epoch,
-                ),
+                )
             )
+            self._preflight_evidence(
+                handle,
+                evidence_bytes=len(event_bytes),
+                rejected_unit_type="session_event",
+                rejected_uart_payload_bytes=None,
+                segment_id=result.segment_id,
+                channel=result.channel,
+                timestamp_us=oversized_line.timestamp_us,
+            )
+            _append_serialized(handle.paths.hardware_events, event_bytes)
         if result.oversized_lines:
             metadata = _read_json_object(handle.paths.metadata)
             _refresh_storage_accounting(metadata, handle.paths)
@@ -680,19 +704,35 @@ class SessionStore:
         """Append one buffer overflow event to a session."""
 
         _require_session_appendable(handle)
-        metadata = _read_json_object(handle.paths.metadata)
-        _record_metadata_segment_timestamp(
-            metadata,
-            segment_id=event.segment_id,
-            timestamp_us=event.timestamp_us,
-        )
-        metadata["overflow"] = True
-        _record_integrity_loss(metadata, dropped_bytes=event.dropped_bytes, cumulative=False)
+        event_bytes = _serialize_jsonl(_buffer_overflow_event_json(event, timestamp_epoch))
 
-        _append_jsonl(
-            handle.paths.hardware_events,
-            _buffer_overflow_event_json(event, timestamp_epoch),
+        def record_summary(metadata: dict[str, object]) -> None:
+            _record_metadata_segment_timestamp(
+                metadata,
+                segment_id=event.segment_id,
+                timestamp_us=event.timestamp_us,
+            )
+            metadata["overflow"] = True
+            _record_integrity_loss(
+                metadata,
+                dropped_bytes=event.dropped_bytes,
+                cumulative=False,
+            )
+
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes),
+            rejected_unit_type="hardware_event",
+            rejected_uart_payload_bytes=None,
+            segment_id=event.segment_id,
+            channel=event.channel,
+            timestamp_us=event.timestamp_us,
+            rejected_metadata_mutator=record_summary,
         )
+        metadata = _read_json_object(handle.paths.metadata)
+        record_summary(metadata)
+
+        _append_serialized(handle.paths.hardware_events, event_bytes)
         _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 
@@ -706,24 +746,36 @@ class SessionStore:
         """Append one buffer status telemetry event to a session."""
 
         _require_session_appendable(handle)
-        metadata = _read_json_object(handle.paths.metadata)
-        _record_metadata_segment_timestamp(
-            metadata,
-            segment_id=event.segment_id,
-            timestamp_us=event.timestamp_us,
-        )
-        if event.dropped_bytes_total > 0 or event.overflow_events > 0:
-            metadata["overflow"] = True
-            _record_integrity_loss(
-                metadata,
-                dropped_bytes=event.dropped_bytes_total,
-                cumulative=True,
-            )
+        event_bytes = _serialize_jsonl(_buffer_status_event_json(event, timestamp_epoch))
 
-        _append_jsonl(
-            handle.paths.hardware_events,
-            _buffer_status_event_json(event, timestamp_epoch),
+        def record_summary(metadata: dict[str, object]) -> None:
+            _record_metadata_segment_timestamp(
+                metadata,
+                segment_id=event.segment_id,
+                timestamp_us=event.timestamp_us,
+            )
+            if event.dropped_bytes_total > 0 or event.overflow_events > 0:
+                metadata["overflow"] = True
+                _record_integrity_loss(
+                    metadata,
+                    dropped_bytes=event.dropped_bytes_total,
+                    cumulative=True,
+                )
+
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes),
+            rejected_unit_type="hardware_event",
+            rejected_uart_payload_bytes=None,
+            segment_id=event.segment_id,
+            channel=None,
+            timestamp_us=event.timestamp_us,
+            rejected_metadata_mutator=record_summary,
         )
+        metadata = _read_json_object(handle.paths.metadata)
+        record_summary(metadata)
+
+        _append_serialized(handle.paths.hardware_events, event_bytes)
         _refresh_storage_accounting(metadata, handle.paths)
         _write_json(handle.paths.metadata, metadata)
 

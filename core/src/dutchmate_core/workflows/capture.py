@@ -182,22 +182,36 @@ class CaptureRecorder:
             )
 
         if isinstance(event, BufferOverflowEvent):
-            self._session_store.append_buffer_overflow(
-                self._session_handle,
-                event=event,
-                timestamp_epoch=self._timestamp_epoch,
-            )
+            try:
+                self._session_store.append_buffer_overflow(
+                    self._session_handle,
+                    event=event,
+                    timestamp_epoch=self._timestamp_epoch,
+                )
+            except EvidenceQuotaExceeded:
+                self._terminalized = True
+                return CaptureRecordResult(
+                    session_id=self.session_id,
+                    event_type="size_limit",
+                )
             return CaptureRecordResult(
                 session_id=self.session_id,
                 event_type="buffer_overflow",
             )
 
         if isinstance(event, BufferStatusEvent):
-            self._session_store.append_buffer_status(
-                self._session_handle,
-                event=event,
-                timestamp_epoch=self._timestamp_epoch,
-            )
+            try:
+                self._session_store.append_buffer_status(
+                    self._session_handle,
+                    event=event,
+                    timestamp_epoch=self._timestamp_epoch,
+                )
+            except EvidenceQuotaExceeded:
+                self._terminalized = True
+                return CaptureRecordResult(
+                    session_id=self.session_id,
+                    event_type="size_limit",
+                )
             return CaptureRecordResult(
                 session_id=self.session_id,
                 event_type="buffer_status",
@@ -223,11 +237,15 @@ class CaptureRecorder:
             return
 
         for result in self._uart_processor.flush_all():
-            self._session_store.append_uart_processing_result(
-                self._session_handle,
-                result=result,
-                timestamp_epoch=self._timestamp_epoch,
-            )
+            try:
+                self._session_store.append_uart_processing_result(
+                    self._session_handle,
+                    result=result,
+                    timestamp_epoch=self._timestamp_epoch,
+                )
+            except EvidenceQuotaExceeded:
+                self._terminalized = True
+                break
         self._finalized = True
 
 
@@ -273,6 +291,8 @@ def run_transport_capture(
         runner.run(recorder)
     except Exception as exc:
         recorder.finalize()
+        if recorder.terminalized:
+            return session_store.summarize_session(recorder.session_id)
         if native_session:
             session_store.fail_session(
                 recorder.session_handle,

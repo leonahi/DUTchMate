@@ -482,6 +482,153 @@ def test_capture_uart_stops_cleanly_when_first_uart_unit_exceeds_budget(
     assert runtime.status().active_session_id is None
 
 
+def test_capture_uart_stops_cleanly_when_hardware_event_exceeds_budget(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource(
+        [
+            BufferStatusEvent(
+                segment_id=0,
+                timestamp_us=150,
+                size_bytes=32768,
+                used_bytes=32768,
+                high_water_bytes=32768,
+                dropped_bytes_total=37,
+                overflow_events=1,
+            ),
+            UartReceiveEvent(
+                segment_id=0,
+                channel=0,
+                timestamp_us=200,
+                data=b"LATE\n",
+            ),
+        ],
+        clock=clock,
+    )
+    store = SessionStore(
+        root=tmp_path,
+        clock=_fixed_session_time,
+        id_factory=lambda: "hardware-quota",
+        evidence_budget_bytes=3,
+    )
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=source,
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
+
+    summary = runtime.capture_uart(duration_s=1.0)
+
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.truncated is True
+    assert summary.overflow is True
+    assert summary.integrity is not None
+    assert summary.integrity.loss_status == "loss_reported"
+    assert summary.integrity.dropped_bytes == 37
+    assert summary.truncation is not None
+    assert summary.truncation["rejected_unit_type"] == "hardware_event"
+    assert summary.truncation["rejected_uart_payload_bytes"] is None
+    assert summary.truncation["channel"] is None
+    assert summary.truncation["timestamp_us"] == 150
+    session_root = tmp_path / summary.session_id
+    assert (session_root / "uart_raw.log").read_bytes() == b""
+    assert (session_root / "uart_events.jsonl").read_bytes() == b""
+    assert (session_root / "hardware_events.jsonl").read_bytes() == b""
+    assert (session_root / "detected_patterns.json").read_bytes() == b"[]\n"
+    assert runtime.status().active_session_id is None
+
+
+def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budget(
+    tmp_path: Path,
+) -> None:
+    uart_event = UartReceiveEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=250,
+        data=b"x" * 65537,
+    )
+    reference_clock = FakeMonotonicClock()
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=_fixed_session_time,
+        id_factory=lambda: "reference",
+    )
+    reference_runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=FakeCaptureSource([uart_event], clock=reference_clock),
+        capture_clock=reference_clock,
+        session_store=reference_store,
+    )
+    reference_runtime.record_hello(hello(), port="/dev/ttyACM0")
+    reference_summary = reference_runtime.capture_uart(duration_s=0.3)
+    reference_root = tmp_path / "reference" / reference_summary.session_id
+    exact_budget = sum(
+        reference_root.joinpath(name).stat().st_size
+        for name in (
+            "uart_raw.log",
+            "uart_events.jsonl",
+            "hardware_events.jsonl",
+            "detected_patterns.json",
+        )
+    )
+
+    clock = FakeMonotonicClock()
+    store = SessionStore(
+        root=tmp_path / "rejected",
+        clock=_fixed_session_time,
+        id_factory=lambda: "session-event-quota",
+        evidence_budget_bytes=exact_budget - 1,
+    )
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=FakeCaptureSource([uart_event], clock=clock),
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
+
+    summary = runtime.capture_uart(duration_s=0.3)
+
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.truncated is True
+    assert summary.line_processing.status == "limit_exceeded"
+    assert summary.truncation is not None
+    assert summary.truncation["rejected_unit_type"] == "session_event"
+    session_root = tmp_path / "rejected" / summary.session_id
+    assert (session_root / "uart_raw.log").read_bytes() == uart_event.data
+    assert (session_root / "hardware_events.jsonl").read_bytes() == b""
+    assert runtime.status().active_session_id is None
+
+    collision_clock = FakeMonotonicClock()
+    collision_store = SessionStore(
+        root=tmp_path / "collision",
+        clock=_fixed_session_time,
+        id_factory=lambda: "session-event-collision",
+        evidence_budget_bytes=exact_budget - 1,
+    )
+    collision_runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=FakeCaptureSource(
+            [uart_event, DeviceCoreRuntimeError("backend disconnected")],
+            clock=collision_clock,
+        ),
+        capture_clock=collision_clock,
+        session_store=collision_store,
+    )
+    collision_runtime.record_hello(hello(), port="/dev/ttyACM0")
+
+    collision_summary = collision_runtime.capture_uart(duration_s=0.3)
+
+    assert collision_summary.state == "completed"
+    assert collision_summary.end_reason == "size_limit"
+    assert collision_summary.error is None
+
+
 def test_capture_updates_connected_integrity_from_buffer_telemetry(
     tmp_path: Path,
 ) -> None:

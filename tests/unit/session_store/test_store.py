@@ -434,6 +434,106 @@ def test_rejected_uart_unit_omits_associated_line_processing_event(
     assert store.summarize_session(handle.session_id).line_processing == LineProcessing()
 
 
+def test_finalized_line_event_uses_exact_session_event_quota_boundary(
+    tmp_path: Path,
+) -> None:
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=1,
+        timestamp_us=700,
+        data=b"x" * 65537,
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_processor = UartCaptureProcessor()
+    reference_store.append_uart_capture(
+        reference_handle,
+        event=event,
+        result=reference_processor.process_event(event),
+    )
+    reference_result = reference_processor.flush_all()[0]
+    admitted_uart_bytes = _evidence_bytes(reference_handle)
+    reference_store.append_uart_processing_result(
+        reference_handle,
+        result=reference_result,
+    )
+    exact_budget = _evidence_bytes(reference_handle)
+    assert exact_budget > admitted_uart_bytes
+
+    exact_store = SessionStore(
+        root=tmp_path / "exact",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget,
+    )
+    exact_handle = exact_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    exact_processor = UartCaptureProcessor()
+    exact_store.append_uart_capture(
+        exact_handle,
+        event=event,
+        result=exact_processor.process_event(event),
+    )
+    exact_store.append_uart_processing_result(
+        exact_handle,
+        result=exact_processor.flush_all()[0],
+    )
+    assert _evidence_bytes(exact_handle) == exact_budget
+    assert exact_store.summarize_session(exact_handle.session_id).truncated is False
+
+    rejected_store = SessionStore(
+        root=tmp_path / "rejected",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget - 1,
+    )
+    rejected_handle = rejected_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    rejected_processor = UartCaptureProcessor()
+    rejected_store.append_uart_capture(
+        rejected_handle,
+        event=event,
+        result=rejected_processor.process_event(event),
+    )
+
+    with pytest.raises(EvidenceQuotaExceeded) as raised:
+        rejected_store.append_uart_processing_result(
+            rejected_handle,
+            result=rejected_processor.flush_all()[0],
+        )
+
+    assert _evidence_bytes(rejected_handle) == admitted_uart_bytes
+    assert rejected_handle.paths.hardware_events.read_bytes() == b""
+    assert raised.value.truncation["rejected_unit_type"] == "session_event"
+    assert raised.value.truncation["rejected_unit_evidence_bytes"] == (
+        exact_budget - admitted_uart_bytes
+    )
+    summary = rejected_store.summarize_session(rejected_handle.session_id)
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.line_processing.status == "limit_exceeded"
+
+
 def test_failed_native_session_sanitizes_and_bounds_error_detail(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
@@ -976,6 +1076,125 @@ def test_append_buffer_overflow_writes_hardware_event_and_marks_metadata(tmp_pat
     ]
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     assert metadata["overflow"] is True
+
+
+def test_native_hardware_event_admits_exact_budget(tmp_path: Path) -> None:
+    event = BufferStatusEvent(
+        segment_id=0,
+        timestamp_us=1234,
+        size_bytes=32768,
+        used_bytes=1200,
+        high_water_bytes=8000,
+        dropped_bytes_total=0,
+        overflow_events=0,
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_store.append_buffer_status(reference_handle, event=event)
+    exact_budget = _evidence_bytes(reference_handle)
+
+    store = SessionStore(
+        root=tmp_path / "exact",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget,
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    store.append_buffer_status(handle, event=event)
+
+    metadata = store.load_metadata(handle.session_id)
+    assert _evidence_bytes(handle) == exact_budget
+    assert metadata["storage"]["evidence_bytes_written"] == exact_budget  # type: ignore[index]
+    assert metadata["state"] == "active"
+    assert metadata["truncated"] is False
+    assert _read_jsonl(handle.paths.hardware_events)[0]["type"] == "buffer_status"
+
+
+def test_rejected_overflow_event_preserves_summary_facts_without_evidence(
+    tmp_path: Path,
+) -> None:
+    event = BufferOverflowEvent(
+        segment_id=0,
+        channel=1,
+        timestamp_us=4321,
+        dropped_bytes=512,
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_store.append_buffer_overflow(reference_handle, event=event)
+    projected_bytes = _evidence_bytes(reference_handle)
+
+    store = SessionStore(
+        root=tmp_path / "rejected",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=projected_bytes - 1,
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    with pytest.raises(EvidenceQuotaExceeded) as raised:
+        store.append_buffer_overflow(handle, event=event)
+
+    assert handle.paths.hardware_events.read_bytes() == b""
+    assert _evidence_bytes(handle) == 3
+    assert raised.value.truncation == {
+        "reason": "size_limit",
+        "rejected_unit_type": "hardware_event",
+        "rejected_unit_evidence_bytes": projected_bytes - 3,
+        "projected_evidence_bytes": projected_bytes,
+        "rejected_uart_payload_bytes": None,
+        "segment_id": 0,
+        "channel": 1,
+        "timestamp_us": 4321,
+        "occurred_at": "2026-07-14T12:30:45Z",
+    }
+    summary = store.summarize_session(handle.session_id)
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.truncated is True
+    assert summary.overflow is True
+    assert summary.integrity == UartIntegrity(
+        loss_status="loss_reported",
+        observation_scope="debug_helper_rx_buffer",
+        dropped_bytes=512,
+    )
+    metadata = store.load_metadata(handle.session_id)
+    assert metadata["segments"][0]["first_timestamp_us"] == 4321  # type: ignore[index]
+    assert metadata["segments"][0]["last_timestamp_us"] == 4321  # type: ignore[index]
+    assert metadata["storage"]["evidence_bytes_written"] == 3  # type: ignore[index]
 
 
 def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path) -> None:

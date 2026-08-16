@@ -384,6 +384,13 @@ class DeviceCoreRuntime:
                 and not recorder.terminalized
             ):
                 recorder.finalize()
+                if recorder.terminalized:
+                    terminalized = True
+                    summary = self._session_store.summarize_session(recorder.session_id)
+                    if summary.integrity is not None:
+                        with self._operation_lock:
+                            self._integrity = summary.integrity
+                    return summary
                 self._session_store.fail_session(
                     recorder.session_handle,
                     end_reason="backend_error",
