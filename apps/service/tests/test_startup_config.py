@@ -235,7 +235,17 @@ def test_build_startup_runtime_opens_basic_without_hello(
     assert status.port == "/dev/ttyUSB0"
     assert status.device is None
     assert status.firmware is None
+    assert status.backend_capabilities == ("uart_receive", "uart_send")
     assert status.capabilities == ("uart_receive", "uart_send")
+    assert status.capability_policy is not None
+    assert status.capability_policy.uart_send.tx_policy_enabled is True
+    assert status.timestamp_provenance is not None
+    assert status.timestamp_provenance.segment_id == 0
+    assert status.timestamp_provenance.timestamp.source == "host"
+    assert status.timestamp_provenance.timestamp.observation_point == "host_serial_read"
+    assert status.integrity is not None
+    assert status.integrity.loss_status == "not_observable"
+    assert status.integrity.observation_scope is None
 
     config = parse_hardware_gpio_config(
         {

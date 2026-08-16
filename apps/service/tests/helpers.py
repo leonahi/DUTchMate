@@ -1,3 +1,10 @@
+from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+)
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
@@ -71,6 +78,13 @@ class FakeRuntime:
             firmware="0.1.0",
             device="dutchmate-rp2040",
             segment_count=1,
+            backend_mode="enhanced",
+            port="/dev/ttyACM0",
+            backend_capabilities=("gpio_control", "uart_receive", "uart_send"),
+            capabilities=("gpio_control", "uart_receive"),
+            capability_policy=_tx_policy(),
+            integrity=_enhanced_integrity(),
+            segment_contexts=(_enhanced_segment(),),
         )
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
@@ -87,6 +101,13 @@ class FakeRuntime:
             firmware="0.1.0",
             device="dutchmate-rp2040",
             segment_count=1,
+            backend_mode="enhanced",
+            port="/dev/ttyACM0",
+            backend_capabilities=("gpio_control", "uart_receive", "uart_send"),
+            capabilities=("gpio_control", "uart_receive"),
+            capability_policy=_tx_policy(),
+            integrity=_enhanced_integrity(),
+            segment_contexts=(_enhanced_segment(),),
         )
 
     def apply_hardware_config(
@@ -107,6 +128,11 @@ def connected_status() -> DeviceCoreStatus:
         capabilities=("gpio_control",),
         active_session_id=None,
         control_channels=registry.snapshot(),
+        backend_mode="enhanced",
+        backend_capabilities=("gpio_control", "uart_receive", "uart_send"),
+        capability_policy=_tx_policy(),
+        timestamp_provenance=_enhanced_segment(),
+        integrity=_enhanced_integrity(),
     )
 
 
@@ -120,4 +146,38 @@ def disconnected_status() -> DeviceCoreStatus:
         capabilities=(),
         active_session_id=None,
         control_channels=registry.snapshot(),
+        backend_mode="enhanced",
+        backend_capabilities=(),
+        capability_policy=_tx_policy(),
+        integrity=None,
     )
+
+
+def _tx_policy() -> BackendCapabilityPolicy:
+    return BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+    )
+
+
+def _enhanced_integrity() -> UartIntegrity:
+    return UartIntegrity(
+        loss_status="none_reported",
+        observation_scope="debug_helper_rx_buffer",
+        dropped_bytes=0,
+    )
+
+
+def _enhanced_timestamp() -> SegmentTimestamp:
+    return SegmentTimestamp(
+        source="device",
+        clock="rp2040_timer",
+        unit="us",
+        origin="segment_start",
+        source_origin_us=100,
+        observation_point="debug_helper_uart_receive",
+        event_granularity="uart_event",
+    )
+
+
+def _enhanced_segment() -> SegmentContext:
+    return SegmentContext(segment_id=0, timestamp=_enhanced_timestamp())

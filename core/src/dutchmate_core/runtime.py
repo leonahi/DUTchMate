@@ -6,9 +6,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
-from dutchmate_core.backends.contracts import BackendInfo, BackendMode
+from dutchmate_core.backends.contracts import (
+    BackendCapability,
+    BackendCapabilityPolicy,
+    BackendInfo,
+    BackendMode,
+    BackendSnapshot,
+    SegmentContext,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+    apply_capability_policy,
+    integrity_for_backend,
+)
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
@@ -56,6 +67,10 @@ class DeviceCoreStatus:
     active_session_id: str | None
     control_channels: dict[GpioControlChannel, GpioControlChannelState]
     backend_mode: BackendMode | None = None
+    backend_capabilities: tuple[str, ...] = ()
+    capability_policy: BackendCapabilityPolicy | None = None
+    timestamp_provenance: SegmentContext | None = None
+    integrity: UartIntegrity | None = None
 
 
 class DeviceCoreRuntime:
@@ -72,6 +87,8 @@ class DeviceCoreRuntime:
         capture_clock: Callable[[], float] | None = None,
         port: str | None = None,
         backend_mode: BackendMode | None = None,
+        tx_policy_enabled: bool = False,
+        segment_context: SegmentContext | None = None,
     ) -> None:
         self._transport = transport
         self._message_source = message_source
@@ -90,7 +107,22 @@ class DeviceCoreRuntime:
         self._hello: HelloMessage | None = None
         self._connected = False
         self._backend_mode = backend_mode
-        self._basic_info: BackendInfo | None = None
+        self._backend_info: BackendInfo | None = None
+        self._backend_capabilities: frozenset[BackendCapability] = frozenset()
+        self._integrity: UartIntegrity | None = None
+        self._capability_policy = BackendCapabilityPolicy(
+            uart_send=UartSendCapabilityPolicy(
+                tx_policy_enabled=tx_policy_enabled,
+            )
+        )
+        source_segment = getattr(message_source, "segment", None)
+        self._segment_context = (
+            segment_context
+            if segment_context is not None
+            else source_segment
+            if isinstance(source_segment, SegmentContext)
+            else None
+        )
         self._active_session_id: str | None = None
         self._operation_lock = RLock()
 
@@ -113,9 +145,21 @@ class DeviceCoreRuntime:
             self._hello = hello
             self._connected = True
             self._backend_mode = "enhanced"
-            self._basic_info = None
             if port is not None:
                 self._port = port
+            self._backend_capabilities = _normalize_hello_capabilities(hello.capabilities)
+            self._integrity = integrity_for_backend("enhanced")
+            self._backend_info = (
+                BackendInfo(
+                    mode="enhanced",
+                    port=self._port,
+                    device=hello.device,
+                    firmware=hello.firmware,
+                    capabilities=self._backend_capabilities,
+                )
+                if self._port is not None
+                else None
+            )
         return self.status()
 
     def record_basic_connection(self, info: BackendInfo) -> DeviceCoreStatus:
@@ -127,7 +171,9 @@ class DeviceCoreRuntime:
             self._hello = None
             self._connected = True
             self._backend_mode = "basic"
-            self._basic_info = info
+            self._backend_info = info
+            self._backend_capabilities = info.capabilities
+            self._integrity = integrity_for_backend("basic")
             self._port = info.port
         return self.status()
 
@@ -137,28 +183,45 @@ class DeviceCoreRuntime:
         with self._operation_lock:
             self._hello = None
             self._connected = False
-            self._basic_info = None
+            self._backend_info = None
+            self._backend_capabilities = frozenset()
+            self._segment_context = None
+            self._integrity = None
         return self.status()
 
     def status(self) -> DeviceCoreStatus:
         """Return the current service-facing status snapshot."""
 
         with self._operation_lock:
+            source_segment = getattr(self._message_source, "segment", None)
+            if isinstance(source_segment, SegmentContext):
+                self._segment_context = source_segment
             return DeviceCoreStatus(
                 connected=self._connected,
                 port=self._port,
                 firmware=self._hello.firmware if self._hello is not None else None,
                 device=self._hello.device if self._hello is not None else None,
                 capabilities=(
-                    self._hello.capabilities
-                    if self._hello is not None
-                    else tuple(sorted(self._basic_info.capabilities))
-                    if self._basic_info is not None
-                    else ()
+                    tuple(
+                        sorted(
+                            apply_capability_policy(
+                                self._backend_capabilities,
+                                self._capability_policy,
+                            )
+                        )
+                    )
                 ),
                 active_session_id=self._active_session_id,
                 control_channels=self._gpio_registry.snapshot(),
                 backend_mode=self._backend_mode,
+                backend_capabilities=tuple(sorted(self._backend_capabilities)),
+                capability_policy=(
+                    self._capability_policy if self._backend_mode is not None else None
+                ),
+                timestamp_provenance=(
+                    self._segment_context
+                ),
+                integrity=self._integrity,
             )
 
     def apply_hardware_config(
@@ -283,6 +346,7 @@ class DeviceCoreRuntime:
                     command=command,
                     firmware=self._hello.firmware if self._hello is not None else None,
                     device=self._hello.device if self._hello is not None else None,
+                    backend_snapshot=self._backend_snapshot(),
                 )
                 active_session_id = recorder.session_id
                 self._active_session_id = active_session_id
@@ -291,7 +355,11 @@ class DeviceCoreRuntime:
                     start_action()
 
             runner.run(recorder)
-            return self._session_store.summarize_session(recorder.session_id)
+            summary = self._session_store.summarize_session(recorder.session_id)
+            if summary.integrity is not None:
+                with self._operation_lock:
+                    self._integrity = summary.integrity
+            return summary
         finally:
             if active_session_id is not None:
                 with self._operation_lock:
@@ -308,3 +376,29 @@ class DeviceCoreRuntime:
                 error="capture_active",
                 detail="capture is already active",
             )
+
+    def _backend_snapshot(self) -> BackendSnapshot | None:
+        if self._backend_info is None:
+            return None
+        if self._integrity is None:
+            raise DeviceCoreRuntimeError("Connected backend integrity state is unavailable")
+        return BackendSnapshot(
+            info=self._backend_info,
+            capabilities=apply_capability_policy(
+                self._backend_capabilities,
+                self._capability_policy,
+            ),
+            capability_policy=self._capability_policy,
+            segment=self._segment_context,
+            integrity=self._integrity,
+        )
+
+
+def _normalize_hello_capabilities(
+    capabilities: tuple[str, ...],
+) -> frozenset[BackendCapability]:
+    normalized: set[BackendCapability] = set()
+    for capability in capabilities:
+        normalized_name = "uart_receive" if capability == "uart_capture" else capability
+        normalized.add(cast(BackendCapability, normalized_name))
+    return frozenset(normalized)

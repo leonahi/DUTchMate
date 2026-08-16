@@ -82,6 +82,110 @@ class BufferStatusEvent:
 
 
 BackendEvent: TypeAlias = UartReceiveEvent | BufferOverflowEvent | BufferStatusEvent
+LossStatus: TypeAlias = Literal["none_reported", "loss_reported", "not_observable"]
+
+
+@dataclass(frozen=True, slots=True)
+class UartSendCapabilityPolicy:
+    """Software policy controlling whether backend UART transmission is usable."""
+
+    tx_policy_enabled: bool
+    source: Literal["hardware.uart.tx_enabled"] = "hardware.uart.tx_enabled"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.tx_policy_enabled, bool):
+            raise ValueError("UART-send TX policy must be a boolean")
+        if self.source != "hardware.uart.tx_enabled":
+            raise ValueError("UART-send TX policy source is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class BackendCapabilityPolicy:
+    """Host policy snapshot applied to backend-reported capabilities."""
+
+    uart_send: UartSendCapabilityPolicy
+
+
+@dataclass(frozen=True, slots=True)
+class UartIntegrity:
+    """What the selected backend can report about upstream UART loss."""
+
+    loss_status: LossStatus
+    observation_scope: Literal["debug_helper_rx_buffer"] | None
+    dropped_bytes: int | None
+
+    def __post_init__(self) -> None:
+        if self.loss_status not in {
+            "none_reported",
+            "loss_reported",
+            "not_observable",
+        }:
+            raise ValueError("UART integrity loss status is invalid")
+        if self.dropped_bytes is not None and (
+            isinstance(self.dropped_bytes, bool)
+            or not isinstance(self.dropped_bytes, int)
+            or self.dropped_bytes < 0
+        ):
+            raise ValueError("UART integrity dropped bytes must be non-negative or null")
+        if self.loss_status == "not_observable":
+            if self.observation_scope is not None or self.dropped_bytes is not None:
+                raise ValueError("not-observable UART integrity cannot claim loss telemetry")
+            return
+        if self.observation_scope != "debug_helper_rx_buffer":
+            raise ValueError("observable UART integrity requires the Debug Helper RX scope")
+        if self.loss_status == "none_reported" and self.dropped_bytes != 0:
+            raise ValueError("none-reported UART integrity requires zero dropped bytes")
+
+
+@dataclass(frozen=True, slots=True)
+class BackendSnapshot:
+    """Backend identity, effective policy, timing, and integrity for one segment."""
+
+    info: BackendInfo
+    capabilities: frozenset[BackendCapability]
+    capability_policy: BackendCapabilityPolicy
+    segment: SegmentContext | None
+    integrity: UartIntegrity
+
+    def __post_init__(self) -> None:
+        effective = apply_capability_policy(
+            self.info.capabilities,
+            self.capability_policy,
+        )
+        if self.capabilities != effective:
+            raise ValueError("backend snapshot capabilities do not match applied policy")
+        if self.info.mode == "basic" and self.integrity.loss_status != "not_observable":
+            raise ValueError("Basic backend integrity must be not_observable")
+        if self.info.mode == "enhanced" and self.integrity.loss_status == "not_observable":
+            raise ValueError("Enhanced backend integrity must describe its RX buffer observer")
+
+
+def apply_capability_policy(
+    backend_capabilities: frozenset[BackendCapability],
+    policy: BackendCapabilityPolicy,
+) -> frozenset[BackendCapability]:
+    """Filter backend support through the shared host capability policy."""
+
+    capabilities = set(backend_capabilities)
+    if not policy.uart_send.tx_policy_enabled:
+        capabilities.discard("uart_send")
+    return frozenset(capabilities)
+
+
+def integrity_for_backend(mode: BackendMode) -> UartIntegrity:
+    """Return the initial UART-loss observation state for a backend mode."""
+
+    if mode == "basic":
+        return UartIntegrity(
+            loss_status="not_observable",
+            observation_scope=None,
+            dropped_bytes=None,
+        )
+    return UartIntegrity(
+        loss_status="none_reported",
+        observation_scope="debug_helper_rx_buffer",
+        dropped_bytes=0,
+    )
 
 
 class BackendDisconnectedError(RuntimeError):

@@ -118,7 +118,9 @@ def test_open_basic_connection_uses_raw_8n1_without_reading_hello() -> None:
     assert connection.info.mode == "basic"
     assert connection.info.device is None
     assert connection.info.firmware is None
-    assert connection.info.capabilities == frozenset({"uart_receive"})
+    assert connection.info.capabilities == frozenset({"uart_receive", "uart_send"})
+    assert connection.capabilities == frozenset({"uart_receive"})
+    assert connection.capability_policy.uart_send.tx_policy_enabled is False
 
 
 def test_basic_tx_capability_follows_explicit_policy() -> None:
@@ -128,6 +130,7 @@ def test_basic_tx_capability_follows_explicit_policy() -> None:
     )
 
     assert connection.info.capabilities == frozenset({"uart_receive", "uart_send"})
+    assert connection.capabilities == frozenset({"uart_receive", "uart_send"})
 
 
 def test_basic_connection_closes_owned_serial_port() -> None:
@@ -259,6 +262,17 @@ def test_basic_source_records_raw_bytes_through_shared_capture_pipeline(tmp_path
     assert (store.root / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
     assert summary.device is None
     assert summary.firmware is None
+    assert summary.backend_mode == "basic"
+    assert summary.port == "/dev/ttyUSB0"
+    assert summary.backend_capabilities == ("uart_receive", "uart_send")
+    assert summary.capabilities == ("uart_receive",)
+    assert summary.capability_policy is not None
+    assert summary.capability_policy.uart_send.tx_policy_enabled is False
+    assert summary.integrity is not None
+    assert summary.integrity.loss_status == "not_observable"
+    assert summary.integrity.observation_scope is None
+    assert summary.integrity.dropped_bytes is None
+    assert summary.segment_contexts[0].timestamp.observation_point == "host_serial_read"
     source.close()
 
 

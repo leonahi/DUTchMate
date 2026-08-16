@@ -9,6 +9,8 @@ from dutchmate_core.backends.contracts import (
     BackendInputError,
     BufferOverflowEvent,
     BufferStatusEvent,
+    SegmentContext,
+    SegmentTimestamp,
     UartReceiveEvent,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
@@ -37,11 +39,22 @@ class EnhancedCaptureEventSource:
         source: EnhancedMessageSource,
         *,
         segment_id: int,
-        source_origin_us: int,
+        source_origin_us: int | None,
     ) -> None:
         self._source = source
         self._segment_id = segment_id
         self._source_origin_us = source_origin_us
+        self._segment = (
+            _enhanced_segment_context(segment_id, source_origin_us)
+            if source_origin_us is not None
+            else None
+        )
+
+    @property
+    def segment(self) -> SegmentContext | None:
+        """Return device-timer provenance for this compatibility source."""
+
+        return self._segment
 
     def read_event(self) -> BackendEvent | None:
         """Read and normalize one wire message, returning ``None`` for inactivity."""
@@ -52,6 +65,16 @@ class EnhancedCaptureEventSource:
             return None
         except ProtocolError as exc:
             raise BackendInputError(str(exc)) from exc
+
+        if self._source_origin_us is None:
+            timestamp_us = _message_timestamp_us(message)
+            if timestamp_us is None:
+                return None
+            self._source_origin_us = timestamp_us
+            self._segment = _enhanced_segment_context(
+                self._segment_id,
+                timestamp_us,
+            )
 
         return normalize_enhanced_message(
             message,
@@ -141,3 +164,27 @@ def _relative_timestamp(timestamp_us: int, source_origin_us: int) -> int:
     if timestamp_us < source_origin_us:
         raise BackendInputError("Enhanced event timestamp precedes its segment origin")
     return timestamp_us - source_origin_us
+
+
+def _enhanced_segment_context(
+    segment_id: int,
+    source_origin_us: int,
+) -> SegmentContext:
+    return SegmentContext(
+        segment_id=segment_id,
+        timestamp=SegmentTimestamp(
+            source="device",
+            clock="rp2040_timer",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=source_origin_us,
+            observation_point="debug_helper_uart_receive",
+            event_granularity="uart_event",
+        ),
+    )
+
+
+def _message_timestamp_us(message: DeviceMessage) -> int | None:
+    if isinstance(message, (UartMessage, BufferOverflowMessage, BufferStatusMessage)):
+        return message.timestamp_us
+    return None

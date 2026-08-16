@@ -20,6 +20,40 @@ def test_boot_test_passes_duration_to_runtime_and_returns_summary() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-boot01",
+        "backend_mode": "enhanced",
+        "backend_identity": {
+            "port": "/dev/ttyACM0",
+            "firmware": "0.1.0",
+            "device": "dutchmate-rp2040",
+        },
+        "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
+        "capabilities": ["gpio_control", "uart_receive"],
+        "capability_policy": {
+            "uart_send": {
+                "tx_policy_enabled": False,
+                "source": "hardware.uart.tx_enabled",
+            }
+        },
+        "timestamp_provenance": [
+            {
+                "segment_id": 0,
+                "timestamp": {
+                    "source": "device",
+                    "clock": "rp2040_timer",
+                    "unit": "us",
+                    "origin": "segment_start",
+                    "source_origin_us": 100,
+                    "observation_point": "debug_helper_uart_receive",
+                    "event_granularity": "uart_event",
+                },
+            }
+        ],
+        "integrity": {
+            "loss_status": "none_reported",
+            "observation_scope": "debug_helper_rx_buffer",
+            "dropped_bytes": 0,
+        },
+        "first_error": None,
         "truncated": False,
         "interrupted": False,
         "resumed": False,
@@ -53,6 +87,18 @@ def test_boot_test_serializes_incomplete_evidence_flags() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-boot02",
+        "backend_mode": None,
+        "backend_identity": {
+            "port": None,
+            "firmware": "0.1.0",
+            "device": "dutchmate-rp2040",
+        },
+        "backend_capabilities": [],
+        "capabilities": [],
+        "capability_policy": None,
+        "timestamp_provenance": [],
+        "integrity": None,
+        "first_error": None,
         "truncated": True,
         "interrupted": True,
         "resumed": True,

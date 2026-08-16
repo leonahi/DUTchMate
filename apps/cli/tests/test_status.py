@@ -12,10 +12,32 @@ from dutchmate_cli.status import format_status
 def test_format_status_renders_channel_first_state() -> None:
     payload: dict[str, object] = {
         "connected": True,
+        "backend_mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
         "device": "dutchmate-rp2040",
-        "capabilities": ["gpio_control", "uart_capture"],
+        "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
+        "capabilities": ["gpio_control", "uart_receive"],
+        "capability_policy": {
+            "uart_send": {
+                "tx_policy_enabled": False,
+                "source": "hardware.uart.tx_enabled",
+            }
+        },
+        "timestamp_provenance": {
+            "segment_id": 0,
+            "timestamp": {
+                "source": "device",
+                "clock": "rp2040_timer",
+                "observation_point": "debug_helper_uart_receive",
+                "event_granularity": "uart_event",
+            },
+        },
+        "integrity": {
+            "loss_status": "none_reported",
+            "observation_scope": "debug_helper_rx_buffer",
+            "dropped_bytes": 0,
+        },
         "active_session_id": None,
         "control_channels": {
             "CTRL0": {
@@ -37,10 +59,16 @@ def test_format_status_renders_channel_first_state() -> None:
     assert format_status(payload) == "\n".join(
         [
             "Service: running",
+            "Backend: enhanced",
             "Device: connected (dutchmate-rp2040, firmware 0.1.0)",
             "Port: /dev/ttyACM0",
             "Active session: none",
-            "Capabilities: gpio_control, uart_capture",
+            "Backend capabilities: gpio_control, uart_receive, uart_send",
+            "Capabilities: gpio_control, uart_receive",
+            "UART TX policy: disabled (hardware.uart.tx_enabled)",
+            "Timestamp provenance: segment 0: device/rp2040_timer, "
+            "debug_helper_uart_receive/uart_event",
+            "UART loss: none_reported (scope=debug_helper_rx_buffer, dropped_bytes=0)",
             "Control channels:",
             "  CTRL0: reset -> RESET_N (mode=open_drain, active=low, idle=high, source=config)",
             "  CTRL1: unconfigured",
@@ -48,6 +76,51 @@ def test_format_status_renders_channel_first_state() -> None:
             "  CTRL3: unconfigured",
         ]
     )
+
+
+def test_format_status_renders_basic_loss_limit_and_tx_policy() -> None:
+    output = format_status(
+        {
+            "connected": True,
+            "backend_mode": "basic",
+            "port": "/dev/ttyUSB0",
+            "backend_capabilities": ["uart_receive", "uart_send"],
+            "capabilities": ["uart_receive"],
+            "capability_policy": {
+                "uart_send": {
+                    "tx_policy_enabled": False,
+                    "source": "hardware.uart.tx_enabled",
+                }
+            },
+            "timestamp_provenance": {
+                "segment_id": 0,
+                "timestamp": {
+                    "source": "host",
+                    "clock": "monotonic",
+                    "observation_point": "host_serial_read",
+                    "event_granularity": "serial_read_chunk",
+                },
+            },
+            "integrity": {
+                "loss_status": "not_observable",
+                "observation_scope": None,
+                "dropped_bytes": None,
+            },
+            "active_session_id": None,
+            "control_channels": {},
+        }
+    )
+
+    assert "Backend: basic" in output
+    assert "Device: connected (generic UART adapter)" in output
+    assert "Backend capabilities: uart_receive, uart_send" in output
+    assert "Capabilities: uart_receive" in output
+    assert "UART TX policy: disabled (hardware.uart.tx_enabled)" in output
+    assert (
+        "Timestamp provenance: segment 0: host/monotonic, "
+        "host_serial_read/serial_read_chunk" in output
+    )
+    assert "UART loss: not_observable" in output
 
 
 def test_status_command_prints_service_status(monkeypatch: pytest.MonkeyPatch) -> None:

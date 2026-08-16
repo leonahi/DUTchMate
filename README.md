@@ -25,7 +25,10 @@ The repository currently contains the first host-side Phase 1 foundation:
 - Enhanced v1 NDJSON schemas, examples, parser, command encoders, discovery,
   and synchronous serial transport
 - exact UART byte preservation, complete-line reconstruction, and keyword
-  pattern detection
+  pattern detection with source event/byte coordinates and bounded evidence
+  excerpts
+- deterministic capture/boot-test `first_error` summaries that exclude the
+  `BOOT_OK` success marker
 - filesystem sessions, incremental evidence writes, summaries, and discovery
 - GPIO control-channel configuration state and guarded reset/boot actions
 - shared exact GPIO identifier/electrical validation across config, core,
@@ -35,16 +38,19 @@ The repository currently contains the first host-side Phase 1 foundation:
 - Basic raw-byte FIFO ingestion with per-read host-monotonic provenance, shared
   capture recording, and TX-gated ordered writes that cannot report partial
   success
+- explicit backend support versus effective TX-policy capabilities, exact
+  identity, per-segment timestamp provenance, and UART-loss integrity in
+  runtime sessions, service status/capture responses, and CLI output
 - finite capture and reset-triggered boot-test orchestration with an explicit
   `0 < duration_s <= 300` boundary
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, complete backend/session reporting, versioned session lifecycle and
-retention, bounded log/session retrieval, wait-pattern, UART-send service/CLI
-exposure, generic Enhanced control actions, RP2040 firmware, MCP runtime, and
-HIL validation are not implemented yet.
+reconnect, native versioned session lifecycle and retention, bounded
+log/session retrieval, wait-pattern, UART-send service/CLI exposure, generic
+Enhanced control actions, RP2040 firmware, MCP runtime, and HIL validation are
+not implemented yet.
 
 The ordered Phase 1 backlog and acceptance criteria are in
 `docs/phase1_implementation_spec.md`.

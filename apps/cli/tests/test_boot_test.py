@@ -13,6 +13,21 @@ def test_format_boot_test_result_renders_session_summary() -> None:
         format_boot_test_result(
             {
                 "session_id": "20260729T100000Z-boot01",
+                "backend_mode": "enhanced",
+                "integrity": {
+                    "loss_status": "none_reported",
+                },
+                "timestamp_provenance": [
+                    {
+                        "segment_id": 0,
+                        "timestamp": {
+                            "source": "device",
+                            "clock": "rp2040_timer",
+                            "observation_point": "debug_helper_uart_receive",
+                            "event_granularity": "uart_event",
+                        },
+                    }
+                ],
                 "segments": 2,
                 "overflow": True,
                 "interrupted": False,
@@ -21,7 +36,10 @@ def test_format_boot_test_result_renders_session_summary() -> None:
             }
         )
         == "Boot test complete: 20260729T100000Z-boot01 "
-        "(segments=2, overflow=yes, interrupted=no, resumed=no, truncated=yes)"
+        "(backend=enhanced, loss=none_reported, "
+        "timestamp=device/rp2040_timer:debug_helper_uart_receive/uart_event, "
+        "first_error=none, segments=2, "
+        "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
     )
 
 

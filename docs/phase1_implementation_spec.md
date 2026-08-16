@@ -78,10 +78,20 @@ then connected to each real backend in milestone order.
    Device Core/service/CLI UART-send exposure remains step 6 work.**
 5. Expose backend mode, capabilities, timestamp provenance, and the UART
    loss-observation object through status, sessions, service responses, and CLI output.
-   **Not started.**
+   **Implemented for current runtime status and capture-like sessions/responses:
+   backend support is separated from TX-policy-filtered effective capabilities,
+   per-segment provenance remains attached to its segment ID, Basic reports
+   `not_observable`, and Enhanced telemetry promotes integrity to
+   `loss_reported`. Status and capture/boot-test CLI output expose the same
+   facts. Native schema-v1 lifecycle/session retrieval remains step 6 work.**
 6. Complete deterministic `first_error` selection plus shared log/session,
    wait-pattern, UART-send, reconnect, and retention work required by the Phase
-   1 done criteria. **In progress.**
+   1 done criteria. **In progress: admitted complete lines now retain event/byte
+   boundaries, detected records carry first-occurrence raw offsets and bounded
+   exact-byte excerpts, and capture/boot-test summaries select and expose
+   deterministic `first_error` while excluding `BOOT_OK`. Derived-line limits,
+   native schema-v1 retrieval, wait-pattern, public UART send, reconnect, and
+   retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -124,6 +134,10 @@ The repository already contains:
 - Basic raw-byte ingestion through one FIFO reader, per-read host-monotonic
   timestamps, and a TX-policy-gated full-write primitive that reports partial
   acceptance on failure.
+- Runtime/backend snapshots containing mode, exact identity, pre-policy backend
+  capabilities, effective capabilities, policy source, per-segment timestamp
+  provenance, and UART-loss integrity, serialized through status and current
+  capture/boot-test responses and CLI output.
 - Shared UART processing, capture recording, and session evidence writes that
   consume normalized events, plus interim Enhanced transport/NDJSON adapters.
 - Channel-aware Debug Helper v1 schemas, canonical examples, parser, and event
@@ -138,9 +152,9 @@ The repository already contains:
 - Service endpoints and CLI commands for status, finite capture, boot-test,
   GPIO mode, reset, and boot-mode.
 
-Log/session retrieval, wait-pattern, reconnect, public UART-send workflows,
-complete Basic reporting/session semantics, RP2040 firmware, and both HIL paths
-remain incomplete.
+Native versioned log/session retrieval, wait-pattern, reconnect, public
+UART-send workflows, lifecycle/retention semantics, RP2040 firmware, and both
+HIL paths remain incomplete.
 
 ### Current Host-Side Core Flow
 
@@ -996,19 +1010,21 @@ Current implementation notes:
 - `hardware_events.jsonl` records `buffer_overflow` and `buffer_status` events.
   Target `uart_tx_attempt` / `uart_tx_result` perturbation recording is not
   implemented.
-- `UartLineBuffer` currently grows without a line limit, and
-  `detected_patterns.json` duplicates each complete matched line as text/base64.
-  The 65536-byte line state, oversized descriptors/events, raw-offset mapping,
-  and 4096-byte excerpt records are target Phase 1 behavior.
-- `metadata.json` is currently unversioned and tracks the existing flags, including
-  `overflow: bool` and legacy `baseline: false`, plus segment timestamp bounds.
-  It accepts arbitrary non-empty `command`, `firmware`, and `device` strings;
-  the native bounded command/backend-identity shape and legacy projection
-  validation above are not implemented. Backend capabilities, segment-relative timestamp
-  normalization/provenance, removal of redundant `timestamp_epoch`, the target
-  session `schema_version`, `integrity` object, lifecycle state/terminal metadata, project baseline
-  pointer, evidence/metadata quotas, terminal reserve, restart recovery, and
-  retention remain to be implemented.
+- `UartLineBuffer` currently grows without a line limit. Normal completed lines
+  retain their source event/byte boundaries; detected-pattern records retain
+  first-occurrence raw offsets and at-most-4096-byte exact excerpts, and session
+  summaries deterministically select the earliest failure by segment/event
+  order while excluding `BOOT_OK`. The 65536-byte line state and oversized
+  descriptors/events remain target Phase 1 behavior.
+- `metadata.json` remains unversioned and retains existing compatibility flags,
+  including `overflow: bool` and legacy `baseline: false`. Runtime-created
+  sessions now additionally snapshot exact backend identity, raw/effective
+  capabilities, TX-policy provenance, per-segment timing provenance, and the
+  `integrity` object; direct legacy store fixtures without a backend snapshot
+  retain the prior shape. The bounded native `schema_version: 1` lifecycle,
+  removal of redundant `timestamp_epoch`, command/identity validation,
+  project baseline pointer, evidence/metadata quotas, terminal reserve,
+  restart recovery, and retention remain to be implemented.
 - Reconnect/resume mutation helpers are not implemented yet.
 - Capture and boot-test now reject non-numeric, boolean, non-finite,
   non-positive, and over-300-second durations consistently across core,
@@ -1152,8 +1168,10 @@ port, preserve pre-policy `backend_capabilities`, report filtered
 `uart_send.tx_policy_enabled` plus source `hardware.uart.tx_enabled`. This is
 software permission, not physical TX state or readback. Operations gate only on
 effective `capabilities`. Status omits or marks unsupported control/event state
-for the Basic backend. The current status model does not yet implement these
-capability layers.
+for the Basic backend. The current status model implements the identity,
+capability layers, TX-policy source, current segment provenance, and initial
+backend-specific integrity. Connection-state/reconnect and commanded-boot-mode
+fields above remain pending.
 
 `GET /dut/logs` accepts optional `session_id` and integer `lines`, default 300,
 in the inclusive range 1..1000. Booleans and path-unsafe IDs are

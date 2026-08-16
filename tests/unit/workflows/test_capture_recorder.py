@@ -8,6 +8,8 @@ from dutchmate_core.backends import (
     BackendEvent,
     BufferOverflowEvent,
     BufferStatusEvent,
+    SegmentContext,
+    SegmentTimestamp,
     UartReceiveEvent,
 )
 from dutchmate_core.session_store.store import SessionStore
@@ -50,6 +52,7 @@ class FakeCaptureEventSource:
         self._clock = clock
         self._read_duration_s = read_duration_s
         self.read_count = 0
+        self.segment: SegmentContext | None = None
 
     def read_event(self) -> BackendEvent | None:
         self.read_count += 1
@@ -105,8 +108,22 @@ def test_record_uart_event_processes_lines_patterns_and_session_files(tmp_path: 
             "timestamp_epoch": 0,
             "timestamp_us": 100,
             "channel": 0,
-            "line_text": "BOOT_OK\n",
-            "line_raw_b64": "Qk9PVF9PSwo=",
+            "ingestion_index": 0,
+            "line_index_in_event": 0,
+            "line_start_ingestion_index": 0,
+            "line_start_event_offset": 0,
+            "line_end_ingestion_index": 0,
+            "line_end_event_offset": 8,
+            "total_line_bytes": 8,
+            "match_start_byte": 0,
+            "match_end_byte": 7,
+            "match_excerpt": {
+                "start_byte": 0,
+                "end_byte": 8,
+                "text": "BOOT_OK\n",
+                "raw_b64": "Qk9PVF9PSwo=",
+                "excerpt_truncated": False,
+            },
         }
     ]
 
@@ -130,8 +147,7 @@ def test_record_uart_event_buffers_split_pattern_across_events(tmp_path: Path) -
     assert [match.pattern for match in second.matches] == ["BOOT_OK"]
     assert recorder.session_handle.paths.uart_raw.read_bytes() == b"BOOT_OK\n"
     event_timestamps = [
-        event["timestamp_us"]
-        for event in _read_jsonl(recorder.session_handle.paths.uart_events)
+        event["timestamp_us"] for event in _read_jsonl(recorder.session_handle.paths.uart_events)
     ]
     assert event_timestamps == [100, 200]
 
@@ -347,8 +363,22 @@ def test_run_mock_capture_persists_capture_evidence(tmp_path: Path) -> None:
             "timestamp_epoch": 0,
             "timestamp_us": 100,
             "channel": 0,
-            "line_text": "ERROR\n",
-            "line_raw_b64": "RVJST1IK",
+            "ingestion_index": 0,
+            "line_index_in_event": 0,
+            "line_start_ingestion_index": 0,
+            "line_start_event_offset": 0,
+            "line_end_ingestion_index": 0,
+            "line_end_event_offset": 6,
+            "total_line_bytes": 6,
+            "match_start_byte": 0,
+            "match_end_byte": 5,
+            "match_excerpt": {
+                "start_byte": 0,
+                "end_byte": 6,
+                "text": "ERROR\n",
+                "raw_b64": "RVJST1IK",
+                "excerpt_truncated": False,
+            },
         }
     ]
 
@@ -395,9 +425,44 @@ def test_run_transport_capture_records_capture_messages_until_deadline(
     assert summary.device == "dutchmate-rp2040"
     session_root = tmp_path / summary.session_id
     assert (session_root / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
-    assert [
-        event["type"] for event in _read_jsonl(session_root / "hardware_events.jsonl")
-    ] == ["buffer_status"]
+    assert [event["type"] for event in _read_jsonl(session_root / "hardware_events.jsonl")] == [
+        "buffer_status"
+    ]
+
+
+def test_transport_capture_persists_source_segment_context_before_event(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeCaptureEventSource(
+        [UartReceiveEvent(segment_id=0, channel=0, timestamp_us=0, data=b"READY\n")],
+        clock=clock,
+    )
+    transport.segment = SegmentContext(
+        segment_id=0,
+        timestamp=SegmentTimestamp(
+            source="device",
+            clock="rp2040_timer",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=8_500,
+            observation_point="debug_helper_uart_receive",
+            event_granularity="uart_event",
+        ),
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    summary = run_transport_capture(
+        transport=transport,
+        duration_s=0.3,
+        session_store=store,
+        command="capture",
+        monotonic_clock=clock,
+    )
+
+    assert summary.segment_contexts == (transport.segment,)
+    metadata = store.load_metadata(summary.session_id)
+    assert metadata["segments"][0]["timestamp"]["source_origin_us"] == 8_500  # type: ignore[index]
 
 
 def test_run_transport_capture_continues_after_read_timeout(tmp_path: Path) -> None:
@@ -468,8 +533,4 @@ def test_run_transport_capture_rejects_invalid_duration(
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]

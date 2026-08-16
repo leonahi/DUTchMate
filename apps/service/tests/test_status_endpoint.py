@@ -1,6 +1,13 @@
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
+from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+)
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.gpio_config.modes import GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
@@ -15,10 +22,25 @@ def test_status_returns_disconnected_runtime_state() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "connected": False,
+        "backend_mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": None,
         "device": None,
+        "backend_identity": {
+            "port": "/dev/ttyACM0",
+            "firmware": None,
+            "device": None,
+        },
+        "backend_capabilities": [],
         "capabilities": [],
+        "capability_policy": {
+            "uart_send": {
+                "tx_policy_enabled": False,
+                "source": "hardware.uart.tx_enabled",
+            }
+        },
+        "timestamp_provenance": None,
+        "integrity": None,
         "active_session_id": None,
         "control_channels": {
             "CTRL0": {
@@ -103,6 +125,28 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                 capabilities=hello.capabilities,
                 active_session_id="20260724T100000Z-abc12345",
                 control_channels=registry.snapshot(),
+                backend_mode="enhanced",
+                backend_capabilities=("gpio_control", "uart_receive"),
+                capability_policy=BackendCapabilityPolicy(
+                    uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+                ),
+                timestamp_provenance=SegmentContext(
+                    segment_id=0,
+                    timestamp=SegmentTimestamp(
+                        source="device",
+                        clock="rp2040_timer",
+                        unit="us",
+                        origin="segment_start",
+                        source_origin_us=100,
+                        observation_point="debug_helper_uart_receive",
+                        event_granularity="uart_event",
+                    ),
+                ),
+                integrity=UartIntegrity(
+                    loss_status="none_reported",
+                    observation_scope="debug_helper_rx_buffer",
+                    dropped_bytes=0,
+                ),
             )
         )
     )
@@ -115,6 +159,12 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["firmware"] == "0.1.0"
     assert payload["device"] == "dutchmate-rp2040"
     assert payload["capabilities"] == ["uart_capture", "gpio_control"]
+    assert payload["backend_mode"] == "enhanced"
+    assert payload["backend_capabilities"] == ["gpio_control", "uart_receive"]
+    assert payload["capability_policy"]["uart_send"]["tx_policy_enabled"] is False
+    assert payload["timestamp_provenance"]["segment_id"] == 0
+    assert payload["timestamp_provenance"]["timestamp"]["clock"] == "rp2040_timer"
+    assert payload["integrity"]["loss_status"] == "none_reported"
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
     assert payload["control_channels"]["CTRL0"]["state"] == "configured"
     assert payload["control_channels"]["CTRL0"]["role"] == "reset"

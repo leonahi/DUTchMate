@@ -104,6 +104,11 @@ def test_sync_adapter_maps_transport_timeout_to_inactivity() -> None:
     )
 
     assert source.read_event() is None
+    assert source.segment.segment_id == 0
+    assert source.segment.timestamp.source == "device"
+    assert source.segment.timestamp.clock == "rp2040_timer"
+    assert source.segment.timestamp.observation_point == "debug_helper_uart_receive"
+    assert source.segment.timestamp.event_granularity == "uart_event"
 
 
 def test_sync_adapter_maps_protocol_failure_to_backend_input_error() -> None:
@@ -115,6 +120,27 @@ def test_sync_adapter_maps_protocol_failure_to_backend_input_error() -> None:
 
     with pytest.raises(BackendInputError, match="invalid message"):
         source.read_event()
+
+
+def test_sync_adapter_establishes_unknown_origin_from_first_evidence_event() -> None:
+    source = EnhancedCaptureEventSource(
+        FakeEnhancedMessageSource(
+            [UartMessage(channel=0, timestamp_us=8_500, data=b"ready\n", text="ready\n")]
+        ),
+        segment_id=2,
+        source_origin_us=None,
+    )
+
+    assert source.segment is None
+    assert source.read_event() == UartReceiveEvent(
+        segment_id=2,
+        timestamp_us=0,
+        channel=0,
+        data=b"ready\n",
+    )
+    assert source.segment is not None
+    assert source.segment.segment_id == 2
+    assert source.segment.timestamp.source_origin_us == 8_500
 
 
 def test_rejects_event_timestamp_before_segment_origin() -> None:

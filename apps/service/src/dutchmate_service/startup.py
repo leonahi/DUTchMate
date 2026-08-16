@@ -85,6 +85,7 @@ def build_startup_runtime(
             session_root=session_root,
             port=connection.info.port,
             backend_mode="basic",
+            tx_policy_enabled=backend_settings.tx_enabled,
         )
         runtime.record_basic_connection(connection.info)
         return runtime
@@ -106,11 +107,12 @@ def build_startup_runtime(
         message_source=EnhancedCaptureEventSource(
             transport,
             segment_id=0,
-            source_origin_us=0,
+            source_origin_us=None,
         ),
         session_root=session_root,
         port=serial_port,
         backend_mode="enhanced",
+        tx_policy_enabled=backend_settings.tx_enabled,
     )
     hello = read_startup_hello(transport)
     runtime.record_hello(hello, port=serial_port)

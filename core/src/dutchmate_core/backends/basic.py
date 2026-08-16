@@ -15,14 +15,19 @@ from typing import Final, Protocol, cast
 from dutchmate_core.backends.contracts import (
     BackendCapability,
     BackendCapabilityError,
+    BackendCapabilityPolicy,
     BackendDisconnectedError,
     BackendEvent,
     BackendInfo,
     BackendInputError,
+    BackendSnapshot,
     BackendWriteError,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
+    UartSendCapabilityPolicy,
+    apply_capability_policy,
+    integrity_for_backend,
 )
 from dutchmate_core.backends.settings import BackendSettings
 
@@ -58,17 +63,22 @@ class BasicBackendConnection:
     ) -> None:
         if settings.mode != "basic" or settings.serial_port is None:
             raise ValueError("Basic connection requires resolved Basic backend settings")
-        capabilities: set[BackendCapability] = {"uart_receive"}
-        if settings.tx_enabled:
-            capabilities.add("uart_send")
+        capabilities: frozenset[BackendCapability] = frozenset(
+            {"uart_receive", "uart_send"}
+        )
         self._serial_port = serial_port
         self._write_lock = Lock()
+        self._capability_policy = BackendCapabilityPolicy(
+            uart_send=UartSendCapabilityPolicy(
+                tx_policy_enabled=settings.tx_enabled,
+            )
+        )
         self._info = BackendInfo(
             mode="basic",
             port=settings.serial_port,
             device=None,
             firmware=None,
-            capabilities=frozenset(capabilities),
+            capabilities=capabilities,
         )
 
     @property
@@ -83,10 +93,22 @@ class BasicBackendConnection:
 
         return self._serial_port
 
+    @property
+    def capability_policy(self) -> BackendCapabilityPolicy:
+        """Return the configured software capability policy."""
+
+        return self._capability_policy
+
+    @property
+    def capabilities(self) -> frozenset[BackendCapability]:
+        """Return capabilities remaining after host policy is applied."""
+
+        return apply_capability_policy(self._info.capabilities, self._capability_policy)
+
     def send_uart(self, data: bytes) -> int:
         """Write a complete UART payload, retrying ordered short writes."""
 
-        if "uart_send" not in self._info.capabilities:
+        if "uart_send" not in self.capabilities:
             raise BackendCapabilityError("Basic backend UART send is disabled")
         if not isinstance(data, bytes):
             raise TypeError("Basic UART payload must be bytes")
@@ -200,6 +222,18 @@ class BasicBackendEventSource:
         """Return host-monotonic provenance established at source creation."""
 
         return self._segment
+
+    @property
+    def snapshot(self) -> BackendSnapshot:
+        """Return the complete Basic identity/policy/provenance snapshot."""
+
+        return BackendSnapshot(
+            info=self._connection.info,
+            capabilities=self._connection.capabilities,
+            capability_policy=self._connection.capability_policy,
+            segment=self._segment,
+            integrity=integrity_for_backend("basic"),
+        )
 
     async def receive_event(self, timeout_s: float | None = None) -> BackendEvent | None:
         """Return the next FIFO event, or ``None`` for an ordinary timeout."""

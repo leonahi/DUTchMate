@@ -22,9 +22,7 @@ def test_process_event_returns_completed_lines_and_matches() -> None:
         channel=0,
         timestamp_us=100,
         lines=(UartLine(raw=b"BOOT_OK\n", text="BOOT_OK\n"),),
-        matches=(
-            PatternMatch(pattern="BOOT_OK", line_text="BOOT_OK\n", line_raw=b"BOOT_OK\n"),
-        ),
+        matches=(PatternMatch(pattern="BOOT_OK", line_text="BOOT_OK\n", line_raw=b"BOOT_OK\n"),),
     )
 
 
@@ -46,21 +44,61 @@ def test_process_event_buffers_split_lines_until_complete() -> None:
     assert first.lines == ()
     assert first.matches == ()
     assert processor.pending_bytes(0) == b""
-    assert second.lines == (
-        UartLine(raw=b"ERROR: sensor failed\n", text="ERROR: sensor failed\n"),
-    )
+    assert second.lines == (UartLine(raw=b"ERROR: sensor failed\n", text="ERROR: sensor failed\n"),)
     assert [match.pattern for match in second.matches] == ["ERROR"]
+
+
+def test_process_event_tracks_split_line_event_and_byte_boundaries() -> None:
+    processor = UartCaptureProcessor()
+
+    processor.process_event(
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"pre ER")
+    )
+    result = processor.process_event(
+        UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=200,
+            data=b"ROR\nnext\n",
+        )
+    )
+
+    first_line, second_line = result.lines
+    assert (
+        first_line.ingestion_index,
+        first_line.line_index_in_event,
+        first_line.start_ingestion_index,
+        first_line.start_event_offset,
+        first_line.end_ingestion_index,
+        first_line.end_event_offset,
+    ) == (1, 0, 0, 0, 1, 4)
+    assert (
+        second_line.ingestion_index,
+        second_line.line_index_in_event,
+        second_line.start_ingestion_index,
+        second_line.start_event_offset,
+        second_line.end_ingestion_index,
+        second_line.end_event_offset,
+    ) == (1, 1, 1, 4, 1, 9)
+    assert result.matches[0].match_start_byte == 4
+    assert result.matches[0].match_end_byte == 9
 
 
 def test_process_event_keeps_channel_buffers_separate() -> None:
     processor = UartCaptureProcessor()
 
-    assert processor.process_event(
-        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"ERR")
-    ).lines == ()
-    assert processor.process_event(
-        UartReceiveEvent(segment_id=0, channel=1, timestamp_us=110, data=b"BOOT_")
-    ).lines == ()
+    assert (
+        processor.process_event(
+            UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"ERR")
+        ).lines
+        == ()
+    )
+    assert (
+        processor.process_event(
+            UartReceiveEvent(segment_id=0, channel=1, timestamp_us=110, data=b"BOOT_")
+        ).lines
+        == ()
+    )
 
     channel_zero = processor.process_event(
         UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"OR\n")

@@ -80,6 +80,18 @@ def test_matching_is_case_sensitive() -> None:
     assert detector.scan_line(line) == []
 
 
+def test_match_offsets_reference_first_exact_raw_occurrence_after_invalid_utf8() -> None:
+    detector = PatternDetector(patterns=("ERROR",))
+    line = UartLine(
+        raw=b"\xffprefix ERROR ERROR\n",
+        text="\ufffdprefix ERROR ERROR\n",
+    )
+
+    match = detector.scan_line(line)[0]
+
+    assert (match.match_start_byte, match.match_end_byte) == (8, 13)
+
+
 @pytest.mark.parametrize("patterns", [(), []])
 def test_patterns_must_not_be_empty(patterns: tuple[str, ...] | list[str]) -> None:
     with pytest.raises(ValueError):
@@ -99,6 +111,12 @@ def test_patterns_must_not_contain_empty_strings() -> None:
 def test_patterns_must_not_contain_duplicates() -> None:
     with pytest.raises(ValueError):
         PatternDetector(patterns=("ERROR", "ERROR"))
+
+
+@pytest.mark.parametrize("pattern", ("bad\npattern", "bad\rpattern", "x" * 257))
+def test_patterns_must_satisfy_the_bounded_literal_contract(pattern: str) -> None:
+    with pytest.raises(ValueError):
+        PatternDetector(patterns=(pattern,))
 
 
 def test_patterns_must_be_strings() -> None:

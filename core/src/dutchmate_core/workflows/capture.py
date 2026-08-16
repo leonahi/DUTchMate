@@ -7,8 +7,10 @@ from typing import Protocol
 
 from dutchmate_core.backends.contracts import (
     BackendEvent,
+    BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
+    SegmentContext,
     UartReceiveEvent,
 )
 from dutchmate_core.log_processing.patterns import PatternMatch
@@ -50,6 +52,9 @@ class TransportCaptureRunner:
             if self._clock() >= deadline:
                 break
             if event is not None:
+                segment = getattr(self._transport, "segment", None)
+                if isinstance(segment, SegmentContext):
+                    recorder.record_segment_context(segment)
                 recorder.record_event(event)
 
 
@@ -72,11 +77,17 @@ class CaptureRecorder:
         session_store: SessionStore,
         session_handle: SessionHandle,
         uart_processor: UartCaptureProcessor | None = None,
+        segment_context: SegmentContext | None = None,
         timestamp_epoch: int = 0,
     ) -> None:
         self._session_store = session_store
         self._session_handle = session_handle
         self._uart_processor = uart_processor or UartCaptureProcessor()
+        self._segment_contexts = (
+            {segment_context.segment_id: segment_context}
+            if segment_context is not None
+            else {}
+        )
         self._timestamp_epoch = timestamp_epoch
 
     @classmethod
@@ -89,6 +100,7 @@ class CaptureRecorder:
         device: str | None = None,
         baseline: bool = False,
         uart_processor: UartCaptureProcessor | None = None,
+        backend_snapshot: BackendSnapshot | None = None,
     ) -> "CaptureRecorder":
         """Create a capture session and return a recorder for it."""
 
@@ -97,11 +109,15 @@ class CaptureRecorder:
             firmware=firmware,
             device=device,
             baseline=baseline,
+            backend_snapshot=backend_snapshot,
         )
         return cls(
             session_store=session_store,
             session_handle=session_handle,
             uart_processor=uart_processor,
+            segment_context=(
+                backend_snapshot.segment if backend_snapshot is not None else None
+            ),
         )
 
     @property
@@ -158,6 +174,17 @@ class CaptureRecorder:
 
         raise TypeError("capture recorder input must be a normalized backend event")
 
+    def record_segment_context(self, context: SegmentContext) -> None:
+        """Persist one immutable segment context before recording its events."""
+
+        existing = self._segment_contexts.get(context.segment_id)
+        if existing is not None:
+            if existing != context:
+                raise ValueError("capture segment timestamp provenance cannot change")
+            return
+        self._session_store.record_segment_context(self._session_handle, context)
+        self._segment_contexts[context.segment_id] = context
+
 
 def run_transport_capture(
     *,
@@ -178,6 +205,7 @@ def run_transport_capture(
         duration_s=duration_s,
         monotonic_clock=monotonic_clock,
     )
+    source_snapshot = getattr(transport, "snapshot", None)
     recorder = CaptureRecorder.start(
         session_store=session_store,
         command=command,
@@ -185,6 +213,9 @@ def run_transport_capture(
         device=device,
         baseline=baseline,
         uart_processor=uart_processor,
+        backend_snapshot=(
+            source_snapshot if isinstance(source_snapshot, BackendSnapshot) else None
+        ),
     )
     runner.run(recorder)
     return session_store.summarize_session(recorder.session_id)

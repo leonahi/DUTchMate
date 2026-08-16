@@ -3,9 +3,75 @@ from fastapi.testclient import TestClient
 from helpers import FakeRuntime, connected_status
 
 from dutchmate_core.runtime import DeviceCoreRuntimeError
-from dutchmate_core.session_store.store import SessionSummary
+from dutchmate_core.session_store.store import FirstError, MatchExcerpt, SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
+from dutchmate_service.schemas import capture_summary_payload
+
+
+def test_capture_summary_serializes_bounded_first_error_evidence() -> None:
+    summary = SessionSummary(
+        session_id="20260729T100000Z-capture-error",
+        started_at="2026-07-29T10:00:00Z",
+        command="capture --seconds 1",
+        truncated=False,
+        interrupted=False,
+        resumed=False,
+        overflow=False,
+        baseline=False,
+        firmware=None,
+        device=None,
+        segment_count=1,
+        first_error=FirstError(
+            pattern="ERROR",
+            detected_pattern_index=3,
+            segment_id=0,
+            timestamp_us=10,
+            channel=1,
+            ingestion_index=2,
+            line_index_in_event=0,
+            line_start_ingestion_index=1,
+            line_start_event_offset=4,
+            line_end_ingestion_index=2,
+            line_end_event_offset=6,
+            total_line_bytes=12,
+            match_start_byte=2,
+            match_end_byte=7,
+            match_excerpt=MatchExcerpt(
+                start_byte=0,
+                end_byte=12,
+                text="x ERROR log\n",
+                raw_b64="eCBFUlJPUiBsb2cK",
+                excerpt_truncated=False,
+            ),
+        ),
+    )
+
+    payload = capture_summary_payload(summary)
+
+    assert payload["first_error"] == {
+        "pattern": "ERROR",
+        "detected_pattern_index": 3,
+        "segment_id": 0,
+        "timestamp_us": 10,
+        "channel": 1,
+        "ingestion_index": 2,
+        "line_index_in_event": 0,
+        "line_start_ingestion_index": 1,
+        "line_start_event_offset": 4,
+        "line_end_ingestion_index": 2,
+        "line_end_event_offset": 6,
+        "total_line_bytes": 12,
+        "match_start_byte": 2,
+        "match_end_byte": 7,
+        "match_excerpt": {
+            "start_byte": 0,
+            "end_byte": 12,
+            "text": "x ERROR log\n",
+            "raw_b64": "eCBFUlJPUiBsb2cK",
+            "excerpt_truncated": False,
+        },
+    }
 
 
 def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
@@ -19,6 +85,40 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-capture01",
+        "backend_mode": "enhanced",
+        "backend_identity": {
+            "port": "/dev/ttyACM0",
+            "firmware": "0.1.0",
+            "device": "dutchmate-rp2040",
+        },
+        "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
+        "capabilities": ["gpio_control", "uart_receive"],
+        "capability_policy": {
+            "uart_send": {
+                "tx_policy_enabled": False,
+                "source": "hardware.uart.tx_enabled",
+            }
+        },
+        "timestamp_provenance": [
+            {
+                "segment_id": 0,
+                "timestamp": {
+                    "source": "device",
+                    "clock": "rp2040_timer",
+                    "unit": "us",
+                    "origin": "segment_start",
+                    "source_origin_us": 100,
+                    "observation_point": "debug_helper_uart_receive",
+                    "event_granularity": "uart_event",
+                },
+            }
+        ],
+        "integrity": {
+            "loss_status": "none_reported",
+            "observation_scope": "debug_helper_rx_buffer",
+            "dropped_bytes": 0,
+        },
+        "first_error": None,
         "truncated": False,
         "interrupted": False,
         "resumed": False,
@@ -52,6 +152,18 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
     assert response.json() == {
         "ok": True,
         "session_id": "20260729T100000Z-capture02",
+        "backend_mode": None,
+        "backend_identity": {
+            "port": None,
+            "firmware": "0.1.0",
+            "device": "dutchmate-rp2040",
+        },
+        "backend_capabilities": [],
+        "capabilities": [],
+        "capability_policy": None,
+        "timestamp_provenance": [],
+        "integrity": None,
+        "first_error": None,
         "truncated": True,
         "interrupted": True,
         "resumed": True,

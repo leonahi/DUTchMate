@@ -52,9 +52,9 @@ Current core modules:
 |---|---|
 | `backends` | Backend-neutral identity/contracts, Basic raw serial event/send adapter, and interim Enhanced wire adapters. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
-| `uart_capture` | Backend-independent UART byte buffering by segment/channel, complete lines, and receive processing. |
-| `log_processing` | Case-sensitive pattern detection on complete lines. |
-| `session_store` | Filesystem sessions, evidence, summaries, and discovery. |
+| `uart_capture` | Backend-independent UART byte buffering by segment/channel, complete lines with event/byte boundaries, and receive processing. |
+| `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
+| `session_store` | Filesystem sessions, bounded pattern evidence, deterministic first-error summaries, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture, Enhanced fixture compatibility, and guarded reset/boot actions. |
 | `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |
@@ -133,11 +133,10 @@ The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
 contracts and shared event processing now exist; Enhanced wire messages are
 translated at an interim compatibility boundary. Major remaining Phase 1 areas
-are complete Basic reporting/session semantics, the full asynchronous Enhanced
-adapter, background ingestion/reconnect, versioned durable sessions and
-retention, bounded log and session retrieval, wait-pattern, UART-send public
-workflows, generic Enhanced control actions, RP2040 firmware, and real HIL
-tests.
+are the full asynchronous Enhanced adapter, background ingestion/reconnect,
+native versioned durable sessions and retention, bounded log and session
+retrieval, wait-pattern, UART-send public workflows, generic Enhanced control
+actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint
 

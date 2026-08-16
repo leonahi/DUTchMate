@@ -27,10 +27,24 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
 
     return {
         "connected": status.connected,
+        "backend_mode": status.backend_mode,
         "port": status.port,
         "firmware": status.firmware,
         "device": status.device,
+        "backend_identity": {
+            "port": status.port,
+            "firmware": status.firmware,
+            "device": status.device,
+        },
+        "backend_capabilities": list(status.backend_capabilities),
         "capabilities": list(status.capabilities),
+        "capability_policy": (
+            asdict(status.capability_policy) if status.capability_policy is not None else None
+        ),
+        "timestamp_provenance": (
+            asdict(status.timestamp_provenance) if status.timestamp_provenance is not None else None
+        ),
+        "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
         "control_channels": {
             channel: asdict(channel_status)
@@ -118,6 +132,20 @@ def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
     return {
         "ok": True,
         "session_id": summary.session_id,
+        "backend_mode": summary.backend_mode,
+        "backend_identity": {
+            "port": summary.port,
+            "firmware": summary.firmware,
+            "device": summary.device,
+        },
+        "backend_capabilities": list(summary.backend_capabilities),
+        "capabilities": list(summary.capabilities),
+        "capability_policy": (
+            asdict(summary.capability_policy) if summary.capability_policy is not None else None
+        ),
+        "timestamp_provenance": [asdict(segment) for segment in summary.segment_contexts],
+        "integrity": asdict(summary.integrity) if summary.integrity is not None else None,
+        "first_error": (asdict(summary.first_error) if summary.first_error is not None else None),
         "truncated": summary.truncated,
         "interrupted": summary.interrupted,
         "resumed": summary.resumed,

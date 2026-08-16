@@ -155,7 +155,7 @@ Owns raw UART byte-to-line processing:
 
 - `UartLineBuffer` assembles newline-terminated lines
 - buffers are independent per segment and UART channel
-- `UartLine` retains raw bytes and lossy display text
+- `UartLine` retains raw bytes, lossy display text, and source event/byte boundaries
 - `UartCaptureProcessor` sends complete lines to pattern detection
 
 It does not write files. It consumes normalized `UartReceiveEvent` objects and
@@ -167,10 +167,11 @@ derived-line limit remains pending and will not truncate raw session evidence.
 Owns case-sensitive pattern detection on complete lossy-display lines. Current
 defaults are `ERROR`, `ASSERT`, `PANIC`, `HardFault`, and `BOOT_OK`.
 
-Current `PatternMatch` records the complete source line. Phase 1 classifies
-failure versus success patterns, chooses deterministic `first_error`, retains
-raw byte offsets, and stores a bounded excerpt. It remains pure processing and
-does not own persistence or backend I/O.
+`PatternMatch` records the complete source line internally plus the first raw
+byte span for each matching literal. Session persistence classifies failure
+versus success patterns, chooses deterministic `first_error`, and stores a
+bounded exact-byte excerpt. Pattern processing remains pure and does not own
+persistence or backend I/O.
 
 ### `session_store`
 
@@ -183,13 +184,18 @@ Owns filesystem-backed sessions under
 - consumes normalized UART and buffer-telemetry events rather than Enhanced
   wire-message models
 - stores buffer overflow/status telemetry and detected patterns
+- stores bounded detected-pattern excerpts and derives deterministic
+  reference-bearing `first_error` summaries in segment/event order
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
 - rejects path-unsafe session IDs
 
 Current metadata is unversioned and lacks the target lifecycle, quota,
-retention, baseline, reconnect, backend identity, timestamp provenance, and
-bounded replay contracts. Those rules are centralized in the Phase 1 spec and
+retention, baseline, reconnect, and bounded replay contracts. Runtime-created
+sessions already snapshot backend identity, raw/effective capabilities,
+TX-policy source, per-segment timestamp provenance, and backend-specific UART
+integrity; older direct-store fixtures retain their legacy shape. The remaining
+rules are centralized in the Phase 1 spec and
 `docs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
@@ -242,12 +248,14 @@ converts each delivered byte chunk to one FIFO normalized event with
 host-monotonic provenance, and exposes a blocking compatibility read to the
 current shared capture runner. Basic UART writes are capability-gated and retry
 ordered short writes to completion. An interim Enhanced adapter translates
-parsed v1 messages and synchronous read timeouts before shared capture. The
-package will additionally own:
+parsed v1 messages and synchronous read timeouts before shared capture. When
+its device-timer origin is unavailable at connection creation, the first
+timestamped evidence event establishes the segment origin and is normalized to
+zero before its immutable context is persisted. The package will additionally
+own:
 
 - Enhanced NDJSON adaptation with device timestamp and telemetry provenance
 - continuous background ingestion and lifecycle ownership beyond finite captures
-- backend support versus effective host-policy capabilities
 - normalized UART-send completion results plus control and future event interfaces
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
@@ -266,7 +274,9 @@ owns request/response serialization and HTTP error mapping.
 The service accepts one explicit Basic/Enhanced selection. Basic requires and
 opens a raw serial port without `hello`, wiring its normalized source into the
 same finite capture path. Enhanced validates `hello` when a port is selected
-and may start disconnected without one. Continuous background ingestion,
+and may start disconnected without one. Status and finite capture responses
+serialize backend identity, raw/effective capabilities, TX-policy provenance,
+segment timing, and UART-loss integrity. Continuous background ingestion,
 reconnect, bounded log/session retrieval, wait-pattern, public UART send,
 baseline operations, and the complete target error projection remain Phase 1
 work.
@@ -308,8 +318,9 @@ summaries, and discovery; GPIO configuration state; fixture and finite transport
 capture; reset/boot-mode and boot-test orchestration; runtime conflict cleanup;
 service endpoints; CLI clients; serial discovery and backend selection; Basic
 no-hello raw opening, normalized FIFO receive/provenance, shared capture, and
-full-write behavior; Enhanced startup `hello` validation; and startup hardware
-mapping.
+full-write behavior; capability-policy filtering; backend/session identity,
+per-segment provenance, and integrity serialization; Enhanced startup `hello`
+validation; and startup hardware mapping.
 
 Use focused tests during development and the full suite before a commit:
 

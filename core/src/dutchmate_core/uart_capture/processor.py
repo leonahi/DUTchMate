@@ -24,6 +24,7 @@ class UartCaptureProcessor:
     def __init__(self, pattern_detector: PatternDetector | None = None) -> None:
         self._pattern_detector = pattern_detector or PatternDetector()
         self._line_buffers: dict[tuple[int, int], UartLineBuffer] = {}
+        self._next_ingestion_index = 0
 
     def process_event(self, event: UartReceiveEvent) -> UartCaptureResult:
         """Process one normalized UART receive event."""
@@ -31,8 +32,10 @@ class UartCaptureProcessor:
         if not isinstance(event, UartReceiveEvent):
             raise TypeError("UART capture processor input must be a UartReceiveEvent")
 
+        ingestion_index = self._next_ingestion_index
+        self._next_ingestion_index += 1
         buffer = self._line_buffer_for_channel(event.segment_id, event.channel)
-        lines = tuple(buffer.feed(event.data))
+        lines = tuple(buffer.feed(event.data, ingestion_index=ingestion_index))
         matches = tuple(self._pattern_detector.scan_lines(lines))
 
         return UartCaptureResult(

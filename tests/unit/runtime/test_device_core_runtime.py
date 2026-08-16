@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from dutchmate_core.backends import BackendEvent, BufferStatusEvent, UartReceiveEvent
+from dutchmate_core.backends import (
+    BackendEvent,
+    BufferStatusEvent,
+    SegmentContext,
+    SegmentTimestamp,
+    UartReceiveEvent,
+)
 from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
@@ -99,6 +105,18 @@ class FakeCaptureSource:
         self._clock = clock
         self._on_read = on_read
         self._read_duration_s = read_duration_s
+        self.segment = SegmentContext(
+            segment_id=0,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=0,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        )
 
     def read_event(self) -> BackendEvent | None:
         if self._on_read is not None:
@@ -155,7 +173,35 @@ def test_record_hello_updates_connection_status(tmp_path: Path) -> None:
     assert status.port == "/dev/tty.usbmodem2040"
     assert status.firmware == "0.1.0"
     assert status.device == "dutchmate-rp2040"
-    assert status.capabilities == ("uart_capture", "gpio_control", "uart_send")
+    assert status.backend_mode == "enhanced"
+    assert status.backend_capabilities == ("gpio_control", "uart_receive", "uart_send")
+    assert status.capabilities == ("gpio_control", "uart_receive")
+    assert status.capability_policy is not None
+    assert status.capability_policy.uart_send.tx_policy_enabled is False
+    assert status.integrity is not None
+    assert status.integrity.loss_status == "none_reported"
+
+
+def test_tx_policy_cannot_manufacture_unreported_backend_capability(
+    tmp_path: Path,
+) -> None:
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        session_root=tmp_path,
+        tx_policy_enabled=True,
+    )
+    no_send_hello = HelloMessage(
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        capabilities=("uart_capture", "gpio_control"),
+    )
+
+    status = runtime.record_hello(no_send_hello, port="/dev/ttyACM0")
+
+    assert status.backend_capabilities == ("gpio_control", "uart_receive")
+    assert status.capabilities == ("gpio_control", "uart_receive")
+    assert status.capability_policy is not None
+    assert status.capability_policy.uart_send.tx_policy_enabled is True
 
 
 def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
@@ -260,6 +306,7 @@ def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Pa
     assert status.connected is False
     assert status.port == "/dev/ttyACM0"
     assert status.firmware is None
+    assert status.integrity is None
     assert status.control_channels["CTRL0"].state == "configured"
 
 
@@ -305,6 +352,21 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
     assert summary.command == "capture --seconds 0.4"
     assert summary.firmware == "0.1.0"
     assert summary.device == "dutchmate-rp2040"
+    assert summary.backend_mode == "enhanced"
+    assert summary.port == "/dev/ttyACM0"
+    assert summary.backend_capabilities == (
+        "gpio_control",
+        "uart_receive",
+        "uart_send",
+    )
+    assert summary.capabilities == ("gpio_control", "uart_receive")
+    assert summary.capability_policy is not None
+    assert summary.capability_policy.uart_send.tx_policy_enabled is False
+    assert summary.integrity is not None
+    assert summary.integrity.loss_status == "none_reported"
+    assert summary.segment_contexts[0].timestamp.observation_point == (
+        "debug_helper_uart_receive"
+    )
     assert runtime.status().active_session_id is None
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
 
@@ -347,6 +409,41 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
     runtime.capture_uart(duration_s=0.2)
 
     assert runtime.status().active_session_id is None
+
+
+def test_capture_updates_connected_integrity_from_buffer_telemetry(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource(
+        [
+            BufferStatusEvent(
+                segment_id=0,
+                timestamp_us=200,
+                size_bytes=32768,
+                used_bytes=32768,
+                high_water_bytes=32768,
+                dropped_bytes_total=37,
+                overflow_events=1,
+            )
+        ],
+        clock=clock,
+    )
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=source,
+        capture_clock=clock,
+        session_root=tmp_path,
+    )
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
+
+    summary = runtime.capture_uart(duration_s=0.3)
+
+    assert summary.integrity is not None
+    assert summary.integrity.loss_status == "loss_reported"
+    assert summary.integrity.dropped_bytes == 37
+    status = runtime.status()
+    assert status.integrity == summary.integrity
 
 
 def test_capture_uart_requires_connection(tmp_path: Path) -> None:
