@@ -78,6 +78,14 @@ class SessionRecoveryError(RuntimeError):
     """Raised when stale native session metadata cannot be safely replaced."""
 
 
+class EvidenceQuotaExceeded(RuntimeError):
+    """Raised after an evidence unit is rejected and its session is terminalized."""
+
+    def __init__(self, truncation: dict[str, object]) -> None:
+        self.truncation = truncation.copy()
+        super().__init__("session evidence budget would be exceeded")
+
+
 @dataclass(frozen=True, slots=True)
 class MatchExcerpt:
     """Bounded exact-byte evidence surrounding one detected pattern."""
@@ -163,6 +171,7 @@ class SessionSummary:
     ended_at: str | None = None
     end_reason: str | None = None
     error: dict[str, object] | None = None
+    truncation: dict[str, object] | None = None
 
 
 class SessionStore:
@@ -401,6 +410,7 @@ class SessionStore:
             state="completed",
             end_reason=end_reason,
             error=None,
+            truncation=None,
         )
 
     def fail_session(
@@ -418,6 +428,7 @@ class SessionStore:
             state="failed",
             end_reason=end_reason,
             error=_bounded_error(error_code, detail),
+            truncation=None,
         )
 
     def abandon_session(self, handle: SessionHandle) -> None:
@@ -428,6 +439,7 @@ class SessionStore:
             state="abandoned",
             end_reason="service_restart",
             error=None,
+            truncation=None,
         )
 
     def _terminalize_session(
@@ -437,6 +449,7 @@ class SessionStore:
         state: Literal["completed", "failed", "abandoned"],
         end_reason: str,
         error: dict[str, object] | None,
+        truncation: dict[str, object] | None,
     ) -> None:
         metadata = _read_json_object(handle.paths.metadata)
         if metadata.get("schema_version") != 1:
@@ -448,6 +461,9 @@ class SessionStore:
         metadata["ended_at"] = ended_at
         metadata["end_reason"] = end_reason
         metadata["error"] = error
+        if truncation is not None:
+            metadata["truncated"] = True
+            metadata["truncation"] = truncation
         segments = metadata.get("segments")
         if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
             raise ValueError("native session must contain a current segment")
@@ -531,39 +547,104 @@ class SessionStore:
         if event.timestamp_us != result.timestamp_us:
             raise ValueError("UART event and capture result timestamps must match")
 
-        _append_bytes(handle.paths.uart_raw, event.data)
-        _append_jsonl(
-            handle.paths.uart_events,
-            _uart_event_json(event, timestamp_epoch),
-        )
-        _append_detected_patterns(
-            handle.paths.detected_patterns,
+        uart_event_bytes = _serialize_jsonl(_uart_event_json(event, timestamp_epoch))
+        pattern_records = _detected_pattern_records(
             result,
             segment_id=event.segment_id,
             timestamp_epoch=timestamp_epoch,
         )
-        for oversized_line in result.oversized_lines:
-            _append_jsonl(
-                handle.paths.hardware_events,
+        detected_patterns_bytes: bytes | None = None
+        detected_patterns_delta = 0
+        if pattern_records:
+            detected_patterns = _read_json_list(handle.paths.detected_patterns)
+            detected_patterns.extend(pattern_records)
+            detected_patterns_bytes = _serialize_json(detected_patterns)
+            detected_patterns_delta = (
+                len(detected_patterns_bytes) - handle.paths.detected_patterns.stat().st_size
+            )
+        hardware_event_bytes = tuple(
+            _serialize_jsonl(
                 _line_limit_exceeded_event_json(
                     result,
                     oversized_line,
                     timestamp_epoch=timestamp_epoch,
-                ),
+                )
             )
+            for oversized_line in result.oversized_lines
+        )
+        evidence_bytes = (
+            len(event.data)
+            + len(uart_event_bytes)
+            + detected_patterns_delta
+            + sum(len(record) for record in hardware_event_bytes)
+        )
+        self._preflight_uart_evidence(
+            handle,
+            event=event,
+            evidence_bytes=evidence_bytes,
+        )
+
+        _append_bytes(handle.paths.uart_raw, event.data)
+        _append_serialized(handle.paths.uart_events, uart_event_bytes)
+        if detected_patterns_bytes is not None:
+            _write_serialized(handle.paths.detected_patterns, detected_patterns_bytes)
+        for record in hardware_event_bytes:
+            _append_serialized(handle.paths.hardware_events, record)
+
+        metadata = _read_json_object(handle.paths.metadata)
         if result.newly_oversized_line_count:
-            metadata = _read_json_object(handle.paths.metadata)
             _record_line_processing(
                 metadata,
                 newly_oversized_line_count=result.newly_oversized_line_count,
             )
-            _refresh_storage_accounting(metadata, handle.paths)
-            _write_json(handle.paths.metadata, metadata)
-        self._record_segment_timestamp(
-            handle,
+        _record_metadata_segment_timestamp(
+            metadata,
             segment_id=event.segment_id,
             timestamp_us=event.timestamp_us,
         )
+        _refresh_storage_accounting(metadata, handle.paths)
+        _write_json(handle.paths.metadata, metadata)
+
+    def _preflight_uart_evidence(
+        self,
+        handle: SessionHandle,
+        *,
+        event: UartReceiveEvent,
+        evidence_bytes: int,
+    ) -> None:
+        metadata = _read_json_object(handle.paths.metadata)
+        if metadata.get("schema_version") != 1:
+            return
+        storage = _optional_object(metadata.get("storage"), "storage")
+        if storage is None:
+            raise ValueError("native session storage metadata is required")
+        budget = storage.get("evidence_budget_bytes")
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+            raise ValueError("native session evidence budget is invalid")
+        current_bytes = _evidence_file_bytes(handle.paths)
+        projected_bytes = current_bytes + evidence_bytes
+        if projected_bytes <= budget:
+            return
+
+        truncation: dict[str, object] = {
+            "reason": "size_limit",
+            "rejected_unit_type": "uart_receive",
+            "rejected_unit_evidence_bytes": evidence_bytes,
+            "projected_evidence_bytes": projected_bytes,
+            "rejected_uart_payload_bytes": len(event.data),
+            "segment_id": event.segment_id,
+            "channel": event.channel,
+            "timestamp_us": event.timestamp_us,
+            "occurred_at": _format_utc_timestamp(self._clock()),
+        }
+        self._terminalize_session(
+            handle,
+            state="completed",
+            end_reason="size_limit",
+            error=None,
+            truncation=truncation,
+        )
+        raise EvidenceQuotaExceeded(truncation)
 
     def append_uart_processing_result(
         self,
@@ -931,6 +1012,7 @@ def _summary_from_metadata(
         ended_at=ended_at,
         end_reason=end_reason,
         error=error,
+        truncation=_optional_object(metadata.get("truncation"), "truncation") if native else None,
     )
 
 
@@ -1205,9 +1287,7 @@ def _required_bool(metadata: dict[str, object], key: str) -> bool:
 
 
 def _write_json(path: Path, value: object) -> None:
-    with path.open("w", encoding="utf-8") as file:
-        json.dump(value, file, indent=2)
-        file.write("\n")
+    _write_serialized(path, _serialize_json(value))
 
 
 def _write_json_atomic(path: Path, value: object) -> None:
@@ -1226,7 +1306,11 @@ def _refresh_storage_accounting(
     storage = _optional_object(metadata.get("storage"), "storage")
     if storage is None:
         return
-    storage["evidence_bytes_written"] = sum(
+    storage["evidence_bytes_written"] = _evidence_file_bytes(paths)
+
+
+def _evidence_file_bytes(paths: SessionPaths) -> int:
+    return sum(
         path.stat().st_size
         for path in (
             paths.uart_raw,
@@ -1298,22 +1382,37 @@ def _append_bytes(path: Path, data: bytes) -> None:
 
 
 def _append_jsonl(path: Path, value: dict[str, object]) -> None:
-    with path.open("a", encoding="utf-8") as file:
-        json.dump(value, file, separators=(",", ":"))
-        file.write("\n")
+    _append_serialized(path, _serialize_jsonl(value))
 
 
-def _append_detected_patterns(
-    path: Path,
+def _serialize_json(value: object) -> bytes:
+    return (json.dumps(value, indent=2) + "\n").encode("utf-8")
+
+
+def _serialize_jsonl(value: dict[str, object]) -> bytes:
+    return (json.dumps(value, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _write_serialized(path: Path, data: bytes) -> None:
+    with path.open("wb") as file:
+        file.write(data)
+
+
+def _append_serialized(path: Path, data: bytes) -> None:
+    with path.open("ab") as file:
+        file.write(data)
+
+
+def _detected_pattern_records(
     result: UartCaptureResult,
     *,
     segment_id: int,
     timestamp_epoch: int,
-) -> None:
+) -> list[dict[str, object]]:
     if not result.matches:
-        return
+        return []
 
-    patterns = _read_json_list(path)
+    patterns: list[dict[str, object]] = []
     for match in result.matches:
         match_start_byte = _match_coordinate(match.match_start_byte, "match_start_byte")
         match_end_byte = _match_coordinate(match.match_end_byte, "match_end_byte")
@@ -1358,7 +1457,7 @@ def _append_detected_patterns(
                 },
             }
         )
-    _write_json(path, patterns)
+    return patterns
 
 
 def _match_coordinate(value: int | None, field: str) -> int:

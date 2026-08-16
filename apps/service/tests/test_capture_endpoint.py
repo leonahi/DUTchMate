@@ -88,6 +88,36 @@ def test_capture_summary_serializes_bounded_first_error_evidence() -> None:
     }
 
 
+def test_capture_summary_serializes_quota_truncation_context() -> None:
+    truncation: dict[str, object] = {
+        "reason": "size_limit",
+        "rejected_unit_type": "uart_receive",
+        "rejected_unit_evidence_bytes": 120,
+        "projected_evidence_bytes": 1025,
+        "rejected_uart_payload_bytes": 8,
+        "segment_id": 0,
+        "channel": 1,
+        "timestamp_us": 42,
+        "occurred_at": "2026-07-29T10:00:03Z",
+    }
+    summary = SessionSummary(
+        session_id="20260729T100000Z-quota",
+        started_at="2026-07-29T10:00:00Z",
+        command="capture --seconds 1",
+        truncated=True,
+        interrupted=False,
+        resumed=False,
+        overflow=False,
+        baseline=False,
+        firmware=None,
+        device=None,
+        segment_count=1,
+        truncation=truncation,
+    )
+
+    assert capture_summary_payload(summary)["truncation"] == truncation
+
+
 def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
     runtime = FakeRuntime(connected_status())
     app = create_app(runtime)
@@ -107,6 +137,7 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
         "ended_at": "2026-07-29T10:00:03Z",
         "end_reason": "duration_elapsed",
         "error": None,
+        "truncation": None,
         "backend_mode": "enhanced",
         "backend_identity": {
             "port": "/dev/ttyACM0",
@@ -187,6 +218,7 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
         "ended_at": None,
         "end_reason": None,
         "error": None,
+        "truncation": None,
         "backend_mode": None,
         "backend_identity": {
             "port": None,

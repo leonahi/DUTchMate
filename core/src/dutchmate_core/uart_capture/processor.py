@@ -1,5 +1,6 @@
 """Backend-independent UART receive processing to log lines and matches."""
 
+import copy
 from dataclasses import dataclass
 
 from dutchmate_core.backends.contracts import UartReceiveEvent
@@ -58,6 +59,11 @@ class UartCaptureProcessor:
             oversized_lines=buffered.oversized_lines,
             newly_oversized_line_count=buffered.newly_oversized_line_count,
         )
+
+    def clone(self) -> "UartCaptureProcessor":
+        """Return an independent candidate state for atomic evidence admission."""
+
+        return copy.deepcopy(self)
 
     def pending_bytes(self, channel: int, *, segment_id: int = 0) -> bytes:
         """Return bytes awaiting a line terminator for one segment and channel."""

@@ -1,6 +1,7 @@
 """Debug session storage."""
 
 from dutchmate_core.session_store.store import (
+    EvidenceQuotaExceeded,
     FirstError,
     LineProcessing,
     MatchExcerpt,
@@ -16,6 +17,7 @@ from dutchmate_core.session_store.store import (
 )
 
 __all__ = [
+    "EvidenceQuotaExceeded",
     "FirstError",
     "LineProcessing",
     "MatchExcerpt",

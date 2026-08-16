@@ -430,6 +430,58 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
     assert runtime.status().active_session_id is None
 
 
+def test_capture_uart_stops_cleanly_when_first_uart_unit_exceeds_budget(
+    tmp_path: Path,
+) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource(
+        [
+            UartReceiveEvent(
+                segment_id=0,
+                channel=0,
+                timestamp_us=100,
+                data=b"BOOT_OK\n",
+            ),
+            UartReceiveEvent(
+                segment_id=0,
+                channel=0,
+                timestamp_us=200,
+                data=b"LATE\n",
+            ),
+        ],
+        clock=clock,
+    )
+    store = SessionStore(
+        root=tmp_path,
+        clock=_fixed_session_time,
+        id_factory=lambda: "quota",
+        evidence_budget_bytes=3,
+    )
+    runtime = DeviceCoreRuntime(
+        transport=FakeTransport(),
+        message_source=source,
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_hello(hello(), port="/dev/ttyACM0")
+
+    summary = runtime.capture_uart(duration_s=1.0)
+
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.truncated is True
+    assert summary.error is None
+    assert summary.truncation is not None
+    assert summary.truncation["rejected_unit_type"] == "uart_receive"
+    assert summary.truncation["rejected_uart_payload_bytes"] == 8
+    session_root = tmp_path / summary.session_id
+    assert (session_root / "uart_raw.log").read_bytes() == b""
+    assert (session_root / "uart_events.jsonl").read_bytes() == b""
+    assert (session_root / "hardware_events.jsonl").read_bytes() == b""
+    assert (session_root / "detected_patterns.json").read_bytes() == b"[]\n"
+    assert runtime.status().active_session_id is None
+
+
 def test_capture_updates_connected_integrity_from_buffer_telemetry(
     tmp_path: Path,
 ) -> None:

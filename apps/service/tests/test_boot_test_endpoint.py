@@ -28,6 +28,7 @@ def test_boot_test_passes_duration_to_runtime_and_returns_summary() -> None:
         "ended_at": "2026-07-29T10:00:03Z",
         "end_reason": "duration_elapsed",
         "error": None,
+        "truncation": None,
         "backend_mode": "enhanced",
         "backend_identity": {
             "port": "/dev/ttyACM0",
@@ -108,6 +109,7 @@ def test_boot_test_serializes_incomplete_evidence_flags() -> None:
         "ended_at": None,
         "end_reason": None,
         "error": None,
+        "truncation": None,
         "backend_mode": None,
         "backend_identity": {
             "port": None,

@@ -1039,8 +1039,12 @@ Current implementation notes:
   `service_restart`, retains recovery diagnostics, and leaves terminal, legacy,
   malformed, and unsupported-schema evidence unmodified as appropriate. Removal
   of redundant `timestamp_epoch`, full identity validation, complete fsync
-  guarantees, project baseline pointer, admission quota enforcement, and
-  retention remain to be implemented.
+  guarantees, project baseline pointer, non-UART evidence quota admission, and
+  retention remain to be implemented. Native UART receive units now preflight
+  their exact raw, compact JSONL, detected-pattern-array growth, and associated
+  line-event bytes atomically. Equality is admitted; the first over-budget unit
+  is omitted whole and completes the session as `size_limit` with bounded
+  truncation context.
 - Reconnect/resume mutation helpers are not implemented yet.
 - Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
   and over-300-second durations consistently across core, service, and CLI.

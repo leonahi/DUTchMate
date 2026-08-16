@@ -16,6 +16,7 @@ from dutchmate_core.backends.contracts import (
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.log_processing.patterns import PatternMatch
 from dutchmate_core.session_store.store import (
+    EvidenceQuotaExceeded,
     SessionHandle,
     SessionStore,
     SessionSummary,
@@ -61,7 +62,9 @@ class TransportCaptureRunner:
                 segment = getattr(self._transport, "segment", None)
                 if isinstance(segment, SegmentContext):
                     recorder.record_segment_context(segment)
-                recorder.record_event(event)
+                result = recorder.record_event(event)
+                if result.event_type == "size_limit":
+                    break
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +96,8 @@ class CaptureRecorder:
             {segment_context.segment_id: segment_context} if segment_context is not None else {}
         )
         self._timestamp_epoch = timestamp_epoch
+        self._terminalized = False
+        self._finalized = False
 
     @classmethod
     def start(
@@ -140,17 +145,35 @@ class CaptureRecorder:
 
         return self._session_handle.session_id
 
+    @property
+    def terminalized(self) -> bool:
+        """Whether storage has already ended this recorder's native session."""
+
+        return self._terminalized
+
     def record_event(self, event: BackendEvent) -> CaptureRecordResult:
         """Record one normalized backend event into the session."""
 
+        if self._terminalized:
+            raise ValueError("capture recorder session is already terminal")
+
         if isinstance(event, UartReceiveEvent):
-            result = self._uart_processor.process_event(event)
-            self._session_store.append_uart_capture(
-                self._session_handle,
-                event=event,
-                result=result,
-                timestamp_epoch=self._timestamp_epoch,
-            )
+            candidate_processor = self._uart_processor.clone()
+            result = candidate_processor.process_event(event)
+            try:
+                self._session_store.append_uart_capture(
+                    self._session_handle,
+                    event=event,
+                    result=result,
+                    timestamp_epoch=self._timestamp_epoch,
+                )
+            except EvidenceQuotaExceeded:
+                self._terminalized = True
+                return CaptureRecordResult(
+                    session_id=self.session_id,
+                    event_type="size_limit",
+                )
+            self._uart_processor = candidate_processor
             return CaptureRecordResult(
                 session_id=self.session_id,
                 event_type="uart_receive",
@@ -196,12 +219,16 @@ class CaptureRecorder:
     def finalize(self) -> None:
         """Finalize bounded derived state at the end of this capture segment."""
 
+        if self._finalized or self._terminalized:
+            return
+
         for result in self._uart_processor.flush_all():
             self._session_store.append_uart_processing_result(
                 self._session_handle,
                 result=result,
                 timestamp_epoch=self._timestamp_epoch,
             )
+        self._finalized = True
 
 
 def run_transport_capture(
@@ -255,6 +282,6 @@ def run_transport_capture(
             )
         raise
     recorder.finalize()
-    if native_session:
+    if native_session and not recorder.terminalized:
         session_store.complete_session(recorder.session_handle)
     return session_store.summarize_session(recorder.session_id)

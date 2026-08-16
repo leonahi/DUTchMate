@@ -140,6 +140,7 @@ def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
         "ended_at": summary.ended_at,
         "end_reason": summary.end_reason,
         "error": summary.error,
+        "truncation": summary.truncation,
         "backend_mode": summary.backend_mode,
         "backend_identity": {
             "port": summary.port,

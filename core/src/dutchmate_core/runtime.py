@@ -368,7 +368,7 @@ class DeviceCoreRuntime:
 
             runner.run(recorder)
             recorder.finalize()
-            if native_session:
+            if native_session and not recorder.terminalized:
                 self._session_store.complete_session(recorder.session_handle)
             terminalized = True
             summary = self._session_store.summarize_session(recorder.session_id)
@@ -377,7 +377,12 @@ class DeviceCoreRuntime:
                     self._integrity = summary.integrity
             return summary
         except Exception as exc:
-            if recorder is not None and native_session and not terminalized:
+            if (
+                recorder is not None
+                and native_session
+                and not terminalized
+                and not recorder.terminalized
+            ):
                 recorder.finalize()
                 self._session_store.fail_session(
                     recorder.session_handle,

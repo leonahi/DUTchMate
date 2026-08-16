@@ -17,7 +17,13 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
+from dutchmate_core.session_store.store import (
+    EvidenceQuotaExceeded,
+    LineProcessing,
+    SessionHandle,
+    SessionStore,
+    SessionSummary,
+)
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 
 
@@ -241,6 +247,191 @@ def test_complete_native_session_is_terminal_and_one_way(tmp_path: Path) -> None
             event=event,
             result=UartCaptureProcessor().process_event(event),
         )
+
+
+def test_native_uart_evidence_admits_exact_budget_with_pattern_growth(
+    tmp_path: Path,
+) -> None:
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=100,
+        data=b"BOOT_OK\n",
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_store.append_uart_capture(
+        reference_handle,
+        event=event,
+        result=UartCaptureProcessor().process_event(event),
+    )
+    exact_budget = _evidence_bytes(reference_handle)
+
+    store = SessionStore(
+        root=tmp_path / "exact",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget,
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    store.append_uart_capture(
+        handle,
+        event=event,
+        result=UartCaptureProcessor().process_event(event),
+    )
+
+    metadata = store.load_metadata(handle.session_id)
+    assert _evidence_bytes(handle) == exact_budget
+    assert metadata["storage"]["evidence_bytes_written"] == exact_budget  # type: ignore[index]
+    assert metadata["truncated"] is False
+    assert metadata["state"] == "active"
+    assert json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8"))[0][
+        "pattern"
+    ] == "BOOT_OK"
+
+
+def test_native_uart_evidence_rejects_one_byte_over_without_counted_mutation(
+    tmp_path: Path,
+) -> None:
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=1,
+        timestamp_us=321,
+        data=b"BOOT_OK\n",
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_store.append_uart_capture(
+        reference_handle,
+        event=event,
+        result=UartCaptureProcessor().process_event(event),
+    )
+    projected_bytes = _evidence_bytes(reference_handle)
+
+    store = SessionStore(
+        root=tmp_path / "rejected",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=projected_bytes - 1,
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    with pytest.raises(EvidenceQuotaExceeded) as raised:
+        store.append_uart_capture(
+            handle,
+            event=event,
+            result=UartCaptureProcessor().process_event(event),
+        )
+
+    assert handle.paths.uart_raw.read_bytes() == b""
+    assert handle.paths.uart_events.read_bytes() == b""
+    assert handle.paths.hardware_events.read_bytes() == b""
+    assert handle.paths.detected_patterns.read_bytes() == b"[]\n"
+    assert _evidence_bytes(handle) == 3
+    assert raised.value.truncation == {
+        "reason": "size_limit",
+        "rejected_unit_type": "uart_receive",
+        "rejected_unit_evidence_bytes": projected_bytes - 3,
+        "projected_evidence_bytes": projected_bytes,
+        "rejected_uart_payload_bytes": len(event.data),
+        "segment_id": 0,
+        "channel": 1,
+        "timestamp_us": 321,
+        "occurred_at": "2026-07-14T12:30:45Z",
+    }
+    summary = store.summarize_session(handle.session_id)
+    assert summary.state == "completed"
+    assert summary.end_reason == "size_limit"
+    assert summary.truncated is True
+    assert summary.error is None
+    assert summary.truncation == raised.value.truncation
+    assert store.load_metadata(handle.session_id)["storage"][  # type: ignore[index]
+        "evidence_bytes_written"
+    ] == 3
+
+
+def test_rejected_uart_unit_omits_associated_line_processing_event(
+    tmp_path: Path,
+) -> None:
+    event = UartReceiveEvent(
+        segment_id=0,
+        channel=0,
+        timestamp_us=500,
+        data=(b"x" * 65537) + b"\n",
+    )
+    result = UartCaptureProcessor().process_event(event)
+    assert len(result.oversized_lines) == 1
+
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_store.append_uart_capture(reference_handle, event=event, result=result)
+    projected_bytes = _evidence_bytes(reference_handle)
+
+    store = SessionStore(
+        root=tmp_path / "rejected",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=projected_bytes - 1,
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    with pytest.raises(EvidenceQuotaExceeded):
+        store.append_uart_capture(handle, event=event, result=result)
+
+    assert handle.paths.uart_raw.read_bytes() == b""
+    assert handle.paths.uart_events.read_bytes() == b""
+    assert handle.paths.hardware_events.read_bytes() == b""
+    assert handle.paths.detected_patterns.read_bytes() == b"[]\n"
+    assert store.summarize_session(handle.session_id).line_processing == LineProcessing()
 
 
 def test_failed_native_session_sanitizes_and_bounds_error_detail(tmp_path: Path) -> None:
@@ -1059,3 +1250,15 @@ def test_append_buffer_status_rejects_missing_segment(tmp_path: Path) -> None:
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _evidence_bytes(handle: SessionHandle) -> int:
+    return sum(
+        path.stat().st_size
+        for path in (
+            handle.paths.uart_raw,
+            handle.paths.uart_events,
+            handle.paths.hardware_events,
+            handle.paths.detected_patterns,
+        )
+    )

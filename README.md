@@ -53,10 +53,11 @@ The repository currently contains the first host-side Phase 1 foundation:
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, session admission quotas and retention, bounded log/session
+reconnect, non-UART session admission quotas and retention, bounded log/session
 retrieval, wait-pattern, UART-send service/CLI exposure, generic Enhanced
 control actions, RP2040 firmware, MCP runtime, and HIL validation are not
-implemented yet.
+implemented yet. Native UART receive admission already enforces exact whole-unit
+evidence budgets and clean `size_limit` terminalization.
 
 The ordered Phase 1 backlog and acceptance criteria are in
 `docs/phase1_implementation_spec.md`.
