@@ -186,7 +186,7 @@ def test_recovery_raises_when_terminal_metadata_cannot_be_replaced(
     def fail_replace(source: Path, target: Path) -> None:
         raise OSError("disk unavailable")
 
-    monkeypatch.setattr("dutchmate_core.session_store.store.os.replace", fail_replace)
+    monkeypatch.setattr("dutchmate_core.session_store.persistence.os.replace", fail_replace)
 
     with pytest.raises(SessionRecoveryError, match="failed to recover stale session"):
         SessionStore(root=tmp_path, clock=_recovery_clock).recover_stale_sessions()
