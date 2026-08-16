@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
 from dutchmate_core.backends.basic import BasicBackendConnection
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl, normalize_enhanced_hello
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
@@ -302,8 +303,11 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     tmp_path: Path,
 ) -> None:
     transport = FakeTransport([CommandSuccessMessage(timestamp_us=123)])
-    runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(_hello(), port="/dev/ttyACM0")
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
         {
             "hardware": {
@@ -338,8 +342,11 @@ def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -
     transport = FakeTransport(
         [CommandErrorMessage(error="hardware_fault", detail="CTRL0 cannot drive RESET_N")]
     )
-    runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(_hello(), port="/dev/ttyACM0")
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
         {
             "hardware": {

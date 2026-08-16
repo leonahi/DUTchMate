@@ -37,7 +37,7 @@ ADAPTER_DEPENDENCY_PREFIXES = (
     "dutchmate_core.backends.basic",
     "dutchmate_core.backends.enhanced",
     "dutchmate_core.device_connection",
-    "dutchmate_core.session_store",
+    "dutchmate_core.session_store.store",
     "pathlib",
 )
 
@@ -46,21 +46,9 @@ ADAPTER_DEPENDENCY_PREFIXES = (
 # and removing an exception requires deleting its stale entry here.
 KNOWN_APPLICATION_ADAPTER_EXCEPTIONS = frozenset(
     {
-        ("dutchmate_core.gpio_config.configurator", "dutchmate_core.device_connection.commands"),
         ("dutchmate_core.gpio_config.configurator", "dutchmate_core.device_connection.errors"),
-        ("dutchmate_core.gpio_config.configurator", "dutchmate_core.device_connection.messages"),
-        ("dutchmate_core.gpio_config.configurator", "dutchmate_core.device_connection.transport"),
-        ("dutchmate_core.runtime", "dutchmate_core.device_connection.messages"),
-        ("dutchmate_core.runtime", "dutchmate_core.device_connection.transport"),
-        ("dutchmate_core.runtime", "dutchmate_core.session_store.store"),
-        ("dutchmate_core.runtime", "pathlib"),
-        ("dutchmate_core.workflows.capture", "dutchmate_core.session_store.store"),
-        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.commands"),
-        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.messages"),
-        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.parser"),
-        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.transport"),
+        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.errors"),
         ("dutchmate_core.workflows.enhanced_capture", "dutchmate_core.backends.enhanced"),
-        ("dutchmate_core.workflows.enhanced_capture", "dutchmate_core.session_store.store"),
     }
 )
 

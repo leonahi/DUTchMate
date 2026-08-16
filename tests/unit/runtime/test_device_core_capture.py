@@ -9,14 +9,14 @@ from runtime_test_support import (
     FakeMonotonicClock,
     FakeSerial,
     FakeTransport,
-    hello,
+    enhanced_info,
 )
 
 from dutchmate_core.backends import (
     BufferStatusEvent,
     UartReceiveEvent,
 )
-from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource
+from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource, EnhancedDeviceControl
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
 )
@@ -60,12 +60,12 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         id_factory=lambda: "runtime",
     )
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
         session_store=store,
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     summary = runtime.capture_uart(duration_s=0.4)
 
@@ -137,12 +137,12 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
 
     source = FakeCaptureSource([], clock=clock, on_read=assert_capture_guards)
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello())
+    runtime.record_backend_connection(enhanced_info())
 
     runtime.capture_uart(duration_s=0.2)
 
@@ -177,12 +177,12 @@ def test_capture_uart_stops_cleanly_when_first_uart_unit_exceeds_budget(
         evidence_budget_bytes=3,
     )
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
         session_store=store,
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     summary = runtime.capture_uart(duration_s=1.0)
 
@@ -232,12 +232,12 @@ def test_capture_uart_stops_cleanly_when_hardware_event_exceeds_budget(
         evidence_budget_bytes=3,
     )
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
         session_store=store,
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     summary = runtime.capture_uart(duration_s=1.0)
 
@@ -277,12 +277,12 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         id_factory=lambda: "reference",
     )
     reference_runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource([uart_event], clock=reference_clock),
         capture_clock=reference_clock,
         session_store=reference_store,
     )
-    reference_runtime.record_hello(hello(), port="/dev/ttyACM0")
+    reference_runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     reference_summary = reference_runtime.capture_uart(duration_s=0.3)
     reference_root = tmp_path / "reference" / reference_summary.session_id
     exact_budget = sum(
@@ -303,12 +303,12 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         evidence_budget_bytes=exact_budget - 1,
     )
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource([uart_event], clock=clock),
         capture_clock=clock,
         session_store=store,
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     summary = runtime.capture_uart(duration_s=0.3)
 
@@ -331,7 +331,7 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         evidence_budget_bytes=exact_budget - 1,
     )
     collision_runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource(
             [uart_event, DeviceCoreRuntimeError("backend disconnected")],
             clock=collision_clock,
@@ -339,7 +339,7 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         capture_clock=collision_clock,
         session_store=collision_store,
     )
-    collision_runtime.record_hello(hello(), port="/dev/ttyACM0")
+    collision_runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     collision_summary = collision_runtime.capture_uart(duration_s=0.3)
 
@@ -367,12 +367,12 @@ def test_capture_updates_connected_integrity_from_buffer_telemetry(
         clock=clock,
     )
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     summary = runtime.capture_uart(duration_s=0.3)
 
@@ -386,10 +386,10 @@ def test_capture_updates_connected_integrity_from_buffer_telemetry(
 def test_capture_uart_requires_connection(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
 
     with pytest.raises(DeviceCoreRuntimeError, match="not connected"):
@@ -397,8 +397,11 @@ def test_capture_uart_requires_connection(tmp_path: Path) -> None:
 
 
 def test_capture_uart_requires_message_source(tmp_path: Path) -> None:
-    runtime = DeviceCoreRuntime(transport=FakeTransport(), session_root=tmp_path)
-    runtime.record_hello(hello())
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
 
     with pytest.raises(DeviceCoreRuntimeError, match="message source"):
         runtime.capture_uart(duration_s=0.1)
@@ -408,12 +411,12 @@ def test_capture_uart_clears_active_session_after_transport_failure(tmp_path: Pa
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([RuntimeError("serial failed")], clock=clock)
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=source,
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     with pytest.raises(RuntimeError, match="serial failed"):
         runtime.capture_uart(duration_s=0.2)
@@ -437,12 +440,12 @@ def test_capture_uart_rejects_invalid_duration_before_creating_session(
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     with pytest.raises(ValueError, match="positive finite"):
         runtime.capture_uart(duration_s=duration_s)  # type: ignore[arg-type]
@@ -479,7 +482,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         id_factory=lambda: "boot-test",
     )
     runtime = DeviceCoreRuntime(
-        transport=transport,
+        device_control=EnhancedDeviceControl(transport),
         message_source=EnhancedCaptureEventSource(
             transport,
             segment_id=0,
@@ -488,7 +491,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.configure_gpio_mode(
         role="reset",
         channel="CTRL2",
@@ -518,12 +521,12 @@ def test_run_boot_test_requires_reset_role_before_creating_session(
     clock = FakeMonotonicClock()
     transport = FakeTransport()
     runtime = DeviceCoreRuntime(
-        transport=transport,
+        device_control=EnhancedDeviceControl(transport),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
     with pytest.raises(GpioConfigurationError, match="'reset'.*not configured"):
         runtime.run_boot_test(duration_s=0.2)
@@ -543,12 +546,12 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
         ]
     )
     runtime = DeviceCoreRuntime(
-        transport=transport,
+        device_control=EnhancedDeviceControl(transport),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.gpio_registry.accept_mode(
         role="reset",
         channel="CTRL0",
@@ -581,12 +584,12 @@ def test_run_boot_test_rejects_invalid_duration_before_creating_session(
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
+        device_control=EnhancedDeviceControl(FakeTransport()),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
-        session_root=tmp_path,
+        session_store=SessionStore(root=tmp_path),
     )
-    runtime.record_hello(hello())
+    runtime.record_backend_connection(enhanced_info())
 
     with pytest.raises(ValueError, match="positive finite"):
         runtime.run_boot_test(duration_s=duration_s)  # type: ignore[arg-type]

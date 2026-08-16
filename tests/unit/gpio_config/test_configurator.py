@@ -1,5 +1,6 @@
 import pytest
 
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
@@ -23,7 +24,7 @@ class FakeTransport:
 def test_configure_mode_sends_command_and_accepts_success() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=182334400))
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     state = configurator.configure_mode(
         role="reset",
@@ -52,7 +53,7 @@ def test_configure_mode_sends_command_and_accepts_success() -> None:
 def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     state = configurator.configure_mode(
         role="boot",
@@ -87,7 +88,7 @@ def test_configure_mode_records_firmware_rejection() -> None:
             detail="push_pull is not supported for reset",
         )
     )
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     state = configurator.configure_mode(
         role="reset",
@@ -128,7 +129,7 @@ def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
             detail="push_pull is not supported for reset",
         )
     )
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     state = configurator.configure_mode(
         role="reset",
@@ -152,7 +153,7 @@ def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
 def test_invalid_channel_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="GPIO control channel"):
         configurator.configure_mode(
@@ -172,7 +173,7 @@ def test_invalid_channel_is_rejected_before_transport_request() -> None:
 def test_custom_role_is_sent_and_recorded() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     state = configurator.configure_mode(
         role="power_en",
@@ -196,7 +197,7 @@ def test_custom_role_is_sent_and_recorded() -> None:
 def test_empty_role_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="GPIO role"):
         configurator.configure_mode(
@@ -216,7 +217,7 @@ def test_empty_role_is_rejected_before_transport_request() -> None:
 def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="dut_signal"):
         configurator.configure_mode(
@@ -234,7 +235,7 @@ def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
 def test_invalid_mode_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="GPIO mode"):
         configurator.configure_mode(
@@ -259,7 +260,7 @@ def test_unexpected_response_does_not_update_registry() -> None:
             capabilities=("uart_capture", "gpio_control"),
         )
     )
-    configurator = GpioConfigurator(registry=registry, transport=transport)
+    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(GpioConfigurationError, match="Expected command response"):
         configurator.configure_mode(

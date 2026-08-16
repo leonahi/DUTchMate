@@ -6,7 +6,7 @@ import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, cast
+from typing import TypeAlias
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.validation import (
@@ -22,19 +22,19 @@ from dutchmate_core.validation import (
     WELL_KNOWN_GPIO_ROLES as WELL_KNOWN_GPIO_ROLES,
 )
 from dutchmate_core.validation import (
+    BootMode,
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
+    validate_boot_mode,
     validate_gpio_channel,
     validate_gpio_mode_configuration,
     validate_gpio_role,
+    validate_reset_pulse,
 )
 
 GpioRole: TypeAlias = str
 GpioMode: TypeAlias = GpioControlMode
-BootMode = Literal["normal", "bootloader"]
-
-VALID_BOOT_MODES = frozenset({"normal", "bootloader"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,19 +144,21 @@ def configure_gpio_mode_command(
 def boot_mode_command(mode: str) -> BootModeCommand:
     """Build a validated `set_boot_mode` command."""
 
-    if mode not in VALID_BOOT_MODES:
-        raise ProtocolValidationError("Boot mode must be 'normal' or 'bootloader'")
-
-    return BootModeCommand(mode=cast(BootMode, mode))
+    try:
+        mode_name = validate_boot_mode(mode)
+    except ValueError as exc:
+        raise ProtocolValidationError(str(exc)) from exc
+    return BootModeCommand(mode=mode_name)
 
 
 def reset_command(pulse_ms: int = 100) -> ResetCommand:
     """Build a validated `reset` command."""
 
-    if not _is_int(pulse_ms) or pulse_ms < 1 or pulse_ms > 10000:
-        raise ProtocolValidationError("Reset pulse_ms must be an integer between 1 and 10000")
-
-    return ResetCommand(pulse_ms=pulse_ms)
+    try:
+        pulse_ms_value = validate_reset_pulse(pulse_ms)
+    except ValueError as exc:
+        raise ProtocolValidationError(str(exc)) from exc
+    return ResetCommand(pulse_ms=pulse_ms_value)
 
 
 def uart_send_command(data: bytes) -> UartSendCommand:
@@ -185,7 +187,3 @@ def uart_send_text_command(text: str, *, append_newline: bool = True) -> UartSen
 
 def _encode_payload(payload: Mapping[str, object]) -> bytes:
     return (json.dumps(payload, separators=(",", ":"), sort_keys=False) + "\n").encode("utf-8")
-
-
-def _is_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)

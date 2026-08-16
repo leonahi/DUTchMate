@@ -3,9 +3,13 @@
 from collections.abc import Iterable
 
 from dutchmate_core.backends.enhanced import EnhancedNdjsonEventStream
-from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
+from dutchmate_core.session_store.models import SessionHandle, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
-from dutchmate_core.workflows.capture import CaptureRecorder, CaptureRecordResult
+from dutchmate_core.workflows.capture import (
+    CaptureRecorder,
+    CaptureRecordResult,
+    CaptureSessionStorage,
+)
 
 
 class CaptureStreamRecorder:
@@ -24,7 +28,7 @@ class CaptureStreamRecorder:
     def start(
         cls,
         *,
-        session_store: SessionStore,
+        session_store: CaptureSessionStorage,
         command: str,
         firmware: str | None = None,
         device: str | None = None,
@@ -80,7 +84,7 @@ class CaptureStreamRecorder:
 def run_mock_capture(
     *,
     chunks: Iterable[bytes],
-    session_store: SessionStore,
+    session_store: CaptureSessionStorage,
     command: str,
     firmware: str | None = None,
     device: str | None = None,

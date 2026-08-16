@@ -1,18 +1,20 @@
 from pathlib import Path
 
 import pytest
-from runtime_test_support import FakeTransport, hello
+from runtime_test_support import FakeTransport, enhanced_info
 
-from dutchmate_core.device_connection.messages import CommandSuccessMessage, HelloMessage
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl
+from dutchmate_core.device_connection.messages import CommandSuccessMessage
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus
+from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
 def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
-        session_root=tmp_path,
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        session_store=SessionStore(root=tmp_path),
         port="/dev/ttyACM0",
     )
 
@@ -32,10 +34,13 @@ def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -
     assert runtime.session_store.root == tmp_path
 
 
-def test_record_hello_updates_connection_status(tmp_path: Path) -> None:
-    runtime = DeviceCoreRuntime(transport=FakeTransport(), session_root=tmp_path)
+def test_record_backend_connection_updates_status(tmp_path: Path) -> None:
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        session_store=SessionStore(root=tmp_path),
+    )
 
-    status = runtime.record_hello(hello(), port="/dev/tty.usbmodem2040")
+    status = runtime.record_backend_connection(enhanced_info(port="/dev/tty.usbmodem2040"))
 
     assert status.connected is True
     assert status.port == "/dev/tty.usbmodem2040"
@@ -54,17 +59,13 @@ def test_tx_policy_cannot_manufacture_unreported_backend_capability(
     tmp_path: Path,
 ) -> None:
     runtime = DeviceCoreRuntime(
-        transport=FakeTransport(),
-        session_root=tmp_path,
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        session_store=SessionStore(root=tmp_path),
         tx_policy_enabled=True,
     )
-    no_send_hello = HelloMessage(
-        firmware="0.1.0",
-        device="dutchmate-rp2040",
-        capabilities=("uart_capture", "gpio_control"),
-    )
+    info = enhanced_info(capabilities=frozenset({"gpio_control", "uart_receive"}))
 
-    status = runtime.record_hello(no_send_hello, port="/dev/ttyACM0")
+    status = runtime.record_backend_connection(info)
 
     assert status.backend_capabilities == ("gpio_control", "uart_receive")
     assert status.capabilities == ("gpio_control", "uart_receive")
@@ -73,7 +74,10 @@ def test_tx_policy_cannot_manufacture_unreported_backend_capability(
 
 
 def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
-    runtime = DeviceCoreRuntime(transport=FakeTransport(), session_root=tmp_path)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        session_store=SessionStore(root=tmp_path),
+    )
     config = parse_hardware_gpio_config({})
 
     with pytest.raises(DeviceCoreRuntimeError, match="not connected"):
@@ -87,8 +91,10 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
             CommandSuccessMessage(timestamp_us=200),
         ]
     )
-    runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
         {
             "hardware": {
@@ -137,8 +143,10 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
             CommandSuccessMessage(timestamp_us=300),
         ]
     )
-    runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(hello())
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+    )
+    runtime.record_backend_connection(enhanced_info())
     runtime.configure_gpio_mode(
         role="reset",
         channel="CTRL0",
@@ -159,8 +167,10 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
 
 def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Path) -> None:
     transport = FakeTransport([CommandSuccessMessage(timestamp_us=100)])
-    runtime = DeviceCoreRuntime(transport=transport, session_root=tmp_path)
-    runtime.record_hello(hello(), port="/dev/ttyACM0")
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.configure_gpio_mode(
         role="reset",
         channel="CTRL0",

@@ -208,6 +208,36 @@ class BackendWriteError(RuntimeError):
         self.bytes_accepted = bytes_accepted
 
 
+class DeviceControlError(RuntimeError):
+    """Raised when a backend rejects or cannot complete a semantic control operation."""
+
+    def __init__(self, *, error: str, detail: str) -> None:
+        super().__init__(detail)
+        self.error = error
+        self.detail = detail
+
+
+class DeviceControl(Protocol):
+    """Backend-neutral semantic DUT and GPIO control operations."""
+
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        role: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        """Configure one physical control channel and return device time."""
+
+    def reset_dut(self, *, pulse_ms: int) -> int | None:
+        """Pulse the DUT reset line and return device time."""
+
+    def set_boot_mode(self, *, mode: str) -> int | None:
+        """Set DUT boot mode and return device time."""
+
+
 class BackendEventSource(Protocol):
     """Asynchronous FIFO source of normalized events from one backend connection."""
 

@@ -2,26 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from dutchmate_core.backends.contracts import (
+    BackendCapability,
     BackendEvent,
+    BackendInfo,
     BackendInputError,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DeviceControl,
+    DeviceControlError,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
+)
+from dutchmate_core.device_connection.commands import (
+    boot_mode_command,
+    configure_gpio_mode_command,
+    reset_command,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
+    CommandErrorMessage,
+    CommandSuccessMessage,
+    HelloMessage,
     UartMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import CommandTransport, TransportTimeoutError
 
 
 class EnhancedMessageSource(Protocol):
@@ -29,6 +41,57 @@ class EnhancedMessageSource(Protocol):
 
     def read_message(self) -> DeviceMessage:
         """Read the next parsed message or raise on transport timeout."""
+
+
+class EnhancedDeviceControl(DeviceControl):
+    """Translate semantic control operations to Enhanced protocol commands."""
+
+    def __init__(self, transport: CommandTransport) -> None:
+        self._transport = transport
+
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        role: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        command = configure_gpio_mode_command(
+            channel=channel,
+            role=role,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
+        )
+        return self._request_success(
+            command.to_ndjson(),
+            operation="GPIO mode configuration",
+        )
+
+    def reset_dut(self, *, pulse_ms: int) -> int | None:
+        return self._request_success(
+            reset_command(pulse_ms).to_ndjson(),
+            operation="reset",
+        )
+
+    def set_boot_mode(self, *, mode: str) -> int | None:
+        return self._request_success(
+            boot_mode_command(mode).to_ndjson(),
+            operation="set_boot_mode",
+        )
+
+    def _request_success(self, command: bytes, *, operation: str) -> int | None:
+        response = self._transport.request(command)
+        if isinstance(response, CommandSuccessMessage):
+            return response.timestamp_us
+        if isinstance(response, CommandErrorMessage):
+            raise DeviceControlError(error=response.error, detail=response.detail)
+        raise DeviceControlError(
+            error="unexpected_response",
+            detail=f"Expected command response for {operation}, got {type(response).__name__}",
+        )
 
 
 class EnhancedCaptureEventSource:
@@ -81,6 +144,22 @@ class EnhancedCaptureEventSource:
             segment_id=self._segment_id,
             source_origin_us=self._source_origin_us,
         )
+
+
+def normalize_enhanced_hello(hello: HelloMessage, *, port: str) -> BackendInfo:
+    """Translate one Enhanced hello message into backend-neutral identity."""
+
+    capabilities = frozenset(
+        cast(BackendCapability, "uart_receive" if value == "uart_capture" else value)
+        for value in hello.capabilities
+    )
+    return BackendInfo(
+        mode="enhanced",
+        port=port,
+        device=hello.device,
+        firmware=hello.firmware,
+        capabilities=capabilities,
+    )
 
 
 class EnhancedNdjsonEventStream:

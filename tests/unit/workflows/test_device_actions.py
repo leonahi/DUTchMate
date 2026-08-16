@@ -1,5 +1,6 @@
 import pytest
 
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
@@ -27,7 +28,7 @@ class FakeTransport:
 def test_reset_requires_configured_reset_role() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(GpioConfigurationError, match="not configured"):
         runner.reset_dut()
@@ -46,7 +47,7 @@ def test_reset_sends_command_after_reset_role_is_configured() -> None:
         source="runtime",
     )
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=182334400))
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     result = runner.reset_dut(pulse_ms=250)
 
@@ -68,7 +69,7 @@ def test_reset_rejected_state_uses_rejection_detail() -> None:
         detail="push_pull is not supported for reset",
     )
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(GpioConfigurationError, match="push_pull is not supported"):
         runner.reset_dut()
@@ -79,7 +80,7 @@ def test_reset_rejected_state_uses_rejection_detail() -> None:
 def test_reset_validates_pulse_before_configuration_check() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="pulse_ms"):
         runner.reset_dut(pulse_ms=0)
@@ -90,7 +91,7 @@ def test_reset_validates_pulse_before_configuration_check() -> None:
 def test_boot_mode_requires_configured_boot_role() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(GpioConfigurationError, match="not configured"):
         runner.set_boot_mode(mode="bootloader")
@@ -109,7 +110,7 @@ def test_boot_mode_sends_command_after_boot_role_is_configured() -> None:
         source="runtime",
     )
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=99))
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     result = runner.set_boot_mode(mode="bootloader")
 
@@ -120,7 +121,7 @@ def test_boot_mode_sends_command_after_boot_role_is_configured() -> None:
 def test_boot_mode_validates_mode_before_configuration_check() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(ProtocolValidationError, match="Boot mode"):
         runner.set_boot_mode(mode="factory")
@@ -144,7 +145,7 @@ def test_command_error_response_raises_device_action_error() -> None:
             detail="reset driver failed",
         )
     )
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(DeviceActionError, match="reset driver failed") as exc_info:
         runner.reset_dut()
@@ -171,7 +172,7 @@ def test_unexpected_response_raises_device_action_error() -> None:
             capabilities=("uart_capture", "gpio_control"),
         )
     )
-    runner = DeviceActionRunner(registry=registry, transport=transport)
+    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
     with pytest.raises(DeviceActionError, match="Expected command response"):
         runner.reset_dut()

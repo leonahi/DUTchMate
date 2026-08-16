@@ -12,6 +12,7 @@ GpioRoleName: TypeAlias = str
 GpioControlMode: TypeAlias = Literal["open_drain", "push_pull"]
 GpioLevel: TypeAlias = Literal["low", "high"]
 GpioModeRequestSource: TypeAlias = Literal["config", "runtime"]
+BootMode: TypeAlias = Literal["normal", "bootloader"]
 
 ALL_CONTROL_CHANNELS: Final[tuple[GpioControlChannel, ...]] = (
     "CTRL0",
@@ -27,6 +28,7 @@ WELL_KNOWN_GPIO_ROLES: Final = frozenset({"reset", "boot", "power_enable", "wake
 MAX_GPIO_IDENTIFIER_BYTES: Final = 64
 MAX_SERIAL_PORT_BYTES: Final = 4096
 MAX_CAPTURE_DURATION_S: Final = 300.0
+VALID_BOOT_MODES: Final = frozenset({"normal", "bootloader"})
 
 IdentifierValidationReason: TypeAlias = Literal[
     "invalid_type",
@@ -90,6 +92,22 @@ def validate_capture_duration(duration_s: object) -> float:
             f"{MAX_CAPTURE_DURATION_S:g} seconds"
         )
     return float(duration_s)
+
+
+def validate_reset_pulse(pulse_ms: object) -> int:
+    """Return a valid DUT reset pulse duration in milliseconds."""
+
+    if isinstance(pulse_ms, bool) or not isinstance(pulse_ms, int) or not 1 <= pulse_ms <= 10000:
+        raise ValueError("Reset pulse_ms must be an integer between 1 and 10000")
+    return pulse_ms
+
+
+def validate_boot_mode(mode: object) -> BootMode:
+    """Return a supported DUT boot mode."""
+
+    if not isinstance(mode, str) or mode not in VALID_BOOT_MODES:
+        raise ValueError("Boot mode must be 'normal' or 'bootloader'")
+    return cast(BootMode, mode)
 
 
 def validate_serial_port(port: object) -> str:

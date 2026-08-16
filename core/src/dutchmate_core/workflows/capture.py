@@ -16,15 +16,14 @@ from dutchmate_core.backends.contracts import (
 )
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.log_processing.patterns import PatternMatch
-from dutchmate_core.session_store.store import (
+from dutchmate_core.session_store.models import (
     EvidenceQuotaExceeded,
     SessionHandle,
-    SessionStore,
     SessionSummary,
     SessionWorkflow,
 )
 from dutchmate_core.uart_capture.line_buffer import UartLine
-from dutchmate_core.uart_capture.processor import UartCaptureProcessor
+from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 from dutchmate_core.validation import validate_capture_duration
 
 
@@ -33,6 +32,85 @@ class CaptureEventSource(Protocol):
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
+
+
+class CaptureSessionStorage(Protocol):
+    """Persistence operations required by the capture application service."""
+
+    def create_session(
+        self,
+        *,
+        command: str,
+        firmware: str | None = None,
+        device: str | None = None,
+        baseline: bool = False,
+        backend_snapshot: BackendSnapshot | None = None,
+        workflow: SessionWorkflow | None = None,
+        duration_s: float | None = None,
+        reconnect_timeout_s: float | None = None,
+    ) -> SessionHandle:
+        """Create one capture session."""
+
+    def append_uart_capture(
+        self,
+        handle: SessionHandle,
+        *,
+        event: UartReceiveEvent,
+        result: UartCaptureResult,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Persist one UART evidence unit."""
+
+    def append_uart_processing_result(
+        self,
+        handle: SessionHandle,
+        *,
+        result: UartCaptureResult,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Persist derived UART records finalized at capture close."""
+
+    def append_buffer_overflow(
+        self,
+        handle: SessionHandle,
+        *,
+        event: BufferOverflowEvent,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Persist one buffer-overflow evidence unit."""
+
+    def append_buffer_status(
+        self,
+        handle: SessionHandle,
+        *,
+        event: BufferStatusEvent,
+        timestamp_epoch: int = 0,
+    ) -> None:
+        """Persist one buffer-status evidence unit."""
+
+    def record_segment_context(self, handle: SessionHandle, context: SegmentContext) -> None:
+        """Persist immutable timestamp provenance for a capture segment."""
+
+    def complete_session(
+        self,
+        handle: SessionHandle,
+        *,
+        end_reason: str = "duration_elapsed",
+    ) -> None:
+        """Complete an active native session."""
+
+    def fail_session(
+        self,
+        handle: SessionHandle,
+        *,
+        end_reason: str,
+        error_code: str,
+        detail: str,
+    ) -> None:
+        """Fail an active native session."""
+
+    def summarize_session(self, session_id: str) -> SessionSummary:
+        """Return the stored session summary."""
 
 
 class TransportCaptureRunner:
@@ -84,7 +162,7 @@ class CaptureRecorder:
     def __init__(
         self,
         *,
-        session_store: SessionStore,
+        session_store: CaptureSessionStorage,
         session_handle: SessionHandle,
         uart_processor: UartCaptureProcessor | None = None,
         segment_context: SegmentContext | None = None,
@@ -104,7 +182,7 @@ class CaptureRecorder:
     def start(
         cls,
         *,
-        session_store: SessionStore,
+        session_store: CaptureSessionStorage,
         command: str,
         firmware: str | None = None,
         device: str | None = None,
@@ -258,7 +336,7 @@ class CaptureRecorder:
 class CaptureWorkflow:
     """Own the complete lifecycle of one finite capture session."""
 
-    def __init__(self, *, session_store: SessionStore) -> None:
+    def __init__(self, *, session_store: CaptureSessionStorage) -> None:
         self._session_store = session_store
 
     def run(

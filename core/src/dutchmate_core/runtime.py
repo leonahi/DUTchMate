@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from threading import RLock
-from typing import TypeAlias, cast
 
 from dutchmate_core.backends.contracts import (
     BackendCapability,
@@ -14,6 +12,7 @@ from dutchmate_core.backends.contracts import (
     BackendInfo,
     BackendMode,
     BackendSnapshot,
+    DeviceControl,
     SegmentContext,
     UartIntegrity,
     UartSendCapabilityPolicy,
@@ -21,8 +20,6 @@ from dutchmate_core.backends.contracts import (
     integrity_for_backend,
 )
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
-from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
@@ -32,7 +29,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
-from dutchmate_core.session_store.store import SessionStore, SessionSummary, SessionWorkflow
+from dutchmate_core.session_store.models import SessionSummary, SessionWorkflow
 from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
@@ -40,6 +37,7 @@ from dutchmate_core.validation import (
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
+    CaptureSessionStorage,
     CaptureWorkflow,
 )
 from dutchmate_core.workflows.device_actions import (
@@ -47,8 +45,6 @@ from dutchmate_core.workflows.device_actions import (
     DeviceActionResult,
     DeviceActionRunner,
 )
-
-DeviceCoreTransport: TypeAlias = CommandTransport
 
 
 class DeviceCoreRuntimeError(RuntimeError):
@@ -79,9 +75,8 @@ class DeviceCoreRuntime:
     def __init__(
         self,
         *,
-        transport: DeviceCoreTransport,
-        session_store: SessionStore | None = None,
-        session_root: Path | str = Path(".dutchmate/sessions"),
+        device_control: DeviceControl,
+        session_store: CaptureSessionStorage,
         gpio_registry: GpioModeRegistry | None = None,
         message_source: CaptureEventSource | None = None,
         capture_clock: Callable[[], float] | None = None,
@@ -91,22 +86,20 @@ class DeviceCoreRuntime:
         segment_context: SegmentContext | None = None,
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
     ) -> None:
-        self._transport = transport
         self._message_source = message_source
         self._capture_clock = capture_clock
-        self._session_store = session_store or SessionStore(root=session_root)
+        self._session_store = session_store
         self._capture_workflow = CaptureWorkflow(session_store=self._session_store)
         self._gpio_registry = gpio_registry or GpioModeRegistry()
         self._gpio_configurator = GpioConfigurator(
             registry=self._gpio_registry,
-            transport=self._transport,
+            control=device_control,
         )
         self._action_runner = DeviceActionRunner(
             registry=self._gpio_registry,
-            transport=self._transport,
+            control=device_control,
         )
         self._port = port
-        self._hello: HelloMessage | None = None
         self._connected = False
         self._backend_mode = backend_mode
         self._backend_info: BackendInfo | None = None
@@ -131,8 +124,8 @@ class DeviceCoreRuntime:
         self._operation_lock = RLock()
 
     @property
-    def session_store(self) -> SessionStore:
-        """Filesystem-backed session store used by this runtime."""
+    def session_store(self) -> CaptureSessionStorage:
+        """Capture-session storage used by this runtime."""
 
         return self._session_store
 
@@ -142,42 +135,17 @@ class DeviceCoreRuntime:
 
         return self._gpio_registry
 
-    def record_hello(self, hello: HelloMessage, *, port: str | None = None) -> DeviceCoreStatus:
-        """Record a validated Debug Helper hello message."""
+    def record_backend_connection(self, info: BackendInfo) -> DeviceCoreStatus:
+        """Record normalized identity for the selected connected backend."""
 
-        with self._operation_lock:
-            self._hello = hello
-            self._connected = True
-            self._backend_mode = "enhanced"
-            if port is not None:
-                self._port = port
-            self._backend_capabilities = _normalize_hello_capabilities(hello.capabilities)
-            self._integrity = integrity_for_backend("enhanced")
-            self._backend_info = (
-                BackendInfo(
-                    mode="enhanced",
-                    port=self._port,
-                    device=hello.device,
-                    firmware=hello.firmware,
-                    capabilities=self._backend_capabilities,
-                )
-                if self._port is not None
-                else None
-            )
-        return self.status()
-
-    def record_basic_connection(self, info: BackendInfo) -> DeviceCoreStatus:
-        """Record an opened Basic backend without requiring a hello message."""
-
-        if info.mode != "basic" or info.device is not None or info.firmware is not None:
+        if info.mode == "basic" and (info.device is not None or info.firmware is not None):
             raise ValueError("Basic backend identity must omit device and firmware")
         with self._operation_lock:
-            self._hello = None
             self._connected = True
-            self._backend_mode = "basic"
+            self._backend_mode = info.mode
             self._backend_info = info
             self._backend_capabilities = info.capabilities
-            self._integrity = integrity_for_backend("basic")
+            self._integrity = integrity_for_backend(info.mode)
             self._port = info.port
         return self.status()
 
@@ -185,7 +153,6 @@ class DeviceCoreRuntime:
         """Mark the Debug Helper connection as disconnected."""
 
         with self._operation_lock:
-            self._hello = None
             self._connected = False
             self._backend_info = None
             self._backend_capabilities = frozenset()
@@ -203,8 +170,8 @@ class DeviceCoreRuntime:
             return DeviceCoreStatus(
                 connected=self._connected,
                 port=self._port,
-                firmware=self._hello.firmware if self._hello is not None else None,
-                device=self._hello.device if self._hello is not None else None,
+                firmware=(self._backend_info.firmware if self._backend_info is not None else None),
+                device=(self._backend_info.device if self._backend_info is not None else None),
                 capabilities=(
                     tuple(
                         sorted(
@@ -339,8 +306,8 @@ class DeviceCoreRuntime:
                 self._gpio_registry.require_role_configured(required_role)
             source = self._message_source
             backend_snapshot = self._backend_snapshot()
-            firmware = self._hello.firmware if self._hello is not None else None
-            device = self._hello.device if self._hello is not None else None
+            firmware = self._backend_info.firmware if self._backend_info is not None else None
+            device = self._backend_info.device if self._backend_info is not None else None
             self._capture_in_progress = True
 
         try:
@@ -396,13 +363,3 @@ class DeviceCoreRuntime:
             segment=self._segment_context,
             integrity=self._integrity,
         )
-
-
-def _normalize_hello_capabilities(
-    capabilities: tuple[str, ...],
-) -> frozenset[BackendCapability]:
-    normalized: set[BackendCapability] = set()
-    for capability in capabilities:
-        normalized_name = "uart_receive" if capability == "uart_capture" else capability
-        normalized.add(cast(BackendCapability, normalized_name))
-    return frozenset(normalized)

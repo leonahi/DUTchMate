@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, NoReturn, Protocol
 
 from dutchmate_core.backends.basic import (
     BasicBackendConnection,
     BasicBackendEventSource,
     open_basic_backend_connection,
 )
-from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource
+from dutchmate_core.backends.enhanced import (
+    EnhancedCaptureEventSource,
+    EnhancedDeviceControl,
+    normalize_enhanced_hello,
+)
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.serial_transport import (
     SerialCommandTransport,
     open_serial_command_transport,
@@ -80,14 +83,14 @@ def build_startup_runtime(
 
     if backend_settings is None:
         return DeviceCoreRuntime(
-            transport=_UnavailableTransport(),
+            device_control=_UnavailableDeviceControl(),
             session_store=session_store,
         )
 
     if backend_settings.mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         runtime = DeviceCoreRuntime(
-            transport=_UnavailableTransport(connection),
+            device_control=_UnavailableDeviceControl(connection),
             message_source=BasicBackendEventSource(connection, segment_id=0),
             session_store=session_store,
             port=connection.info.port,
@@ -95,13 +98,13 @@ def build_startup_runtime(
             tx_policy_enabled=backend_settings.tx_enabled,
             reconnect_timeout_s=backend_settings.reconnect_timeout_s,
         )
-        runtime.record_basic_connection(connection.info)
+        runtime.record_backend_connection(connection.info)
         return runtime
 
     serial_port = backend_settings.serial_port
     if serial_port is None:
         return DeviceCoreRuntime(
-            transport=_UnavailableTransport(),
+            device_control=_UnavailableDeviceControl(),
             session_store=session_store,
             backend_mode="enhanced",
         )
@@ -111,7 +114,7 @@ def build_startup_runtime(
         baudrate=backend_settings.baudrate,
     )
     runtime = DeviceCoreRuntime(
-        transport=transport,
+        device_control=EnhancedDeviceControl(transport),
         message_source=EnhancedCaptureEventSource(
             transport,
             segment_id=0,
@@ -124,7 +127,7 @@ def build_startup_runtime(
         reconnect_timeout_s=backend_settings.reconnect_timeout_s,
     )
     hello = read_startup_hello(transport)
-    runtime.record_hello(hello, port=serial_port)
+    runtime.record_backend_connection(normalize_enhanced_hello(hello, port=serial_port))
     return runtime
 
 
@@ -138,11 +141,28 @@ def read_startup_hello(transport: SerialCommandTransport) -> HelloMessage:
     return message
 
 
-class _UnavailableTransport:
+class _UnavailableDeviceControl:
     def __init__(self, resource: BasicBackendConnection | None = None) -> None:
         self._resource = resource
 
-    def request(self, command: bytes) -> DeviceMessage:
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        role: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        self._raise_unavailable()
+
+    def reset_dut(self, *, pulse_ms: int) -> int | None:
+        self._raise_unavailable()
+
+    def set_boot_mode(self, *, mode: str) -> int | None:
+        self._raise_unavailable()
+
+    def _raise_unavailable(self) -> NoReturn:
         if self._resource is not None:
             raise DeviceCoreRuntimeError("Basic backend does not support Debug Helper commands")
         raise DeviceCoreRuntimeError("Serial transport is not configured")

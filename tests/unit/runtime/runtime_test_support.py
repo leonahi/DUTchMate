@@ -1,7 +1,12 @@
 from collections.abc import Callable
 
-from dutchmate_core.backends import BackendEvent, SegmentContext, SegmentTimestamp
-from dutchmate_core.device_connection.messages import HelloMessage
+from dutchmate_core.backends import (
+    BackendCapability,
+    BackendEvent,
+    BackendInfo,
+    SegmentContext,
+    SegmentTimestamp,
+)
 from dutchmate_core.device_connection.parser import DeviceMessage
 
 
@@ -108,9 +113,17 @@ class FakeCaptureSource:
         return result
 
 
-def hello() -> HelloMessage:
-    return HelloMessage(
+def enhanced_info(
+    *,
+    port: str = "/dev/ttyACM0",
+    capabilities: frozenset[BackendCapability] = frozenset(
+        {"gpio_control", "uart_receive", "uart_send"}
+    ),
+) -> BackendInfo:
+    return BackendInfo(
+        mode="enhanced",
+        port=port,
         firmware="0.1.0",
         device="dutchmate-rp2040",
-        capabilities=("uart_capture", "gpio_control", "uart_send"),
+        capabilities=capabilities,
     )

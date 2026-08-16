@@ -7,10 +7,7 @@ from dutchmate_core.gpio_config.config import (
     load_hardware_gpio_config,
     parse_hardware_gpio_config,
 )
-from dutchmate_core.gpio_config.configurator import (
-    GpioCommandTransport,
-    GpioConfigurator,
-)
+from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
     GpioControlChannel,
@@ -27,7 +24,6 @@ from dutchmate_core.gpio_config.modes import (
 
 __all__ = [
     "GpioConfigError",
-    "GpioCommandTransport",
     "GpioConfigurator",
     "GpioControlChannel",
     "GpioControlChannelState",

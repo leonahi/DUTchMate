@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
-from dutchmate_core.device_connection.commands import configure_gpio_mode_command
+from dutchmate_core.backends.contracts import DeviceControl, DeviceControlError
 from dutchmate_core.device_connection.errors import ProtocolValidationError
-from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
-from dutchmate_core.device_connection.transport import CommandTransport
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
     GpioControlChannelState,
@@ -15,8 +11,6 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
 )
 from dutchmate_core.validation import validate_gpio_configuration
-
-GpioCommandTransport: TypeAlias = CommandTransport
 
 
 class GpioConfigurator:
@@ -26,10 +20,10 @@ class GpioConfigurator:
         self,
         *,
         registry: GpioModeRegistry,
-        transport: GpioCommandTransport,
+        control: DeviceControl,
     ) -> None:
         self._registry = registry
-        self._transport = transport
+        self._control = control
 
     def configure_mode(
         self,
@@ -55,28 +49,17 @@ class GpioConfigurator:
             )
         except ValueError as exc:
             raise ProtocolValidationError(str(exc)) from exc
-        command = configure_gpio_mode_command(
-            channel=request.channel,
-            role=request.role,
-            mode=request.mode,
-            active_level=request.active_level,
-            idle_level=request.idle_level,
-        )
-        response = self._transport.request(command.to_ndjson())
-
-        if isinstance(response, CommandSuccessMessage):
-            return self._registry.accept_mode(
-                role=request.role,
+        try:
+            timestamp_us = self._control.configure_gpio_mode(
                 channel=request.channel,
-                dut_signal=request.dut_signal,
+                role=request.role,
                 mode=request.mode,
                 active_level=request.active_level,
                 idle_level=request.idle_level,
-                source=source,
-                device_timestamp_us=response.timestamp_us,
             )
-
-        if isinstance(response, CommandErrorMessage):
+        except DeviceControlError as exc:
+            if exc.error == "unexpected_response":
+                raise GpioConfigurationError(exc.detail) from exc
             return self._registry.reject_mode(
                 role=request.role,
                 channel=request.channel,
@@ -85,11 +68,16 @@ class GpioConfigurator:
                 active_level=request.active_level,
                 idle_level=request.idle_level,
                 source=source,
-                error=response.error,
-                detail=response.detail,
+                error=exc.error,
+                detail=exc.detail,
             )
-
-        message_name = type(response).__name__
-        raise GpioConfigurationError(
-            f"Expected command response for GPIO mode configuration, got {message_name}"
+        return self._registry.accept_mode(
+            role=request.role,
+            channel=request.channel,
+            dut_signal=request.dut_signal,
+            mode=request.mode,
+            active_level=request.active_level,
+            idle_level=request.idle_level,
+            source=source,
+            device_timestamp_us=timestamp_us,
         )
