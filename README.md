@@ -101,6 +101,7 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 | `docs/project_context.md` | Product architecture, scope, safety, roadmap, and known limitations. |
 | `docs/phase1_implementation_spec.md` | Normative Phase 1 order, backend/API/session/protocol requirements, tests, and done criteria. |
 | `docs/software_architecture.md` | Current Python data flow, module ownership, and migration boundaries. |
+| `docs/architecture_audit.md` | 2026-08-17 constraint-based code-structure audit and refactoring sequence. |
 | `docs/developer_guide.md` | Workspace layout, setup, package boundaries, and contribution workflow. |
 | `docs/dutchmate_hardware_architecture.md` | Revision A voltage-domain hardware, pin map, BOM, and validation checklist. |
 | `docs/gpio_configuration_semantics.md` | Control-channel identifiers, electrical modes, state, workflows, and reporting. |
