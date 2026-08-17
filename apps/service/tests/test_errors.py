@@ -4,6 +4,7 @@ from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
+from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
 from dutchmate_service.errors import ServiceError, service_error_from_exception
@@ -59,11 +60,17 @@ def test_maps_runtime_error_to_service_unavailable() -> None:
 
 def test_maps_validation_errors_to_invalid_argument() -> None:
     protocol_error = service_error_from_exception(ProtocolValidationError("bad protocol"))
+    input_error = service_error_from_exception(InputValidationError("bad input"))
     config_error = service_error_from_exception(GpioConfigError("bad config"))
 
     assert protocol_error == ServiceError(
         error="invalid_argument",
         detail="bad protocol",
+        status_code=400,
+    )
+    assert input_error == ServiceError(
+        error="invalid_argument",
+        detail="bad input",
         status_code=400,
     )
     assert config_error == ServiceError(
@@ -87,6 +94,23 @@ def test_exception_handlers_return_json_error_response() -> None:
         "ok": False,
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
+    }
+
+
+def test_input_validation_handler_returns_json_error_response() -> None:
+    app = create_app()
+
+    @app.get("/raise-invalid-input")
+    def raise_invalid_input() -> None:
+        raise InputValidationError("bad input")
+
+    response = TestClient(app).get("/raise-invalid-input")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_argument",
+        "detail": "bad input",
     }
 
 

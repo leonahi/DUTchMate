@@ -1,11 +1,5 @@
-"""Normalized Device Core backend contracts and adapters."""
+"""Stable facade for normalized Device Core backend contracts."""
 
-from dutchmate_core.backends.basic import (
-    BasicBackendConnection,
-    BasicBackendEventSource,
-    BasicSerialPort,
-    open_basic_backend_connection,
-)
 from dutchmate_core.backends.contracts import (
     BackendCapability,
     BackendCapabilityError,
@@ -20,6 +14,8 @@ from dutchmate_core.backends.contracts import (
     BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DeviceControl,
+    DeviceControlError,
     LossStatus,
     SegmentContext,
     SegmentTimestamp,
@@ -29,23 +25,11 @@ from dutchmate_core.backends.contracts import (
     apply_capability_policy,
     integrity_for_backend,
 )
-from dutchmate_core.backends.settings import (
-    BackendConfig,
-    BackendConfigError,
-    BackendSettings,
-    UartConfig,
-    load_backend_config,
-    parse_backend_config,
-    resolve_backend_mode,
-    resolve_backend_settings,
-)
 
 __all__ = [
     "BackendCapability",
     "BackendCapabilityError",
     "BackendCapabilityPolicy",
-    "BackendConfig",
-    "BackendConfigError",
     "BackendDisconnectedError",
     "BackendEvent",
     "BackendEventSource",
@@ -53,12 +37,10 @@ __all__ = [
     "BackendInputError",
     "BackendMode",
     "BackendSnapshot",
-    "BackendSettings",
-    "BasicBackendConnection",
-    "BasicBackendEventSource",
-    "BasicSerialPort",
     "BufferOverflowEvent",
     "BufferStatusEvent",
+    "DeviceControl",
+    "DeviceControlError",
     "LossStatus",
     "BackendWriteError",
     "SegmentContext",
@@ -66,12 +48,6 @@ __all__ = [
     "UartIntegrity",
     "UartReceiveEvent",
     "UartSendCapabilityPolicy",
-    "UartConfig",
     "apply_capability_policy",
     "integrity_for_backend",
-    "load_backend_config",
-    "open_basic_backend_connection",
-    "parse_backend_config",
-    "resolve_backend_mode",
-    "resolve_backend_settings",
 ]

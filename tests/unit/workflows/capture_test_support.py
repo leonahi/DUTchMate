@@ -1,8 +1,17 @@
 import json
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
 from dutchmate_core.backends import BackendEvent, SegmentContext
+from dutchmate_core.backends.enhanced import EnhancedNdjsonEventStream
+from dutchmate_core.session_store.models import SessionHandle, SessionSummary
+from dutchmate_core.uart_capture.processor import UartCaptureProcessor
+from dutchmate_core.workflows.capture import (
+    CaptureRecorder,
+    CaptureRecordResult,
+    CaptureSessionStorage,
+)
 
 
 def fixed_clock() -> datetime:
@@ -44,6 +53,77 @@ class FakeCaptureEventSource:
         if not self._script:
             return None
         return self._script.pop(0)
+
+
+class EnhancedCaptureFixtureRecorder:
+    """Compose Enhanced fixture parsing with the shared capture recorder."""
+
+    def __init__(
+        self,
+        *,
+        recorder: CaptureRecorder,
+        event_stream: EnhancedNdjsonEventStream | None = None,
+    ) -> None:
+        self._recorder = recorder
+        self._event_stream = event_stream or EnhancedNdjsonEventStream()
+
+    @classmethod
+    def start(
+        cls,
+        *,
+        session_store: CaptureSessionStorage,
+        command: str,
+        firmware: str | None = None,
+        device: str | None = None,
+        baseline: bool = False,
+        uart_processor: UartCaptureProcessor | None = None,
+    ) -> "EnhancedCaptureFixtureRecorder":
+        return cls(
+            recorder=CaptureRecorder.start(
+                session_store=session_store,
+                command=command,
+                firmware=firmware,
+                device=device,
+                baseline=baseline,
+                uart_processor=uart_processor,
+            )
+        )
+
+    @property
+    def session_handle(self) -> SessionHandle:
+        return self._recorder.session_handle
+
+    @property
+    def pending_bytes(self) -> bytes:
+        return self._event_stream.pending_bytes
+
+    def feed(self, chunk: bytes) -> list[CaptureRecordResult]:
+        return [self._recorder.record_event(event) for event in self._event_stream.feed(chunk)]
+
+
+def run_enhanced_capture_fixture(
+    *,
+    chunks: Iterable[bytes],
+    session_store: CaptureSessionStorage,
+    command: str,
+    firmware: str | None = None,
+    device: str | None = None,
+    baseline: bool = False,
+    uart_processor: UartCaptureProcessor | None = None,
+) -> SessionSummary:
+    """Record a finite Enhanced fixture stream and return its summary."""
+
+    recorder = EnhancedCaptureFixtureRecorder.start(
+        session_store=session_store,
+        command=command,
+        firmware=firmware,
+        device=device,
+        baseline=baseline,
+        uart_processor=uart_processor,
+    )
+    for chunk in chunks:
+        recorder.feed(chunk)
+    return session_store.summarize_session(recorder.session_handle.session_id)
 
 
 def read_jsonl(path: Path) -> list[dict[str, object]]:

@@ -155,7 +155,7 @@ The repository already contains:
   and pattern detection.
 - Session creation, incremental UART/event writes, telemetry, summaries,
   newest-first discovery, and latest-session lookup.
-- Mocked NDJSON capture, finite transport capture, reset-triggered boot-test,
+- Enhanced NDJSON adapter fixtures, finite transport capture, reset-triggered boot-test,
   active-session guards, reset/boot action enforcement, and synchronous serial
   command transport.
 - Service endpoints and CLI commands for status, finite capture, boot-test,
@@ -167,7 +167,7 @@ HIL paths remain incomplete.
 
 ### Current Host-Side Core Flow
 
-The implemented mock capture path is:
+The Enhanced adapter fixture path is:
 
 ```text
 NDJSON byte chunks
@@ -175,7 +175,7 @@ NDJSON byte chunks
   -> device_connection.parse_device_message
   -> backends.enhanced.EnhancedNdjsonEventStream
   -> normalized backend events
-  -> workflows.enhanced_capture.CaptureStreamRecorder
+  -> test fixture composition
   -> workflows.CaptureRecorder
   -> uart_capture.UartCaptureProcessor
   -> log_processing.PatternDetector
@@ -183,11 +183,9 @@ NDJSON byte chunks
   -> session_store.SessionSummary
 ```
 
-The Enhanced-only mock runner `run_mock_capture(...)` adapts finite NDJSON byte
-chunks before shared recording. The shared transport runner
-`run_transport_capture(...)` reads normalized events until a host-monotonic
-deadline. Both return a `SessionSummary`; the workflow layer accepts injected
-sources and does not open a serial port.
+Enhanced-only byte-chunk composition is test support rather than a production
+workflow API. Production capture accepts injected normalized event sources and
+does not open a serial port.
 
 The service-facing core path currently reaches the same recorder through one
 of the selected backend adapters:

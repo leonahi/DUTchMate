@@ -254,7 +254,6 @@ def test_require_role_configured_returns_configured_state() -> None:
     )
 
     assert registry.require_role_configured("reset") == configured
-    assert registry.require_configured("reset") == configured
 
 
 def test_require_role_configured_rejects_unconfigured_role() -> None:

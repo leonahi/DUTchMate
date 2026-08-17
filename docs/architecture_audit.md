@@ -345,6 +345,10 @@ Each numbered item should be independently reviewed, validated, and committed.
    adapter, and introduce semantic device-control operations.
 6. **Remove compatibility/test-only surfaces and trim exports.** Do this only
    after callers and intended external API are documented.
+   Implemented by moving Enhanced byte-chunk composition into test support,
+   removing obsolete GPIO compatibility names, defining the runtime and
+   normalized-backend facades, and reducing application adapter exceptions to
+   an empty set.
 7. **Resolve inert session configuration.** Wire effective limits or remove
    them from the accepted current configuration surface.
 8. **Reorganize CLI registration only if still useful.** Reuse existing concern

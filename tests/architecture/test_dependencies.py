@@ -30,7 +30,6 @@ APPLICATION_MODULES = frozenset(
         "dutchmate_core.runtime",
         "dutchmate_core.workflows.capture",
         "dutchmate_core.workflows.device_actions",
-        "dutchmate_core.workflows.enhanced_capture",
     }
 )
 ADAPTER_DEPENDENCY_PREFIXES = (
@@ -44,13 +43,7 @@ ADAPTER_DEPENDENCY_PREFIXES = (
 # These are the concrete boundary leaks recorded by the 2026-08-17 audit. The
 # test intentionally requires an exact match: new exceptions fail immediately,
 # and removing an exception requires deleting its stale entry here.
-KNOWN_APPLICATION_ADAPTER_EXCEPTIONS = frozenset(
-    {
-        ("dutchmate_core.gpio_config.configurator", "dutchmate_core.device_connection.errors"),
-        ("dutchmate_core.workflows.device_actions", "dutchmate_core.device_connection.errors"),
-        ("dutchmate_core.workflows.enhanced_capture", "dutchmate_core.backends.enhanced"),
-    }
-)
+KNOWN_APPLICATION_ADAPTER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset()
 
 
 def test_core_never_depends_on_delivery_packages_or_frameworks() -> None:

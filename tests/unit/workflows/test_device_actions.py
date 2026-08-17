@@ -1,13 +1,13 @@
 import pytest
 
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl
-from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
     HelloMessage,
 )
 from dutchmate_core.gpio_config.modes import GpioConfigurationError, GpioModeRegistry
+from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
     DeviceActionResult,
@@ -82,7 +82,7 @@ def test_reset_validates_pulse_before_configuration_check() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="pulse_ms"):
+    with pytest.raises(InputValidationError, match="pulse_ms"):
         runner.reset_dut(pulse_ms=0)
 
     assert transport.requests == []
@@ -123,7 +123,7 @@ def test_boot_mode_validates_mode_before_configuration_check() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="Boot mode"):
+    with pytest.raises(InputValidationError, match="Boot mode"):
         runner.set_boot_mode(mode="factory")
 
     assert transport.requests == []

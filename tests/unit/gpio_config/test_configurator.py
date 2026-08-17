@@ -1,7 +1,6 @@
 import pytest
 
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl
-from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
@@ -9,6 +8,7 @@ from dutchmate_core.device_connection.messages import (
 )
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import GpioConfigurationError, GpioModeRegistry
+from dutchmate_core.validation import InputValidationError
 
 
 class FakeTransport:
@@ -155,7 +155,7 @@ def test_invalid_channel_is_rejected_before_transport_request() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="GPIO control channel"):
+    with pytest.raises(InputValidationError, match="GPIO control channel"):
         configurator.configure_mode(
             role="reset",
             channel="GPIO0",
@@ -199,7 +199,7 @@ def test_empty_role_is_rejected_before_transport_request() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="GPIO role"):
+    with pytest.raises(InputValidationError, match="GPIO role"):
         configurator.configure_mode(
             role=" ",
             channel="CTRL0",
@@ -219,7 +219,7 @@ def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="dut_signal"):
+    with pytest.raises(InputValidationError, match="dut_signal"):
         configurator.configure_mode(
             role="reset",
             channel="CTRL0",
@@ -237,7 +237,7 @@ def test_invalid_mode_is_rejected_before_transport_request() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(ProtocolValidationError, match="GPIO mode"):
+    with pytest.raises(InputValidationError, match="GPIO mode"):
         configurator.configure_mode(
             role="reset",
             channel="CTRL0",

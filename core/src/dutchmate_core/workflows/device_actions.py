@@ -7,9 +7,12 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from dutchmate_core.backends.contracts import DeviceControl, DeviceControlError
-from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.modes import GpioModeRegistry
-from dutchmate_core.validation import validate_boot_mode, validate_reset_pulse
+from dutchmate_core.validation import (
+    InputValidationError,
+    validate_boot_mode,
+    validate_reset_pulse,
+)
 
 DeviceActionName: TypeAlias = Literal["reset", "set_boot_mode"]
 
@@ -49,7 +52,7 @@ class DeviceActionRunner:
         try:
             pulse_ms_value = validate_reset_pulse(pulse_ms)
         except ValueError as exc:
-            raise ProtocolValidationError(str(exc)) from exc
+            raise InputValidationError(str(exc)) from exc
         self._registry.require_role_configured("reset")
         return self._run_action(
             action="reset",
@@ -62,7 +65,7 @@ class DeviceActionRunner:
         try:
             mode_name = validate_boot_mode(mode)
         except ValueError as exc:
-            raise ProtocolValidationError(str(exc)) from exc
+            raise InputValidationError(str(exc)) from exc
         self._registry.require_role_configured("boot")
         return self._run_action(
             action="set_boot_mode",

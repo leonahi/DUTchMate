@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from dutchmate_core.backends.contracts import DeviceControl, DeviceControlError
-from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.modes import (
     GpioConfigurationError,
     GpioControlChannelState,
     GpioModeRegistry,
     GpioModeRequestSource,
 )
-from dutchmate_core.validation import validate_gpio_configuration
+from dutchmate_core.validation import InputValidationError, validate_gpio_configuration
 
 
 class GpioConfigurator:
@@ -48,7 +47,7 @@ class GpioConfigurator:
                 idle_level=idle_level,
             )
         except ValueError as exc:
-            raise ProtocolValidationError(str(exc)) from exc
+            raise InputValidationError(str(exc)) from exc
         try:
             timestamp_us = self._control.configure_gpio_mode(
                 channel=request.channel,

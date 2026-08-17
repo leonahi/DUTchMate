@@ -29,17 +29,13 @@ apps/service
 core/runtime
   -> workflows
   -> gpio_config
-  -> backends contracts/adapters
-  -> device_connection
+  -> backends.contracts
+  -> session_store models
 
 core/workflows.capture
   -> session_store
   -> uart_capture
   -> backends.contracts
-
-core/workflows.enhanced_capture
-  -> workflows.capture
-  -> backends.enhanced
 
 core/uart_capture
   -> log_processing
@@ -50,7 +46,8 @@ core/session_store
   -> backends.contracts
 
 core/workflows.device_actions, gpio_config
-  -> device_connection commands/responses
+  -> backends.contracts
+  -> validation
 
 core/device_connection
   -> no higher DUTchMate layer
@@ -84,7 +81,7 @@ background reader and complete connection/segment coordinator.
 
 ## Data Flow
 
-The implemented fixture/mock path is:
+Enhanced byte-chunk compatibility composition is test-only:
 
 ```text
 NDJSON bytes
@@ -92,7 +89,7 @@ NDJSON bytes
   -> parse_device_message
   -> EnhancedNdjsonEventStream
   -> normalized backend events
-  -> enhanced_capture.CaptureStreamRecorder
+  -> test fixture recorder
   -> CaptureRecorder
   -> UartCaptureProcessor
   -> UartLineBuffer
@@ -100,6 +97,9 @@ NDJSON bytes
   -> SessionStore
   -> SessionSummary
 ```
+
+Production workflows receive normalized events and never import Enhanced wire
+messages, parsers, commands, or transports.
 
 The implemented finite serial path is:
 
@@ -121,6 +121,17 @@ and rejects conflicting capture or hardware-changing operations. The current
 serial path is synchronous and Debug Helper-oriented. Phase 1 replaces its
 input edge with one continuous reader and a FIFO normalized event source for
 either backend; downstream processing remains shared.
+
+## Supported Core Facades
+
+The intentionally small package facades are:
+
+- `dutchmate_core`: the service-facing runtime and status types;
+- `dutchmate_core.backends`: normalized backend contracts and events.
+
+Concrete adapters, protocol DTOs, storage implementations, validation helpers,
+and workflows are imported from their defining modules. Their package
+`__init__.py` files are not a compatibility promise during Phase 1.
 
 ## Module Ownership
 

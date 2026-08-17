@@ -12,6 +12,7 @@ from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
+from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -88,6 +89,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_protocol_validation_error(
         request: Request,
         exc: ProtocolValidationError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(InputValidationError)
+    async def handle_input_validation_error(
+        request: Request,
+        exc: InputValidationError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

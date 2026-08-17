@@ -69,9 +69,6 @@ class GpioControlChannelState:
     last_rejected: GpioModeRejection | None = None
 
 
-GpioRoleState: TypeAlias = GpioControlChannelState
-
-
 class GpioModeRegistry:
     """Track accepted and rejected GPIO mode configuration per control channel."""
 
@@ -223,14 +220,6 @@ class GpioModeRegistry:
         if rejection is not None:
             raise GpioConfigurationError(rejection.detail)
         raise GpioConfigurationError(f"GPIO role '{role_name}' is not configured")
-
-    def require_configured(self, role: str) -> GpioControlChannelState:
-        """Return configured channel state for a role.
-
-        Kept as a compatibility wrapper for existing reset/boot workflow code.
-        """
-
-        return self.require_role_configured(role)
 
     def _clear_role_from_other_channels(
         self,

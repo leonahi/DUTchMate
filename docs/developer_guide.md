@@ -56,9 +56,9 @@ Current core modules:
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
 | `session_store` | Filesystem sessions, bounded pattern/line-limit evidence, deterministic first-error summaries, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
-| `workflows` | Shared normalized-event capture, Enhanced fixture compatibility, and guarded reset/boot actions. |
-| `runtime.py` | Service-facing composition, active workflow state, and boot-test orchestration. |
-| `validation.py` | Shared public duration and exact GPIO input contracts used by core and app entry points. |
+| `workflows` | Shared normalized-event capture and guarded reset/boot actions. |
+| `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
+| `validation.py` | Shared public input contracts and application validation errors. |
 
 See `docs/software_architecture.md` for current data flow and ownership details.
 
@@ -132,7 +132,7 @@ CLI commands:
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
 contracts and shared event processing now exist; Enhanced wire messages are
-translated at an interim compatibility boundary. Major remaining Phase 1 areas
+translated only by the Enhanced backend adapter. Major remaining Phase 1 areas
 are the full asynchronous Enhanced adapter, background ingestion/reconnect,
 native-session quota enforcement and retention, bounded log and session
 retrieval, wait-pattern, UART-send public workflows, generic Enhanced control

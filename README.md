@@ -21,7 +21,7 @@ The repository currently contains the first host-side Phase 1 foundation:
 - backend-neutral identity, timestamp provenance, normalized event, event-source,
   and backend-error contracts with shared fake-source tests
 - backend-independent UART processing, capture recording, and session evidence
-  writes, plus an interim Enhanced wire-to-event compatibility adapter
+  writes behind normalized backend and storage contracts
 - Enhanced v1 NDJSON schemas, examples, parser, command encoders, discovery,
   and synchronous serial transport
 - exact UART byte preservation, complete-line reconstruction, and keyword

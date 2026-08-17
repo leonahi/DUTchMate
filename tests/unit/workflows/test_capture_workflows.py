@@ -3,11 +3,13 @@ from pathlib import Path
 
 import pytest
 from capture_test_support import (
+    EnhancedCaptureFixtureRecorder,
     FakeCaptureEventSource,
     FakeMonotonicClock,
     fixed_clock,
     fixed_id,
     read_jsonl,
+    run_enhanced_capture_fixture,
 )
 
 from dutchmate_core.backends import (
@@ -18,12 +20,11 @@ from dutchmate_core.backends import (
 )
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.capture import CaptureWorkflow
-from dutchmate_core.workflows.enhanced_capture import CaptureStreamRecorder, run_mock_capture
 
 
 def test_stream_recorder_records_complete_uart_ndjson(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
-    recorder = CaptureStreamRecorder.start(session_store=store, command="capture")
+    recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     results = recorder.feed(
         b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"Qk9PVF9PSwo="}\n'
@@ -36,7 +37,7 @@ def test_stream_recorder_records_complete_uart_ndjson(tmp_path: Path) -> None:
 
 def test_stream_recorder_buffers_split_ndjson_until_complete(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
-    recorder = CaptureStreamRecorder.start(session_store=store, command="capture")
+    recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     assert recorder.feed(b'{"type":"uart","channel":0,') == []
     assert recorder.pending_bytes == b'{"type":"uart","channel":0,'
@@ -52,7 +53,7 @@ def test_stream_recorder_records_multiple_capture_messages_from_one_chunk(
     tmp_path: Path,
 ) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
-    recorder = CaptureStreamRecorder.start(session_store=store, command="capture")
+    recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     results = recorder.feed(
         b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"WAo="}\n'
@@ -76,7 +77,7 @@ def test_stream_recorder_records_multiple_capture_messages_from_one_chunk(
 
 def test_stream_recorder_ignores_non_capture_messages(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
-    recorder = CaptureStreamRecorder.start(session_store=store, command="capture")
+    recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     results = recorder.feed(
         b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
@@ -91,16 +92,16 @@ def test_stream_recorder_ignores_non_capture_messages(tmp_path: Path) -> None:
 
 def test_stream_recorder_requires_bytes(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
-    recorder = CaptureStreamRecorder.start(session_store=store, command="capture")
+    recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     with pytest.raises(TypeError):
         recorder.feed("not bytes")  # type: ignore[arg-type]
 
 
-def test_run_mock_capture_returns_final_session_summary(tmp_path: Path) -> None:
+def test_enhanced_capture_fixture_returns_final_session_summary(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_mock_capture(
+    summary = run_enhanced_capture_fixture(
         chunks=[
             b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
             b'"capabilities":[]}\n',
@@ -123,10 +124,10 @@ def test_run_mock_capture_returns_final_session_summary(tmp_path: Path) -> None:
     assert summary.segment_count == 1
 
 
-def test_run_mock_capture_summary_reflects_overflow(tmp_path: Path) -> None:
+def test_enhanced_capture_fixture_summary_reflects_overflow(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_mock_capture(
+    summary = run_enhanced_capture_fixture(
         chunks=[
             b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"WAo="}\n',
             b'{"type":"buffer_overflow","channel":0,"timestamp_us":200,"dropped_bytes":64}\n',
@@ -138,10 +139,10 @@ def test_run_mock_capture_summary_reflects_overflow(tmp_path: Path) -> None:
     assert summary.overflow is True
 
 
-def test_run_mock_capture_persists_capture_evidence(tmp_path: Path) -> None:
+def test_enhanced_capture_fixture_persists_capture_evidence(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    summary = run_mock_capture(
+    summary = run_enhanced_capture_fixture(
         chunks=[
             b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"RVJST1IK"}\n',
         ],

@@ -38,6 +38,10 @@ IdentifierValidationReason: TypeAlias = Literal[
 ]
 
 
+class InputValidationError(ValueError):
+    """Raised when an application input violates a Device Core contract."""
+
+
 class GpioIdentifierValidationError(ValueError):
     """Raised when a GPIO role or DUT signal violates the exact identifier contract."""
 
