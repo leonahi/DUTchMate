@@ -403,7 +403,11 @@ class CaptureWorkflow:
                     failure = finalize_error
             if recorder.terminalized:
                 return self._session_store.summarize_session(recorder.session_id)
-            if native_session:
+            terminalization_safe = not isinstance(
+                failure,
+                SessionPersistenceError,
+            ) or failure.terminalization_safe
+            if native_session and terminalization_safe:
                 self._session_store.fail_session(
                     recorder.session_handle,
                     end_reason=(

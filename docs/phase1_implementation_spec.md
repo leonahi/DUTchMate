@@ -827,13 +827,14 @@ active workflow as `failed` / `backend_input_error`. It does not itself set
 facts. The offending frame is not evidence, the source is closed, and this
 session cannot reconnect or resume.
 
-Before opening a backend or accepting a workflow request, startup scans native
-version `1` metadata and atomically changes every stale `active` session to
-`abandoned`. It reports but does not mutate legacy or unknown-version
-directories. It does not auto-resume native stale sessions or infer an
-unobserved USB disconnect. A normal terminal transition flushes all accepted
-evidence and atomically replaces terminal metadata before clearing the active
-workflow owner.
+Before opening a backend or accepting a workflow request, startup first resolves
+an internal evidence-transaction marker by either keeping the metadata-last
+complete unit or restoring its saved preimages. It then scans native version `1`
+metadata and atomically changes every stale `active` session to `abandoned`. It
+reports but does not otherwise mutate legacy or unknown-version directories. It
+does not auto-resume native stale sessions or infer an unobserved USB disconnect.
+A normal terminal transition flushes all accepted evidence and atomically
+replaces terminal metadata before clearing the active workflow owner.
 
 Startup recovery removes and uses an existing `.terminal-reserve` before the
 atomic abandoned-metadata replacement. Missing/malformed reserve state is a
@@ -846,8 +847,8 @@ session snapshots the accepted budget. Count the current logical byte lengths of
 `uart_raw.log`, `uart_events.jsonl`, `hardware_events.jsonl`, and
 `detected_patterns.json`, including empty JSON/framing and duplicated
 raw/base64 representations. Do not count filesystem blocks, temporary atomic
-write files, `metadata.json`, `.terminal-reserve`, store-level `baseline.json`,
-or future reports.
+write files, internal `.evidence-transaction*` recovery files, `metadata.json`,
+`.terminal-reserve`, store-level `baseline.json`, or future reports.
 
 Serialize counted JSON deterministically as compact UTF-8 in schema key order,
 without ASCII-escaping non-ASCII text, and with exactly one LF after each JSONL
@@ -1036,9 +1037,8 @@ Current implementation notes:
   stored metadata, atomically abandons stale native active sessions with
   `service_restart`, retains recovery diagnostics, and leaves terminal, legacy,
   malformed, and unsupported-schema evidence unmodified as appropriate. Removal
-  of redundant `timestamp_epoch`, full identity validation, cross-file evidence
-  transaction recovery, project baseline pointer, quota admission for future
-  reconnect,
+  of redundant `timestamp_epoch`, full identity validation, project baseline
+  pointer, quota admission for future reconnect,
   control-action, and UART-TX evidence, and retention remain to be implemented.
   Native UART receive, buffer overflow/status, and finalized line-limit session
   events now preflight their exact whole-unit evidence bytes atomically.
@@ -1047,6 +1047,11 @@ Current implementation notes:
   JSON documents with a parent-directory fsync. Failures propagate as the typed
   `persistence_fault` contract and native workflows terminalize them as
   `persistence_error` when terminal metadata can still be written.
+  Existing multi-file UART, buffer-telemetry, and finalized line-limit units use
+  a durable internal transaction marker, saved append offsets, and hard-linked
+  metadata/pattern preimages. Metadata is the final data write. Startup keeps a
+  unit whose expected metadata digest is present and otherwise restores every
+  preimage before stale-session lifecycle recovery.
   Equality is admitted; the first over-budget unit is omitted whole and
   completes the session as `size_limit` with bounded truncation context.
   Rejected overflow/status evidence still applies its bounded loss, overflow,

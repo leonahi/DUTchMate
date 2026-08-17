@@ -63,9 +63,17 @@ class SessionPersistenceError(RuntimeError):
 
     error = "persistence_fault"
 
-    def __init__(self, *, operation: str, path: Path, detail: str) -> None:
+    def __init__(
+        self,
+        *,
+        operation: str,
+        path: Path,
+        detail: str,
+        terminalization_safe: bool = True,
+    ) -> None:
         self.operation = operation
         self.path = path
+        self.terminalization_safe = terminalization_safe
         super().__init__(f"session persistence {operation} failed for {path.name}: {detail}")
 
 

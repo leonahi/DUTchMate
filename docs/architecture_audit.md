@@ -383,9 +383,9 @@ Each numbered item should be independently reviewed, validated, and committed.
    after the CLI assessment.
 10. **Resume feature work.** Persistence durability/fault handling is the first
     functional increment after the structural work. Implemented for retrying,
-    fsynced single-file writes, atomic complete-document replacement, typed fault
-    propagation, and workflow/service mapping; cross-file evidence transaction
-    recovery remains separate follow-up work.
+    fsynced writes, atomic complete-document replacement, typed fault propagation,
+    workflow/service mapping, and crash recovery of current multi-file evidence
+    units without changing public session schemas.
 
 ## Refactoring Guardrails
 

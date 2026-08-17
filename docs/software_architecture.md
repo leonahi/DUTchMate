@@ -198,6 +198,9 @@ Owns filesystem-backed sessions under
   partial appends back to their prior length when a write fails
 - replaces complete JSON documents through a synced temporary file, atomic
   rename, and parent-directory fsync
+- wraps current UART, buffer-telemetry, and finalized line-limit units in a
+  durable internal transaction marker with append offsets and hard-linked
+  metadata/pattern preimages
 - consumes normalized UART and buffer-telemetry events rather than Enhanced
   wire-message models
 - stores buffer overflow/status telemetry and detected patterns
@@ -212,6 +215,9 @@ Owns filesystem-backed sessions under
   a terminal reserve, then transitions them once to completed or failed
 - performs schema-aware startup recovery before backend opening, abandoning
   stale native active sessions while preserving legacy/unsupported evidence
+- resolves interrupted evidence transactions first: metadata-last digest
+  matching commits a complete unit, while any earlier interruption restores all
+  append offsets and complete-document preimages
 - exposes filesystem read/write failures as a typed `persistence_fault`; native
   workflow failures use the terminal reason `persistence_error`
 - summarizes one session, lists valid sessions newest-first, and resolves the
@@ -228,9 +234,9 @@ native session snapshots and enforces the exact resulting byte budget.
 future reconnect/control/TX events, retention, baseline, reconnect, and bounded
 replay remain. Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
-failed terminal metadata replacement as a startup error. A single workflow
-evidence unit can still span several independently durable files; transaction
-markers and recovery for cross-file interruption remain future work.
+failed terminal metadata replacement or unrecoverable transaction preimage as a
+startup error. Transaction bookkeeping is internal and does not change schema-v0
+or schema-v1 evidence formats.
 The remaining rules are centralized in the Phase 1 spec and
 `docs/reconnect_session_semantics.md`; they are not repeated here.
 
@@ -269,9 +275,9 @@ protocol validation. Current behavior includes:
 Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
 Native workflows persist and echo accepted duration/reconnect policy and
-terminal lifecycle state, and startup abandons stale active sessions before
-opening a backend. Wait-pattern, UART-send exposure, reconnect/resume, and
-cross-file evidence transaction recovery remain Phase 1 work.
+terminal lifecycle state, and startup resolves interrupted evidence units and
+abandons stale active sessions before opening a backend. Wait-pattern,
+UART-send exposure, and reconnect/resume remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 

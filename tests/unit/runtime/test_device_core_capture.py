@@ -478,6 +478,42 @@ def test_capture_uart_records_persistence_failure_and_clears_active_session(
     }
 
 
+def test_capture_uart_does_not_terminalize_when_persistence_state_is_unsafe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource(
+        [UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"READY\n")],
+        clock=clock,
+    )
+    store = SessionStore(root=tmp_path)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
+
+    def fail_append(*args: object, **kwargs: object) -> None:
+        raise SessionPersistenceError(
+            operation="recover transaction",
+            path=tmp_path / ".evidence-transaction.json",
+            detail="preimage is unavailable",
+            terminalization_safe=False,
+        )
+
+    monkeypatch.setattr(store, "append_uart_capture", fail_append)
+
+    with pytest.raises(SessionPersistenceError, match="preimage is unavailable"):
+        runtime.capture_uart(duration_s=0.2)
+
+    assert runtime.status().active_session_id is None
+    session_id = next(tmp_path.iterdir()).name
+    assert store.summarize_session(session_id).state == "active"
+
+
 @pytest.mark.parametrize("duration_s", [0, 300.1, True])
 def test_capture_uart_rejects_invalid_duration_before_creating_session(
     tmp_path: Path,

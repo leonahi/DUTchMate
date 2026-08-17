@@ -32,7 +32,8 @@ The repository currently contains the first host-side Phase 1 foundation:
 - independently bounded derived UART lines with exact oversized-line
   descriptors while preserving all admitted raw evidence
 - filesystem sessions with configurable per-session evidence budgets, durable
-  retrying appends, atomic complete-document replacement, summaries, and discovery
+  retrying appends, atomic complete-document replacement, crash-recoverable
+  multi-file evidence units, summaries, and discovery
 - GPIO control-channel configuration state and guarded reset/boot actions
 - shared exact GPIO identifier/electrical validation across config, core,
   service, CLI, and the Enhanced v1 command schema
@@ -48,14 +49,15 @@ The repository currently contains the first host-side Phase 1 foundation:
   `0 < duration_s <= 300` boundary
 - schema-v1 runtime capture/boot-test lifecycle metadata with active ownership,
   terminal completion/failure, bounded errors, and legacy-v0 separation
-- pre-backend startup recovery that abandons stale native active sessions while
-  preserving legacy and unsupported-schema evidence
+- pre-backend startup recovery that resolves interrupted evidence transactions
+  and abandons stale native active sessions while preserving legacy and
+  unsupported-schema evidence
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, multi-file evidence transactions/recovery, admission for future
-reconnect/control/TX evidence, retention, bounded log/session retrieval,
+reconnect, admission for future reconnect/control/TX evidence, retention,
+bounded log/session retrieval,
 wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
 Current UART, buffer telemetry, and finalized line-limit units enforce exact

@@ -9,6 +9,7 @@ from typing import Literal
 import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
+import dutchmate_core.session_store.transactions as _transactions
 from dutchmate_core.backends.contracts import (
     BackendSnapshot,
     BufferOverflowEvent,
@@ -108,6 +109,24 @@ class SessionStore:
             if session_root.is_symlink() or not session_root.is_dir():
                 continue
             paths = _persistence.session_paths(session_root)
+            try:
+                transaction_recovery = _transactions.recover_evidence_transaction(paths)
+            except SessionPersistenceError as exc:
+                raise SessionRecoveryError(
+                    "failed to recover evidence transaction "
+                    f"{session_root.name}: {exc}"
+                ) from exc
+            if transaction_recovery is not None:
+                diagnostics.append(
+                    SessionRecoveryDiagnostic(
+                        session_id=session_root.name,
+                        code=f"evidence_transaction_{transaction_recovery}",
+                        detail=(
+                            "interrupted evidence transaction was "
+                            f"{transaction_recovery}"
+                        ),
+                    )
+                )
             if not paths.metadata.is_file():
                 continue
             session_id = session_root.name
@@ -483,13 +502,6 @@ class SessionStore:
             timestamp_us=event.timestamp_us,
         )
 
-        _persistence.append_bytes(handle.paths.uart_raw, event.data)
-        _persistence.append_serialized(handle.paths.uart_events, uart_event_bytes)
-        if detected_patterns_bytes is not None:
-            _persistence.write_serialized(handle.paths.detected_patterns, detected_patterns_bytes)
-        for record in hardware_event_bytes:
-            _persistence.append_serialized(handle.paths.hardware_events, record)
-
         metadata = _persistence.read_json_object(handle.paths.metadata)
         if result.newly_oversized_line_count:
             _metadata._record_line_processing(
@@ -501,8 +513,28 @@ class SessionStore:
             segment_id=event.segment_id,
             timestamp_us=event.timestamp_us,
         )
-        _persistence.refresh_storage_accounting(metadata, handle.paths)
-        _persistence.write_json(handle.paths.metadata, metadata)
+        append_paths = [handle.paths.uart_raw, handle.paths.uart_events]
+        if hardware_event_bytes:
+            append_paths.append(handle.paths.hardware_events)
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=append_paths,
+            replace_detected_patterns=detected_patterns_bytes is not None,
+        ) as transaction:
+            _persistence.append_bytes(handle.paths.uart_raw, event.data)
+            _persistence.append_serialized(handle.paths.uart_events, uart_event_bytes)
+            if detected_patterns_bytes is not None:
+                _persistence.write_serialized(
+                    handle.paths.detected_patterns,
+                    detected_patterns_bytes,
+                )
+            for record in hardware_event_bytes:
+                _persistence.append_serialized(handle.paths.hardware_events, record)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
     def _preflight_evidence(
         self,
         handle: SessionHandle,
@@ -579,11 +611,16 @@ class SessionStore:
                 channel=result.channel,
                 timestamp_us=oversized_line.timestamp_us,
             )
-            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
-        if result.oversized_lines:
             metadata = _persistence.read_json_object(handle.paths.metadata)
-            _persistence.refresh_storage_accounting(metadata, handle.paths)
-            _persistence.write_json(handle.paths.metadata, metadata)
+            with _transactions.evidence_transaction(
+                handle.paths,
+                append_paths=[handle.paths.hardware_events],
+            ) as transaction:
+                _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+                _persistence.refresh_storage_accounting(metadata, handle.paths)
+                serialized_metadata = _persistence.serialize_json(metadata)
+                transaction.prepare_metadata(serialized_metadata)
+                _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
     def append_buffer_overflow(
         self,
@@ -625,9 +662,16 @@ class SessionStore:
         metadata = _persistence.read_json_object(handle.paths.metadata)
         record_summary(metadata)
 
-        _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
-        _persistence.refresh_storage_accounting(metadata, handle.paths)
-        _persistence.write_json(handle.paths.metadata, metadata)
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
     def append_buffer_status(
         self,
         handle: SessionHandle,
@@ -669,9 +713,15 @@ class SessionStore:
         metadata = _persistence.read_json_object(handle.paths.metadata)
         record_summary(metadata)
 
-        _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
-        _persistence.refresh_storage_accounting(metadata, handle.paths)
-        _persistence.write_json(handle.paths.metadata, metadata)
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
     def record_segment_context(
         self,
