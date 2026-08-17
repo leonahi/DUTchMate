@@ -23,6 +23,7 @@ from dutchmate_core.session_store.models import (
     MatchExcerpt,
     SessionHandle,
     SessionPaths,
+    SessionPersistenceError,
     SessionRecoveryDiagnostic,
     SessionRecoveryError,
     SessionRecoveryResult,
@@ -44,6 +45,7 @@ __all__ = [
     "MatchExcerpt",
     "SessionHandle",
     "SessionPaths",
+    "SessionPersistenceError",
     "SessionRecoveryDiagnostic",
     "SessionRecoveryError",
     "SessionRecoveryResult",
@@ -112,7 +114,12 @@ class SessionStore:
             try:
                 _metadata._validate_session_id(session_id)
                 metadata = _persistence.read_json_object(paths.metadata)
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
+            except (
+                OSError,
+                SessionPersistenceError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
                 diagnostics.append(
                     SessionRecoveryDiagnostic(
                         session_id=session_id,
@@ -216,7 +223,7 @@ class SessionStore:
             handle = SessionHandle(session_id=session_id, paths=paths)
             try:
                 self.abandon_session(handle)
-            except (OSError, ValueError) as exc:
+            except (OSError, SessionPersistenceError, ValueError) as exc:
                 raise SessionRecoveryError(
                     f"failed to recover stale session {session_id}: {exc}"
                 ) from exc
@@ -256,7 +263,7 @@ class SessionStore:
         )
         paths = _persistence.session_paths(self._root / session_id)
 
-        paths.root.mkdir(parents=True, exist_ok=False)
+        _persistence.create_directory(paths.root)
         metadata = _metadata._initial_metadata(
             session_id=session_id,
             started_at=_metadata._format_utc_timestamp(started_at),
@@ -272,10 +279,13 @@ class SessionStore:
         )
 
         if workflow is not None:
-            paths.terminal_reserve.write_bytes(b"\0" * _metadata.METADATA_MAX_BYTES)
-        paths.uart_raw.write_bytes(b"")
-        paths.uart_events.write_text("", encoding="utf-8")
-        paths.hardware_events.write_text("", encoding="utf-8")
+            _persistence.write_serialized(
+                paths.terminal_reserve,
+                b"\0" * _metadata.METADATA_MAX_BYTES,
+            )
+        _persistence.write_serialized(paths.uart_raw, b"")
+        _persistence.write_serialized(paths.uart_events, b"")
+        _persistence.write_serialized(paths.hardware_events, b"")
         _persistence.write_json(paths.detected_patterns, [])
         _persistence.write_json(paths.metadata, metadata)
 
@@ -357,7 +367,7 @@ class SessionStore:
         segments[-1]["ended_at"] = ended_at
         segments[-1]["end_reason"] = end_reason
         _persistence.refresh_storage_accounting(metadata, handle.paths)
-        handle.paths.terminal_reserve.unlink(missing_ok=True)
+        _persistence.remove_file(handle.paths.terminal_reserve, missing_ok=True)
         _persistence.write_json_atomic(handle.paths.metadata, metadata)
 
     def load_metadata(self, session_id: str) -> dict[str, object]:
@@ -365,11 +375,7 @@ class SessionStore:
 
         session_name = _metadata._validate_session_id(session_id)
         metadata_path = _persistence.session_paths(self._root / session_name).metadata
-        with metadata_path.open("r", encoding="utf-8") as file:
-            loaded = json.load(file)
-        if not isinstance(loaded, dict):
-            raise ValueError("session metadata must be a JSON object")
-        return loaded
+        return _persistence.read_json_object(metadata_path)
 
     def summarize_session(self, session_id: str) -> SessionSummary:
         """Load and summarize one session's metadata."""

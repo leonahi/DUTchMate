@@ -19,6 +19,7 @@ from dutchmate_core.log_processing.patterns import PatternMatch
 from dutchmate_core.session_store.models import (
     EvidenceQuotaExceeded,
     SessionHandle,
+    SessionPersistenceError,
     SessionSummary,
     SessionWorkflow,
 )
@@ -394,16 +395,27 @@ class CaptureWorkflow:
             if native_session and not recorder.terminalized:
                 self._session_store.complete_session(recorder.session_handle)
         except Exception as exc:
-            recorder.finalize()
+            failure = exc
+            if not isinstance(failure, SessionPersistenceError):
+                try:
+                    recorder.finalize()
+                except SessionPersistenceError as finalize_error:
+                    failure = finalize_error
             if recorder.terminalized:
                 return self._session_store.summarize_session(recorder.session_id)
             if native_session:
                 self._session_store.fail_session(
                     recorder.session_handle,
-                    end_reason="backend_error",
-                    error_code=self._failure_code(exc),
-                    detail=str(exc),
+                    end_reason=(
+                        "persistence_error"
+                        if isinstance(failure, SessionPersistenceError)
+                        else "backend_error"
+                    ),
+                    error_code=self._failure_code(failure),
+                    detail=str(failure),
                 )
+            if failure is not exc:
+                raise failure from exc
             raise
         return self._session_store.summarize_session(recorder.session_id)
 

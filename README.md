@@ -31,8 +31,8 @@ The repository currently contains the first host-side Phase 1 foundation:
   `BOOT_OK` success marker
 - independently bounded derived UART lines with exact oversized-line
   descriptors while preserving all admitted raw evidence
-- filesystem sessions with configurable per-session evidence budgets,
-  incremental writes, summaries, and discovery
+- filesystem sessions with configurable per-session evidence budgets, durable
+  retrying appends, atomic complete-document replacement, summaries, and discovery
 - GPIO control-channel configuration state and guarded reset/boot actions
 - shared exact GPIO identifier/electrical validation across config, core,
   service, CLI, and the Enhanced v1 command schema
@@ -54,12 +54,12 @@ The repository currently contains the first host-side Phase 1 foundation:
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, admission for future reconnect/control/TX evidence, retention,
-bounded log/session retrieval, wait-pattern, UART-send service/CLI exposure,
-generic Enhanced control actions, RP2040 firmware, MCP runtime, and HIL
-validation are not implemented yet. Current UART, buffer telemetry, and
-finalized line-limit units enforce exact whole-unit evidence budgets and clean
-`size_limit` terminalization.
+reconnect, multi-file evidence transactions/recovery, admission for future
+reconnect/control/TX evidence, retention, bounded log/session retrieval,
+wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
+RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
+Current UART, buffer telemetry, and finalized line-limit units enforce exact
+whole-unit evidence budgets and clean `size_limit` terminalization.
 
 The ordered Phase 1 backlog and acceptance criteria are in
 `docs/phase1_implementation_spec.md`.

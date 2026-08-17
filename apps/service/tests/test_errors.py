@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
+from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
@@ -55,6 +58,22 @@ def test_maps_runtime_error_to_service_unavailable() -> None:
         error="service_unavailable",
         detail="Debug Helper is not connected",
         status_code=503,
+    )
+
+
+def test_maps_session_persistence_error_to_server_fault() -> None:
+    error = service_error_from_exception(
+        SessionPersistenceError(
+            operation="append",
+            path=Path("uart_events.jsonl"),
+            detail="disk full",
+        )
+    )
+
+    assert error == ServiceError(
+        error="persistence_fault",
+        detail="session persistence append failed for uart_events.jsonl: disk full",
+        status_code=500,
     )
 
 

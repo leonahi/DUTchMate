@@ -58,6 +58,17 @@ class SessionRecoveryError(RuntimeError):
     """Raised when stale native session metadata cannot be safely replaced."""
 
 
+class SessionPersistenceError(RuntimeError):
+    """Raised when durable session evidence cannot be read or written."""
+
+    error = "persistence_fault"
+
+    def __init__(self, *, operation: str, path: Path, detail: str) -> None:
+        self.operation = operation
+        self.path = path
+        super().__init__(f"session persistence {operation} failed for {path.name}: {detail}")
+
+
 class EvidenceQuotaExceeded(RuntimeError):
     """Raised after an evidence unit is rejected and its session is terminalized."""
 

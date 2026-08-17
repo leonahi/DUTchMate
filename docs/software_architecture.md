@@ -194,6 +194,10 @@ Owns filesystem-backed sessions under
 - creates `metadata.json`, `uart_raw.log`, `uart_events.jsonl`,
   `hardware_events.jsonl`, and `detected_patterns.json`
 - appends exact UART bytes and structured events incrementally
+- retries short filesystem writes, fsyncs accepted append records, and rolls
+  partial appends back to their prior length when a write fails
+- replaces complete JSON documents through a synced temporary file, atomic
+  rename, and parent-directory fsync
 - consumes normalized UART and buffer-telemetry events rather than Enhanced
   wire-message models
 - stores buffer overflow/status telemetry and detected patterns
@@ -208,6 +212,8 @@ Owns filesystem-backed sessions under
   a terminal reserve, then transitions them once to completed or failed
 - performs schema-aware startup recovery before backend opening, abandoning
   stale native active sessions while preserving legacy/unsupported evidence
+- exposes filesystem read/write failures as a typed `persistence_fault`; native
+  workflow failures use the terminal reason `persistence_error`
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
 - rejects path-unsafe session IDs
@@ -222,7 +228,9 @@ native session snapshots and enforces the exact resulting byte budget.
 future reconnect/control/TX events, retention, baseline, reconnect, and bounded
 replay remain. Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
-failed terminal metadata replacement as a startup error.
+failed terminal metadata replacement as a startup error. A single workflow
+evidence unit can still span several independently durable files; transaction
+markers and recovery for cross-file interruption remain future work.
 The remaining rules are centralized in the Phase 1 spec and
 `docs/reconnect_session_semantics.md`; they are not repeated here.
 
@@ -262,8 +270,8 @@ Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
 Native workflows persist and echo accepted duration/reconnect policy and
 terminal lifecycle state, and startup abandons stale active sessions before
-opening a backend. Wait-pattern, UART-send exposure, reconnect/resume, and full
-durability guarantees remain Phase 1 work.
+opening a backend. Wait-pattern, UART-send exposure, reconnect/resume, and
+cross-file evidence transaction recovery remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 

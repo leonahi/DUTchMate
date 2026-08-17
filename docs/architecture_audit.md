@@ -381,8 +381,11 @@ Each numbered item should be independently reviewed, validated, and committed.
    final module map and remove obsolete migration descriptions.
    Implemented alongside the corresponding boundary changes and finalized
    after the CLI assessment.
-10. **Resume feature work.** Persistence durability/fault handling remains the
-    recommended next functional increment after the structural work is stable.
+10. **Resume feature work.** Persistence durability/fault handling is the first
+    functional increment after the structural work. Implemented for retrying,
+    fsynced single-file writes, atomic complete-document replacement, typed fault
+    propagation, and workflow/service mapping; cross-file evidence transaction
+    recovery remains separate follow-up work.
 
 ## Refactoring Guardrails
 

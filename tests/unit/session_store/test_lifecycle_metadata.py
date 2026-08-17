@@ -4,12 +4,14 @@ from pathlib import Path
 import pytest
 from session_store_support import enhanced_snapshot, fixed_clock, fixed_id
 
+import dutchmate_core.session_store.persistence as persistence
 from dutchmate_core.backends import (
     BufferOverflowEvent,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
 )
+from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
@@ -160,6 +162,38 @@ def test_create_native_session_writes_active_schema_v1_and_terminal_reserve(
     assert summary.schema_version == 1
     assert summary.state == "active"
     assert summary.workflow == "capture"
+
+
+def test_create_native_session_does_not_publish_metadata_when_reserve_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    real_write = persistence.write_serialized
+
+    def fail_reserve(path: Path, data: bytes) -> None:
+        if path.name == ".terminal-reserve":
+            raise SessionPersistenceError(
+                operation="write",
+                path=path,
+                detail="simulated storage failure",
+            )
+        real_write(path, data)
+
+    monkeypatch.setattr(persistence, "write_serialized", fail_reserve)
+
+    with pytest.raises(SessionPersistenceError, match="terminal-reserve"):
+        store.create_session(
+            command="capture --seconds 2.5",
+            backend_snapshot=enhanced_snapshot(),
+            workflow="capture",
+            duration_s=2.5,
+            reconnect_timeout_s=4.0,
+        )
+
+    session_root = tmp_path / "20260714T123045Z-abc12345"
+    assert session_root.is_dir()
+    assert not (session_root / "metadata.json").exists()
 
 
 def test_complete_native_session_is_terminal_and_one_way(tmp_path: Path) -> None:

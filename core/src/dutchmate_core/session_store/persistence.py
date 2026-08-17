@@ -2,11 +2,16 @@
 
 import json
 import os
+from contextlib import suppress
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from dutchmate_core.session_store.models import SessionHandle, SessionPaths
+from dutchmate_core.session_store.models import (
+    SessionHandle,
+    SessionPaths,
+    SessionPersistenceError,
+)
 
 
 def session_paths(root: Path) -> SessionPaths:
@@ -26,12 +31,28 @@ def write_json(path: Path, value: object) -> None:
 
 
 def write_json_atomic(path: Path, value: object) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    write_serialized(path, serialize_json(value))
+
+
+def create_directory(path: Path) -> None:
+    """Create a session directory and durably publish its parent entry."""
+
     try:
-        write_json(temporary, value)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+        path.mkdir(parents=True, exist_ok=False)
+        _fsync_directory(path.parent)
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        raise _error("create directory", path, exc) from exc
+
+
+def remove_file(path: Path, *, missing_ok: bool = False) -> None:
+    """Remove one session file without hiding filesystem failures."""
+
+    try:
+        path.unlink(missing_ok=missing_ok)
+    except OSError as exc:
+        raise _error("remove", path, exc) from exc
 
 
 def refresh_storage_accounting(
@@ -48,28 +69,37 @@ def refresh_storage_accounting(
 
 
 def evidence_file_bytes(paths: SessionPaths) -> int:
-    return sum(
-        path.stat().st_size
-        for path in (
-            paths.uart_raw,
-            paths.uart_events,
-            paths.hardware_events,
-            paths.detected_patterns,
+    try:
+        return sum(
+            path.stat().st_size
+            for path in (
+                paths.uart_raw,
+                paths.uart_events,
+                paths.hardware_events,
+                paths.detected_patterns,
+            )
         )
-    )
+    except OSError as exc:
+        raise _error("account evidence", paths.root, exc) from exc
 
 
 def read_json_object(path: Path) -> dict[str, object]:
-    with path.open("r", encoding="utf-8") as file:
-        loaded = json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            loaded = json.load(file)
+    except OSError as exc:
+        raise _error("read", path, exc) from exc
     if not isinstance(loaded, dict):
         raise ValueError(f"{path.name} must contain a JSON object")
     return cast(dict[str, object], loaded)
 
 
 def read_json_list(path: Path) -> list[object]:
-    with path.open("r", encoding="utf-8") as file:
-        loaded = json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            loaded = json.load(file)
+    except OSError as exc:
+        raise _error("read", path, exc) from exc
     if not isinstance(loaded, list):
         raise ValueError(f"{path.name} must contain a JSON array")
     return cast(list[object], loaded)
@@ -83,8 +113,7 @@ def require_session_appendable(handle: SessionHandle) -> None:
 
 
 def append_bytes(path: Path, data: bytes) -> None:
-    with path.open("ab") as file:
-        file.write(data)
+    append_serialized(path, data)
 
 
 def serialize_json(value: object) -> bytes:
@@ -96,10 +125,78 @@ def serialize_jsonl(value: dict[str, object]) -> bytes:
 
 
 def write_serialized(path: Path, data: bytes) -> None:
-    with path.open("wb") as file:
-        file.write(data)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        _write_all(descriptor, data)
+        _sync_fd(descriptor)
+        synced_descriptor = descriptor
+        descriptor = None
+        os.close(synced_descriptor)
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    except OSError as exc:
+        raise _error("write", path, exc) from exc
+    finally:
+        if descriptor is not None:
+            with suppress(OSError):
+                os.close(descriptor)
+        with suppress(OSError):
+            temporary.unlink(missing_ok=True)
 
 
 def append_serialized(path: Path, data: bytes) -> None:
-    with path.open("ab") as file:
-        file.write(data)
+    descriptor: int | None = None
+    original_size: int | None = None
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o666)
+        original_size = os.fstat(descriptor).st_size
+        _write_all(descriptor, data)
+        _sync_fd(descriptor)
+        synced_descriptor = descriptor
+        descriptor = None
+        os.close(synced_descriptor)
+    except OSError as exc:
+        if descriptor is not None and original_size is not None:
+            try:
+                os.ftruncate(descriptor, original_size)
+                _sync_fd(descriptor)
+            except OSError:
+                pass
+        raise _error("append", path, exc) from exc
+    finally:
+        if descriptor is not None:
+            with suppress(OSError):
+                os.close(descriptor)
+
+
+def _write_all(descriptor: int, data: bytes) -> None:
+    view = memoryview(data)
+    written = 0
+    while written < len(view):
+        count = _write_chunk(descriptor, view[written:])
+        if count <= 0:
+            raise OSError("write returned zero bytes")
+        written += count
+
+
+def _write_chunk(descriptor: int, data: memoryview) -> int:
+    return os.write(descriptor, data)
+
+
+def _sync_fd(descriptor: int) -> None:
+    os.fsync(descriptor)
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        _sync_fd(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _error(operation: str, path: Path, exc: OSError) -> SessionPersistenceError:
+    detail = exc.strerror or str(exc) or type(exc).__name__
+    return SessionPersistenceError(operation=operation, path=path, detail=detail)

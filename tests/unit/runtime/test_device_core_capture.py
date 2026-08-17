@@ -26,7 +26,7 @@ from dutchmate_core.runtime import (
     DeviceCoreRuntime,
     DeviceCoreRuntimeError,
 )
-from dutchmate_core.session_store.store import SessionStore
+from dutchmate_core.session_store.store import SessionPersistenceError, SessionStore
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -429,6 +429,51 @@ def test_capture_uart_clears_active_session_after_transport_failure(tmp_path: Pa
     assert summary.error == {
         "code": "internal_error",
         "detail": "serial failed",
+        "detail_truncated": False,
+    }
+
+
+def test_capture_uart_records_persistence_failure_and_clears_active_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource(
+        [UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"READY\n")],
+        clock=clock,
+    )
+    store = SessionStore(root=tmp_path)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
+
+    def fail_append(*args: object, **kwargs: object) -> None:
+        raise SessionPersistenceError(
+            operation="append",
+            path=tmp_path / "uart_events.jsonl",
+            detail="simulated storage failure",
+        )
+
+    monkeypatch.setattr(store, "append_uart_capture", fail_append)
+
+    with pytest.raises(SessionPersistenceError, match="simulated storage failure"):
+        runtime.capture_uart(duration_s=0.2)
+
+    assert runtime.status().active_session_id is None
+    session_id = next(tmp_path.iterdir()).name
+    summary = store.summarize_session(session_id)
+    assert summary.state == "failed"
+    assert summary.end_reason == "persistence_error"
+    assert summary.error == {
+        "code": "persistence_fault",
+        "detail": (
+            "session persistence append failed for uart_events.jsonl: "
+            "simulated storage failure"
+        ),
         "detail_truncated": False,
     }
 
