@@ -56,7 +56,6 @@ pythonpath = [
   "apps/mcp_server/src",
 ]
 testpaths = [
-  "core/tests",
   "apps/cli/tests",
   "apps/service/tests",
   "apps/mcp_server/tests",

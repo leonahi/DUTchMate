@@ -232,7 +232,7 @@ Owns host control-channel mapping, validation, and accepted/rejected state. It:
 
 - loads `[hardware.control.*]` mappings
 - tracks `CTRL0` through `CTRL3` as `unconfigured`, `configured`, or `rejected`
-- sends configuration through an injected transport
+- sends configuration through an injected semantic device-control port
 - changes accepted state only after firmware acknowledgement
 - preserves a prior accepted state when an override is rejected
 - records role, channel, DUT signal, mode/levels, source, host configuration
@@ -251,9 +251,9 @@ in `docs/gpio_configuration_semantics.md`.
 Owns deterministic orchestration, not serial-port discovery or low-level
 protocol validation. Current behavior includes:
 
-- capture from parsed messages or NDJSON fixtures
-- finite transport-backed capture using a host-monotonic deadline
-- reset and boot-mode actions through an injected transport
+- capture from normalized backend events
+- finite source-backed capture using a host-monotonic deadline
+- reset and boot-mode actions through an injected semantic device-control port
 - reset-triggered boot-test recording
 - active-session publication and conflict cleanup in `DeviceCoreRuntime`
 - required accepted `reset`/`boot` role checks

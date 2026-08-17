@@ -164,14 +164,15 @@ The current host-side `gpio_config` package implements two pieces of this
 boundary:
 
 - config-file validation for `[hardware.control.*]`
-- command/result handling for `configure_gpio_mode`
+- semantic control/result handling for `configure_gpio_mode`
 
 It validates channel, role, mode, level, DUT signal, DUT I/O voltage, and
 duplicate channel assignments before startup integration code tries to apply the
-mapping. It sends the encoded command through an injected transport and updates
-the registry only after a command success or command error response. Service
-startup supplies the pyserial-backed command transport when a device is
-selected. The service-facing runtime rejects GPIO configuration with
+mapping. It calls an injected backend-neutral device-control port and updates
+the registry only after the operation succeeds or returns a device-control
+error. The Enhanced adapter owns command encoding and response translation;
+service startup supplies that adapter when a device is selected. The
+service-facing runtime rejects GPIO configuration with
 `capture_active` while a finite capture, boot-test, or target wait-pattern
 session owns the serial message stream.
 

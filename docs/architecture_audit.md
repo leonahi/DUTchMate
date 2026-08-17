@@ -232,6 +232,9 @@ Keep top-level `tests/` as the core/cross-package test root and remove the empty
 `core/tests` configuration/documentation entry, unless the team deliberately
 chooses to move all core tests instead.
 
+Implemented: the large suites were split by behavior, top-level `tests/` is the
+single core/cross-package test root, and the empty `core/tests` entry is removed.
+
 ### A8 — Medium: current-status documentation has drifted
 
 Evidence:
@@ -245,6 +248,8 @@ Evidence:
 
 Decision: **correct during the corresponding refactors**. Avoid a standalone
 large wording rewrite that can drift again before module changes land.
+
+Implemented across the owning refactors and finalized after the CLI assessment.
 
 ### A9 — Low: CLI registration is concentrated but not fundamentally bloated
 
@@ -262,6 +267,11 @@ Move command registration/handlers into the existing concern modules if CLI
 growth makes `main.py` harder to navigate. A small shared command-error wrapper
 may remove repetition. Do not centralize tiny display helpers unless a real
 formatting contract emerges.
+
+Assessed after the structural refactors and intentionally left in place: the
+file remains mostly declarative registration, and behavior already has cohesive
+owners in client, lifecycle, configuration, device-selection, and formatter
+modules.
 
 ### A10 — Low: Phase 2 MCP is an intentional scaffold, not current complexity
 
@@ -337,15 +347,22 @@ Each numbered item should be independently reviewed, validated, and committed.
    architecture decision.
 2. **Split oversized tests by behavior.** This lowers refactoring risk without
    changing production behavior.
+   Implemented by splitting session-store and runtime coverage into focused
+   behavior modules under the top-level test tree.
 3. **Split `session_store/store.py` behind the unchanged facade.** Move models,
    metadata/schema code, and evidence serialization without changing persisted
    bytes or public responses.
+   Implemented with dedicated models, metadata, evidence, and persistence
+   modules behind `SessionStore`.
 4. **Make capture lifecycle single-owner.** Consolidate runtime/free-function
    behavior, centralize quota-terminal handling, and migrate Basic integration
    coverage to the production path.
+   Implemented with `TransportCaptureRunner` as the capture lifecycle owner.
 5. **Move composition and protocol translation outward.** Inject session
    storage from service startup, normalize hello/connection updates in the
    adapter, and introduce semantic device-control operations.
+   Implemented through service-startup composition, storage/control ports, and
+   Enhanced adapter translation.
 6. **Remove compatibility/test-only surfaces and trim exports.** Do this only
    after callers and intended external API are documented.
    Implemented by moving Enhanced byte-chunk composition into test support,
@@ -357,8 +374,13 @@ Each numbered item should be independently reviewed, validated, and committed.
    Implemented by wiring `max_size_mb` end to end and rejecting `max_count`.
 8. **Reorganize CLI registration only if still useful.** Reuse existing concern
    modules; do not optimize for fewer files.
+   Assessed and intentionally skipped: registration remains declarative, while
+   HTTP, formatting, lifecycle, configuration, and device selection already
+   have cohesive owners.
 9. **Update architecture/developer/current-status documentation.** Reflect the
    final module map and remove obsolete migration descriptions.
+   Implemented alongside the corresponding boundary changes and finalized
+   after the CLI assessment.
 10. **Resume feature work.** Persistence durability/fault handling remains the
     recommended next functional increment after the structural work is stable.
 
