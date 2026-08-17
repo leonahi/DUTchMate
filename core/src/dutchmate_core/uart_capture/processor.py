@@ -99,10 +99,24 @@ class UartCaptureProcessor:
         """Finalize trailing derived state for every segment/channel."""
 
         results: list[UartCaptureResult] = []
-        for segment_id, channel in tuple(self._line_buffers):
+        for segment_id in dict.fromkeys(key[0] for key in self._line_buffers):
+            results.extend(self.flush_segment(segment_id))
+        return tuple(results)
+
+    def flush_segment(self, segment_id: int) -> tuple[UartCaptureResult, ...]:
+        """Finalize and discard trailing derived state for one connection segment."""
+
+        results: list[UartCaptureResult] = []
+        channels = tuple(
+            channel
+            for buffered_segment_id, channel in self._line_buffers
+            if buffered_segment_id == segment_id
+        )
+        for channel in channels:
             result = self.flush_channel(channel, segment_id=segment_id)
             if result is not None:
                 results.append(result)
+            self._line_buffers.pop((segment_id, channel), None)
         return tuple(results)
 
     def _line_buffer_for_channel(self, segment_id: int, channel: int) -> UartLineBuffer:

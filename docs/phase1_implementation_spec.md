@@ -99,8 +99,13 @@ then connected to each real backend in milestone order.
    `failed`, while recognized unversioned sessions remain v0. Startup now
    abandons stale native active sessions before backend opening and reports
    reserve/schema diagnostics without mutating legacy or unsupported schemas.
-   Quota enforcement, schema-v1 retrieval, wait-pattern, public UART send,
-   reconnect, and retention remain.**
+   Whole-unit quota enforcement now covers UART, telemetry, derived line-limit,
+   and disconnect/reconnect evidence. Capture/boot-test coordination preserves
+   one monotonic deadline across replacement sources, finalizes old-segment line
+   state, enforces the 32-segment boundary, and distinguishes disconnect,
+   reconnect timeout, and fatal backend input. Backend-specific reopen/service
+   composition, schema-v1 retrieval, wait-pattern, public UART send, and
+   retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -1037,9 +1042,9 @@ Current implementation notes:
   stored metadata, atomically abandons stale native active sessions with
   `service_restart`, retains recovery diagnostics, and leaves terminal, legacy,
   malformed, and unsupported-schema evidence unmodified as appropriate. Removal
-  of redundant `timestamp_epoch`, full identity validation, project baseline
-  pointer, quota admission for future reconnect,
-  control-action, and UART-TX evidence, and retention remain to be implemented.
+  of redundant `timestamp_epoch`, the project baseline pointer, quota admission
+  for future control-action and UART-TX evidence, and retention remain to be
+  implemented.
   Native UART receive, buffer overflow/status, and finalized line-limit session
   events now preflight their exact whole-unit evidence bytes atomically.
   Filesystem persistence retries short writes, fsyncs append records, rolls a
@@ -1058,8 +1063,11 @@ Current implementation notes:
   and segment-timestamp summary facts in terminal metadata.
 - Disconnect/resume persistence now closes the current segment, admits explicit
   lifecycle/discontinuity events, validates exact backend identity and contiguous
-  IDs, and caps sessions at 32 segments. The background reopen/deadline
-  coordinator is not implemented yet.
+  IDs, and caps sessions at 32 segments. The capture workflow now coordinates
+  monotonic deadline precedence, per-segment derived-state finalization,
+  replacement-source publication, reconnect timeout, and the segment limit
+  through an injected backend reopen operation. Basic/Enhanced reopening and
+  service/runtime connection-state composition are not implemented yet.
 - Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
   and over-300-second durations consistently across core, service, and CLI.
   Native sessions persist and echo the accepted duration and reconnect policy.

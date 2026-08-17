@@ -131,11 +131,13 @@ CLI commands:
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
 contracts and shared event processing now exist; Enhanced wire messages are
-translated only by the Enhanced backend adapter. Major remaining Phase 1 areas
-are the full asynchronous Enhanced adapter, background ingestion/reconnect coordination,
-retention, bounded log and session retrieval, wait-pattern, UART-send public
-workflows, generic Enhanced control actions, RP2040 firmware, and real HIL
-tests.
+translated only by the Enhanced backend adapter. The core capture workflow now
+coordinates disconnect/resume deadlines and segment-bound source replacement;
+service composition still needs backend-specific reopen/handshake operations.
+Major remaining Phase 1 areas are the full asynchronous Enhanced adapter,
+background ingestion and reconnect composition, retention, bounded log and
+session retrieval, wait-pattern, UART-send public workflows, generic Enhanced
+control actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint
 

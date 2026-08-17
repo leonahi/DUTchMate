@@ -51,15 +51,18 @@ The repository currently contains the first host-side Phase 1 foundation:
   terminal completion/failure, bounded errors, and legacy-v0 separation
 - durable disconnect/reconnect session mutations with contiguous bounded
   segments, explicit discontinuity evidence, and whole-unit quota admission
+- deterministic capture/boot-test reconnect coordination that preserves the
+  original monotonic deadline, replaces segment-bound sources, and never joins
+  derived UART lines across a disconnect
 - pre-backend startup recovery that resolves interrupted evidence transactions
   and abandons stale native active sessions while preserving legacy and
   unsupported-schema evidence
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
-The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect coordination/port reopening, admission for future control/TX evidence, retention,
-bounded log/session retrieval,
+The full asynchronous Enhanced adapter, continuous background ingestion,
+backend-specific port reopening/handshake composition, admission for future
+control/TX evidence, retention, bounded log/session retrieval,
 wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
 Current UART, buffer telemetry, and finalized line-limit units enforce exact

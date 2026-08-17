@@ -195,6 +195,9 @@ class BackendDisconnectedError(RuntimeError):
 class BackendInputError(RuntimeError):
     """Raised when a backend emits malformed or otherwise invalid input."""
 
+    error = "backend_input_error"
+    end_reason = "backend_input_error"
+
 
 class BackendCapabilityError(RuntimeError):
     """Raised when an operation is disabled or unsupported by the backend."""

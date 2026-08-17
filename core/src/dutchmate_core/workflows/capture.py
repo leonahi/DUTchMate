@@ -7,6 +7,7 @@ from functools import partial
 from typing import Protocol
 
 from dutchmate_core.backends.contracts import (
+    BackendDisconnectedError,
     BackendEvent,
     BackendSnapshot,
     BufferOverflowEvent,
@@ -33,6 +34,36 @@ class CaptureEventSource(Protocol):
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReconnectedCaptureSource:
+    """A validated replacement source and its immutable backend snapshot."""
+
+    source: CaptureEventSource
+    backend_snapshot: BackendSnapshot
+
+
+class CaptureReconnect(Protocol):
+    """Backend-specific reopen operation used by a capture workflow."""
+
+    def __call__(
+        self,
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource | None:
+        """Return a ready replacement before ``deadline``, or ``None``."""
+
+
+class CaptureReconnectError(RuntimeError):
+    """Raised when an interrupted capture cannot resume within policy."""
+
+    error = "service_unavailable"
+
+    def __init__(self, *, end_reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.end_reason = end_reason
 
 
 class CaptureSessionStorage(Protocol):
@@ -131,28 +162,26 @@ class CaptureSessionStorage(Protocol):
 
 
 class TransportCaptureRunner:
-    """Record parsed transport messages for one finite capture duration."""
+    """Record parsed transport messages until one fixed workflow deadline."""
 
     def __init__(
         self,
         *,
         transport: CaptureEventSource,
-        duration_s: float,
+        deadline: float,
         monotonic_clock: Callable[[], float] | None = None,
     ) -> None:
-        validated_duration_s = validate_capture_duration(duration_s)
         self._transport = transport
-        self._duration_s = validated_duration_s
+        self._deadline = deadline
         self._clock = monotonic_clock or time.monotonic
 
     def run(self, recorder: "CaptureRecorder") -> None:
         """Record supported messages until the host-monotonic deadline."""
 
-        deadline = self._clock() + self._duration_s
-        while self._clock() < deadline:
+        while self._clock() < self._deadline:
             event = self._transport.read_event()
 
-            if self._clock() >= deadline:
+            if self._clock() >= self._deadline:
                 break
             if event is not None:
                 segment = getattr(self._transport, "segment", None)
@@ -183,7 +212,6 @@ class CaptureRecorder:
         session_handle: SessionHandle,
         uart_processor: UartCaptureProcessor | None = None,
         segment_context: SegmentContext | None = None,
-        timestamp_epoch: int = 0,
     ) -> None:
         self._session_store = session_store
         self._session_handle = session_handle
@@ -191,7 +219,6 @@ class CaptureRecorder:
         self._segment_contexts = (
             {segment_context.segment_id: segment_context} if segment_context is not None else {}
         )
-        self._timestamp_epoch = timestamp_epoch
         self._terminalized = False
         self._finalized = False
 
@@ -261,7 +288,7 @@ class CaptureRecorder:
                     self._session_handle,
                     event=event,
                     result=result,
-                    timestamp_epoch=self._timestamp_epoch,
+                    timestamp_epoch=event.segment_id,
                 )
             ):
                 return CaptureRecordResult(
@@ -281,7 +308,7 @@ class CaptureRecorder:
                 lambda: self._session_store.append_buffer_overflow(
                     self._session_handle,
                     event=event,
-                    timestamp_epoch=self._timestamp_epoch,
+                    timestamp_epoch=event.segment_id,
                 )
             ):
                 return CaptureRecordResult(
@@ -298,7 +325,7 @@ class CaptureRecorder:
                 lambda: self._session_store.append_buffer_status(
                     self._session_handle,
                     event=event,
-                    timestamp_epoch=self._timestamp_epoch,
+                    timestamp_epoch=event.segment_id,
                 )
             ):
                 return CaptureRecordResult(
@@ -324,7 +351,7 @@ class CaptureRecorder:
         self._segment_contexts[context.segment_id] = context
 
     def finalize(self) -> None:
-        """Finalize bounded derived state at the end of this capture segment."""
+        """Finalize bounded derived state at the end of this capture."""
 
         if self._finalized or self._terminalized:
             return
@@ -335,11 +362,65 @@ class CaptureRecorder:
                     self._session_store.append_uart_processing_result,
                     self._session_handle,
                     result=result,
-                    timestamp_epoch=self._timestamp_epoch,
+                    timestamp_epoch=result.segment_id,
                 )
             ):
                 break
         self._finalized = True
+
+    def finalize_segment(self, segment_id: int) -> None:
+        """Finalize derived state without joining lines across a disconnect."""
+
+        if self._terminalized or self._finalized:
+            return
+        for result in self._uart_processor.flush_segment(segment_id):
+            if not self._record_with_quota(
+                partial(
+                    self._session_store.append_uart_processing_result,
+                    self._session_handle,
+                    result=result,
+                    timestamp_epoch=result.segment_id,
+                )
+            ):
+                break
+
+    def record_backend_disconnect(self, segment_id: int) -> int | None:
+        """Persist one disconnect, returning the segment count when admitted."""
+
+        segment_count: int | None = None
+
+        def record() -> None:
+            nonlocal segment_count
+            segment_count = self._session_store.record_backend_disconnect(
+                self._session_handle,
+                segment_id=segment_id,
+            )
+
+        if not self._record_with_quota(record):
+            return None
+        return segment_count
+
+    def resume_session(self, backend_snapshot: BackendSnapshot) -> int | None:
+        """Persist and activate one replacement segment when quota admits it."""
+
+        context = backend_snapshot.segment
+        if context is None:
+            raise ValueError("reconnected backend snapshot requires segment provenance")
+        segment_id: int | None = None
+
+        def resume() -> None:
+            nonlocal segment_id
+            segment_id = self._session_store.resume_session(
+                self._session_handle,
+                backend_snapshot=backend_snapshot,
+            )
+
+        if not self._record_with_quota(resume):
+            return None
+        if context.segment_id != segment_id:
+            raise ValueError("reconnected backend segment ID does not match persisted segment")
+        self._segment_contexts[segment_id] = context
+        return segment_id
 
     def _record_with_quota(self, operation: Callable[[], None]) -> bool:
         try:
@@ -372,14 +453,12 @@ class CaptureWorkflow:
         workflow: SessionWorkflow = "capture",
         start_action: Callable[[], object] | None = None,
         on_session_started: Callable[[str], None] | None = None,
+        reconnect: CaptureReconnect | None = None,
     ) -> SessionSummary:
         """Create, record, terminalize, and summarize one capture session."""
 
-        runner = TransportCaptureRunner(
-            transport=source,
-            duration_s=duration_s,
-            monotonic_clock=monotonic_clock,
-        )
+        validated_duration_s = validate_capture_duration(duration_s)
+        clock = monotonic_clock or time.monotonic
         source_snapshot = getattr(source, "snapshot", None)
         snapshot = (
             backend_snapshot
@@ -398,7 +477,7 @@ class CaptureWorkflow:
             uart_processor=uart_processor,
             backend_snapshot=snapshot,
             workflow=workflow if native_session else None,
-            duration_s=duration_s if native_session else None,
+            duration_s=validated_duration_s if native_session else None,
             reconnect_timeout_s=reconnect_timeout_s if native_session else None,
         )
         try:
@@ -406,7 +485,60 @@ class CaptureWorkflow:
                 on_session_started(recorder.session_id)
             if start_action is not None:
                 start_action()
-            runner.run(recorder)
+            workflow_deadline = clock() + validated_duration_s
+            current_source = source
+            current_segment_id = self._segment_id(current_source, snapshot)
+            while True:
+                runner = TransportCaptureRunner(
+                    transport=current_source,
+                    deadline=workflow_deadline,
+                    monotonic_clock=clock,
+                )
+                try:
+                    runner.run(recorder)
+                    break
+                except BackendDisconnectedError as disconnect_error:
+                    if not native_session or reconnect is None:
+                        raise
+                    if clock() >= workflow_deadline:
+                        break
+                    reconnect_started_at = clock()
+                    reconnect_deadline = reconnect_started_at + reconnect_timeout_s
+                    recorder.finalize_segment(current_segment_id)
+                    if recorder.terminalized:
+                        break
+                    segment_count = recorder.record_backend_disconnect(current_segment_id)
+                    if segment_count is None:
+                        break
+                    now = clock()
+                    if workflow_deadline <= reconnect_deadline and now >= workflow_deadline:
+                        break
+                    if segment_count >= 32:
+                        raise CaptureReconnectError(
+                            end_reason="reconnect_limit",
+                            detail="Session reached the 32-segment reconnect limit",
+                        ) from disconnect_error
+                    if now >= reconnect_deadline:
+                        raise self._reconnect_timeout_error() from disconnect_error
+                    replacement = reconnect(
+                        segment_id=segment_count,
+                        deadline=min(workflow_deadline, reconnect_deadline),
+                    )
+                    now = clock()
+                    if workflow_deadline <= reconnect_deadline and now >= workflow_deadline:
+                        break
+                    if replacement is None or now >= reconnect_deadline:
+                        raise self._reconnect_timeout_error() from disconnect_error
+                    replacement_segment = getattr(replacement.source, "segment", None)
+                    if replacement_segment != replacement.backend_snapshot.segment:
+                        raise ValueError(
+                            "reconnected source segment must match its backend snapshot"
+                        ) from disconnect_error
+                    resumed_segment_id = recorder.resume_session(replacement.backend_snapshot)
+                    if resumed_segment_id is None:
+                        break
+                    current_segment_id = resumed_segment_id
+                    current_source = replacement.source
             recorder.finalize()
             if native_session and not recorder.terminalized:
                 self._session_store.complete_session(recorder.session_handle)
@@ -419,17 +551,20 @@ class CaptureWorkflow:
                     failure = finalize_error
             if recorder.terminalized:
                 return self._session_store.summarize_session(recorder.session_id)
-            terminalization_safe = not isinstance(
-                failure,
-                SessionPersistenceError,
-            ) or failure.terminalization_safe
+            terminalization_safe = (
+                not isinstance(
+                    failure,
+                    SessionPersistenceError,
+                )
+                or failure.terminalization_safe
+            )
             if native_session and terminalization_safe:
                 self._session_store.fail_session(
                     recorder.session_handle,
                     end_reason=(
                         "persistence_error"
                         if isinstance(failure, SessionPersistenceError)
-                        else "backend_error"
+                        else getattr(failure, "end_reason", "backend_error")
                     ),
                     error_code=self._failure_code(failure),
                     detail=str(failure),
@@ -443,3 +578,20 @@ class CaptureWorkflow:
     def _failure_code(exc: Exception) -> str:
         code = getattr(exc, "error", None)
         return code if isinstance(code, str) and code else "internal_error"
+
+    @staticmethod
+    def _segment_id(
+        source: CaptureEventSource,
+        snapshot: BackendSnapshot | None,
+    ) -> int:
+        if snapshot is not None and snapshot.segment is not None:
+            return snapshot.segment.segment_id
+        source_segment = getattr(source, "segment", None)
+        return source_segment.segment_id if isinstance(source_segment, SegmentContext) else 0
+
+    @staticmethod
+    def _reconnect_timeout_error() -> CaptureReconnectError:
+        return CaptureReconnectError(
+            end_reason="reconnect_timeout",
+            detail="Backend did not reconnect before the reconnect deadline",
+        )

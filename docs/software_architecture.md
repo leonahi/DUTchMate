@@ -270,6 +270,10 @@ protocol validation. Current behavior includes:
 
 - capture from normalized backend events
 - finite source-backed capture using a host-monotonic deadline
+- disconnect recovery through an injected backend reopen operation, with one
+  immutable deadline across all replacement sources
+- per-segment UART finalization before reconnect so partial and oversized lines
+  never cross a connection boundary
 - reset and boot-mode actions through an injected semantic device-control port
 - reset-triggered boot-test recording
 - active-session publication and conflict cleanup in `DeviceCoreRuntime`
@@ -280,8 +284,11 @@ Capture and boot-test validation consistently enforces the Phase 1
 Native workflows persist and echo accepted duration/reconnect policy and
 terminal lifecycle state, and startup resolves interrupted evidence units and
 abandons stale active sessions before opening a backend. The session store owns
-durable disconnect/resume mutations; the background reopen/deadline coordinator
-is not implemented. Wait-pattern and UART-send exposure remain Phase 1 work.
+durable disconnect/resume mutations. The capture workflow owns deadline
+precedence, the 32-segment stop, source replacement, and canonical reconnect
+failures through a small injected reopen port; runtime/service startup does not
+yet provide the Basic/Enhanced reopen implementation. Wait-pattern and
+UART-send exposure remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 
@@ -325,7 +332,8 @@ same finite capture path. Enhanced validates `hello` when a port is selected
 and may start disconnected without one. Status and finite capture responses
 serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, and UART-loss integrity. Continuous background ingestion,
-reconnect, bounded log/session retrieval, wait-pattern, public UART send,
+backend-specific reconnect composition, bounded log/session retrieval,
+wait-pattern, public UART send,
 baseline operations, and the complete target error projection remain Phase 1
 work.
 
