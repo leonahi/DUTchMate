@@ -49,6 +49,8 @@ The repository currently contains the first host-side Phase 1 foundation:
   `0 < duration_s <= 300` boundary
 - schema-v1 runtime capture/boot-test lifecycle metadata with active ownership,
   terminal completion/failure, bounded errors, and legacy-v0 separation
+- durable disconnect/reconnect session mutations with contiguous bounded
+  segments, explicit discontinuity evidence, and whole-unit quota admission
 - pre-backend startup recovery that resolves interrupted evidence transactions
   and abandons stale native active sessions while preserving legacy and
   unsupported-schema evidence
@@ -56,7 +58,7 @@ The repository currently contains the first host-side Phase 1 foundation:
   status, capture, boot-test, GPIO mode, reset, and boot mode
 
 The full asynchronous Enhanced adapter, continuous background ingestion and
-reconnect, admission for future reconnect/control/TX evidence, retention,
+reconnect coordination/port reopening, admission for future control/TX evidence, retention,
 bounded log/session retrieval,
 wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.

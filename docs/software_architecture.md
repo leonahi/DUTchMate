@@ -213,6 +213,9 @@ Owns filesystem-backed sessions under
   terminalize native sessions as successful `size_limit` truncations
 - creates native runtime sessions with versioned workflow/lifecycle fields and
   a terminal reserve, then transitions them once to completed or failed
+- atomically closes disconnected segments and appends validated contiguous
+  reconnect segments with `usb_disconnect`, `usb_reconnect`, and
+  `timestamp_discontinuity` evidence
 - performs schema-aware startup recovery before backend opening, abandoning
   stale native active sessions while preserving legacy/unsupported evidence
 - resolves interrupted evidence transactions first: metadata-last digest
@@ -231,8 +234,8 @@ fixtures retain their recognized unversioned legacy shape. The CLI propagates
 the positive `sessions.max_size_mb` setting through service startup, and each
 native session snapshots and enforces the exact resulting byte budget.
 `sessions.max_count` is rejected until retention exists. Quota admission for
-future reconnect/control/TX events, retention, baseline, reconnect, and bounded
-replay remain. Startup recovery
+future control/TX events, retention, baseline, reconnect coordination, and
+bounded replay remain. Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
@@ -276,8 +279,9 @@ Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
 Native workflows persist and echo accepted duration/reconnect policy and
 terminal lifecycle state, and startup resolves interrupted evidence units and
-abandons stale active sessions before opening a backend. Wait-pattern,
-UART-send exposure, and reconnect/resume remain Phase 1 work.
+abandons stale active sessions before opening a backend. The session store owns
+durable disconnect/resume mutations; the background reopen/deadline coordinator
+is not implemented. Wait-pattern and UART-send exposure remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 

@@ -176,6 +176,36 @@ def buffer_status_event_json(
     }
 
 
+def usb_disconnect_event_json(*, host_timestamp: str, segment_id: int) -> dict[str, object]:
+    return {
+        "type": "usb_disconnect",
+        "host_timestamp": host_timestamp,
+        "segment_id": segment_id,
+    }
+
+
+def usb_reconnect_event_json(*, host_timestamp: str, segment_id: int) -> dict[str, object]:
+    return {
+        "type": "usb_reconnect",
+        "host_timestamp": host_timestamp,
+        "segment_id": segment_id,
+    }
+
+
+def timestamp_discontinuity_event_json(
+    *,
+    host_timestamp: str,
+    from_segment_id: int,
+    to_segment_id: int,
+) -> dict[str, object]:
+    return {
+        "type": "timestamp_discontinuity",
+        "host_timestamp": host_timestamp,
+        "from_segment_id": from_segment_id,
+        "to_segment_id": to_segment_id,
+    }
+
+
 def line_limit_exceeded_event_json(
     result: UartCaptureResult,
     line: OversizedUartLine,

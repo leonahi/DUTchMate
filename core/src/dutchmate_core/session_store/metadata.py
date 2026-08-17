@@ -25,6 +25,7 @@ from dutchmate_core.session_store.models import (
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 
 METADATA_MAX_BYTES = 262144
+MAX_SESSION_SEGMENTS = 32
 
 
 def _validate_session_id(session_id: str) -> str:
@@ -295,6 +296,86 @@ def _backend_segment_json(
         "first_timestamp_us": None,
         "last_timestamp_us": None,
     }
+
+
+def _record_backend_disconnect(
+    metadata: dict[str, object],
+    *,
+    segment_id: int,
+    ended_at: str,
+) -> int:
+    if metadata.get("schema_version") != 1 or metadata.get("state") != "active":
+        raise ValueError("backend disconnect requires an active native session")
+    if isinstance(segment_id, bool) or not isinstance(segment_id, int) or segment_id < 0:
+        raise ValueError("backend disconnect segment ID must be a non-negative integer")
+    segments = _contiguous_native_segments(metadata)
+    current = segments[-1]
+    if not isinstance(current, dict) or current.get("segment_id") != segment_id:
+        raise ValueError("backend disconnect must close the current segment")
+    if current.get("ended_at") is not None or current.get("end_reason") is not None:
+        raise ValueError("current session segment is already closed")
+    current["ended_at"] = ended_at
+    current["end_reason"] = "usb_disconnect"
+    metadata["interrupted"] = True
+    return len(segments)
+
+
+def _append_resumed_backend_segment(
+    metadata: dict[str, object],
+    *,
+    snapshot: BackendSnapshot,
+    started_at: str,
+) -> int:
+    if metadata.get("schema_version") != 1 or metadata.get("state") != "active":
+        raise ValueError("session resume requires an active native session")
+    if snapshot.segment is None:
+        raise ValueError("session resume requires timestamp provenance")
+    segments = _contiguous_native_segments(metadata)
+    if len(segments) >= MAX_SESSION_SEGMENTS:
+        raise ValueError("session already contains the maximum 32 segments")
+    previous = segments[-1]
+    previous_id = len(segments) - 1
+    if (
+        not isinstance(previous, dict)
+        or previous.get("segment_id") != previous_id
+        or previous.get("end_reason") != "usb_disconnect"
+        or previous.get("ended_at") is None
+    ):
+        raise ValueError("session resume requires a closed disconnected segment")
+    resumed_segment_id = snapshot.segment.segment_id
+    if (
+        isinstance(resumed_segment_id, bool)
+        or not isinstance(resumed_segment_id, int)
+        or resumed_segment_id != len(segments)
+    ):
+        raise ValueError("resumed segment ID must be the next contiguous ID")
+    if snapshot.info.mode != metadata.get("backend_mode"):
+        raise ValueError("resumed backend mode must match the session")
+    identity = _optional_object(metadata.get("backend_identity"), "backend_identity")
+    if identity is None or snapshot.info.port != identity.get("port"):
+        raise ValueError("resumed backend port must match the session")
+    if snapshot.info.mode == "enhanced" and (
+        snapshot.info.device != identity.get("device")
+        or snapshot.info.firmware != identity.get("firmware")
+    ):
+        raise ValueError("resumed Enhanced identity must match the session")
+    if snapshot.info.mode == "basic" and (
+        snapshot.info.device is not None or snapshot.info.firmware is not None
+    ):
+        raise ValueError("resumed Basic identity must omit device and firmware")
+    segments.append(_backend_segment_json(snapshot, started_at=started_at))
+    metadata["resumed"] = True
+    return resumed_segment_id
+
+
+def _contiguous_native_segments(metadata: dict[str, object]) -> list[dict[str, object]]:
+    segments = metadata.get("segments")
+    if not isinstance(segments, list) or not 1 <= len(segments) <= MAX_SESSION_SEGMENTS:
+        raise ValueError("native session must contain 1..32 segments")
+    for expected_id, segment in enumerate(segments):
+        if not isinstance(segment, dict) or segment.get("segment_id") != expected_id:
+            raise ValueError("native session segment IDs must be contiguous from zero")
+    return cast(list[dict[str, object]], segments)
 
 
 def _capability_policy_json(policy: BackendCapabilityPolicy) -> dict[str, object]:

@@ -53,7 +53,7 @@ Current core modules:
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
 | `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
-| `session_store` | Filesystem sessions, crash-recoverable multi-file evidence units, bounded pattern/line-limit evidence, deterministic first-error summaries, and discovery. |
+| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded disconnect/reconnect segments, pattern/line-limit evidence, deterministic first-error summaries, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture and guarded reset/boot actions. |
 | `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
@@ -132,7 +132,7 @@ The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
 contracts and shared event processing now exist; Enhanced wire messages are
 translated only by the Enhanced backend adapter. Major remaining Phase 1 areas
-are the full asynchronous Enhanced adapter, background ingestion/reconnect,
+are the full asynchronous Enhanced adapter, background ingestion/reconnect coordination,
 retention, bounded log and session retrieval, wait-pattern, UART-send public
 workflows, generic Enhanced control actions, RP2040 firmware, and real HIL
 tests.

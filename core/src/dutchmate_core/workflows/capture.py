@@ -92,6 +92,22 @@ class CaptureSessionStorage(Protocol):
     def record_segment_context(self, handle: SessionHandle, context: SegmentContext) -> None:
         """Persist immutable timestamp provenance for a capture segment."""
 
+    def record_backend_disconnect(
+        self,
+        handle: SessionHandle,
+        *,
+        segment_id: int,
+    ) -> int:
+        """Close the current segment and return the persisted segment count."""
+
+    def resume_session(
+        self,
+        handle: SessionHandle,
+        *,
+        backend_snapshot: BackendSnapshot,
+    ) -> int:
+        """Append a validated reconnect segment and return its segment ID."""
+
     def complete_session(
         self,
         handle: SessionHandle,

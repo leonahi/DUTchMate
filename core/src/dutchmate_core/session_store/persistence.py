@@ -30,10 +30,6 @@ def write_json(path: Path, value: object) -> None:
     write_serialized(path, serialize_json(value))
 
 
-def write_json_atomic(path: Path, value: object) -> None:
-    write_serialized(path, serialize_json(value))
-
-
 def create_directory(path: Path) -> None:
     """Create a session directory and durably publish its parent entry."""
 

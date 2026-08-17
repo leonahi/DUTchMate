@@ -306,7 +306,9 @@ class SessionStore:
         _persistence.write_serialized(paths.uart_events, b"")
         _persistence.write_serialized(paths.hardware_events, b"")
         _persistence.write_json(paths.detected_patterns, [])
-        _persistence.write_json(paths.metadata, metadata)
+        serialized_metadata = _persistence.serialize_json(metadata)
+        _require_metadata_capacity(serialized_metadata)
+        _persistence.write_serialized(paths.metadata, serialized_metadata)
 
         return SessionHandle(session_id=session_id, paths=paths)
 
@@ -383,11 +385,18 @@ class SessionStore:
         segments = metadata.get("segments")
         if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
             raise ValueError("native session must contain a current segment")
-        segments[-1]["ended_at"] = ended_at
-        segments[-1]["end_reason"] = end_reason
+        if segments[-1].get("ended_at") is None:
+            if segments[-1].get("end_reason") is not None:
+                raise ValueError("open session segment cannot have an end reason")
+            segments[-1]["ended_at"] = ended_at
+            segments[-1]["end_reason"] = end_reason
+        elif segments[-1].get("end_reason") is None:
+            raise ValueError("closed session segment must have an end reason")
         _persistence.refresh_storage_accounting(metadata, handle.paths)
+        serialized_metadata = _persistence.serialize_json(metadata)
+        _require_metadata_capacity(serialized_metadata)
         _persistence.remove_file(handle.paths.terminal_reserve, missing_ok=True)
-        _persistence.write_json_atomic(handle.paths.metadata, metadata)
+        _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
@@ -532,6 +541,7 @@ class SessionStore:
                 _persistence.append_serialized(handle.paths.hardware_events, record)
             _persistence.refresh_storage_accounting(metadata, handle.paths)
             serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
             transaction.prepare_metadata(serialized_metadata)
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
@@ -619,6 +629,7 @@ class SessionStore:
                 _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
                 _persistence.refresh_storage_accounting(metadata, handle.paths)
                 serialized_metadata = _persistence.serialize_json(metadata)
+                _require_metadata_capacity(serialized_metadata)
                 transaction.prepare_metadata(serialized_metadata)
                 _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
@@ -669,6 +680,7 @@ class SessionStore:
             _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
             _persistence.refresh_storage_accounting(metadata, handle.paths)
             serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
             transaction.prepare_metadata(serialized_metadata)
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
@@ -720,8 +732,114 @@ class SessionStore:
             _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
             _persistence.refresh_storage_accounting(metadata, handle.paths)
             serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
             transaction.prepare_metadata(serialized_metadata)
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
+    def record_backend_disconnect(
+        self,
+        handle: SessionHandle,
+        *,
+        segment_id: int,
+    ) -> int:
+        """Close the current segment and durably admit one disconnect unit."""
+
+        _persistence.require_session_appendable(handle)
+        host_timestamp = _metadata._format_utc_timestamp(self._clock())
+        event_bytes = _persistence.serialize_jsonl(
+            _evidence.usb_disconnect_event_json(
+                host_timestamp=host_timestamp,
+                segment_id=segment_id,
+            )
+        )
+
+        def record_summary(metadata: dict[str, object]) -> None:
+            _metadata._record_backend_disconnect(
+                metadata,
+                segment_id=segment_id,
+                ended_at=host_timestamp,
+            )
+
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        record_summary(metadata)
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes),
+            rejected_unit_type="hardware_event",
+            rejected_uart_payload_bytes=None,
+            segment_id=segment_id,
+            channel=None,
+            timestamp_us=None,
+            rejected_metadata_mutator=record_summary,
+        )
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        segments = metadata["segments"]
+        if not isinstance(segments, list):
+            raise AssertionError("validated session segments changed type")
+        return len(segments)
+
+    def resume_session(
+        self,
+        handle: SessionHandle,
+        *,
+        backend_snapshot: BackendSnapshot,
+    ) -> int:
+        """Append one validated reconnect segment and its discontinuity evidence."""
+
+        _persistence.require_session_appendable(handle)
+        host_timestamp = _metadata._format_utc_timestamp(self._clock())
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        segment_id = _metadata._append_resumed_backend_segment(
+            metadata,
+            snapshot=backend_snapshot,
+            started_at=host_timestamp,
+        )
+        reconnect_bytes = _persistence.serialize_jsonl(
+            _evidence.usb_reconnect_event_json(
+                host_timestamp=host_timestamp,
+                segment_id=segment_id,
+            )
+        )
+        discontinuity_bytes = _persistence.serialize_jsonl(
+            _evidence.timestamp_discontinuity_event_json(
+                host_timestamp=host_timestamp,
+                from_segment_id=segment_id - 1,
+                to_segment_id=segment_id,
+            )
+        )
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(reconnect_bytes) + len(discontinuity_bytes),
+            rejected_unit_type="hardware_event",
+            rejected_uart_payload_bytes=None,
+            segment_id=segment_id,
+            channel=None,
+            timestamp_us=None,
+        )
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, reconnect_bytes)
+            _persistence.append_serialized(
+                handle.paths.hardware_events,
+                discontinuity_bytes,
+            )
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        return segment_id
 
     def record_segment_context(
         self,
@@ -739,7 +857,9 @@ class SessionStore:
             raise ValueError("session segment timestamp provenance cannot change")
         if existing is None:
             segment["timestamp"] = timestamp
-            _persistence.write_json(handle.paths.metadata, metadata)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
     def _record_segment_timestamp(
         self,
@@ -755,4 +875,11 @@ class SessionStore:
             timestamp_us=timestamp_us,
         )
         _persistence.refresh_storage_accounting(metadata, handle.paths)
-        _persistence.write_json(handle.paths.metadata, metadata)
+        serialized_metadata = _persistence.serialize_json(metadata)
+        _require_metadata_capacity(serialized_metadata)
+        _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
+
+def _require_metadata_capacity(serialized_metadata: bytes) -> None:
+    if len(serialized_metadata) > _metadata.METADATA_MAX_BYTES:
+        raise ValueError("session metadata exceeds its fixed size limit")

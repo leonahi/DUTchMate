@@ -1056,7 +1056,10 @@ Current implementation notes:
   completes the session as `size_limit` with bounded truncation context.
   Rejected overflow/status evidence still applies its bounded loss, overflow,
   and segment-timestamp summary facts in terminal metadata.
-- Reconnect/resume mutation helpers are not implemented yet.
+- Disconnect/resume persistence now closes the current segment, admits explicit
+  lifecycle/discontinuity events, validates exact backend identity and contiguous
+  IDs, and caps sessions at 32 segments. The background reopen/deadline
+  coordinator is not implemented yet.
 - Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
   and over-300-second durations consistently across core, service, and CLI.
   Native sessions persist and echo the accepted duration and reconnect policy.

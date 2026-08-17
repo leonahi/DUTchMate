@@ -2,6 +2,7 @@
 
 > Status: accepted Phase 1 target contract
 > Scope: Device Core lifecycle and timestamp behavior when either Phase 1 backend disconnects or reconnects during a capture-like workflow.
+> Implementation: durable disconnect/resume session mutations are present; background connection monitoring, reopen/handshake coordination, and deadline handling remain.
 
 ## Goal
 
