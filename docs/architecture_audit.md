@@ -202,6 +202,9 @@ one contract change. Keep `max_count` explicitly planned without accepting it as
 effective configuration, or implement retention before advertising it as
 active behavior.
 
+Implemented: `max_size_mb` now reaches `SessionStore` as an exact byte budget,
+and CLI configuration rejects `max_count` until retention is implemented.
+
 ### A7 — Medium: the largest tests mirror production monoliths
 
 Evidence:
@@ -351,6 +354,7 @@ Each numbered item should be independently reviewed, validated, and committed.
    an empty set.
 7. **Resolve inert session configuration.** Wire effective limits or remove
    them from the accepted current configuration surface.
+   Implemented by wiring `max_size_mb` end to end and rejecting `max_count`.
 8. **Reorganize CLI registration only if still useful.** Reuse existing concern
    modules; do not optimize for fewer files.
 9. **Update architecture/developer/current-status documentation.** Reflect the

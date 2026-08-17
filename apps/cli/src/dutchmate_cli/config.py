@@ -13,13 +13,15 @@ from dutchmate_core.backends.settings import (
     BackendConfigError,
     parse_backend_config,
 )
+from dutchmate_core.validation import (
+    DEFAULT_SESSION_MAX_SIZE_MB,
+    validate_session_max_size_mb,
+)
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
 DEFAULT_DAEMON_HOST: Final = "127.0.0.1"
 DEFAULT_DAEMON_PORT: Final = 2040
 DEFAULT_SESSION_PATH: Final = Path(".dutchmate/sessions")
-DEFAULT_SESSION_MAX_COUNT: Final = 100
-DEFAULT_SESSION_MAX_SIZE_MB: Final = 50
 
 
 class CliConfigError(RuntimeError):
@@ -39,7 +41,6 @@ class SessionsConfig:
     """Debug session storage configuration."""
 
     path: Path = DEFAULT_SESSION_PATH
-    max_count: int = DEFAULT_SESSION_MAX_COUNT
     max_size_mb: int = DEFAULT_SESSION_MAX_SIZE_MB
 
 
@@ -89,20 +90,15 @@ def _parse_daemon_config(raw_daemon: Mapping[str, object]) -> DaemonConfig:
 
 
 def _parse_sessions_config(raw_sessions: Mapping[str, object]) -> SessionsConfig:
+    if "max_count" in raw_sessions:
+        raise CliConfigError("[sessions].max_count is not supported yet")
     path = Path(_optional_str(raw_sessions, "path", str(DEFAULT_SESSION_PATH), "[sessions].path"))
-    max_count = _optional_positive_int(
-        raw_sessions,
-        "max_count",
-        DEFAULT_SESSION_MAX_COUNT,
-        "[sessions].max_count",
-    )
-    max_size_mb = _optional_positive_int(
-        raw_sessions,
-        "max_size_mb",
-        DEFAULT_SESSION_MAX_SIZE_MB,
-        "[sessions].max_size_mb",
-    )
-    return SessionsConfig(path=path, max_count=max_count, max_size_mb=max_size_mb)
+    raw_max_size_mb = raw_sessions.get("max_size_mb", DEFAULT_SESSION_MAX_SIZE_MB)
+    try:
+        max_size_mb = validate_session_max_size_mb(raw_max_size_mb)
+    except ValueError as exc:
+        raise CliConfigError("[sessions].max_size_mb must be a positive integer") from exc
+    return SessionsConfig(path=path, max_size_mb=max_size_mb)
 
 
 def _optional_table(raw_config: Mapping[str, object], key: str) -> Mapping[str, object]:

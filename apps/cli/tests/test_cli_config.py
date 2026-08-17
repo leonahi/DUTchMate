@@ -28,7 +28,6 @@ def test_parse_daemon_and_sessions_config() -> None:
             "daemon": {"host": "localhost", "port": 2041},
             "sessions": {
                 "path": ".dutchmate/custom-sessions",
-                "max_count": 25,
                 "max_size_mb": 10,
             },
         }
@@ -38,7 +37,6 @@ def test_parse_daemon_and_sessions_config() -> None:
         daemon=DaemonConfig(host="localhost", port=2041),
         sessions=SessionsConfig(
             path=Path(".dutchmate/custom-sessions"),
-            max_count=25,
             max_size_mb=10,
         ),
     )
@@ -103,6 +101,14 @@ def test_rejects_invalid_daemon_port() -> None:
         parse_cli_config({"daemon": {"port": 70000}})
 
 
-def test_rejects_boolean_session_limit() -> None:
-    with pytest.raises(CliConfigError, match=r"\[sessions\]\.max_count must be an integer"):
-        parse_cli_config({"sessions": {"max_count": True}})
+def test_rejects_unsupported_session_max_count() -> None:
+    with pytest.raises(CliConfigError, match=r"\[sessions\]\.max_count is not supported yet"):
+        parse_cli_config({"sessions": {"max_count": 25}})
+
+
+def test_rejects_boolean_session_max_size() -> None:
+    with pytest.raises(
+        CliConfigError,
+        match=r"\[sessions\]\.max_size_mb must be a positive integer",
+    ):
+        parse_cli_config({"sessions": {"max_size_mb": True}})

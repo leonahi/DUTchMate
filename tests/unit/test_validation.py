@@ -2,10 +2,12 @@ import pytest
 
 from dutchmate_core.validation import (
     GpioIdentifierValidationError,
+    session_evidence_budget_bytes,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_identifier,
     validate_gpio_mode_configuration,
+    validate_session_max_size_mb,
 )
 
 
@@ -21,6 +23,18 @@ def test_capture_duration_accepts_phase_one_range(duration_s: int | float) -> No
 def test_capture_duration_rejects_values_outside_exact_contract(duration_s: object) -> None:
     with pytest.raises(ValueError, match="positive finite.*300"):
         validate_capture_duration(duration_s)
+
+
+@pytest.mark.parametrize("max_size_mb", [1, 10, 50])
+def test_session_max_size_accepts_positive_mib_values(max_size_mb: int) -> None:
+    assert validate_session_max_size_mb(max_size_mb) == max_size_mb
+    assert session_evidence_budget_bytes(max_size_mb) == max_size_mb * 1024 * 1024
+
+
+@pytest.mark.parametrize("max_size_mb", [0, -1, True, 1.5, "10"])
+def test_session_max_size_rejects_non_positive_integers(max_size_mb: object) -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        validate_session_max_size_mb(max_size_mb)
 
 
 @pytest.mark.parametrize(

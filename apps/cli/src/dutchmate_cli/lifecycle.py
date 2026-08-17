@@ -20,6 +20,7 @@ from dutchmate_cli.config import (
     DEFAULT_SESSION_PATH,
 )
 from dutchmate_core.backends.settings import BackendSettings
+from dutchmate_core.validation import DEFAULT_SESSION_MAX_SIZE_MB
 
 DEFAULT_HOST: Final = DEFAULT_DAEMON_HOST
 DEFAULT_PORT: Final = DEFAULT_DAEMON_PORT
@@ -66,6 +67,7 @@ def start_service(
     port: int = DEFAULT_PORT,
     config_path: Path = DEFAULT_CONFIG_PATH,
     session_root: Path = DEFAULT_SESSION_ROOT,
+    session_max_size_mb: int = DEFAULT_SESSION_MAX_SIZE_MB,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
     command: Sequence[str] | None = None,
@@ -95,6 +97,8 @@ def start_service(
             str(port),
             "--session-root",
             str(session_root),
+            "--session-max-size-mb",
+            str(session_max_size_mb),
             "--config",
             str(config_path),
             "--backend",

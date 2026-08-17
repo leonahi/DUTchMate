@@ -109,6 +109,7 @@ def start(
             host=resolved_host,
             port=resolved_port,
             session_root=config.sessions.path,
+            session_max_size_mb=config.sessions.max_size_mb,
             backend_settings=backend_settings,
         )
     except LifecycleError as exc:

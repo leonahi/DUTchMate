@@ -28,7 +28,10 @@ from dutchmate_core.gpio_config.config import (
 )
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioRoleName
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus
-from dutchmate_core.session_store.store import SessionStore
+from dutchmate_core.session_store.store import (
+    DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    SessionStore,
+)
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
 
@@ -74,11 +77,15 @@ def apply_startup_hardware_config(
 def build_startup_runtime(
     *,
     session_root: Path | str,
+    session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     backend_settings: BackendSettings | None = None,
 ) -> DeviceCoreRuntime:
     """Build the service runtime for one explicitly selected backend."""
 
-    session_store = SessionStore(root=session_root)
+    session_store = SessionStore(
+        root=session_root,
+        evidence_budget_bytes=session_evidence_budget_bytes,
+    )
     session_store.recover_stale_sessions()
 
     if backend_settings is None:

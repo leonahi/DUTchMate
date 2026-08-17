@@ -13,7 +13,10 @@ from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import (
     DeviceCoreStatus,
 )
-from dutchmate_core.session_store.store import SessionSummary
+from dutchmate_core.session_store.store import (
+    DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    SessionSummary,
+)
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
@@ -71,6 +74,7 @@ def create_app(
     runtime: RuntimeProvider | None = None,
     *,
     session_root: Path | str = Path(".dutchmate/sessions"),
+    session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     hardware_config: HardwareGpioConfig | None = None,
     backend_settings: BackendSettings | None = None,
 ) -> FastAPI:
@@ -80,6 +84,7 @@ def create_app(
     register_error_handlers(app)
     runtime_provider = runtime or build_startup_runtime(
         session_root=session_root,
+        session_evidence_budget_bytes=session_evidence_budget_bytes,
         backend_settings=backend_settings,
     )
     if hardware_config is not None:

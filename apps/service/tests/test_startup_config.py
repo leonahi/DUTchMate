@@ -19,6 +19,7 @@ from dutchmate_core.device_connection.serial_transport import SerialCommandTrans
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
+from dutchmate_service import startup
 from dutchmate_service.app import create_app
 from dutchmate_service.startup import (
     apply_startup_hardware_config,
@@ -144,6 +145,30 @@ def test_build_startup_runtime_without_serial_port_is_disconnected(tmp_path: Pat
     assert status.connected is False
     assert status.port is None
     assert runtime.session_store.root == tmp_path
+
+
+def test_build_startup_runtime_passes_session_evidence_budget_to_store(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    observed: list[tuple[Path | str, int]] = []
+
+    def tracking_session_store(
+        *,
+        root: Path | str,
+        evidence_budget_bytes: int,
+    ) -> SessionStore:
+        observed.append((root, evidence_budget_bytes))
+        return SessionStore(root=root, evidence_budget_bytes=evidence_budget_bytes)
+
+    monkeypatch.setattr(startup, "SessionStore", tracking_session_store)
+
+    startup.build_startup_runtime(
+        session_root=tmp_path,
+        session_evidence_budget_bytes=10 * 1024 * 1024,
+    )
+
+    assert observed == [(tmp_path, 10 * 1024 * 1024)]
 
 
 def test_build_startup_runtime_preserves_disconnected_enhanced_selection(

@@ -31,8 +31,13 @@ from dutchmate_core.session_store.models import (
     SessionWorkflow,
 )
 from dutchmate_core.uart_capture.processor import UartCaptureResult
+from dutchmate_core.validation import (
+    DEFAULT_SESSION_MAX_SIZE_MB,
+    session_evidence_budget_bytes,
+)
 
 __all__ = [
+    "DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES",
     "EvidenceQuotaExceeded",
     "FirstError",
     "LineProcessing",
@@ -48,7 +53,9 @@ __all__ = [
     "SessionWorkflow",
 ]
 
-_DEFAULT_EVIDENCE_BUDGET_BYTES = 50 * 1024 * 1024
+DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES = session_evidence_budget_bytes(
+    DEFAULT_SESSION_MAX_SIZE_MB
+)
 
 
 class SessionStore:
@@ -60,7 +67,7 @@ class SessionStore:
         *,
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
-        evidence_budget_bytes: int = _DEFAULT_EVIDENCE_BUDGET_BYTES,
+        evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     ) -> None:
         self._root = Path(root)
         self._clock = clock or _metadata._utc_now

@@ -28,6 +28,8 @@ WELL_KNOWN_GPIO_ROLES: Final = frozenset({"reset", "boot", "power_enable", "wake
 MAX_GPIO_IDENTIFIER_BYTES: Final = 64
 MAX_SERIAL_PORT_BYTES: Final = 4096
 MAX_CAPTURE_DURATION_S: Final = 300.0
+_MIB_BYTES: Final = 1024 * 1024
+DEFAULT_SESSION_MAX_SIZE_MB: Final = 50
 VALID_BOOT_MODES: Final = frozenset({"normal", "bootloader"})
 
 IdentifierValidationReason: TypeAlias = Literal[
@@ -96,6 +98,24 @@ def validate_capture_duration(duration_s: object) -> float:
             f"{MAX_CAPTURE_DURATION_S:g} seconds"
         )
     return float(duration_s)
+
+
+def validate_session_max_size_mb(max_size_mb: object) -> int:
+    """Return a positive per-session evidence budget in MiB units."""
+
+    if (
+        isinstance(max_size_mb, bool)
+        or not isinstance(max_size_mb, int)
+        or max_size_mb <= 0
+    ):
+        raise ValueError("session max_size_mb must be a positive integer")
+    return max_size_mb
+
+
+def session_evidence_budget_bytes(max_size_mb: object) -> int:
+    """Convert a validated per-session MiB setting to exact evidence bytes."""
+
+    return validate_session_max_size_mb(max_size_mb) * _MIB_BYTES
 
 
 def validate_reset_pulse(pulse_ms: object) -> int:

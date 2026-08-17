@@ -215,7 +215,10 @@ Owns filesystem-backed sessions under
 Runtime capture/boot-test sessions with complete backend identity now use schema
 version 1 and snapshot backend facts, accepted timing policy, integrity, line
 processing, storage accounting, and one-way lifecycle state. Older direct-store
-fixtures retain their recognized unversioned legacy shape. Quota admission for
+fixtures retain their recognized unversioned legacy shape. The CLI propagates
+the positive `sessions.max_size_mb` setting through service startup, and each
+native session snapshots and enforces the exact resulting byte budget.
+`sessions.max_count` is rejected until retention exists. Quota admission for
 future reconnect/control/TX events, retention, baseline, reconnect, and bounded
 replay remain. Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a

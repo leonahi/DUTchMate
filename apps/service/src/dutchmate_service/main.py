@@ -14,6 +14,10 @@ from dutchmate_core.backends.settings import (
     load_backend_config,
     resolve_backend_settings,
 )
+from dutchmate_core.validation import (
+    DEFAULT_SESSION_MAX_SIZE_MB,
+    session_evidence_budget_bytes,
+)
 from dutchmate_service.app import create_app
 from dutchmate_service.startup import DEFAULT_CONFIG_PATH, load_startup_hardware_config
 
@@ -25,6 +29,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2040)
     parser.add_argument("--session-root", type=Path, default=Path(".dutchmate/sessions"))
+    parser.add_argument(
+        "--session-max-size-mb",
+        type=int,
+        default=DEFAULT_SESSION_MAX_SIZE_MB,
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--backend", choices=("basic", "enhanced"))
     parser.add_argument("--serial-port")
@@ -39,6 +48,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--reconnect-timeout-s", type=float)
     args = parser.parse_args(argv)
+    try:
+        session_budget_bytes = session_evidence_budget_bytes(args.session_max_size_mb)
+    except ValueError as exc:
+        parser.error(str(exc))
     hardware_config = load_startup_hardware_config(args.config)
     try:
         try:
@@ -62,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     uvicorn.run(
         create_app(
             session_root=args.session_root,
+            session_evidence_budget_bytes=session_budget_bytes,
             hardware_config=hardware_config,
             backend_settings=backend_settings,
         ),

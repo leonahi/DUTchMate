@@ -1769,7 +1769,8 @@ Shared/backend-independent coverage:
   HTTP context. Quota and persistence failures retain their higher-priority
   outcomes.
 - Default `max_size_mb: 50` yields 52428800 bytes; positive-integer config
-  validation rejects booleans, and each session snapshots its accepted budget.
+  validation rejects booleans, CLI startup propagates the exact MiB setting to
+  the service, and each session snapshots its accepted budget.
 - Evidence accounting equals the current logical lengths of the four Phase 1
   evidence files, counts JSON/base64/framing and initial array bytes, and excludes
   metadata, reserve, temporary files, baseline pointer, and future reports.
