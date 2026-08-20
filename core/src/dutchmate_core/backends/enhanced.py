@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Protocol, cast
 
 from dutchmate_core.backends.contracts import (
     BackendCapability,
+    BackendDisconnectedError,
     BackendEvent,
     BackendInfo,
     BackendInputError,
@@ -112,6 +114,7 @@ class EnhancedCaptureEventSource:
             if source_origin_us is not None
             else None
         )
+        self._pending_events: deque[BackendEvent] = deque()
 
     @property
     def segment(self) -> SegmentContext | None:
@@ -122,12 +125,38 @@ class EnhancedCaptureEventSource:
     def read_event(self) -> BackendEvent | None:
         """Read and normalize one wire message, returning ``None`` for inactivity."""
 
+        if self._pending_events:
+            return self._pending_events.popleft()
+        return self._read_event()
+
+    def prime_segment(self) -> SegmentContext | None:
+        """Establish timestamp provenance while retaining the first evidence event."""
+
+        if self._segment is not None:
+            return self._segment
+        event = self._read_event()
+        if event is not None:
+            self._pending_events.append(event)
+        return self._segment
+
+    def close(self) -> None:
+        """Close the owned message source when it exposes a close operation."""
+
+        close = getattr(self._source, "close", None)
+        if callable(close):
+            close()
+
+    def _read_event(self) -> BackendEvent | None:
+        """Read and normalize one event without consulting the retained queue."""
+
         try:
             message = self._source.read_message()
         except TransportTimeoutError:
             return None
         except ProtocolError as exc:
             raise BackendInputError(str(exc)) from exc
+        except Exception as exc:
+            raise BackendDisconnectedError("Enhanced serial read failed") from exc
 
         if self._source_origin_us is None:
             timestamp_us = _message_timestamp_us(message)

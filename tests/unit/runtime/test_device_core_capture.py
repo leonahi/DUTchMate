@@ -13,8 +13,15 @@ from runtime_test_support import (
 )
 
 from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendDisconnectedError,
+    BackendSnapshot,
     BufferStatusEvent,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
     UartReceiveEvent,
+    UartSendCapabilityPolicy,
 )
 from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource, EnhancedDeviceControl
 from dutchmate_core.device_connection.messages import (
@@ -25,8 +32,10 @@ from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import (
     DeviceCoreRuntime,
     DeviceCoreRuntimeError,
+    DeviceCoreStatus,
 )
 from dutchmate_core.session_store.store import SessionPersistenceError, SessionStore
+from dutchmate_core.workflows.capture import ReconnectedCaptureSource
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -107,6 +116,95 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         )
     )
     assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes  # type: ignore[index]
+
+
+def test_runtime_publishes_reconnect_state_and_replacement_source(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    initial_source = FakeCaptureSource(
+        [BackendDisconnectedError("serial disconnected")],
+        clock=clock,
+    )
+    replacement_snapshot = _replacement_snapshot(1)
+    replacement_source = FakeCaptureSource(
+        [UartReceiveEvent(segment_id=1, channel=0, timestamp_us=0, data=b"READY\n")],
+        clock=clock,
+    )
+    assert replacement_snapshot.segment is not None
+    replacement_source.segment = replacement_snapshot.segment
+    observed_reconnect_status: list[DeviceCoreStatus] = []
+    runtime: DeviceCoreRuntime
+
+    def reconnect(
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource:
+        assert segment_id == 1
+        observed_reconnect_status.append(runtime.status())
+        assert deadline == pytest.approx(0.6)
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=replacement_snapshot,
+        )
+
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=initial_source,
+        capture_clock=clock,
+        session_store=SessionStore(root=tmp_path),
+        backend_reconnect=reconnect,
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
+
+    summary = runtime.capture_uart(duration_s=0.6)
+
+    assert summary.state == "completed"
+    assert summary.interrupted is True
+    assert summary.resumed is True
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+    reconnect_status = observed_reconnect_status[0]
+    assert reconnect_status.connected is False
+    assert reconnect_status.connection_state == "reconnecting"
+    assert reconnect_status.active_workflow == "capture"
+    assert reconnect_status.reconnect_remaining_s == pytest.approx(0.5)
+    status = runtime.status()
+    assert status.connected is True
+    assert status.connection_state == "connected"
+    assert status.active_workflow is None
+    assert status.reconnect_remaining_s is None
+    assert status.timestamp_provenance == replacement_snapshot.segment
+
+
+def test_new_capture_remaps_live_connection_to_session_segment_zero(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    live_snapshot = _replacement_snapshot(3)
+    assert live_snapshot.segment is not None
+    source = FakeCaptureSource(
+        [UartReceiveEvent(segment_id=3, channel=0, timestamp_us=50, data=b"NEXT\n")],
+        clock=clock,
+    )
+    source.segment = live_snapshot.segment
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(live_snapshot.info)
+
+    summary = runtime.capture_uart(duration_s=0.3)
+
+    assert summary.segment_count == 1
+    assert summary.segment_contexts[0].segment_id == 0
+    uart_events = [
+        json.loads(line)
+        for line in (tmp_path / summary.session_id / "uart_events.jsonl").read_text().splitlines()
+    ]
+    assert uart_events[0]["segment_id"] == 0
+    assert uart_events[0]["timestamp_epoch"] == 0
+    status = runtime.status()
+    assert status.timestamp_provenance is not None
+    assert status.timestamp_provenance.segment_id == 3
 
 
 def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
@@ -471,8 +569,7 @@ def test_capture_uart_records_persistence_failure_and_clears_active_session(
     assert summary.error == {
         "code": "persistence_fault",
         "detail": (
-            "session persistence append failed for uart_events.jsonl: "
-            "simulated storage failure"
+            "session persistence append failed for uart_events.jsonl: simulated storage failure"
         ),
         "detail_truncated": False,
     }
@@ -680,3 +777,29 @@ def test_run_boot_test_rejects_invalid_duration_before_creating_session(
 
 def _fixed_session_time() -> datetime:
     return datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)
+
+
+def _replacement_snapshot(segment_id: int) -> BackendSnapshot:
+    policy = BackendCapabilityPolicy(uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False))
+    return BackendSnapshot(
+        info=enhanced_info(port="/dev/ttyACM0"),
+        capabilities=frozenset({"gpio_control", "uart_receive"}),
+        capability_policy=policy,
+        segment=SegmentContext(
+            segment_id=segment_id,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=10_000,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
+    )

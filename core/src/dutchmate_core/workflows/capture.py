@@ -454,6 +454,7 @@ class CaptureWorkflow:
         start_action: Callable[[], object] | None = None,
         on_session_started: Callable[[str], None] | None = None,
         reconnect: CaptureReconnect | None = None,
+        on_backend_disconnected: Callable[[], None] | None = None,
     ) -> SessionSummary:
         """Create, record, terminalize, and summarize one capture session."""
 
@@ -498,10 +499,12 @@ class CaptureWorkflow:
                     runner.run(recorder)
                     break
                 except BackendDisconnectedError as disconnect_error:
-                    if not native_session or reconnect is None:
-                        raise
+                    if on_backend_disconnected is not None:
+                        on_backend_disconnected()
                     if clock() >= workflow_deadline:
                         break
+                    if not native_session or reconnect is None:
+                        raise
                     reconnect_started_at = clock()
                     reconnect_deadline = reconnect_started_at + reconnect_timeout_s
                     recorder.finalize_segment(current_segment_id)

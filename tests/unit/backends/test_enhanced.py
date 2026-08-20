@@ -3,6 +3,7 @@
 import pytest
 
 from dutchmate_core.backends import (
+    BackendDisconnectedError,
     BackendInputError,
     BufferOverflowEvent,
     BufferStatusEvent,
@@ -122,6 +123,17 @@ def test_sync_adapter_maps_protocol_failure_to_backend_input_error() -> None:
         source.read_event()
 
 
+def test_sync_adapter_maps_transport_failure_to_backend_disconnect() -> None:
+    source = EnhancedCaptureEventSource(
+        FakeEnhancedMessageSource([OSError("device removed")]),
+        segment_id=0,
+        source_origin_us=0,
+    )
+
+    with pytest.raises(BackendDisconnectedError, match="Enhanced serial read failed"):
+        source.read_event()
+
+
 def test_sync_adapter_establishes_unknown_origin_from_first_evidence_event() -> None:
     source = EnhancedCaptureEventSource(
         FakeEnhancedMessageSource(
@@ -143,6 +155,27 @@ def test_sync_adapter_establishes_unknown_origin_from_first_evidence_event() -> 
     assert source.segment.timestamp.source_origin_us == 8_500
 
 
+def test_sync_adapter_primes_origin_without_losing_first_event() -> None:
+    source = EnhancedCaptureEventSource(
+        FakeEnhancedMessageSource(
+            [UartMessage(channel=0, timestamp_us=8_500, data=b"ready\n", text="ready\n")]
+        ),
+        segment_id=2,
+        source_origin_us=None,
+    )
+
+    segment = source.prime_segment()
+
+    assert segment is not None
+    assert segment.segment_id == 2
+    assert source.read_event() == UartReceiveEvent(
+        segment_id=2,
+        timestamp_us=0,
+        channel=0,
+        data=b"ready\n",
+    )
+
+
 def test_rejects_event_timestamp_before_segment_origin() -> None:
     with pytest.raises(BackendInputError, match="precedes"):
         normalize_enhanced_message(
@@ -161,9 +194,7 @@ def test_ndjson_stream_emits_only_normalized_evidence_events() -> None:
         b'{"type":"uart","channel":0,"timestamp_us":125,"data_b64":"WAo="}\n'
     )
 
-    assert events == [
-        UartReceiveEvent(segment_id=4, timestamp_us=25, channel=0, data=b"X\n")
-    ]
+    assert events == [UartReceiveEvent(segment_id=4, timestamp_us=25, channel=0, data=b"X\n")]
 
 
 def test_ndjson_stream_maps_invalid_input_to_backend_input_error() -> None:

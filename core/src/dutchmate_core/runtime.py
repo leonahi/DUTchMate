@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import partial
 from threading import RLock
+from typing import Literal
 
 from dutchmate_core.backends.contracts import (
     BackendCapability,
     BackendCapabilityPolicy,
+    BackendEvent,
     BackendInfo,
+    BackendInputError,
     BackendMode,
     BackendSnapshot,
     DeviceControl,
@@ -37,8 +42,10 @@ from dutchmate_core.validation import (
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
+    CaptureReconnect,
     CaptureSessionStorage,
     CaptureWorkflow,
+    ReconnectedCaptureSource,
 )
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
@@ -49,6 +56,9 @@ from dutchmate_core.workflows.device_actions import (
 
 class DeviceCoreRuntimeError(RuntimeError):
     """Raised when the runtime cannot perform the requested operation."""
+
+
+ConnectionState = Literal["connected", "disconnected", "reconnecting"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +77,26 @@ class DeviceCoreStatus:
     capability_policy: BackendCapabilityPolicy | None = None
     timestamp_provenance: SegmentContext | None = None
     integrity: UartIntegrity | None = None
+    connection_state: ConnectionState = "disconnected"
+    active_workflow: SessionWorkflow | None = None
+    reconnect_remaining_s: float | None = None
+
+
+class _SessionCaptureSource:
+    """Map one live connection source onto a new session-local segment zero."""
+
+    def __init__(self, source: CaptureEventSource, segment: SegmentContext) -> None:
+        self._source = source
+        self._source_segment_id = segment.segment_id
+        self.segment = replace(segment, segment_id=0)
+
+    def read_event(self) -> BackendEvent | None:
+        event = self._source.read_event()
+        if event is None:
+            return None
+        if event.segment_id != self._source_segment_id:
+            raise BackendInputError("backend event source changed its bound segment ID")
+        return replace(event, segment_id=0)
 
 
 class DeviceCoreRuntime:
@@ -85,9 +115,12 @@ class DeviceCoreRuntime:
         tx_policy_enabled: bool = False,
         segment_context: SegmentContext | None = None,
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
+        backend_reconnect: CaptureReconnect | None = None,
     ) -> None:
         self._message_source = message_source
         self._capture_clock = capture_clock
+        self._status_clock = capture_clock or time.monotonic
+        self._backend_reconnect = backend_reconnect
         self._session_store = session_store
         self._capture_workflow = CaptureWorkflow(session_store=self._session_store)
         self._gpio_registry = gpio_registry or GpioModeRegistry()
@@ -119,8 +152,10 @@ class DeviceCoreRuntime:
             else None
         )
         self._active_session_id: str | None = None
+        self._active_workflow: SessionWorkflow | None = None
         self._capture_in_progress = False
         self._reconnect_timeout_s = reconnect_timeout_s
+        self._reconnect_deadline: float | None = None
         self._operation_lock = RLock()
 
     @property
@@ -165,8 +200,20 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             source_segment = getattr(self._message_source, "segment", None)
-            if isinstance(source_segment, SegmentContext):
+            if self._connected and isinstance(source_segment, SegmentContext):
                 self._segment_context = source_segment
+            reconnect_remaining_s = (
+                max(0.0, self._reconnect_deadline - self._status_clock())
+                if self._reconnect_deadline is not None
+                else None
+            )
+            connection_state: ConnectionState = (
+                "reconnecting"
+                if self._reconnect_deadline is not None
+                else "connected"
+                if self._connected
+                else "disconnected"
+            )
             return DeviceCoreStatus(
                 connected=self._connected,
                 port=self._port,
@@ -191,6 +238,9 @@ class DeviceCoreRuntime:
                 ),
                 timestamp_provenance=(self._segment_context),
                 integrity=self._integrity,
+                connection_state=connection_state,
+                active_workflow=self._active_workflow,
+                reconnect_remaining_s=reconnect_remaining_s,
             )
 
     def apply_hardware_config(
@@ -304,11 +354,26 @@ class DeviceCoreRuntime:
                 raise DeviceCoreRuntimeError("Capture message source is not configured")
             if required_role is not None:
                 self._gpio_registry.require_role_configured(required_role)
-            source = self._message_source
-            backend_snapshot = self._backend_snapshot()
+            source = self._session_capture_source(self._message_source)
+            source_segment = getattr(source, "segment", None)
+            backend_snapshot = self._backend_snapshot(
+                segment_context=(
+                    source_segment if isinstance(source_segment, SegmentContext) else None
+                )
+            )
             firmware = self._backend_info.firmware if self._backend_info is not None else None
             device = self._backend_info.device if self._backend_info is not None else None
             self._capture_in_progress = True
+            self._active_workflow = workflow
+
+        reconnect = (
+            partial(
+                self._reconnect_capture_source,
+                expected_snapshot=backend_snapshot,
+            )
+            if backend_snapshot is not None and self._backend_reconnect is not None
+            else None
+        )
 
         try:
             summary = self._capture_workflow.run(
@@ -323,6 +388,8 @@ class DeviceCoreRuntime:
                 workflow=workflow,
                 start_action=start_action,
                 on_session_started=self._set_active_session,
+                reconnect=reconnect,
+                on_backend_disconnected=self._mark_backend_disconnected,
             )
             if summary.integrity is not None:
                 with self._operation_lock:
@@ -332,10 +399,84 @@ class DeviceCoreRuntime:
             with self._operation_lock:
                 self._capture_in_progress = False
                 self._active_session_id = None
+                self._active_workflow = None
+                self._reconnect_deadline = None
 
     def _set_active_session(self, session_id: str) -> None:
         with self._operation_lock:
             self._active_session_id = session_id
+
+    def _mark_backend_disconnected(self) -> None:
+        with self._operation_lock:
+            self._connected = False
+            self._backend_info = None
+            self._backend_capabilities = frozenset()
+            self._segment_context = None
+            self._integrity = None
+
+    def _reconnect_capture_source(
+        self,
+        *,
+        expected_snapshot: BackendSnapshot,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource | None:
+        reconnect = self._backend_reconnect
+        if reconnect is None:
+            return None
+        with self._operation_lock:
+            self._reconnect_deadline = deadline
+        try:
+            replacement = reconnect(segment_id=segment_id, deadline=deadline)
+            if replacement is None:
+                return None
+            try:
+                self._validate_replacement(expected_snapshot, replacement.backend_snapshot)
+            except Exception:
+                self._close_event_source(replacement.source)
+                raise
+            with self._operation_lock:
+                snapshot = replacement.backend_snapshot
+                self._message_source = replacement.source
+                self._connected = True
+                self._backend_mode = snapshot.info.mode
+                self._backend_info = snapshot.info
+                self._backend_capabilities = snapshot.info.capabilities
+                self._segment_context = snapshot.segment
+                self._integrity = snapshot.integrity
+                self._port = snapshot.info.port
+            return replacement
+        finally:
+            with self._operation_lock:
+                self._reconnect_deadline = None
+
+    def _validate_replacement(
+        self,
+        expected: BackendSnapshot,
+        replacement: BackendSnapshot,
+    ) -> None:
+        expected_identity = (
+            expected.info.mode,
+            expected.info.port,
+            expected.info.device,
+            expected.info.firmware,
+        )
+        replacement_identity = (
+            replacement.info.mode,
+            replacement.info.port,
+            replacement.info.device,
+            replacement.info.firmware,
+        )
+        if replacement_identity != expected_identity:
+            raise ValueError("reconnected backend identity does not match active session")
+        if replacement.capability_policy != self._capability_policy:
+            raise ValueError("reconnected backend capability policy changed")
+
+    @staticmethod
+    def _close_event_source(source: CaptureEventSource) -> None:
+        close = getattr(source, "close", None)
+        if callable(close):
+            close()
 
     def _require_connected(self) -> None:
         if not self._connected:
@@ -348,7 +489,18 @@ class DeviceCoreRuntime:
                 detail="capture is already active",
             )
 
-    def _backend_snapshot(self) -> BackendSnapshot | None:
+    @staticmethod
+    def _session_capture_source(source: CaptureEventSource) -> CaptureEventSource:
+        segment = getattr(source, "segment", None)
+        if not isinstance(segment, SegmentContext) or segment.segment_id == 0:
+            return source
+        return _SessionCaptureSource(source, segment)
+
+    def _backend_snapshot(
+        self,
+        *,
+        segment_context: SegmentContext | None = None,
+    ) -> BackendSnapshot | None:
         if self._backend_info is None:
             return None
         if self._integrity is None:
@@ -360,6 +512,6 @@ class DeviceCoreRuntime:
                 self._capability_policy,
             ),
             capability_policy=self._capability_policy,
-            segment=self._segment_context,
+            segment=(segment_context if segment_context is not None else self._segment_context),
             integrity=self._integrity,
         )

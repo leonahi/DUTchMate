@@ -147,6 +147,7 @@ def connected_status() -> DeviceCoreStatus:
         capability_policy=_tx_policy(),
         timestamp_provenance=_enhanced_segment(),
         integrity=_enhanced_integrity(),
+        connection_state="connected",
     )
 
 
@@ -164,6 +165,7 @@ def disconnected_status() -> DeviceCoreStatus:
         backend_capabilities=(),
         capability_policy=_tx_policy(),
         integrity=None,
+        connection_state="disconnected",
     )
 
 

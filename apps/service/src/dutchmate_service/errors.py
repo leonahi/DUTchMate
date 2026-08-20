@@ -8,12 +8,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from dutchmate_core.backends.contracts import BackendInputError
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.validation import InputValidationError
+from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -45,6 +47,12 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
 
     if isinstance(exc, SessionPersistenceError):
         return ServiceError(error=exc.error, detail=str(exc), status_code=500)
+
+    if isinstance(exc, CaptureReconnectError):
+        return ServiceError(error=exc.error, detail=str(exc), status_code=503)
+
+    if isinstance(exc, BackendInputError):
+        return ServiceError(error=exc.error, detail=str(exc), status_code=502)
 
     if isinstance(exc, GpioConfigurationError):
         return ServiceError(error="not_configured", detail=str(exc), status_code=409)
@@ -93,6 +101,20 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_session_persistence_error(
         request: Request,
         exc: SessionPersistenceError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(CaptureReconnectError)
+    async def handle_capture_reconnect_error(
+        request: Request,
+        exc: CaptureReconnectError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(BackendInputError)
+    async def handle_backend_input_error(
+        request: Request,
+        exc: BackendInputError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

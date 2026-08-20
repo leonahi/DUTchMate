@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final, NoReturn, Protocol
 
@@ -31,6 +33,12 @@ from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, De
 from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     SessionStore,
+)
+from dutchmate_service.backend_reconnect import (
+    ReplaceableDeviceControl,
+    build_basic_capture_reconnect,
+    build_enhanced_capture_reconnect,
+    read_enhanced_hello,
 )
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
@@ -79,6 +87,8 @@ def build_startup_runtime(
     session_root: Path | str,
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     backend_settings: BackendSettings | None = None,
+    monotonic_clock: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
 ) -> DeviceCoreRuntime:
     """Build the service runtime for one explicitly selected backend."""
 
@@ -87,23 +97,37 @@ def build_startup_runtime(
         evidence_budget_bytes=session_evidence_budget_bytes,
     )
     session_store.recover_stale_sessions()
+    reconnect_clock = monotonic_clock or time.monotonic
+    reconnect_sleep = sleep or time.sleep
 
     if backend_settings is None:
         return DeviceCoreRuntime(
             device_control=_UnavailableDeviceControl(),
             session_store=session_store,
+            capture_clock=monotonic_clock,
         )
 
     if backend_settings.mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
+        basic_source = BasicBackendEventSource(connection, segment_id=0)
+        control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
+        reconnect = build_basic_capture_reconnect(
+            settings=backend_settings,
+            current_source=basic_source,
+            open_connection=open_basic_backend_connection,
+            monotonic_clock=reconnect_clock,
+            sleep=reconnect_sleep,
+        )
         runtime = DeviceCoreRuntime(
-            device_control=_UnavailableDeviceControl(connection),
-            message_source=BasicBackendEventSource(connection, segment_id=0),
+            device_control=control,
+            message_source=basic_source,
             session_store=session_store,
+            capture_clock=monotonic_clock,
             port=connection.info.port,
             backend_mode="basic",
             tx_policy_enabled=backend_settings.tx_enabled,
             reconnect_timeout_s=backend_settings.reconnect_timeout_s,
+            backend_reconnect=reconnect,
         )
         runtime.record_backend_connection(connection.info)
         return runtime
@@ -114,38 +138,49 @@ def build_startup_runtime(
             device_control=_UnavailableDeviceControl(),
             session_store=session_store,
             backend_mode="enhanced",
+            capture_clock=monotonic_clock,
         )
 
     transport = open_serial_command_transport(
         port=serial_port,
         baudrate=backend_settings.baudrate,
     )
+    enhanced_source = EnhancedCaptureEventSource(
+        transport,
+        segment_id=0,
+        source_origin_us=None,
+    )
+    control = ReplaceableDeviceControl(EnhancedDeviceControl(transport))
+    hello = read_startup_hello(transport)
+    info = normalize_enhanced_hello(hello, port=serial_port)
+    reconnect = build_enhanced_capture_reconnect(
+        settings=backend_settings,
+        current_source=enhanced_source,
+        expected_info=info,
+        control=control,
+        open_transport=open_serial_command_transport,
+        monotonic_clock=reconnect_clock,
+        sleep=reconnect_sleep,
+    )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
-        message_source=EnhancedCaptureEventSource(
-            transport,
-            segment_id=0,
-            source_origin_us=None,
-        ),
+        device_control=control,
+        message_source=enhanced_source,
         session_store=session_store,
+        capture_clock=monotonic_clock,
         port=serial_port,
         backend_mode="enhanced",
         tx_policy_enabled=backend_settings.tx_enabled,
         reconnect_timeout_s=backend_settings.reconnect_timeout_s,
+        backend_reconnect=reconnect,
     )
-    hello = read_startup_hello(transport)
-    runtime.record_backend_connection(normalize_enhanced_hello(hello, port=serial_port))
+    runtime.record_backend_connection(info)
     return runtime
 
 
 def read_startup_hello(transport: SerialCommandTransport) -> HelloMessage:
     """Read and validate the initial Debug Helper hello message."""
 
-    message = transport.read_message()
-    if not isinstance(message, HelloMessage):
-        message_name = type(message).__name__
-        raise RuntimeError(f"Expected Debug Helper hello message, got {message_name}")
-    return message
+    return read_enhanced_hello(transport)
 
 
 class _UnavailableDeviceControl:

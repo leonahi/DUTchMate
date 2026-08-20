@@ -286,9 +286,12 @@ terminal lifecycle state, and startup resolves interrupted evidence units and
 abandons stale active sessions before opening a backend. The session store owns
 durable disconnect/resume mutations. The capture workflow owns deadline
 precedence, the 32-segment stop, source replacement, and canonical reconnect
-failures through a small injected reopen port; runtime/service startup does not
-yet provide the Basic/Enhanced reopen implementation. Wait-pattern and
-UART-send exposure remain Phase 1 work.
+failures through a small injected reopen port and does not own serial details.
+Service composition retries the configured Basic port or reopens Enhanced,
+validates an exact identity and timestamp provenance, and replaces the live
+control transport. Runtime publishes connected, disconnected, and reconnecting
+state plus the active workflow and remaining reconnect window. Wait-pattern
+and UART-send exposure remain Phase 1 work.
 
 ### `backends` (Contract Foundation)
 
@@ -331,9 +334,10 @@ opens a raw serial port without `hello`, wiring its normalized source into the
 same finite capture path. Enhanced validates `hello` when a port is selected
 and may start disconnected without one. Status and finite capture responses
 serialize backend identity, raw/effective capabilities, TX-policy provenance,
-segment timing, and UART-loss integrity. Continuous background ingestion,
-backend-specific reconnect composition, bounded log/session retrieval,
-wait-pattern, public UART send,
+segment timing, UART-loss integrity, and volatile reconnect state. Active
+capture/boot-test workflows reopen the selected Basic port or validate an exact
+Enhanced hello before resuming. Continuous background ingestion outside active
+workflows, bounded log/session retrieval, wait-pattern, public UART send,
 baseline operations, and the complete target error projection remain Phase 1
 work.
 

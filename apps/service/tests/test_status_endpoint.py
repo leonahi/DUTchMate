@@ -22,6 +22,7 @@ def test_status_returns_disconnected_runtime_state() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "connected": False,
+        "connection_state": "disconnected",
         "backend_mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": None,
@@ -42,6 +43,8 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "timestamp_provenance": None,
         "integrity": None,
         "active_session_id": None,
+        "active_workflow": None,
+        "reconnect_remaining_s": None,
         "control_channels": {
             "CTRL0": {
                 "channel": "CTRL0",
@@ -147,6 +150,8 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                     observation_scope="debug_helper_rx_buffer",
                     dropped_bytes=0,
                 ),
+                connection_state="connected",
+                active_workflow="capture",
             )
         )
     )
@@ -166,6 +171,9 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["timestamp_provenance"]["timestamp"]["clock"] == "rp2040_timer"
     assert payload["integrity"]["loss_status"] == "none_reported"
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
+    assert payload["connection_state"] == "connected"
+    assert payload["active_workflow"] == "capture"
+    assert payload["reconnect_remaining_s"] is None
     assert payload["control_channels"]["CTRL0"]["state"] == "configured"
     assert payload["control_channels"]["CTRL0"]["role"] == "reset"
     assert payload["control_channels"]["CTRL0"]["dut_signal"] == "RESET_N"

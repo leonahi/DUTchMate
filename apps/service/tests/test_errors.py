@@ -2,12 +2,14 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from dutchmate_core.backends import BackendInputError
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.validation import InputValidationError
+from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
 from dutchmate_service.errors import ServiceError, service_error_from_exception
@@ -74,6 +76,31 @@ def test_maps_session_persistence_error_to_server_fault() -> None:
         error="persistence_fault",
         detail="session persistence append failed for uart_events.jsonl: disk full",
         status_code=500,
+    )
+
+
+def test_maps_reconnect_error_to_service_unavailable() -> None:
+    error = service_error_from_exception(
+        CaptureReconnectError(
+            end_reason="reconnect_timeout",
+            detail="Backend did not reconnect before the reconnect deadline",
+        )
+    )
+
+    assert error == ServiceError(
+        error="service_unavailable",
+        detail="Backend did not reconnect before the reconnect deadline",
+        status_code=503,
+    )
+
+
+def test_maps_backend_input_error_to_bad_gateway() -> None:
+    error = service_error_from_exception(BackendInputError("invalid enhanced frame"))
+
+    assert error == ServiceError(
+        error="backend_input_error",
+        detail="invalid enhanced frame",
+        status_code=502,
     )
 
 

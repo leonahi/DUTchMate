@@ -27,6 +27,7 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
 
     return {
         "connected": status.connected,
+        "connection_state": status.connection_state,
         "backend_mode": status.backend_mode,
         "port": status.port,
         "firmware": status.firmware,
@@ -46,6 +47,8 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         ),
         "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
+        "active_workflow": status.active_workflow,
+        "reconnect_remaining_s": status.reconnect_remaining_s,
         "control_channels": {
             channel: asdict(channel_status)
             for channel, channel_status in status.control_channels.items()

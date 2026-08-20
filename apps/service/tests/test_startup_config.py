@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event as ThreadEvent
 
 import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
+from dutchmate_core.backends import BackendInputError
 from dutchmate_core.backends.basic import BasicBackendConnection
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl, normalize_enhanced_hello
 from dutchmate_core.backends.settings import BackendSettings
@@ -61,6 +63,62 @@ class FakeSerial:
 
     def close(self) -> None:
         pass
+
+
+class ScriptedBasicSerial:
+    def __init__(self, reads: list[bytes | Exception]) -> None:
+        self._reads = reads
+        self.closed = False
+        self._closed = ThreadEvent()
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+    def read(self, size: int = 1) -> bytes:
+        del size
+        if not self._reads:
+            self._closed.wait()
+            raise OSError("serial closed")
+        result = self._reads.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def close(self) -> None:
+        self.closed = True
+        self._closed.set()
+
+
+class ScriptedEnhancedSerial(FakeSerial):
+    def __init__(self, reads: list[bytes | Exception]) -> None:
+        super().__init__([])
+        self._script = reads
+        self.closed = False
+
+    def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
+        del expected, size
+        if not self._script:
+            return b""
+        result = self._script.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class AdvancingClock:
+    def __init__(self, step_s: float = 0.01) -> None:
+        self.value = 0.0
+        self._step_s = step_s
+
+    def __call__(self) -> float:
+        self.value += self._step_s
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.value += seconds
 
 
 def backend_settings(
@@ -290,6 +348,156 @@ def test_build_startup_runtime_opens_basic_without_hello(
     )
     assert apply_startup_hardware_config(runtime, config) is False
     assert runtime.gpio_registry.get("CTRL0").state == "unconfigured"
+
+
+def test_basic_startup_runtime_reopens_disconnected_capture_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "basic",
+        serial_port="/dev/ttyUSB0",
+        baudrate=115200,
+    )
+    initial_serial = ScriptedBasicSerial([OSError("device removed")])
+    replacement_serial = ScriptedBasicSerial([b"READY\n"])
+    serials = [initial_serial, replacement_serial]
+
+    def fake_open(received_settings: BackendSettings) -> BasicBackendConnection:
+        assert received_settings == settings
+        return BasicBackendConnection(serial_port=serials.pop(0), settings=settings)
+
+    monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
+    clock = AdvancingClock()
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=settings,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    try:
+        summary = runtime.capture_uart(duration_s=0.2)
+    finally:
+        replacement_serial.close()
+
+    assert summary.state == "completed"
+    assert summary.interrupted is True
+    assert summary.resumed is True
+    assert summary.segment_count == 2
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+    assert runtime.status().connection_state == "connected"
+
+
+def test_enhanced_startup_runtime_reopens_and_validates_hello(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "enhanced",
+        serial_port="/dev/ttyACM0",
+        baudrate=460800,
+    )
+    hello = (
+        b'{"type":"hello","v":1,"firmware":"0.1.0",'
+        b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n'
+    )
+    serials = [
+        ScriptedEnhancedSerial([hello, OSError("device removed")]),
+        ScriptedEnhancedSerial(
+            [
+                hello,
+                b'{"type":"uart","channel":0,"timestamp_us":25,"data_b64":"UkVBRFkK"}\n',
+            ]
+        ),
+    ]
+
+    def fake_open_serial_command_transport(
+        *,
+        port: str,
+        baudrate: int,
+    ) -> SerialCommandTransport:
+        assert port == "/dev/ttyACM0"
+        assert baudrate == 460800
+        return SerialCommandTransport(serials.pop(0))
+
+    monkeypatch.setattr(
+        startup, "open_serial_command_transport", fake_open_serial_command_transport
+    )
+    clock = AdvancingClock()
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=settings,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    summary = runtime.capture_uart(duration_s=0.2)
+
+    assert summary.state == "completed"
+    assert summary.interrupted is True
+    assert summary.resumed is True
+    assert summary.segment_count == 2
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+    status = runtime.status()
+    assert status.connection_state == "connected"
+    assert status.timestamp_provenance is not None
+    assert status.timestamp_provenance.segment_id == 1
+
+
+def test_enhanced_reconnect_rejects_changed_device_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "enhanced",
+        serial_port="/dev/ttyACM0",
+        baudrate=460800,
+    )
+    initial_hello = (
+        b'{"type":"hello","v":1,"firmware":"0.1.0",'
+        b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n'
+    )
+    changed_hello = (
+        b'{"type":"hello","v":1,"firmware":"0.1.0",'
+        b'"device":"another-helper","capabilities":["uart_capture"]}\n'
+    )
+    serials = [
+        ScriptedEnhancedSerial([initial_hello, OSError("device removed")]),
+        ScriptedEnhancedSerial([changed_hello]),
+    ]
+
+    def fake_open_serial_command_transport(
+        *,
+        port: str,
+        baudrate: int,
+    ) -> SerialCommandTransport:
+        del port, baudrate
+        return SerialCommandTransport(serials.pop(0))
+
+    monkeypatch.setattr(
+        startup,
+        "open_serial_command_transport",
+        fake_open_serial_command_transport,
+    )
+    clock = AdvancingClock()
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=settings,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    with pytest.raises(BackendInputError, match="identity changed"):
+        runtime.capture_uart(duration_s=0.2)
+
+    summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
+    assert summary.state == "failed"
+    assert summary.end_reason == "backend_input_error"
+    assert summary.error is not None
+    assert summary.error["code"] == "backend_input_error"
+    assert runtime.status().connection_state == "disconnected"
+    assert serials == []
 
 
 def test_build_startup_runtime_recovers_sessions_before_opening_backend(

@@ -103,9 +103,11 @@ then connected to each real backend in milestone order.
    and disconnect/reconnect evidence. Capture/boot-test coordination preserves
    one monotonic deadline across replacement sources, finalizes old-segment line
    state, enforces the 32-segment boundary, and distinguishes disconnect,
-   reconnect timeout, and fatal backend input. Backend-specific reopen/service
-   composition, schema-v1 retrieval, wait-pattern, public UART send, and
-   retention remain.**
+   reconnect timeout, and fatal backend input. Service composition now performs
+   bounded Basic reopen attempts or Enhanced reopen/hello/identity validation,
+   updates volatile connection state, and replaces Enhanced control transport.
+   Background reconnect outside active workflows, schema-v1 retrieval,
+   wait-pattern, public UART send, and retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -1066,8 +1068,10 @@ Current implementation notes:
   IDs, and caps sessions at 32 segments. The capture workflow now coordinates
   monotonic deadline precedence, per-segment derived-state finalization,
   replacement-source publication, reconnect timeout, and the segment limit
-  through an injected backend reopen operation. Basic/Enhanced reopening and
-  service/runtime connection-state composition are not implemented yet.
+  through an injected backend reopen operation. Service/runtime composition now
+  retries Basic opening, validates Enhanced hello identity and timestamp
+  provenance, replaces the live source/control adapters, and exposes volatile
+  reconnect status. Continuous monitoring outside active workflows remains.
 - Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
   and over-300-second durations consistently across core, service, and CLI.
   Native sessions persist and echo the accepted duration and reconnect policy.
@@ -1211,9 +1215,10 @@ port, preserve pre-policy `backend_capabilities`, report filtered
 software permission, not physical TX state or readback. Operations gate only on
 effective `capabilities`. Status omits or marks unsupported control/event state
 for the Basic backend. The current status model implements the identity,
-capability layers, TX-policy source, current segment provenance, and initial
-backend-specific integrity. Connection-state/reconnect and commanded-boot-mode
-fields above remain pending.
+capability layers, TX-policy source, current segment provenance, initial
+backend-specific integrity, connection state, active workflow, and bounded
+reconnect countdown. Commanded-boot-mode state and CLI reconnect presentation
+remain pending.
 
 `GET /dut/logs` accepts optional `session_id` and integer `lines`, default 300,
 in the inclusive range 1..1000. Booleans and path-unsafe IDs are
