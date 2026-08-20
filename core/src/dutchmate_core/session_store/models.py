@@ -14,6 +14,7 @@ from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 
 SessionState = Literal["active", "completed", "failed", "abandoned"]
 SessionWorkflow = Literal["capture", "boot_test", "wait_pattern"]
+SessionCompatibility = Literal["native", "legacy_read_only"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +76,29 @@ class SessionPersistenceError(RuntimeError):
         self.path = path
         self.terminalization_safe = terminalization_safe
         super().__init__(f"session persistence {operation} failed for {path.name}: {detail}")
+
+
+class SessionQueryError(RuntimeError):
+    """Raised when a bounded session query cannot produce a valid projection."""
+
+    def __init__(
+        self,
+        *,
+        error: Literal[
+            "not_found",
+            "persistence_fault",
+            "unsupported_session_schema",
+        ],
+        operation: Literal["list_sessions", "get_session"],
+        detail: str,
+        session_id: str | None = None,
+        detected_schema_version: int | None = None,
+    ) -> None:
+        self.error = error
+        self.operation = operation
+        self.session_id = session_id
+        self.detected_schema_version = detected_schema_version
+        super().__init__(detail)
 
 
 class EvidenceQuotaExceeded(RuntimeError):
@@ -171,3 +195,117 @@ class SessionSummary:
     end_reason: str | None = None
     error: dict[str, object] | None = None
     truncation: dict[str, object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FirstErrorReference:
+    """Compact first-error location used by bounded session list items."""
+
+    pattern: str
+    detected_pattern_index: int
+    segment_id: int
+    timestamp_us: int
+    channel: int
+    ingestion_index: int
+    line_index_in_event: int
+
+
+@dataclass(frozen=True, slots=True)
+class NativeSessionListItem:
+    """Bounded native lifecycle projection for one session list item."""
+
+    session_id: str
+    started_at: str
+    state: SessionState
+    workflow: SessionWorkflow
+    ended_at: str | None
+    end_reason: str | None
+    backend_mode: BackendMode
+    baseline: bool
+    truncated: bool
+    truncation: dict[str, object] | None
+    interrupted: bool
+    resumed: bool
+    segment_count: int
+    integrity: UartIntegrity
+    line_processing: LineProcessing
+    first_error: FirstErrorReference | None
+    schema_version: Literal[1] = 1
+    compatibility: Literal["native"] = "native"
+
+
+@dataclass(frozen=True, slots=True)
+class LegacySessionListItem:
+    """Bounded read-only identity projection for one unversioned session."""
+
+    session_id: str
+    started_at: str
+    command: str
+    firmware: str | None
+    device: str | None
+    schema_version: Literal[0] = 0
+    compatibility: Literal["legacy_read_only"] = "legacy_read_only"
+    migration_required: Literal[True] = True
+    migration_available: Literal[False] = False
+
+
+SessionListItem = NativeSessionListItem | LegacySessionListItem
+
+
+@dataclass(frozen=True, slots=True)
+class SessionListPage:
+    """One stable newest-first page of bounded session list items."""
+
+    items: tuple[SessionListItem, ...]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionArtifact:
+    """Logical size and optional record count for one session artifact."""
+
+    name: str
+    bytes: int
+    records: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceTypeCount:
+    """Bounded count for one detected-pattern or hardware-event type."""
+
+    type: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class NativeSessionDetail:
+    """Bounded native session detail without expanded evidence arrays."""
+
+    summary: NativeSessionListItem
+    command: str
+    duration_s: float | None
+    reconnect_timeout_s: float
+    error: dict[str, object] | None
+    backend_identity: dict[str, object]
+    backend_capabilities: tuple[str, ...]
+    capabilities: tuple[str, ...]
+    capability_policy: BackendCapabilityPolicy
+    commanded_boot_mode: Literal["normal", "bootloader"] | None
+    storage: dict[str, object]
+    segments: tuple[dict[str, object], ...]
+    first_error: FirstError | None
+    pattern_counts: tuple[EvidenceTypeCount, ...]
+    hardware_event_counts: tuple[EvidenceTypeCount, ...]
+    unresolved_uart_tx_attempts: int
+    artifacts: tuple[SessionArtifact, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LegacySessionDetail:
+    """Bounded legacy identity and artifact-size compatibility projection."""
+
+    summary: LegacySessionListItem
+    artifacts: tuple[SessionArtifact, ...]
+
+
+SessionDetail = NativeSessionDetail | LegacySessionDetail

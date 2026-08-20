@@ -106,8 +106,10 @@ then connected to each real backend in milestone order.
    reconnect timeout, and fatal backend input. Service composition now performs
    bounded Basic reopen attempts or Enhanced reopen/hello/identity validation,
    updates volatile connection state, and replaces Enhanced control transport.
-   Background reconnect outside active workflows, schema-v1 retrieval,
-   wait-pattern, public UART send, and retention remain.**
+   Bounded native/legacy session list/detail retrieval is implemented with
+   stable opaque pagination and artifact/count summaries. Background reconnect
+   outside active workflows, log replay, wait-pattern, public UART send, and
+   retention remain.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -161,16 +163,17 @@ The repository already contains:
 - UART byte preservation, lossy UTF-8 display text, complete-line buffering,
   and pattern detection.
 - Session creation, incremental UART/event writes, telemetry, summaries,
-  newest-first discovery, and latest-session lookup.
+  newest-first discovery, stable opaque pagination, bounded native detail, and
+  legacy read-only identity/artifact projections.
 - Enhanced NDJSON adapter fixtures, finite transport capture, reset-triggered boot-test,
   active-session guards, reset/boot action enforcement, and synchronous serial
   command transport.
 - Service endpoints and CLI commands for status, finite capture, boot-test,
   GPIO mode, reset, and boot-mode.
 
-Native versioned log/session retrieval, wait-pattern, reconnect, public
-UART-send workflows, lifecycle/retention semantics, RP2040 firmware, and both
-HIL paths remain incomplete.
+Native versioned log replay, wait-pattern, public UART-send workflows,
+retention/baseline semantics, RP2040 firmware, and both HIL paths remain
+incomplete.
 
 ### Current Host-Side Core Flow
 
@@ -1093,14 +1096,14 @@ Currently implemented endpoints:
 - `POST /gpio/mode`
 - `POST /dut/reset`
 - `POST /dut/boot-mode`
+- `GET /sessions`
+- `GET /sessions/{id}`
 
 Remaining target Phase 1 endpoints:
 
 - `GET /dut/logs`
 - `POST /dut/wait-pattern`
 - `POST /dut/uart/send`
-- `GET /sessions`
-- `GET /sessions/{id}`
 - `POST /sessions/{id}/baseline`
 - `DELETE /sessions/{id}/baseline`
 
@@ -1218,9 +1221,9 @@ software permission, not physical TX state or readback. Operations gate only on
 effective `capabilities`. Status omits or marks unsupported control/event state
 for the Basic backend. The current status model implements the identity,
 capability layers, TX-policy source, current segment provenance, initial
-backend-specific integrity, connection state, active workflow, and bounded
-reconnect countdown. Commanded-boot-mode state and CLI reconnect presentation
-remain pending.
+backend-specific integrity, connection state, active workflow, bounded
+reconnect countdown, and CLI reconnect presentation. Commanded-boot-mode state
+remains pending.
 
 `GET /dut/logs` accepts optional `session_id` and integer `lines`, default 300,
 in the inclusive range 1..1000. Booleans and path-unsafe IDs are
@@ -1593,10 +1596,12 @@ accepted role mapping they return `not_configured`.
 prints the exact strings without trimming or normalization. Service and Device
 Core repeat the validation and remain authoritative.
 
-Currently implemented capture commands:
+Currently implemented workflow and session-query commands:
 
 - `dutchmate capture --seconds <seconds>`
 - `dutchmate boot-test --seconds <seconds>`
+- `dutchmate sessions [--limit <count>] [--cursor <opaque>]`
+- `dutchmate session <session_id>`
 
 `capture` must work with either backend. `boot-test` requires the Enhanced
 backend, `gpio_control`, and a configured `reset` role.
@@ -1613,8 +1618,6 @@ Remaining target Phase 1 commands:
 - `dutchmate logs [--session <session_id>] --last <lines>`
 - `dutchmate wait <pattern> --timeout <seconds>`
 - `dutchmate send <cmd> [--no-newline] [--force]`
-- `dutchmate sessions [--limit <count>] [--cursor <opaque>]`
-- `dutchmate session <session_id>`
 - `dutchmate mark-baseline <session_id>`
 - `dutchmate clear-baseline <session_id>`
 

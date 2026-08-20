@@ -8,7 +8,8 @@ from dutchmate_core.backends import (
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
-from dutchmate_core.session_store.store import SessionSummary
+from dutchmate_core.session_store.models import SessionQueryError
+from dutchmate_core.session_store.store import SessionDetail, SessionListPage, SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
@@ -122,6 +123,23 @@ class FakeRuntime:
             reconnect_timeout_s=5.0,
             ended_at="2026-07-29T10:00:03Z",
             end_reason="duration_elapsed",
+        )
+
+    def list_sessions(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> SessionListPage:
+        del limit, cursor
+        return SessionListPage(items=(), next_cursor=None)
+
+    def get_session(self, session_id: str) -> SessionDetail:
+        raise SessionQueryError(
+            error="not_found",
+            operation="get_session",
+            session_id=session_id,
+            detail=f"Session '{session_id}' was not found",
         )
 
     def apply_hardware_config(

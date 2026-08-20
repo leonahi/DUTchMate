@@ -54,7 +54,7 @@ Current core modules:
 | `diagnostics.py` | Shared sanitized, UTF-8-safe, 1024-byte diagnostic projection. |
 | `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
-| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded disconnect/reconnect segments, pattern/line-limit evidence, deterministic first-error summaries, and discovery. |
+| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded reconnect segments, stable paginated list/detail projections, pattern/line-limit evidence, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture and guarded reset/boot actions. |
 | `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
@@ -137,8 +137,8 @@ coordinates disconnect/resume deadlines and segment-bound source replacement;
 service composition now retries the configured Basic port or validates an exact
 Enhanced identity/hello before publishing a prepared replacement. Major
 remaining Phase 1 areas are the full asynchronous Enhanced adapter, background
-ingestion outside active workflows, retention, bounded log and session
-retrieval, wait-pattern, UART-send public workflows, generic Enhanced control
+ingestion outside active workflows, retention, bounded log retrieval,
+wait-pattern, UART-send public workflows, generic Enhanced control
 actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint

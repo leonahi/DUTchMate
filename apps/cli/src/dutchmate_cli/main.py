@@ -13,6 +13,8 @@ from dutchmate_cli.client import (
     capture_uart,
     configure_gpio_mode,
     fetch_status,
+    get_debug_session,
+    list_debug_sessions,
     reset_dut,
     run_boot_test,
     set_boot_mode,
@@ -26,6 +28,7 @@ from dutchmate_cli.lifecycle import (
     start_service,
     stop_service,
 )
+from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
 from dutchmate_core.backends.settings import (
     BackendConfigError,
@@ -163,6 +166,61 @@ def status(
         _fail(str(exc))
 
     typer.echo(format_status(payload))
+
+
+@app.command("sessions")
+def sessions_command(
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, max=100, help="Maximum sessions to return."),
+    ] = 50,
+    cursor: Annotated[
+        str | None,
+        typer.Option("--cursor", help="Opaque continuation cursor from a previous page."),
+    ] = None,
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """List bounded debug-session summaries."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = list_debug_sessions(
+            limit=limit,
+            cursor=cursor,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_session_list(payload))
+
+
+@app.command("session")
+def session_command(
+    session_id: Annotated[str, typer.Argument(help="Exact debug-session ID.")],
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Show bounded detail for one debug session."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = get_debug_session(session_id, service_url=resolved_service_url)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_session_detail(payload))
 
 
 @app.command()

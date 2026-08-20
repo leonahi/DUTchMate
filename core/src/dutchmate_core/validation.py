@@ -154,6 +154,21 @@ def validate_serial_port(port: object) -> str:
     return port
 
 
+def validate_session_id(session_id: object) -> str:
+    """Validate one exact path-safe session identifier."""
+
+    if (
+        not isinstance(session_id, str)
+        or not session_id
+        or session_id.strip() != session_id
+        or session_id in {".", ".."}
+        or "/" in session_id
+        or "\\" in session_id
+    ):
+        raise InputValidationError("session ID must be a non-empty path-safe name")
+    return session_id
+
+
 def validate_gpio_identifier(value: object, *, field: str) -> str:
     """Validate and return an exact 1..64-byte GPIO role or signal identifier."""
 

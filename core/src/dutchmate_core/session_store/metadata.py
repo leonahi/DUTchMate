@@ -24,22 +24,14 @@ from dutchmate_core.session_store.models import (
     SessionWorkflow,
 )
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
+from dutchmate_core.validation import validate_session_id
 
 METADATA_MAX_BYTES = 262144
 MAX_SESSION_SEGMENTS = 32
 
 
 def _validate_session_id(session_id: str) -> str:
-    if (
-        not isinstance(session_id, str)
-        or not session_id
-        or session_id.strip() != session_id
-        or session_id in {".", ".."}
-        or "/" in session_id
-        or "\\" in session_id
-    ):
-        raise ValueError("session ID must be a non-empty path-safe name")
-    return session_id
+    return validate_session_id(session_id)
 
 
 def _validate_session_limit(limit: int | None) -> None:

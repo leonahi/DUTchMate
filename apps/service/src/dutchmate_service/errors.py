@@ -14,7 +14,7 @@ from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
-from dutchmate_core.session_store.models import SessionPersistenceError
+from dutchmate_core.session_store.models import SessionPersistenceError, SessionQueryError
 from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
@@ -54,6 +54,14 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
 
     if isinstance(exc, SessionPersistenceError):
         return _service_error(error=exc.error, detail=str(exc), status_code=500)
+
+    if isinstance(exc, SessionQueryError):
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=_status_for_error(exc.error),
+            context=_session_query_context(exc),
+        )
 
     if isinstance(exc, CaptureReconnectError):
         return _service_error(
@@ -137,6 +145,20 @@ def _reconnect_context(exc: CaptureReconnectError) -> dict[str, object] | None:
     return None
 
 
+def _session_query_context(exc: SessionQueryError) -> dict[str, object]:
+    context: dict[str, object] = {"operation": exc.operation}
+    if exc.session_id is not None:
+        context["session_id"] = exc.session_id
+    if exc.error == "unsupported_session_schema":
+        context.update(
+            {
+                "detected_schema_version": exc.detected_schema_version,
+                "supported_schema_versions": [1],
+            }
+        )
+    return context
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Register service exception handlers on an app."""
 
@@ -165,6 +187,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_session_persistence_error(
         request: Request,
         exc: SessionPersistenceError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(SessionQueryError)
+    async def handle_session_query_error(
+        request: Request,
+        exc: SessionQueryError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 
@@ -218,6 +247,12 @@ def _json_response(error: ServiceError) -> JSONResponse:
 def _status_for_error(error: str) -> int:
     if error == "invalid_argument":
         return 400
+    if error == "not_found":
+        return 404
+    if error == "unsupported_session_schema":
+        return 409
+    if error == "persistence_fault":
+        return 500
     if error in {"not_configured", "capture_active"}:
         return 409
     if error in {"timeout", "hardware_fault"}:

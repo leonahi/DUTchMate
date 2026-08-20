@@ -9,6 +9,8 @@ from dutchmate_cli.client import (
     capture_uart,
     configure_gpio_mode,
     fetch_status,
+    get_debug_session,
+    list_debug_sessions,
     reset_dut,
     run_boot_test,
     set_boot_mode,
@@ -43,6 +45,64 @@ def test_fetch_status_includes_service_error_detail() -> None:
         fetch_status(transport=httpx.MockTransport(handler))
 
     assert str(error.value) == "Device Core Service returned HTTP 500: runtime failed"
+
+
+def test_list_debug_sessions_forwards_bounded_page_arguments() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/sessions"
+        assert dict(request.url.params) == {"limit": "25", "cursor": "next-page"}
+        return httpx.Response(200, json={"items": [], "next_cursor": None})
+
+    payload = list_debug_sessions(
+        limit=25,
+        cursor="next-page",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert payload == {"items": [], "next_cursor": None}
+
+
+@pytest.mark.parametrize("limit", [0, 101, True, 1.5])
+def test_list_debug_sessions_rejects_invalid_limit_before_http(limit: object) -> None:
+    def unexpected_request(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("invalid session limit reached HTTP transport")
+
+    with pytest.raises(ValueError, match="integer from 1 to 100"):
+        list_debug_sessions(
+            limit=limit,  # type: ignore[arg-type]
+            transport=httpx.MockTransport(unexpected_request),
+        )
+
+
+def test_get_debug_session_fetches_exact_validated_id() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/sessions/20260820T120000Z-abc12345"
+        return httpx.Response(
+            200,
+            json={
+                "session_id": "20260820T120000Z-abc12345",
+                "schema_version": 1,
+                "compatibility": "native",
+            },
+        )
+
+    payload = get_debug_session(
+        "20260820T120000Z-abc12345",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert payload["compatibility"] == "native"
+
+
+def test_get_debug_session_rejects_unsafe_id_before_http() -> None:
+    def unexpected_request(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("unsafe session ID reached HTTP transport")
+
+    with pytest.raises(ValueError, match="path-safe"):
+        get_debug_session(
+            "../outside",
+            transport=httpx.MockTransport(unexpected_request),
+        )
 
 
 def test_configure_gpio_mode_posts_request_payload() -> None:

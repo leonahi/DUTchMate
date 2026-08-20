@@ -9,6 +9,14 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
+from dutchmate_core.session_store.models import (
+    LegacySessionDetail,
+    LegacySessionListItem,
+    NativeSessionListItem,
+    SessionDetail,
+    SessionListItem,
+    SessionListPage,
+)
 from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.validation import (
     MAX_CAPTURE_DURATION_S,
@@ -164,6 +172,80 @@ def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
         "resumed": summary.resumed,
         "overflow": summary.overflow,
         "segments": summary.segment_count,
+    }
+
+
+def session_list_payload(page: SessionListPage) -> dict[str, object]:
+    """Serialize one bounded stable session page."""
+
+    return {
+        "items": [_session_list_item_payload(item) for item in page.items],
+        "next_cursor": page.next_cursor,
+    }
+
+
+def session_detail_payload(detail: SessionDetail) -> dict[str, object]:
+    """Serialize bounded native or legacy session detail."""
+
+    if isinstance(detail, LegacySessionDetail):
+        payload = _session_list_item_payload(detail.summary)
+        payload["artifact_manifest"] = [asdict(artifact) for artifact in detail.artifacts]
+        return payload
+
+    payload = _session_list_item_payload(detail.summary)
+    payload.update(
+        {
+            "command": detail.command,
+            "duration_s": detail.duration_s,
+            "reconnect_timeout_s": detail.reconnect_timeout_s,
+            "error": detail.error,
+            "backend_identity": detail.backend_identity,
+            "backend_capabilities": list(detail.backend_capabilities),
+            "capabilities": list(detail.capabilities),
+            "capability_policy": asdict(detail.capability_policy),
+            "commanded_boot_mode": detail.commanded_boot_mode,
+            "storage": detail.storage,
+            "segments": list(detail.segments),
+            "first_error": asdict(detail.first_error) if detail.first_error is not None else None,
+            "pattern_counts": {
+                count.type: count.count for count in detail.pattern_counts
+            },
+            "hardware_event_counts": {
+                count.type: count.count for count in detail.hardware_event_counts
+            },
+            "unresolved_uart_tx_attempts": detail.unresolved_uart_tx_attempts,
+            "artifact_manifest": [asdict(artifact) for artifact in detail.artifacts],
+        }
+    )
+    return payload
+
+
+def _session_list_item_payload(item: SessionListItem) -> dict[str, object]:
+    if isinstance(item, LegacySessionListItem):
+        return asdict(item)
+    return _native_session_list_item_payload(item)
+
+
+def _native_session_list_item_payload(item: NativeSessionListItem) -> dict[str, object]:
+    return {
+        "session_id": item.session_id,
+        "schema_version": item.schema_version,
+        "compatibility": item.compatibility,
+        "started_at": item.started_at,
+        "state": item.state,
+        "workflow": item.workflow,
+        "ended_at": item.ended_at,
+        "end_reason": item.end_reason,
+        "backend_mode": item.backend_mode,
+        "baseline": item.baseline,
+        "truncated": item.truncated,
+        "truncation": item.truncation,
+        "interrupted": item.interrupted,
+        "resumed": item.resumed,
+        "segment_count": item.segment_count,
+        "integrity": asdict(item.integrity),
+        "line_processing": asdict(item.line_processing),
+        "first_error": asdict(item.first_error) if item.first_error is not None else None,
     }
 
 

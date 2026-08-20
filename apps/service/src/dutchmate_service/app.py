@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
+from typing import Annotated, Protocol
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
@@ -15,6 +15,8 @@ from dutchmate_core.runtime import (
 )
 from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    SessionDetail,
+    SessionListPage,
     SessionSummary,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
@@ -28,6 +30,8 @@ from dutchmate_service.schemas import (
     capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
+    session_detail_payload,
+    session_list_payload,
     status_payload,
 )
 from dutchmate_service.startup import apply_startup_hardware_config, build_startup_runtime
@@ -63,6 +67,17 @@ class RuntimeProvider(Protocol):
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
         """Reset the DUT and capture boot evidence into a session."""
 
+    def list_sessions(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> SessionListPage:
+        """Return one bounded newest-first session page."""
+
+    def get_session(self, session_id: str) -> SessionDetail:
+        """Return bounded schema-aware detail for one session."""
+
     def apply_hardware_config(
         self,
         config: HardwareGpioConfig,
@@ -93,6 +108,18 @@ def create_app(
     @app.get("/status")
     def get_status() -> dict[str, object]:
         return status_payload(runtime_provider.status())
+
+    @app.get("/sessions")
+    def list_sessions(
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        cursor: str | None = None,
+    ) -> dict[str, object]:
+        page = runtime_provider.list_sessions(limit=limit, cursor=cursor)
+        return session_list_payload(page)
+
+    @app.get("/sessions/{session_id}")
+    def get_session(session_id: str) -> dict[str, object]:
+        return session_detail_payload(runtime_provider.get_session(session_id))
 
     @app.post("/gpio/mode")
     def configure_gpio_mode(request: GpioModeRequest) -> dict[str, object]:

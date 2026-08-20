@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Final, cast
+from urllib.parse import quote
 
 import httpx
 
-from dutchmate_core.validation import validate_capture_duration, validate_gpio_configuration
+from dutchmate_core.validation import (
+    validate_capture_duration,
+    validate_gpio_configuration,
+    validate_session_id,
+)
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
@@ -43,6 +48,50 @@ def fetch_status(
         transport=transport,
     )
     return _response_payload(response, description="status payload")
+
+
+def list_debug_sessions(
+    *,
+    limit: int = 50,
+    cursor: str | None = None,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Fetch one bounded newest-first session page."""
+
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("session limit must be an integer from 1 to 100")
+    if cursor is not None and (not isinstance(cursor, str) or not cursor):
+        raise ValueError("session cursor must be a non-empty string")
+    params: dict[str, str | int] = {"limit": limit}
+    if cursor is not None:
+        params["cursor"] = cursor
+    response = _request_service(
+        method="GET",
+        path="/sessions",
+        service_url=service_url,
+        transport=transport,
+        params=params,
+    )
+    return _response_payload(response, description="session list payload")
+
+
+def get_debug_session(
+    session_id: str,
+    *,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Fetch bounded schema-aware detail for one session."""
+
+    validated_id = validate_session_id(session_id)
+    response = _request_service(
+        method="GET",
+        path=f"/sessions/{quote(validated_id, safe='')}",
+        service_url=service_url,
+        transport=transport,
+    )
+    return _response_payload(response, description="session detail payload")
 
 
 def configure_gpio_mode(
@@ -190,6 +239,7 @@ def _request_service(
     service_url: str,
     transport: httpx.BaseTransport | None = None,
     json: Mapping[str, object] | None = None,
+    params: Mapping[str, str | int] | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> httpx.Response:
     try:
@@ -198,7 +248,7 @@ def _request_service(
             timeout=timeout_s,
             transport=transport,
         ) as client:
-            response = client.request(method, path, json=json)
+            response = client.request(method, path, json=json, params=params)
     except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
         raise ServiceUnavailableError(SERVICE_NOT_RUNNING_MESSAGE) from exc
     except httpx.ReadTimeout as exc:

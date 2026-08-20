@@ -61,10 +61,12 @@ The repository currently contains the first host-side Phase 1 foundation:
   unsupported-schema evidence
 - FastAPI endpoints and CLI commands for service lifecycle, device listing,
   status, capture, boot-test, GPIO mode, reset, and boot mode
+- bounded native/legacy session list and detail queries with stable opaque
+  pagination, artifact manifests, and read-only legacy compatibility output
 
 The full asynchronous Enhanced adapter, continuous background ingestion outside
 active workflows, admission for future control/TX evidence, retention, bounded
-log/session retrieval,
+log retrieval,
 wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
 Current UART, buffer telemetry, and finalized line-limit units enforce exact

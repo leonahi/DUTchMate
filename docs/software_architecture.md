@@ -226,6 +226,8 @@ Owns filesystem-backed sessions under
   workflow failures use the terminal reason `persistence_error`
 - summarizes one session, lists valid sessions newest-first, and resolves the
   latest session
+- returns stable opaque-cursor pages and bounded native/legacy detail without
+  expanding raw UART, JSONL, or detected-pattern arrays
 - rejects path-unsafe session IDs
 
 Session persistence and service delivery share the core `diagnostics`
@@ -332,7 +334,8 @@ format CLI output.
 
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
-GPIO mode, reset, and boot mode. Handlers should remain thin: core code owns
+GPIO mode, reset, boot mode, and bounded session list/detail. Handlers remain
+thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
 
@@ -344,7 +347,7 @@ serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
-workflows, bounded log/session retrieval, wait-pattern, public UART send,
+workflows, bounded log retrieval, wait-pattern, public UART send,
 baseline operations, and remaining error-specific structured contexts remain
 Phase 1 work.
 
@@ -356,7 +359,8 @@ not import low-level transport code or open serial ports for debug workflows.
 
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
-reset, and boot mode. Logs, sessions, wait-pattern, UART send, and baseline
+reset, boot mode, session listing, and session detail. Logs, wait-pattern, UART
+send, and baseline
 commands remain pending.
 
 ### MCP Server

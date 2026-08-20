@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 from threading import RLock
-from typing import Literal
+from typing import Literal, Protocol
 
 from dutchmate_core.backends.contracts import (
     BackendCapability,
@@ -34,7 +34,12 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
-from dutchmate_core.session_store.models import SessionSummary, SessionWorkflow
+from dutchmate_core.session_store.models import (
+    SessionDetail,
+    SessionListPage,
+    SessionSummary,
+    SessionWorkflow,
+)
 from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
@@ -59,6 +64,21 @@ class DeviceCoreRuntimeError(RuntimeError):
 
 
 ConnectionState = Literal["connected", "disconnected", "reconnecting"]
+
+
+class DeviceCoreSessionStorage(CaptureSessionStorage, Protocol):
+    """Capture and bounded-query storage operations required by the runtime."""
+
+    def list_session_page(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> SessionListPage:
+        """Return one bounded newest-first session page."""
+
+    def get_session_detail(self, session_id: str) -> SessionDetail:
+        """Return bounded schema-aware detail for one session."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +126,7 @@ class DeviceCoreRuntime:
         self,
         *,
         device_control: DeviceControl,
-        session_store: CaptureSessionStorage,
+        session_store: DeviceCoreSessionStorage,
         gpio_registry: GpioModeRegistry | None = None,
         message_source: CaptureEventSource | None = None,
         capture_clock: Callable[[], float] | None = None,
@@ -159,10 +179,25 @@ class DeviceCoreRuntime:
         self._operation_lock = RLock()
 
     @property
-    def session_store(self) -> CaptureSessionStorage:
+    def session_store(self) -> DeviceCoreSessionStorage:
         """Capture-session storage used by this runtime."""
 
         return self._session_store
+
+    def list_sessions(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> SessionListPage:
+        """Return one bounded page without requiring a backend connection."""
+
+        return self._session_store.list_session_page(limit=limit, cursor=cursor)
+
+    def get_session(self, session_id: str) -> SessionDetail:
+        """Return bounded session detail without expanding raw evidence arrays."""
+
+        return self._session_store.get_session_detail(session_id)
 
     @property
     def gpio_registry(self) -> GpioModeRegistry:

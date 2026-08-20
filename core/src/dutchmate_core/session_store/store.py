@@ -22,7 +22,9 @@ from dutchmate_core.session_store.models import (
     FirstError,
     LineProcessing,
     MatchExcerpt,
+    SessionDetail,
     SessionHandle,
+    SessionListPage,
     SessionPaths,
     SessionPersistenceError,
     SessionRecoveryDiagnostic,
@@ -31,6 +33,15 @@ from dutchmate_core.session_store.models import (
     SessionState,
     SessionSummary,
     SessionWorkflow,
+)
+from dutchmate_core.session_store.retrieval import (
+    DEFAULT_SESSION_PAGE_LIMIT,
+)
+from dutchmate_core.session_store.retrieval import (
+    get_session_detail as _get_session_detail,
+)
+from dutchmate_core.session_store.retrieval import (
+    list_session_page as _list_session_page,
 )
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 from dutchmate_core.validation import (
@@ -45,6 +56,8 @@ __all__ = [
     "LineProcessing",
     "MatchExcerpt",
     "SessionHandle",
+    "SessionDetail",
+    "SessionListPage",
     "SessionPaths",
     "SessionPersistenceError",
     "SessionRecoveryDiagnostic",
@@ -449,6 +462,21 @@ class SessionStore:
 
         sessions = self.list_sessions(limit=1)
         return sessions[0] if sessions else None
+
+    def list_session_page(
+        self,
+        *,
+        limit: int = DEFAULT_SESSION_PAGE_LIMIT,
+        cursor: str | None = None,
+    ) -> SessionListPage:
+        """Return one stable bounded native/legacy session page."""
+
+        return _list_session_page(self._root, limit=limit, cursor=cursor)
+
+    def get_session_detail(self, session_id: str) -> SessionDetail:
+        """Return bounded schema-aware detail for one stored session."""
+
+        return _get_session_detail(self._root, session_id)
 
     def append_uart_capture(
         self,
