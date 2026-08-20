@@ -44,6 +44,7 @@ def test_reset_not_configured_uses_service_error_contract() -> None:
         "ok": False,
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
+        "detail_truncated": False,
     }
 
 
@@ -57,6 +58,7 @@ def test_reset_validation_error_uses_service_error_contract() -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "Request validation failed",
+        "detail_truncated": False,
     }
 
 
@@ -98,6 +100,7 @@ def test_boot_mode_not_configured_uses_service_error_contract() -> None:
         "ok": False,
         "error": "not_configured",
         "detail": "GPIO role 'boot' is not configured",
+        "detail_truncated": False,
     }
 
 
@@ -111,4 +114,5 @@ def test_boot_mode_validation_error_uses_service_error_contract() -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "Request validation failed",
+        "detail_truncated": False,
     }

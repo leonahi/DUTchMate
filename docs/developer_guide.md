@@ -51,6 +51,7 @@ Current core modules:
 |---|---|
 | `backends` | Backend-neutral identity/contracts, Basic raw serial event/send adapter, and interim Enhanced wire adapters. |
 | `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
+| `diagnostics.py` | Shared sanitized, UTF-8-safe, 1024-byte diagnostic projection. |
 | `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
 | `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded disconnect/reconnect segments, pattern/line-limit evidence, deterministic first-error summaries, and discovery. |

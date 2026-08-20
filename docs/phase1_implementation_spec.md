@@ -1143,10 +1143,12 @@ projection and always includes `detail_truncated`. Schema-defined context is
 bounded by its field contracts and never carries arbitrary exception text, a
 wire frame, or a UART payload.
 
-The current mapper already returns `internal_error` for otherwise unmapped
-exceptions, but its payload contains only `ok`, `error`, and unbounded `detail`.
-It does not yet apply the diagnostic projection, emit `detail_truncated`, or
-return structured `context`.
+The current mapper returns `internal_error` for otherwise unmapped exceptions,
+applies the shared bounded diagnostic projection, and always emits
+`detail_truncated`. Reconnect timeout and reconnect-limit failures also return
+their exact schema-defined context. Remaining error-specific context contracts,
+including complete `backend_input_error` classification, are implemented with
+their owning workflows rather than inferred from arbitrary exception text.
 
 `unsupported_session_schema` context contains `session_id`,
 `detected_schema_version`, `supported_schema_versions: [1]`, and `operation`.

@@ -15,6 +15,7 @@ from dutchmate_core.backends.contracts import (
     UartIntegrity,
     UartSendCapabilityPolicy,
 )
+from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.session_store.evidence import first_error as _first_error
 from dutchmate_core.session_store.models import (
     LineProcessing,
@@ -624,28 +625,7 @@ def _required_bool(metadata: dict[str, object], key: str) -> bool:
 def _bounded_error(code: str, detail: str) -> dict[str, object]:
     if not isinstance(code, str) or not code:
         raise ValueError("session error code must be a non-empty string")
-    if not isinstance(detail, str):
-        raise TypeError("session error detail must be a string")
-    cleaned = "".join(
-        " "
-        if character in {"\r", "\n", "\t"}
-        else "\ufffd"
-        if unicodedata.category(character) == "Cc"
-        else character
-        for character in detail
-    )
-    if not cleaned:
-        cleaned = code.replace("_", " ")
-    encoded = cleaned.encode("utf-8")
-    truncated = len(encoded) > 1024
-    if truncated:
-        prefix = encoded[:1024]
-        while True:
-            try:
-                cleaned = prefix.decode("utf-8")
-                break
-            except UnicodeDecodeError:
-                prefix = prefix[:-1]
+    cleaned, truncated = project_diagnostic_detail(fallback_code=code, detail=detail)
     return {
         "code": code,
         "detail": cleaned,

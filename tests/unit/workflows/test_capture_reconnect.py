@@ -161,7 +161,7 @@ def test_reconnect_deadline_failure_is_persisted_and_raised(tmp_path: Path) -> N
     with pytest.raises(
         CaptureReconnectError,
         match="Backend did not reconnect before the reconnect deadline",
-    ):
+    ) as error_info:
         CaptureWorkflow(session_store=store).run(
             source=source,
             duration_s=2.0,
@@ -171,6 +171,10 @@ def test_reconnect_deadline_failure_is_persisted_and_raised(tmp_path: Path) -> N
             backend_snapshot=initial_snapshot,
             reconnect=reconnect,
         )
+
+    assert error_info.value.operation == "capture"
+    assert error_info.value.session_id == "20260714T123045Z-reconnect"
+    assert error_info.value.reconnect_timeout_s == 0.5
 
     summary = store.summarize_session("20260714T123045Z-reconnect")
     assert summary.state == "failed"
@@ -269,7 +273,7 @@ def test_disconnect_from_segment_31_fails_without_another_reopen(tmp_path: Path)
     with pytest.raises(
         CaptureReconnectError,
         match="Session reached the 32-segment reconnect limit",
-    ):
+    ) as error_info:
         CaptureWorkflow(session_store=store).run(
             source=sources[0],
             duration_s=10.0,
@@ -279,6 +283,11 @@ def test_disconnect_from_segment_31_fails_without_another_reopen(tmp_path: Path)
             backend_snapshot=snapshots[0],
             reconnect=reconnect,
         )
+
+    assert error_info.value.operation == "capture"
+    assert error_info.value.session_id == "20260714T123045Z-reconnect"
+    assert error_info.value.segment_count == 32
+    assert error_info.value.max_segments == 32
 
     summary = store.summarize_session("20260714T123045Z-reconnect")
     assert summary.state == "failed"

@@ -12,6 +12,7 @@ from dutchmate_cli.status import format_status
 def test_format_status_renders_channel_first_state() -> None:
     payload: dict[str, object] = {
         "connected": True,
+        "connection_state": "connected",
         "backend_mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
@@ -39,6 +40,8 @@ def test_format_status_renders_channel_first_state() -> None:
             "dropped_bytes": 0,
         },
         "active_session_id": None,
+        "active_workflow": None,
+        "reconnect_remaining_s": None,
         "control_channels": {
             "CTRL0": {
                 "channel": "CTRL0",
@@ -60,9 +63,11 @@ def test_format_status_renders_channel_first_state() -> None:
         [
             "Service: running",
             "Backend: enhanced",
+            "Workflow: none",
+            "Session: none",
+            "Connection: connected",
             "Device: connected (dutchmate-rp2040, firmware 0.1.0)",
             "Port: /dev/ttyACM0",
-            "Active session: none",
             "Backend capabilities: gpio_control, uart_receive, uart_send",
             "Capabilities: gpio_control, uart_receive",
             "UART TX policy: disabled (hardware.uart.tx_enabled)",
@@ -121,6 +126,36 @@ def test_format_status_renders_basic_loss_limit_and_tx_policy() -> None:
         "host_serial_read/serial_read_chunk" in output
     )
     assert "UART loss: not_observable" in output
+
+
+def test_format_status_renders_active_reconnect_window() -> None:
+    output = format_status(
+        {
+            "connected": False,
+            "connection_state": "reconnecting",
+            "backend_mode": "enhanced",
+            "active_workflow": "boot_test",
+            "active_session_id": "20260820T120000Z-a1b2c3d4",
+            "reconnect_remaining_s": 2.14,
+        }
+    )
+
+    assert "Workflow: boot-test (active)" in output
+    assert "Session: 20260820T120000Z-a1b2c3d4" in output
+    assert "Connection: reconnecting (2.1s remaining)" in output
+
+
+@pytest.mark.parametrize("remaining", [None, True, -0.1, float("inf"), "2.1"])
+def test_format_status_omits_invalid_reconnect_remaining_time(remaining: object) -> None:
+    output = format_status(
+        {
+            "connected": False,
+            "connection_state": "reconnecting",
+            "reconnect_remaining_s": remaining,
+        }
+    )
+
+    assert "Connection: reconnecting\n" in output
 
 
 def test_status_command_prints_service_status(monkeypatch: pytest.MonkeyPatch) -> None:

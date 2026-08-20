@@ -147,6 +147,7 @@ def test_boot_test_rejects_invalid_duration(duration_s: object) -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "Request validation failed",
+        "detail_truncated": False,
     }
     assert runtime.boot_test_requests == []
 
@@ -165,6 +166,7 @@ def test_boot_test_requires_configured_reset_role() -> None:
         "ok": False,
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
+        "detail_truncated": False,
     }
 
 
@@ -185,6 +187,7 @@ def test_boot_test_active_uses_conflict_error_contract() -> None:
         "ok": False,
         "error": "capture_active",
         "detail": "capture is already active",
+        "detail_truncated": False,
     }
 
 
@@ -202,4 +205,5 @@ def test_boot_test_disconnected_uses_service_unavailable_contract() -> None:
         "ok": False,
         "error": "service_unavailable",
         "detail": "Debug Helper is not connected",
+        "detail_truncated": False,
     }

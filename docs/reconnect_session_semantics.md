@@ -410,7 +410,7 @@ metadata plus `interrupted`, `resumed`, and segment count. Native
 `GET /sessions/{id}` detail exposes the same facts. Legacy version `0` uses the
 separate read-only compatibility shape and does not synthesize reconnect facts.
 
-`dutchmate status` should show reconnect state during an active capture-like
+`dutchmate status` shows reconnect state during an active capture-like
 workflow, including its kind:
 
 ```text
@@ -419,7 +419,7 @@ Session: 20260704T120000Z-a1b2c3d4
 Connection: reconnecting (2.1s remaining)
 ```
 
-The target `GET /status` payload supplies this without reconstructing volatile
+The current `GET /status` payload supplies this without reconstructing volatile
 state from session files: `connection_state` is `connected`, `disconnected`, or
 `reconnecting`; nullable `active_workflow` names the finite owner; and nullable
 `reconnect_remaining_s` is the non-negative monotonic time remaining for that

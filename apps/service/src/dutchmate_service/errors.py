@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from dutchmate_core.backends.contracts import BackendInputError
 from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
@@ -26,51 +27,114 @@ class ServiceError:
     error: str
     detail: str
     status_code: int
+    detail_truncated: bool = False
+    context: dict[str, object] | None = None
 
     def payload(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "ok": False,
             "error": self.error,
             "detail": self.detail,
+            "detail_truncated": self.detail_truncated,
         }
+        if self.context is not None:
+            payload["context"] = self.context
+        return payload
 
 
 def service_error_from_exception(exc: Exception) -> ServiceError:
     """Map known core exceptions to the service error contract."""
 
     if isinstance(exc, DeviceActionError):
-        return ServiceError(
+        return _service_error(
             error=exc.error,
             detail=exc.detail,
             status_code=_status_for_error(exc.error),
         )
 
     if isinstance(exc, SessionPersistenceError):
-        return ServiceError(error=exc.error, detail=str(exc), status_code=500)
+        return _service_error(error=exc.error, detail=str(exc), status_code=500)
 
     if isinstance(exc, CaptureReconnectError):
-        return ServiceError(error=exc.error, detail=str(exc), status_code=503)
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=503,
+            context=_reconnect_context(exc),
+        )
 
     if isinstance(exc, BackendInputError):
-        return ServiceError(error=exc.error, detail=str(exc), status_code=502)
+        return _service_error(error=exc.error, detail=str(exc), status_code=502)
 
     if isinstance(exc, GpioConfigurationError):
-        return ServiceError(error="not_configured", detail=str(exc), status_code=409)
+        return _service_error(error="not_configured", detail=str(exc), status_code=409)
 
     if isinstance(exc, DeviceCoreRuntimeError):
-        return ServiceError(error="service_unavailable", detail=str(exc), status_code=503)
+        return _service_error(error="service_unavailable", detail=str(exc), status_code=503)
 
     if isinstance(exc, RequestValidationError):
-        return ServiceError(
+        return _service_error(
             error="invalid_argument",
             detail="Request validation failed",
             status_code=400,
         )
 
     if isinstance(exc, ProtocolValidationError | GpioConfigError | ValueError):
-        return ServiceError(error="invalid_argument", detail=str(exc), status_code=400)
+        return _service_error(error="invalid_argument", detail=str(exc), status_code=400)
 
-    return ServiceError(error="internal_error", detail="Internal service error", status_code=500)
+    return _service_error(
+        error="internal_error",
+        detail="Internal service error",
+        status_code=500,
+    )
+
+
+def _service_error(
+    *,
+    error: str,
+    detail: str,
+    status_code: int,
+    context: dict[str, object] | None = None,
+) -> ServiceError:
+    projected_detail, truncated = project_diagnostic_detail(
+        fallback_code=error,
+        detail=detail,
+    )
+    return ServiceError(
+        error=error,
+        detail=projected_detail,
+        status_code=status_code,
+        detail_truncated=truncated,
+        context=context,
+    )
+
+
+def _reconnect_context(exc: CaptureReconnectError) -> dict[str, object] | None:
+    if (
+        exc.end_reason == "reconnect_timeout"
+        and exc.operation is not None
+        and exc.session_id is not None
+        and exc.reconnect_timeout_s is not None
+    ):
+        return {
+            "operation": exc.operation,
+            "session_id": exc.session_id,
+            "reconnect_timeout_s": exc.reconnect_timeout_s,
+        }
+    if (
+        exc.end_reason == "reconnect_limit"
+        and exc.operation is not None
+        and exc.session_id is not None
+        and exc.segment_count is not None
+        and exc.max_segments is not None
+    ):
+        return {
+            "operation": exc.operation,
+            "session_id": exc.session_id,
+            "segment_count": exc.segment_count,
+            "max_segments": exc.max_segments,
+        }
+    return None
 
 
 def register_error_handlers(app: FastAPI) -> None:

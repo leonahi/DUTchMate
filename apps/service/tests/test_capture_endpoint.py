@@ -256,6 +256,7 @@ def test_capture_rejects_invalid_duration(duration_s: object) -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "Request validation failed",
+        "detail_truncated": False,
     }
     assert runtime.capture_requests == []
 
@@ -277,6 +278,7 @@ def test_capture_active_uses_conflict_error_contract() -> None:
         "ok": False,
         "error": "capture_active",
         "detail": "capture is already active",
+        "detail_truncated": False,
     }
 
 
@@ -294,4 +296,5 @@ def test_capture_disconnected_uses_service_unavailable_contract() -> None:
         "ok": False,
         "error": "service_unavailable",
         "detail": "Debug Helper is not connected",
+        "detail_truncated": False,
     }

@@ -61,9 +61,24 @@ class CaptureReconnectError(RuntimeError):
 
     error = "service_unavailable"
 
-    def __init__(self, *, end_reason: str, detail: str) -> None:
+    def __init__(
+        self,
+        *,
+        end_reason: str,
+        detail: str,
+        operation: SessionWorkflow | None = None,
+        session_id: str | None = None,
+        reconnect_timeout_s: float | None = None,
+        segment_count: int | None = None,
+        max_segments: int | None = None,
+    ) -> None:
         super().__init__(detail)
         self.end_reason = end_reason
+        self.operation = operation
+        self.session_id = session_id
+        self.reconnect_timeout_s = reconnect_timeout_s
+        self.segment_count = segment_count
+        self.max_segments = max_segments
 
 
 class CaptureSessionStorage(Protocol):
@@ -520,9 +535,17 @@ class CaptureWorkflow:
                         raise CaptureReconnectError(
                             end_reason="reconnect_limit",
                             detail="Session reached the 32-segment reconnect limit",
+                            operation=workflow,
+                            session_id=recorder.session_id,
+                            segment_count=32,
+                            max_segments=32,
                         ) from disconnect_error
                     if now >= reconnect_deadline:
-                        raise self._reconnect_timeout_error() from disconnect_error
+                        raise self._reconnect_timeout_error(
+                            operation=workflow,
+                            session_id=recorder.session_id,
+                            reconnect_timeout_s=reconnect_timeout_s,
+                        ) from disconnect_error
                     replacement = reconnect(
                         segment_id=segment_count,
                         deadline=min(workflow_deadline, reconnect_deadline),
@@ -531,7 +554,11 @@ class CaptureWorkflow:
                     if workflow_deadline <= reconnect_deadline and now >= workflow_deadline:
                         break
                     if replacement is None or now >= reconnect_deadline:
-                        raise self._reconnect_timeout_error() from disconnect_error
+                        raise self._reconnect_timeout_error(
+                            operation=workflow,
+                            session_id=recorder.session_id,
+                            reconnect_timeout_s=reconnect_timeout_s,
+                        ) from disconnect_error
                     replacement_segment = getattr(replacement.source, "segment", None)
                     if replacement_segment != replacement.backend_snapshot.segment:
                         raise ValueError(
@@ -593,8 +620,16 @@ class CaptureWorkflow:
         return source_segment.segment_id if isinstance(source_segment, SegmentContext) else 0
 
     @staticmethod
-    def _reconnect_timeout_error() -> CaptureReconnectError:
+    def _reconnect_timeout_error(
+        *,
+        operation: SessionWorkflow,
+        session_id: str,
+        reconnect_timeout_s: float,
+    ) -> CaptureReconnectError:
         return CaptureReconnectError(
             end_reason="reconnect_timeout",
             detail="Backend did not reconnect before the reconnect deadline",
+            operation=operation,
+            session_id=session_id,
+            reconnect_timeout_s=reconnect_timeout_s,
         )

@@ -44,6 +44,7 @@ core/uart_capture
 core/session_store
   -> uart_capture results
   -> backends.contracts
+  -> diagnostics
 
 core/workflows.device_actions, gpio_config
   -> backends.contracts
@@ -227,6 +228,12 @@ Owns filesystem-backed sessions under
   latest session
 - rejects path-unsafe session IDs
 
+Session persistence and service delivery share the core `diagnostics`
+projection for non-empty, control-sanitized, UTF-8-safe 1024-byte error detail.
+The projection owns only bounded diagnostic text; error codes, HTTP status, and
+schema-defined context remain responsibilities of their originating workflow
+and delivery adapter.
+
 Runtime capture/boot-test sessions with complete backend identity now use schema
 version 1 and snapshot backend facts, accepted timing policy, integrity, line
 processing, storage accounting, and one-way lifecycle state. Older direct-store
@@ -338,8 +345,8 @@ segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
 workflows, bounded log/session retrieval, wait-pattern, public UART send,
-baseline operations, and the complete target error projection remain Phase 1
-work.
+baseline operations, and remaining error-specific structured contexts remain
+Phase 1 work.
 
 ### CLI
 

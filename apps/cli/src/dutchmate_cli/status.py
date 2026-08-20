@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Final, cast
 
@@ -14,9 +15,11 @@ def format_status(payload: Mapping[str, object]) -> str:
     lines = [
         "Service: running",
         f"Backend: {_display(payload.get('backend_mode'))}",
+        f"Workflow: {_format_workflow(payload.get('active_workflow'))}",
+        f"Session: {_display(payload.get('active_session_id'))}",
+        f"Connection: {_format_connection(payload)}",
         f"Device: {_format_device(payload)}",
         f"Port: {_display(payload.get('port'))}",
-        f"Active session: {_display(payload.get('active_session_id'))}",
         f"Backend capabilities: {_format_capabilities(payload.get('backend_capabilities'))}",
         f"Capabilities: {_format_capabilities(payload.get('capabilities'))}",
         f"UART TX policy: {_format_tx_policy(payload.get('capability_policy'))}",
@@ -26,6 +29,36 @@ def format_status(payload: Mapping[str, object]) -> str:
     ]
     lines.extend(_format_control_channels(payload.get("control_channels")))
     return "\n".join(lines)
+
+
+def _format_workflow(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        return "none"
+    return f"{value.replace('_', '-')} (active)"
+
+
+def _format_connection(payload: Mapping[str, object]) -> str:
+    value = payload.get("connection_state")
+    state = (
+        value
+        if isinstance(value, str)
+        and value in {"connected", "disconnected", "reconnecting"}
+        else None
+    )
+    if state is None:
+        state = "connected" if payload.get("connected") is True else "disconnected"
+    if state != "reconnecting":
+        return state
+
+    remaining = payload.get("reconnect_remaining_s")
+    if (
+        isinstance(remaining, int | float)
+        and not isinstance(remaining, bool)
+        and math.isfinite(remaining)
+        and remaining >= 0
+    ):
+        return f"reconnecting ({remaining:.1f}s remaining)"
+    return "reconnecting"
 
 
 def _format_device(payload: Mapping[str, object]) -> str:

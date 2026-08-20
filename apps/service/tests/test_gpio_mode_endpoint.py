@@ -107,6 +107,7 @@ def test_configure_gpio_mode_runtime_error_uses_service_error_contract() -> None
         "ok": False,
         "error": "service_unavailable",
         "detail": "Debug Helper is not connected",
+        "detail_truncated": False,
     }
 
 
@@ -129,6 +130,7 @@ def test_configure_gpio_mode_validation_error_uses_service_error_contract() -> N
         "ok": False,
         "error": "invalid_argument",
         "detail": "Request validation failed",
+        "detail_truncated": False,
     }
 
 

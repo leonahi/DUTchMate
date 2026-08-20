@@ -26,6 +26,7 @@ def test_service_error_payload_shape() -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "bad input",
+        "detail_truncated": False,
     }
 
 
@@ -84,6 +85,9 @@ def test_maps_reconnect_error_to_service_unavailable() -> None:
         CaptureReconnectError(
             end_reason="reconnect_timeout",
             detail="Backend did not reconnect before the reconnect deadline",
+            operation="capture",
+            session_id="20260820T120000Z-a1b2c3d4",
+            reconnect_timeout_s=5.0,
         )
     )
 
@@ -91,7 +95,60 @@ def test_maps_reconnect_error_to_service_unavailable() -> None:
         error="service_unavailable",
         detail="Backend did not reconnect before the reconnect deadline",
         status_code=503,
+        context={
+            "operation": "capture",
+            "session_id": "20260820T120000Z-a1b2c3d4",
+            "reconnect_timeout_s": 5.0,
+        },
     )
+    assert error.payload() == {
+        "ok": False,
+        "error": "service_unavailable",
+        "detail": "Backend did not reconnect before the reconnect deadline",
+        "detail_truncated": False,
+        "context": {
+            "operation": "capture",
+            "session_id": "20260820T120000Z-a1b2c3d4",
+            "reconnect_timeout_s": 5.0,
+        },
+    }
+
+
+def test_maps_reconnect_limit_with_exact_context() -> None:
+    error = service_error_from_exception(
+        CaptureReconnectError(
+            end_reason="reconnect_limit",
+            detail="Session reached the 32-segment reconnect limit",
+            operation="boot_test",
+            session_id="20260820T120000Z-a1b2c3d4",
+            segment_count=32,
+            max_segments=32,
+        )
+    )
+
+    assert error.payload() == {
+        "ok": False,
+        "error": "service_unavailable",
+        "detail": "Session reached the 32-segment reconnect limit",
+        "detail_truncated": False,
+        "context": {
+            "operation": "boot_test",
+            "session_id": "20260820T120000Z-a1b2c3d4",
+            "segment_count": 32,
+            "max_segments": 32,
+        },
+    }
+
+
+def test_service_error_sanitizes_and_bounds_diagnostic_detail() -> None:
+    error = service_error_from_exception(ValueError("start\n" + "é" * 600 + "\x00end"))
+
+    assert error.error == "invalid_argument"
+    assert error.detail.startswith("start ")
+    assert "\n" not in error.detail
+    assert "\x00" not in error.detail
+    assert len(error.detail.encode("utf-8")) <= 1024
+    assert error.detail_truncated is True
 
 
 def test_maps_backend_input_error_to_bad_gateway() -> None:
@@ -140,6 +197,7 @@ def test_exception_handlers_return_json_error_response() -> None:
         "ok": False,
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
+        "detail_truncated": False,
     }
 
 
@@ -157,6 +215,7 @@ def test_input_validation_handler_returns_json_error_response() -> None:
         "ok": False,
         "error": "invalid_argument",
         "detail": "bad input",
+        "detail_truncated": False,
     }
 
 
@@ -174,4 +233,5 @@ def test_exception_handlers_preserve_firmware_error_code() -> None:
         "ok": False,
         "error": "capture_active",
         "detail": "capture is already active",
+        "detail_truncated": False,
     }
