@@ -228,6 +228,9 @@ Owns filesystem-backed sessions under
   latest session
 - returns stable opaque-cursor pages and bounded native/legacy detail without
   expanding raw UART, JSONL, or detected-pattern arrays
+- selects an explicit, active, or newest terminal native session and replays
+  persisted UART events through the shared segment/channel line buffer, retaining
+  bounded complete, partial, and oversized records with evidence coordinates
 - rejects path-unsafe session IDs
 
 Session persistence and service delivery share the core `diagnostics`
@@ -243,8 +246,8 @@ fixtures retain their recognized unversioned legacy shape. The CLI propagates
 the positive `sessions.max_size_mb` setting through service startup, and each
 native session snapshots and enforces the exact resulting byte budget.
 `sessions.max_count` is rejected until retention exists. Quota admission for
-future control/TX events, retention, baseline, reconnect coordination, and
-bounded replay remain. Startup recovery
+future control/TX events, retention, baseline, and reconnect coordination remain.
+Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
@@ -334,7 +337,8 @@ format CLI output.
 
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
-GPIO mode, reset, boot mode, and bounded session list/detail. Handlers remain
+GPIO mode, reset, boot mode, bounded session list/detail, and bounded recent
+UART replay. Handlers remain
 thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
@@ -347,8 +351,8 @@ serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
-workflows, bounded log retrieval, wait-pattern, public UART send,
-baseline operations, and remaining error-specific structured contexts remain
+workflows, wait-pattern, public UART send, baseline operations, and remaining
+error-specific structured contexts remain
 Phase 1 work.
 
 ### CLI
@@ -359,9 +363,8 @@ not import low-level transport code or open serial ports for debug workflows.
 
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
-reset, boot mode, session listing, and session detail. Logs, wait-pattern, UART
-send, and baseline
-commands remain pending.
+reset, boot mode, session listing, session detail, and recent logs. Wait-pattern,
+UART send, and baseline commands remain pending.
 
 ### MCP Server
 

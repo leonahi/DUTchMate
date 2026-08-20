@@ -35,6 +35,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioRoleName,
 )
 from dutchmate_core.session_store.models import (
+    RecentLogs,
     SessionDetail,
     SessionListPage,
     SessionSummary,
@@ -79,6 +80,15 @@ class DeviceCoreSessionStorage(CaptureSessionStorage, Protocol):
 
     def get_session_detail(self, session_id: str) -> SessionDetail:
         """Return bounded schema-aware detail for one session."""
+
+    def replay_recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = 300,
+        active_session_id: str | None = None,
+    ) -> RecentLogs:
+        """Return bounded recent UART replay for one selected native session."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +208,22 @@ class DeviceCoreRuntime:
         """Return bounded session detail without expanding raw evidence arrays."""
 
         return self._session_store.get_session_detail(session_id)
+
+    def recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = 300,
+    ) -> RecentLogs:
+        """Return recent UART evidence without requiring a backend connection."""
+
+        with self._operation_lock:
+            active_session_id = self._active_session_id
+        return self._session_store.replay_recent_logs(
+            session_id=session_id,
+            lines=lines,
+            active_session_id=active_session_id,
+        )
 
     @property
     def gpio_registry(self) -> GpioModeRegistry:

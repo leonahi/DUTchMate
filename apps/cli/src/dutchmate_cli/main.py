@@ -12,6 +12,7 @@ from dutchmate_cli.client import (
     ServiceUnavailableError,
     capture_uart,
     configure_gpio_mode,
+    fetch_recent_logs,
     fetch_status,
     get_debug_session,
     list_debug_sessions,
@@ -28,6 +29,7 @@ from dutchmate_cli.lifecycle import (
     start_service,
     stop_service,
 )
+from dutchmate_cli.logs import format_recent_logs
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
 from dutchmate_core.backends.settings import (
@@ -221,6 +223,39 @@ def session_command(
     except ServiceClientError as exc:
         _fail(str(exc))
     typer.echo(format_session_detail(payload))
+
+
+@app.command("logs")
+def logs_command(
+    session_id: Annotated[
+        str | None,
+        typer.Option("--session", help="Exact native debug-session ID."),
+    ] = None,
+    last: Annotated[
+        int,
+        typer.Option("--last", min=1, max=1000, help="Newest complete lines to return."),
+    ] = 300,
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Show recent UART logs from an active or terminal native session."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = fetch_recent_logs(
+            session_id=session_id,
+            lines=last,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_recent_logs(payload))
 
 
 @app.command()

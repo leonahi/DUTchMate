@@ -54,7 +54,7 @@ Current core modules:
 | `diagnostics.py` | Shared sanitized, UTF-8-safe, 1024-byte diagnostic projection. |
 | `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
-| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded reconnect segments, stable paginated list/detail projections, pattern/line-limit evidence, and discovery. |
+| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded reconnect segments, stable paginated list/detail projections, bounded native UART replay, pattern/line-limit evidence, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
 | `workflows` | Shared normalized-event capture and guarded reset/boot actions. |
 | `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
@@ -128,6 +128,8 @@ CLI commands:
 - `dutchmate gpio mode <channel> <role> <dut_signal> ...`
 - `dutchmate dut reset`
 - `dutchmate dut boot-mode <normal|bootloader>`
+- `dutchmate sessions`, `session <session_id>`, and
+  `logs [--session <session_id>] --last <lines>`
 
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
@@ -137,8 +139,8 @@ coordinates disconnect/resume deadlines and segment-bound source replacement;
 service composition now retries the configured Basic port or validates an exact
 Enhanced identity/hello before publishing a prepared replacement. Major
 remaining Phase 1 areas are the full asynchronous Enhanced adapter, background
-ingestion outside active workflows, retention, bounded log retrieval,
-wait-pattern, UART-send public workflows, generic Enhanced control
+ingestion outside active workflows, retention, wait-pattern, UART-send public
+workflows, generic Enhanced control
 actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint

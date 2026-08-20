@@ -89,7 +89,7 @@ class SessionQueryError(RuntimeError):
             "persistence_fault",
             "unsupported_session_schema",
         ],
-        operation: Literal["list_sessions", "get_session"],
+        operation: Literal["list_sessions", "get_session", "get_logs"],
         detail: str,
         session_id: str | None = None,
         detected_schema_version: int | None = None,
@@ -309,3 +309,63 @@ class LegacySessionDetail:
 
 
 SessionDetail = NativeSessionDetail | LegacySessionDetail
+
+
+SessionSelection = Literal["explicit", "active", "latest_terminal"]
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLogLine:
+    """One bounded complete or trailing UART line from replayed evidence."""
+
+    segment_id: int
+    channel: int
+    timestamp_us: int
+    ingestion_index: int
+    line_index_in_event: int
+    line_raw_b64: str
+    line_text: str
+    partial: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class OversizedLogLine:
+    """Location-only descriptor for a replayed physical line over the limit."""
+
+    segment_id: int
+    channel: int
+    ingestion_index: int
+    line_index_in_event: int
+    line_start_ingestion_index: int
+    line_start_event_offset: int
+    line_end_ingestion_index: int
+    line_end_event_offset: int
+    total_line_bytes: int
+    terminated: bool
+    timestamp_us: int
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLogs:
+    """Bounded recent UART replay plus session evidence-quality context."""
+
+    session_selection: SessionSelection
+    session_id: str
+    active: bool
+    snapshot_event_count: int
+    complete_lines: tuple[RecentLogLine, ...]
+    partial_lines: tuple[RecentLogLine, ...]
+    oversized_lines: tuple[OversizedLogLine, ...]
+    integrity: UartIntegrity
+    line_processing: LineProcessing
+    reconnect_timeout_s: float
+    interrupted: bool
+    resumed: bool
+    storage: dict[str, object]
+    truncated: bool
+    truncation: dict[str, object] | None
+    timestamp_provenance: tuple[dict[str, object], ...]
+    omitted_complete_lines: int = 0
+    omitted_partial_lines: int = 0
+    omitted_oversized_lines: int = 0
+    schema_version: Literal[1] = 1

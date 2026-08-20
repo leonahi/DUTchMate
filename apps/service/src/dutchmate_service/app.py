@@ -15,6 +15,7 @@ from dutchmate_core.runtime import (
 )
 from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    RecentLogs,
     SessionDetail,
     SessionListPage,
     SessionSummary,
@@ -30,6 +31,7 @@ from dutchmate_service.schemas import (
     capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
+    recent_logs_payload,
     session_detail_payload,
     session_list_payload,
     status_payload,
@@ -78,6 +80,14 @@ class RuntimeProvider(Protocol):
     def get_session(self, session_id: str) -> SessionDetail:
         """Return bounded schema-aware detail for one session."""
 
+    def recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = 300,
+    ) -> RecentLogs:
+        """Return bounded recent UART replay for one selected session."""
+
     def apply_hardware_config(
         self,
         config: HardwareGpioConfig,
@@ -120,6 +130,15 @@ def create_app(
     @app.get("/sessions/{session_id}")
     def get_session(session_id: str) -> dict[str, object]:
         return session_detail_payload(runtime_provider.get_session(session_id))
+
+    @app.get("/dut/logs")
+    def get_recent_logs(
+        session_id: str | None = None,
+        lines: Annotated[int, Query(ge=1, le=1000)] = 300,
+    ) -> dict[str, object]:
+        return recent_logs_payload(
+            runtime_provider.recent_logs(session_id=session_id, lines=lines)
+        )
 
     @app.post("/gpio/mode")
     def configure_gpio_mode(request: GpioModeRequest) -> dict[str, object]:

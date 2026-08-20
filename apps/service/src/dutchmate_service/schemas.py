@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
-from typing import Literal
+from typing import Final, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
@@ -13,6 +14,7 @@ from dutchmate_core.session_store.models import (
     LegacySessionDetail,
     LegacySessionListItem,
     NativeSessionListItem,
+    RecentLogs,
     SessionDetail,
     SessionListItem,
     SessionListPage,
@@ -218,6 +220,88 @@ def session_detail_payload(detail: SessionDetail) -> dict[str, object]:
         }
     )
     return payload
+
+
+MAX_RECENT_LOG_RESPONSE_BYTES: Final = 262144
+
+
+def recent_logs_payload(logs: RecentLogs) -> dict[str, object]:
+    """Serialize recent logs and remove oldest whole records to fit the body cap."""
+
+    payload: dict[str, object] = {
+        "session_selection": logs.session_selection,
+        "session_id": logs.session_id,
+        "schema_version": logs.schema_version,
+        "active": logs.active,
+        "snapshot_event_count": logs.snapshot_event_count,
+        "complete_lines": [asdict(line) for line in logs.complete_lines],
+        "partial_lines": [asdict(line) for line in logs.partial_lines],
+        "oversized_lines": [asdict(line) for line in logs.oversized_lines],
+        "integrity": asdict(logs.integrity),
+        "line_processing": asdict(logs.line_processing),
+        "reconnect_timeout_s": logs.reconnect_timeout_s,
+        "interrupted": logs.interrupted,
+        "resumed": logs.resumed,
+        "storage": logs.storage,
+        "truncated": logs.truncated,
+        "truncation": logs.truncation,
+        "timestamp_provenance": list(logs.timestamp_provenance),
+        "response_truncated": False,
+        "omitted_complete_lines": logs.omitted_complete_lines,
+        "omitted_partial_lines": logs.omitted_partial_lines,
+        "omitted_oversized_lines": logs.omitted_oversized_lines,
+    }
+    while _compact_json_size(payload) > MAX_RECENT_LOG_RESPONSE_BYTES:
+        category = _oldest_log_category(payload)
+        if category is None:
+            raise ValueError("recent-log metadata exceeds the response byte limit")
+        records = cast(list[object], payload[category])
+        records.pop(0)
+        omission_key = {
+            "complete_lines": "omitted_complete_lines",
+            "partial_lines": "omitted_partial_lines",
+            "oversized_lines": "omitted_oversized_lines",
+        }[category]
+        payload[omission_key] = cast(int, payload[omission_key]) + 1
+    payload["response_truncated"] = any(
+        cast(int, payload[key]) > 0
+        for key in (
+            "omitted_complete_lines",
+            "omitted_partial_lines",
+            "omitted_oversized_lines",
+        )
+    )
+    return payload
+
+
+def _oldest_log_category(payload: dict[str, object]) -> str | None:
+    candidates: list[tuple[tuple[int, int], str]] = []
+    for category in ("complete_lines", "partial_lines", "oversized_lines"):
+        records = cast(list[object], payload[category])
+        if not records:
+            continue
+        record = cast(dict[str, object], records[0])
+        candidates.append(
+            (
+                (
+                    cast(int, record["ingestion_index"]),
+                    cast(int, record["line_index_in_event"]),
+                ),
+                category,
+            )
+        )
+    return min(candidates)[1] if candidates else None
+
+
+def _compact_json_size(payload: dict[str, object]) -> int:
+    return len(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
 
 
 def _session_list_item_payload(item: SessionListItem) -> dict[str, object]:

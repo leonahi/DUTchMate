@@ -17,11 +17,18 @@ from dutchmate_core.backends.contracts import (
     SegmentContext,
     UartReceiveEvent,
 )
+from dutchmate_core.session_store.log_replay import (
+    DEFAULT_RECENT_LOG_LINES,
+)
+from dutchmate_core.session_store.log_replay import (
+    replay_recent_logs as _replay_recent_logs,
+)
 from dutchmate_core.session_store.models import (
     EvidenceQuotaExceeded,
     FirstError,
     LineProcessing,
     MatchExcerpt,
+    RecentLogs,
     SessionDetail,
     SessionHandle,
     SessionListPage,
@@ -55,6 +62,7 @@ __all__ = [
     "FirstError",
     "LineProcessing",
     "MatchExcerpt",
+    "RecentLogs",
     "SessionHandle",
     "SessionDetail",
     "SessionListPage",
@@ -477,6 +485,22 @@ class SessionStore:
         """Return bounded schema-aware detail for one stored session."""
 
         return _get_session_detail(self._root, session_id)
+
+    def replay_recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = DEFAULT_RECENT_LOG_LINES,
+        active_session_id: str | None = None,
+    ) -> RecentLogs:
+        """Return bounded replayed UART lines for one selected native session."""
+
+        return _replay_recent_logs(
+            self._root,
+            session_id=session_id,
+            lines=lines,
+            active_session_id=active_session_id,
+        )
 
     def append_uart_capture(
         self,

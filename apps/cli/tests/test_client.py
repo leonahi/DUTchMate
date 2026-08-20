@@ -8,6 +8,7 @@ from dutchmate_cli.client import (
     ServiceUnavailableError,
     capture_uart,
     configure_gpio_mode,
+    fetch_recent_logs,
     fetch_status,
     get_debug_session,
     list_debug_sessions,
@@ -92,6 +93,30 @@ def test_get_debug_session_fetches_exact_validated_id() -> None:
     )
 
     assert payload["compatibility"] == "native"
+
+
+def test_fetch_recent_logs_forwards_selection_and_limit() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/logs"
+        assert dict(request.url.params) == {
+            "lines": "12",
+            "session_id": "20260820T120000Z-abc12345",
+        }
+        return httpx.Response(200, json={"session_id": "20260820T120000Z-abc12345"})
+
+    payload = fetch_recent_logs(
+        session_id="20260820T120000Z-abc12345",
+        lines=12,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert payload["session_id"] == "20260820T120000Z-abc12345"
+
+
+@pytest.mark.parametrize("lines", [0, 1001, True, 1.5])
+def test_fetch_recent_logs_rejects_invalid_limit_before_http(lines: object) -> None:
+    with pytest.raises(ValueError, match="integer from 1 to 1000"):
+        fetch_recent_logs(lines=lines)  # type: ignore[arg-type]
 
 
 def test_get_debug_session_rejects_unsafe_id_before_http() -> None:

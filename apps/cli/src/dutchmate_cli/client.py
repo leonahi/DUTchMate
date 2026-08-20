@@ -94,6 +94,30 @@ def get_debug_session(
     return _response_payload(response, description="session detail payload")
 
 
+def fetch_recent_logs(
+    *,
+    session_id: str | None = None,
+    lines: int = 300,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Fetch bounded recent UART replay for one selected native session."""
+
+    if isinstance(lines, bool) or not isinstance(lines, int) or not 1 <= lines <= 1000:
+        raise ValueError("log lines must be an integer from 1 to 1000")
+    params: dict[str, str | int] = {"lines": lines}
+    if session_id is not None:
+        params["session_id"] = validate_session_id(session_id)
+    response = _request_service(
+        method="GET",
+        path="/dut/logs",
+        service_url=service_url,
+        transport=transport,
+        params=params,
+    )
+    return _response_payload(response, description="recent logs payload")
+
+
 def configure_gpio_mode(
     *,
     channel: str,

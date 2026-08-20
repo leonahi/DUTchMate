@@ -34,6 +34,8 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.validation import InputValidationError, validate_serial_port
 
+QueryOperation = Literal["list_sessions", "get_session", "get_logs"]
+
 DEFAULT_SESSION_PAGE_LIMIT: Final = 50
 MAX_SESSION_PAGE_LIMIT: Final = 100
 _CURSOR_VERSION: Final = 1
@@ -184,7 +186,7 @@ def get_session_detail(root: Path, session_id: str) -> SessionDetail:
 def _list_item(
     paths: SessionPaths,
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
 ) -> SessionListItem:
     metadata = _read_metadata(paths, operation=operation)
     session_id = paths.root.name
@@ -269,7 +271,7 @@ def _stable_native_summary(
     paths: SessionPaths,
     initial_metadata: dict[str, object],
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
 ) -> tuple[SessionSummary, list[object]]:
     metadata = initial_metadata
     for _attempt in range(_SNAPSHOT_ATTEMPTS):
@@ -310,7 +312,7 @@ def _validated_summary(
     patterns: list[object],
     paths: SessionPaths,
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
 ) -> SessionSummary:
     try:
         summary = _metadata._summary_from_metadata(metadata, detected_patterns=patterns)
@@ -424,7 +426,7 @@ def _legacy_item(
     metadata: dict[str, object],
     directory_session_id: str,
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
 ) -> LegacySessionListItem:
     try:
         session_id = _required_string(metadata, "session_id")
@@ -455,7 +457,7 @@ def _legacy_item(
 def _read_metadata(
     paths: SessionPaths,
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
 ) -> dict[str, object]:
     if paths.metadata.is_symlink() or not paths.metadata.is_file():
         raise _query_fault(
@@ -482,7 +484,7 @@ def _read_metadata(
 def _schema_version(
     metadata: dict[str, object],
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
     session_id: str,
 ) -> int:
     value = metadata.get("schema_version", 0)
@@ -831,7 +833,7 @@ def _transaction_active(paths: SessionPaths) -> bool:
 
 def _unsupported_schema(
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
     session_id: str,
     detected: int,
 ) -> SessionQueryError:
@@ -846,7 +848,7 @@ def _unsupported_schema(
 
 def _query_fault(
     *,
-    operation: Literal["list_sessions", "get_session"],
+    operation: QueryOperation,
     session_id: str | None,
     detail: str,
 ) -> SessionQueryError:

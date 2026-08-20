@@ -8,7 +8,7 @@ from dutchmate_core.backends import (
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
-from dutchmate_core.session_store.models import SessionQueryError
+from dutchmate_core.session_store.models import RecentLogs, SessionQueryError
 from dutchmate_core.session_store.store import SessionDetail, SessionListPage, SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
@@ -140,6 +140,20 @@ class FakeRuntime:
             operation="get_session",
             session_id=session_id,
             detail=f"Session '{session_id}' was not found",
+        )
+
+    def recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = 300,
+    ) -> RecentLogs:
+        del lines
+        raise SessionQueryError(
+            error="not_found",
+            operation="get_logs",
+            session_id=session_id,
+            detail="No native active or terminal session is available",
         )
 
     def apply_hardware_config(

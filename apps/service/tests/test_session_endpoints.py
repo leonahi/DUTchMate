@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from helpers import FakeRuntime, disconnected_status
+from helpers import FakeRuntime, _enhanced_segment, disconnected_status
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
+    BackendInfo,
+    BackendSnapshot,
     UartIntegrity,
+    UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
 from dutchmate_core.session_store.models import (
@@ -18,13 +22,17 @@ from dutchmate_core.session_store.models import (
     LineProcessing,
     NativeSessionDetail,
     NativeSessionListItem,
+    RecentLogLine,
+    RecentLogs,
     SessionArtifact,
     SessionDetail,
     SessionListPage,
     SessionQueryError,
 )
 from dutchmate_core.session_store.store import SessionStore
+from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_service.app import create_app
+from dutchmate_service.schemas import recent_logs_payload
 
 
 class SessionRuntime(FakeRuntime):
@@ -41,6 +49,7 @@ class SessionRuntime(FakeRuntime):
         self.store = store
         self.list_requests: list[tuple[int, str | None]] = []
         self.detail_requests: list[str] = []
+        self.log_requests: list[tuple[str | None, int]] = []
 
     def list_sessions(
         self,
@@ -60,6 +69,16 @@ class SessionRuntime(FakeRuntime):
             return self.store.get_session_detail(session_id)
         assert self.detail is not None
         return self.detail
+
+    def recent_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        lines: int = 300,
+    ) -> RecentLogs:
+        self.log_requests.append((session_id, lines))
+        assert self.store is not None
+        return self.store.replay_recent_logs(session_id=session_id, lines=lines)
 
 
 def test_list_sessions_endpoint_serializes_discriminated_page() -> None:
@@ -199,6 +218,124 @@ def test_default_service_composition_queries_sessions_while_disconnected(tmp_pat
     assert detail.status_code == 200
     assert detail.json()["session_id"] == handle.session_id
     assert detail.json()["artifact_manifest"][0]["name"] == "metadata.json"
+
+
+def test_recent_logs_endpoint_replays_native_uart_and_validates_limit(tmp_path: Path) -> None:
+    store = SessionStore(
+        root=tmp_path,
+        clock=lambda: datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
+        id_factory=lambda: "logs",
+    )
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=BackendSnapshot(
+            info=BackendInfo(
+                mode="enhanced",
+                port="/dev/ttyACM0",
+                device="dutchmate-rp2040",
+                firmware="0.1.0",
+                capabilities=frozenset(
+                    {"uart_receive", "gpio_control", "device_timestamp"}
+                ),
+            ),
+            capabilities=frozenset(
+                {"uart_receive", "gpio_control", "device_timestamp"}
+            ),
+            capability_policy=BackendCapabilityPolicy(
+                uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+            ),
+            segment=_enhanced_segment(),
+            integrity=UartIntegrity(
+                loss_status="none_reported",
+                observation_scope="debug_helper_rx_buffer",
+                dropped_bytes=0,
+            ),
+        ),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=10, data=b"hello\n")
+    store.append_uart_capture(
+        handle,
+        event=event,
+        result=UartCaptureProcessor().process_event(event),
+    )
+    store.complete_session(handle)
+    runtime = SessionRuntime(store=store)
+    client = TestClient(create_app(runtime))
+
+    response = client.get(
+        "/dut/logs",
+        params={"session_id": handle.session_id, "lines": 7},
+    )
+    invalid = client.get("/dut/logs", params={"lines": 1001})
+    composed = TestClient(create_app(session_root=tmp_path)).get("/dut/logs")
+
+    assert response.status_code == 200
+    assert runtime.log_requests == [(handle.session_id, 7)]
+    assert response.json()["complete_lines"][0]["line_text"] == "hello\n"
+    assert response.json()["complete_lines"][0]["line_raw_b64"] == "aGVsbG8K"
+    assert response.json()["response_truncated"] is False
+    assert invalid.status_code == 400
+    assert invalid.json()["error"] == "invalid_argument"
+    assert composed.status_code == 200
+    assert composed.json()["session_selection"] == "latest_terminal"
+    assert composed.json()["session_id"] == handle.session_id
+
+
+def test_recent_logs_payload_removes_oldest_whole_records_to_fit_body_cap() -> None:
+    records = tuple(
+        RecentLogLine(
+            segment_id=0,
+            channel=0,
+            timestamp_us=index,
+            ingestion_index=index,
+            line_index_in_event=0,
+            line_raw_b64="eA==" * 16000,
+            line_text="x" * 64000,
+        )
+        for index in range(5)
+    )
+    payload = recent_logs_payload(
+        RecentLogs(
+            session_selection="explicit",
+            session_id="20260821T120000Z-large",
+            active=False,
+            snapshot_event_count=5,
+            complete_lines=records,
+            partial_lines=(),
+            oversized_lines=(),
+            integrity=UartIntegrity(
+                loss_status="none_reported",
+                observation_scope="debug_helper_rx_buffer",
+                dropped_bytes=0,
+            ),
+            line_processing=LineProcessing(),
+            reconnect_timeout_s=5.0,
+            interrupted=False,
+            resumed=False,
+            storage={"evidence_bytes_written": 1},
+            truncated=False,
+            truncation=None,
+            timestamp_provenance=(),
+        )
+    )
+
+    body = json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert len(body) <= 262144
+    assert payload["response_truncated"] is True
+    omitted = payload["omitted_complete_lines"]
+    assert isinstance(omitted, int) and omitted >= 1
+    assert [record["ingestion_index"] for record in payload["complete_lines"]] == list(
+        range(omitted, 5)
+    )
+    assert all(len(record["line_text"]) == 64000 for record in payload["complete_lines"])
 
 
 def _native_item() -> NativeSessionListItem:
