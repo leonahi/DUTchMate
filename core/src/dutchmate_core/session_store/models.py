@@ -48,7 +48,12 @@ class BaselineError(RuntimeError):
             "unsupported_session_schema",
             "persistence_fault",
         ],
-        operation: Literal["read_baseline", "mark_baseline", "clear_baseline"],
+        operation: Literal[
+            "read_baseline",
+            "mark_baseline",
+            "clear_baseline",
+            "compare_session",
+        ],
         detail: str,
         session_id: str | None = None,
         reason: str | None = None,
@@ -339,6 +344,96 @@ class EvidenceTypeCount:
 
     type: str
     count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonSessionEvidence:
+    """Bounded evidence-quality summary for one side of a comparison."""
+
+    session_id: str
+    state: SessionState
+    workflow: SessionWorkflow
+    backend_mode: BackendMode
+    integrity: UartIntegrity
+    truncated: bool
+    interrupted: bool
+    resumed: bool
+    segment_count: int
+    complete_lines_in_window: int
+    omitted_complete_lines: int
+    partial_lines_in_window: int
+    omitted_partial_lines: int
+    oversized_lines_in_window: int
+    omitted_oversized_lines: int
+
+
+@dataclass(frozen=True, slots=True)
+class PatternCountComparison:
+    """Baseline and subject counts for one pattern classification."""
+
+    type: str
+    baseline_count: int
+    subject_count: int
+    delta: int
+
+
+@dataclass(frozen=True, slots=True)
+class LineCountComparison:
+    """Bounded exact-line count change without returning raw UART bytes."""
+
+    channel: int
+    line_sha256: str
+    line_bytes: int
+    text_excerpt: str
+    excerpt_truncated: bool
+    baseline_count: int
+    subject_count: int
+    delta: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionComparison:
+    """Bounded comparison against the explicit project baseline."""
+
+    session_id: str
+    baseline_session_id: str
+    baseline_marked_at: str
+    baseline: ComparisonSessionEvidence
+    subject: ComparisonSessionEvidence
+    pattern_counts: tuple[PatternCountComparison, ...]
+    line_window_limit: int
+    line_changes: tuple[LineCountComparison, ...]
+    omitted_line_changes: int
+    timing_comparable: bool
+    timing_incompatibility_reason: str | None
+    baseline_window_span_us: int | None
+    subject_window_span_us: int | None
+    window_span_delta_us: int | None
+
+
+class SessionComparisonError(RuntimeError):
+    """Raised when a baseline comparison cannot be completed safely."""
+
+    def __init__(
+        self,
+        *,
+        error: Literal[
+            "not_found",
+            "invalid_session_state",
+            "unsupported_session_schema",
+            "persistence_fault",
+        ],
+        detail: str,
+        session_id: str | None = None,
+        reason: str | None = None,
+        detected_schema_version: int | None = None,
+    ) -> None:
+        self.error = error
+        self.operation: Literal["compare_session"] = "compare_session"
+        self.session_id = session_id
+        self.reason = reason
+        self.detected_schema_version = detected_schema_version
+        super().__init__(detail)
 
 
 @dataclass(frozen=True, slots=True)

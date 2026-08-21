@@ -16,6 +16,7 @@ from dutchmate_core.session_store.models import (
     LegacySessionListItem,
     NativeSessionListItem,
     RecentLogs,
+    SessionComparison,
     SessionDetail,
     SessionListItem,
     SessionListPage,
@@ -82,6 +83,27 @@ def baseline_mutation_payload(result: BaselineMutationResult) -> dict[str, objec
         "changed": result.changed,
         "marked_at": result.marked_at,
         "integrity": asdict(result.integrity) if result.integrity is not None else None,
+    }
+
+
+def session_comparison_payload(result: SessionComparison) -> dict[str, object]:
+    """Serialize one bounded comparison with explicit evidence-quality context."""
+
+    return {
+        "session_id": result.session_id,
+        "baseline_session_id": result.baseline_session_id,
+        "baseline_marked_at": result.baseline_marked_at,
+        "baseline": asdict(result.baseline),
+        "subject": asdict(result.subject),
+        "pattern_counts": [asdict(item) for item in result.pattern_counts],
+        "line_window_limit": result.line_window_limit,
+        "line_changes": [asdict(item) for item in result.line_changes],
+        "omitted_line_changes": result.omitted_line_changes,
+        "timing_comparable": result.timing_comparable,
+        "timing_incompatibility_reason": result.timing_incompatibility_reason,
+        "baseline_window_span_us": result.baseline_window_span_us,
+        "subject_window_span_us": result.subject_window_span_us,
+        "window_span_delta_us": result.window_span_delta_us,
     }
 
 

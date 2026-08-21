@@ -16,6 +16,7 @@ from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import (
     BaselineError,
+    SessionComparisonError,
     SessionPersistenceError,
     SessionQueryError,
 )
@@ -91,6 +92,14 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             detail=str(exc),
             status_code=_status_for_error(exc.error),
             context=_baseline_context(exc),
+        )
+
+    if isinstance(exc, SessionComparisonError):
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=_status_for_error(exc.error),
+            context=_comparison_context(exc),
         )
 
     if isinstance(exc, SessionQueryError):
@@ -213,6 +222,22 @@ def _baseline_context(exc: BaselineError) -> dict[str, object]:
     return context
 
 
+def _comparison_context(exc: SessionComparisonError) -> dict[str, object]:
+    context: dict[str, object] = {"operation": exc.operation}
+    if exc.session_id is not None:
+        context["session_id"] = exc.session_id
+    if exc.reason is not None:
+        context["reason"] = exc.reason
+    if exc.error == "unsupported_session_schema":
+        context.update(
+            {
+                "detected_schema_version": exc.detected_schema_version,
+                "supported_schema_versions": [1],
+            }
+        )
+    return context
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Register service exception handlers on an app."""
 
@@ -262,6 +287,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_session_query_error(
         request: Request,
         exc: SessionQueryError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(SessionComparisonError)
+    async def handle_session_comparison_error(
+        request: Request,
+        exc: SessionComparisonError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

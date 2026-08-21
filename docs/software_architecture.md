@@ -254,8 +254,10 @@ protecting active, legacy, baseline-designated, and in-progress read evidence;
 blocked or unsafe passes are exposed through service status. The adjacent
 baseline module owns the atomic versioned `baseline.json` pointer, target
 eligibility, idempotent mark/clear semantics, and pointer validation. Native
-list/detail baseline flags are derived only from that pointer. Comparison
-remains.
+list/detail baseline flags are derived only from that pointer. The comparison
+module owns bounded pattern and exact-line count deltas plus timing-provenance
+compatibility against that explicit pointer; it does not select a baseline
+heuristically or expose unbounded raw evidence.
 Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
@@ -350,8 +352,8 @@ format CLI output.
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
 wait-pattern, bounded UART send, GPIO mode, reset, boot mode, bounded session
-list/detail, baseline mark/clear, and bounded recent UART replay. Handlers remain
-thin: core code owns
+list/detail and comparison, baseline mark/clear, and bounded recent UART replay.
+Handlers remain thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
 

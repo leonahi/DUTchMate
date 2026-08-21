@@ -18,7 +18,12 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.session_store.retrieval import get_session_detail as _get_session_detail
 
-BaselineOperation = Literal["read_baseline", "mark_baseline", "clear_baseline"]
+BaselineOperation = Literal[
+    "read_baseline",
+    "mark_baseline",
+    "clear_baseline",
+    "compare_session",
+]
 BASELINE_SCHEMA_VERSION = 1
 BASELINE_FILENAME = "baseline.json"
 

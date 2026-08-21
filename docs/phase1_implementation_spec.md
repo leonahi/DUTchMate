@@ -1100,11 +1100,9 @@ Currently implemented endpoints:
 - `POST /dut/boot-mode`
 - `GET /sessions`
 - `GET /sessions/{id}`
+- `GET /sessions/{id}/compare`
 - `GET /dut/logs`
 - `POST /dut/wait-pattern`
-
-Remaining target Phase 1 endpoints:
-
 - `POST /dut/uart/send`
 - `POST /sessions/{id}/baseline`
 - `DELETE /sessions/{id}/baseline`
@@ -1351,13 +1349,23 @@ performs no deletion while pointer validity is unknown. After successful
 replacement or clearing it runs again because an old baseline may now be
 eligible.
 
-Phase 4 comparison resolves the current pointer or returns `not_found` when no
-baseline is designated. The subject must be a terminal `capture` or `boot_test`
-session but need not satisfy baseline eligibility. Log/pattern comparison may
-cross backend modes. Timing is comparable only for uninterrupted single-segment
-sessions whose timestamp `source`, `clock`, `observation_point`, and
-`event_granularity` are equal; otherwise the result reports
-`timing_comparable: false` and a reason.
+`GET /sessions/{id}/compare` resolves the current pointer or returns `not_found`
+with reason `baseline_not_designated` when no baseline is designated. The
+subject must be a terminal `capture` or `boot_test` session but need not satisfy
+baseline eligibility. Log/pattern comparison may cross backend modes. It uses
+the newest 300 complete lines from each session and returns at most 50 changed
+exact-line identities. Each identity contains its channel, SHA-256 digest, byte
+length, bounded sanitized text excerpt, counts, and subject-minus-baseline
+delta; raw line bytes are not returned. Per-side omission, partial-line,
+oversized-line, truncation, interruption, integrity, and backend facts keep the
+bounded comparison interpretable.
+
+Timing is comparable only for uninterrupted single-segment sessions whose
+timestamp `source`, `clock`, `observation_point`, and `event_granularity` are
+equal. Otherwise the result reports `timing_comparable: false`, a deterministic
+incompatibility reason, and no timing deltas. Comparable results report bounded
+recent-window spans and their subject-minus-baseline delta; they do not imply a
+whole-session timing comparison.
 
 `POST /gpio/mode` is the Phase 1 runtime override endpoint for a configured
 role. It must return the accepted role, channel, DUT signal name, mode, source,

@@ -10,6 +10,8 @@ from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRe
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.models import (
     RecentLogs,
+    SessionComparison,
+    SessionComparisonError,
     SessionQueryError,
     WaitPatternResult,
 )
@@ -176,6 +178,14 @@ class FakeRuntime:
             operation="get_session",
             session_id=session_id,
             detail=f"Session '{session_id}' was not found",
+        )
+
+    def compare_session(self, session_id: str) -> SessionComparison:
+        raise SessionComparisonError(
+            error="not_found",
+            session_id=session_id,
+            reason="baseline_not_designated",
+            detail="No project baseline is designated",
         )
 
     def recent_logs(

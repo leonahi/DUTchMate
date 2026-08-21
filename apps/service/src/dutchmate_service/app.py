@@ -17,6 +17,7 @@ from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     BaselineMutationResult,
     RecentLogs,
+    SessionComparison,
     SessionDetail,
     SessionListPage,
     SessionSummary,
@@ -38,6 +39,7 @@ from dutchmate_service.schemas import (
     device_action_payload,
     gpio_mode_payload,
     recent_logs_payload,
+    session_comparison_payload,
     session_detail_payload,
     session_list_payload,
     status_payload,
@@ -114,6 +116,9 @@ class RuntimeProvider(Protocol):
     def clear_baseline(self, session_id: str) -> BaselineMutationResult:
         """Clear the baseline only when it names the requested session."""
 
+    def compare_session(self, session_id: str) -> SessionComparison:
+        """Compare one terminal session with the designated baseline."""
+
     def apply_hardware_config(
         self,
         config: HardwareGpioConfig,
@@ -166,6 +171,10 @@ def create_app(
     @app.delete("/sessions/{session_id}/baseline")
     def clear_baseline(session_id: str) -> dict[str, object]:
         return baseline_mutation_payload(runtime_provider.clear_baseline(session_id))
+
+    @app.get("/sessions/{session_id}/compare")
+    def compare_session(session_id: str) -> dict[str, object]:
+        return session_comparison_payload(runtime_provider.compare_session(session_id))
 
     @app.get("/dut/logs")
     def get_recent_logs(

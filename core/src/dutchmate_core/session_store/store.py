@@ -9,6 +9,7 @@ from threading import RLock
 from typing import Literal
 
 import dutchmate_core.session_store.baseline as _baseline
+import dutchmate_core.session_store.comparison as _comparison
 import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
@@ -36,6 +37,8 @@ from dutchmate_core.session_store.models import (
     LineProcessing,
     MatchExcerpt,
     RecentLogs,
+    SessionComparison,
+    SessionComparisonError,
     SessionDetail,
     SessionHandle,
     SessionListPage,
@@ -75,6 +78,8 @@ __all__ = [
     "LineProcessing",
     "MatchExcerpt",
     "RecentLogs",
+    "SessionComparison",
+    "SessionComparisonError",
     "SessionHandle",
     "SessionDetail",
     "SessionListPage",
@@ -729,6 +734,13 @@ class SessionStore:
             result = _baseline.clear_baseline(self._root, session_id)
             self._apply_retention_locked()
             return result
+
+    def compare_session(self, session_id: str) -> SessionComparison:
+        """Compare one terminal capture or boot test with the current baseline."""
+
+        with self._store_lock:
+            _metadata._validate_session_id(session_id)
+            return _comparison.compare_session(self._root, session_id)
 
     def _apply_retention_locked(
         self,

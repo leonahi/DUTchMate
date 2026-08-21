@@ -41,6 +41,7 @@ from dutchmate_core.session_store.models import (
     BaselineMutationResult,
     FirstError,
     RecentLogs,
+    SessionComparison,
     SessionDetail,
     SessionHandle,
     SessionListPage,
@@ -122,6 +123,9 @@ class DeviceCoreSessionStorage(CaptureSessionStorage, UartSendSessionStorage, Pr
 
     def clear_baseline(self, session_id: str) -> BaselineMutationResult:
         """Clear the project baseline only when it names the requested session."""
+
+    def compare_session(self, session_id: str) -> SessionComparison:
+        """Compare one terminal session with the designated baseline."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +302,11 @@ class DeviceCoreRuntime:
         """Clear a named designation without requiring a backend connection."""
 
         return self._session_store.clear_baseline(session_id)
+
+    def compare_session(self, session_id: str) -> SessionComparison:
+        """Compare stored evidence without requiring a backend connection."""
+
+        return self._session_store.compare_session(session_id)
 
     @property
     def gpio_registry(self) -> GpioModeRegistry:

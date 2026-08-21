@@ -10,14 +10,16 @@ from helpers import (
     disconnected_status,
 )
 
-from dutchmate_core.backends import BackendInfo, BackendSnapshot
+from dutchmate_core.backends import BackendInfo, BackendSnapshot, UartReceiveEvent
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
+    SessionComparison,
     SessionDetail,
     SessionHandle,
     SessionListPage,
 )
 from dutchmate_core.session_store.store import SessionStore
+from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_service.app import create_app
 
 
@@ -31,6 +33,9 @@ class BaselineRuntime(FakeRuntime):
 
     def clear_baseline(self, session_id: str) -> BaselineMutationResult:
         return self.store.clear_baseline(session_id)
+
+    def compare_session(self, session_id: str) -> SessionComparison:
+        return self.store.compare_session(session_id)
 
     def list_sessions(
         self,
@@ -128,3 +133,61 @@ def test_baseline_endpoint_maps_state_schema_and_pointer_faults(tmp_path: Path) 
     pointer_error = client.delete(f"/sessions/{active.session_id}/baseline")
     assert pointer_error.status_code == 500
     assert pointer_error.json()["error"] == "persistence_fault"
+
+
+def test_compare_endpoint_returns_bounded_deltas_and_maps_preconditions(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    baseline = _capture(store)
+    _append_line(store, baseline, b"BOOT_OK\n", timestamp_us=100)
+    store.complete_session(baseline)
+    subject = _capture(store)
+    _append_line(store, subject, b"ERROR\n", timestamp_us=150)
+    store.complete_session(subject)
+    active = _capture(store)
+    store.mark_baseline(baseline.session_id)
+    client = TestClient(create_app(BaselineRuntime(store)))
+
+    compared = client.get(f"/sessions/{subject.session_id}/compare")
+    active_error = client.get(f"/sessions/{active.session_id}/compare")
+    client.delete(f"/sessions/{baseline.session_id}/baseline")
+    missing_error = client.get(f"/sessions/{subject.session_id}/compare")
+
+    assert compared.status_code == 200
+    assert compared.json()["baseline_session_id"] == baseline.session_id
+    assert compared.json()["session_id"] == subject.session_id
+    assert compared.json()["line_window_limit"] == 300
+    assert {item["type"]: item["delta"] for item in compared.json()["pattern_counts"]} == {
+        "failure": 1,
+        "success": -1,
+    }
+    assert compared.json()["timing_comparable"] is True
+    assert active_error.status_code == 409
+    assert active_error.json()["context"]["reason"] == "state_not_terminal"
+    assert missing_error.status_code == 404
+    assert missing_error.json()["context"] == {
+        "operation": "compare_session",
+        "session_id": subject.session_id,
+        "reason": "baseline_not_designated",
+    }
+
+
+def _append_line(
+    store: SessionStore,
+    handle: SessionHandle,
+    data: bytes,
+    *,
+    timestamp_us: int,
+) -> None:
+    event = UartReceiveEvent(
+        segment_id=0,
+        timestamp_us=timestamp_us,
+        channel=0,
+        data=data,
+    )
+    store.append_uart_capture(
+        handle,
+        event=event,
+        result=UartCaptureProcessor().process_event(event),
+    )
