@@ -175,6 +175,7 @@ def test_create_native_session_writes_active_schema_v1_and_terminal_reserve(
         workflow="capture",
         duration_s=2.5,
         reconnect_timeout_s=4.0,
+        commanded_boot_mode="bootloader",
     )
     metadata = store.load_metadata(handle.session_id)
     summary = store.summarize_session(handle.session_id)
@@ -187,7 +188,7 @@ def test_create_native_session_writes_active_schema_v1_and_terminal_reserve(
     assert metadata["ended_at"] is None
     assert metadata["end_reason"] is None
     assert metadata["error"] is None
-    assert metadata["commanded_boot_mode"] is None
+    assert metadata["commanded_boot_mode"] == "bootloader"
     assert "firmware" not in metadata
     assert "device" not in metadata
     assert metadata["storage"] == {

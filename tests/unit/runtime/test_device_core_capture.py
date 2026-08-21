@@ -26,6 +26,7 @@ from dutchmate_core.backends import (
 from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource, EnhancedDeviceControl
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
+    CommandSuccessMessage,
 )
 from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
@@ -116,6 +117,42 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         )
     )
     assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes  # type: ignore[index]
+
+
+def test_capture_snapshots_commanded_boot_mode_at_session_start(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    transport = FakeTransport(
+        [
+            CommandSuccessMessage(timestamp_us=100),
+            CommandSuccessMessage(timestamp_us=200),
+        ]
+    )
+    store = SessionStore(
+        root=tmp_path,
+        clock=_fixed_session_time,
+        id_factory=lambda: "boot-mode-snapshot",
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        message_source=FakeCaptureSource([], clock=clock),
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_backend_connection(enhanced_info())
+    runtime.configure_gpio_mode(
+        role="boot",
+        channel="CTRL1",
+        dut_signal="BOOT0",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+    runtime.set_boot_mode(mode="bootloader")
+
+    summary = runtime.capture_uart(duration_s=0.2)
+
+    assert store.load_metadata(summary.session_id)["commanded_boot_mode"] == "bootloader"
+    assert runtime.get_session(summary.session_id).commanded_boot_mode == "bootloader"
 
 
 def test_runtime_publishes_reconnect_state_and_replacement_source(tmp_path: Path) -> None:

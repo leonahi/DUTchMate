@@ -30,6 +30,7 @@ from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
+    GpioConfigurationError,
     GpioControlChannel,
     GpioControlChannelState,
     GpioModeRegistry,
@@ -39,6 +40,7 @@ from dutchmate_core.gpio_config.modes import (
 from dutchmate_core.log_processing.patterns import DEFAULT_PATTERNS, PatternDetector
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
+    CommandedBootMode,
     FirstError,
     RecentLogs,
     SessionComparison,
@@ -139,6 +141,7 @@ class DeviceCoreStatus:
     capabilities: tuple[str, ...]
     active_session_id: str | None
     control_channels: dict[GpioControlChannel, GpioControlChannelState]
+    commanded_boot_mode: CommandedBootMode | None = None
     backend_mode: BackendMode | None = None
     backend_capabilities: tuple[str, ...] = ()
     capability_policy: BackendCapabilityPolicy | None = None
@@ -231,6 +234,7 @@ class DeviceCoreRuntime:
         )
         self._port = port
         self._connected = False
+        self._commanded_boot_mode: CommandedBootMode | None = None
         self._backend_mode = backend_mode
         self._backend_info: BackendInfo | None = None
         self._backend_capabilities: frozenset[BackendCapability] = frozenset()
@@ -323,6 +327,7 @@ class DeviceCoreRuntime:
             raise ValueError("Basic backend identity must omit device and firmware")
         with self._operation_lock:
             self._connected = True
+            self._commanded_boot_mode = None
             self._backend_mode = info.mode
             self._backend_info = info
             self._backend_capabilities = info.capabilities
@@ -335,6 +340,7 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             self._connected = False
+            self._commanded_boot_mode = None
             self._backend_info = None
             self._backend_capabilities = frozenset()
             self._segment_context = None
@@ -382,6 +388,7 @@ class DeviceCoreRuntime:
                 ),
                 active_session_id=self._active_session_id,
                 control_channels=self._gpio_registry.snapshot(),
+                commanded_boot_mode=self._commanded_boot_mode,
                 backend_mode=self._backend_mode,
                 backend_capabilities=tuple(sorted(self._backend_capabilities)),
                 capability_policy=(
@@ -442,15 +449,36 @@ class DeviceCoreRuntime:
         with self._operation_lock:
             self._require_connected()
             self._require_no_active_capture()
-            return self._gpio_configurator.configure_mode(
-                role=request.role,
-                channel=request.channel,
-                dut_signal=request.dut_signal,
-                mode=request.mode,
-                active_level=request.active_level,
-                idle_level=request.idle_level,
-                source=source_name,
+            boot_mapping = self._gpio_registry.find_by_role("boot")
+            affects_boot_state = request.role == "boot" or (
+                boot_mapping is not None and boot_mapping.channel == request.channel
             )
+            try:
+                state = self._gpio_configurator.configure_mode(
+                    role=request.role,
+                    channel=request.channel,
+                    dut_signal=request.dut_signal,
+                    mode=request.mode,
+                    active_level=request.active_level,
+                    idle_level=request.idle_level,
+                    source=source_name,
+                )
+            except GpioConfigurationError:
+                if affects_boot_state:
+                    self._commanded_boot_mode = None
+                raise
+            if state.last_rejected is not None:
+                if (
+                    affects_boot_state
+                    and state.last_rejected.error in {"hardware_fault", "timeout"}
+                ):
+                    self._commanded_boot_mode = None
+            elif state.state == "configured":
+                if request.role == "boot":
+                    self._commanded_boot_mode = "normal"
+                elif self._gpio_registry.find_by_role("boot") is None:
+                    self._commanded_boot_mode = None
+            return state
 
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
         """Pulse the configured DUT reset role."""
@@ -466,7 +494,21 @@ class DeviceCoreRuntime:
         with self._operation_lock:
             self._require_connected()
             self._require_no_active_capture()
-            return self._action_runner.set_boot_mode(mode=mode)
+            try:
+                result = self._action_runner.set_boot_mode(mode=mode)
+            except DeviceActionError as exc:
+                if exc.error not in {
+                    "invalid_command",
+                    "invalid_argument",
+                    "not_configured",
+                    "capture_active",
+                }:
+                    self._commanded_boot_mode = None
+                raise
+            if result.mode is None:
+                raise DeviceCoreRuntimeError("Accepted boot-mode result omitted mode")
+            self._commanded_boot_mode = result.mode
+            return result
 
     def capture_uart(self, *, duration_s: float) -> SessionSummary:
         """Capture UART and telemetry messages into one filesystem session."""
@@ -651,6 +693,7 @@ class DeviceCoreRuntime:
             device = self._backend_info.device if self._backend_info is not None else None
             self._capture_in_progress = True
             self._active_workflow = workflow
+            commanded_boot_mode = self._commanded_boot_mode
             self._active_segment_context = (
                 source_segment if isinstance(source_segment, SegmentContext) else None
             )
@@ -675,6 +718,7 @@ class DeviceCoreRuntime:
                 reconnect_timeout_s=self._reconnect_timeout_s,
                 backend_snapshot=backend_snapshot,
                 workflow=workflow,
+                commanded_boot_mode=commanded_boot_mode,
                 uart_processor=uart_processor,
                 start_action=start_action,
                 on_session_handle_started=self._set_active_session,
@@ -710,6 +754,7 @@ class DeviceCoreRuntime:
     def _mark_backend_disconnected(self) -> None:
         with self._operation_lock:
             self._connected = False
+            self._commanded_boot_mode = None
             self._backend_info = None
             self._backend_capabilities = frozenset()
             self._segment_context = None

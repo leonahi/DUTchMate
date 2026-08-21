@@ -15,6 +15,7 @@ from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 SessionState = Literal["active", "completed", "failed", "abandoned"]
 SessionWorkflow = Literal["capture", "boot_test", "wait_pattern"]
 SessionCompatibility = Literal["native", "legacy_read_only"]
+CommandedBootMode = Literal["normal", "bootloader"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,7 +450,7 @@ class NativeSessionDetail:
     backend_capabilities: tuple[str, ...]
     capabilities: tuple[str, ...]
     capability_policy: BackendCapabilityPolicy
-    commanded_boot_mode: Literal["normal", "bootloader"] | None
+    commanded_boot_mode: CommandedBootMode | None
     storage: dict[str, object]
     segments: tuple[dict[str, object], ...]
     first_error: FirstError | None

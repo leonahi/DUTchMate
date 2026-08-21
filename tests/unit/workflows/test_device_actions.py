@@ -8,6 +8,7 @@ from dutchmate_core.device_connection.messages import (
     CommandSuccessMessage,
     HelloMessage,
 )
+from dutchmate_core.device_connection.transport import TransportTimeoutError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError, GpioModeRegistry
 from dutchmate_core.validation import InputValidationError
 from dutchmate_core.workflows.device_actions import (
@@ -25,6 +26,11 @@ class FakeTransport:
     def request(self, command: bytes) -> object:
         self.requests.append(command)
         return self.response
+
+
+class TimeoutTransport:
+    def request(self, command: bytes) -> object:
+        raise TransportTimeoutError("quiet")
 
 
 def test_reset_requires_configured_reset_role() -> None:
@@ -226,3 +232,24 @@ def test_unexpected_response_raises_device_action_error() -> None:
         runner.reset_dut()
 
     assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
+
+
+def test_transport_timeout_raises_typed_device_action_error() -> None:
+    registry = GpioModeRegistry()
+    registry.accept_mode(
+        role="reset",
+        channel="CTRL0",
+        dut_signal="RESET_N",
+        mode="open_drain",
+        active_level="low",
+        source="runtime",
+    )
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(TimeoutTransport()),
+    )
+
+    with pytest.raises(DeviceActionError, match="Timed out") as exc_info:
+        runner.reset_dut()
+
+    assert exc_info.value.error == "timeout"

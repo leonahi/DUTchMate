@@ -64,6 +64,7 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
         "active_workflow": status.active_workflow,
+        "commanded_boot_mode": status.commanded_boot_mode,
         "reconnect_remaining_s": status.reconnect_remaining_s,
         "retention": asdict(status.retention),
         "control_channels": {

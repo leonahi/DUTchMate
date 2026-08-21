@@ -5,11 +5,12 @@ import pytest
 from runtime_test_support import FakeTransport, enhanced_info
 
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl
-from dutchmate_core.device_connection.messages import CommandSuccessMessage
+from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
+from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus
 from dutchmate_core.session_store.store import SessionStore
-from dutchmate_core.workflows.device_actions import DeviceActionResult
+from dutchmate_core.workflows.device_actions import DeviceActionError, DeviceActionResult
 
 
 def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -> None:
@@ -136,6 +137,115 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
     assert states["boot"].source == "config"
     assert states["boot"].device_timestamp_us == 200
     assert runtime.status().control_channels["CTRL0"] == states["reset"]
+    assert runtime.status().commanded_boot_mode == "normal"
+
+
+def test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport(
+        [
+            CommandSuccessMessage(timestamp_us=100),
+            CommandSuccessMessage(timestamp_us=200),
+        ]
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
+
+    runtime.configure_gpio_mode(
+        role="boot",
+        channel="CTRL1",
+        dut_signal="BOOT0",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+    assert runtime.status().commanded_boot_mode == "normal"
+
+    runtime.set_boot_mode(mode="bootloader")
+    assert runtime.status().commanded_boot_mode == "bootloader"
+
+    assert runtime.disconnect().commanded_boot_mode is None
+
+
+def test_uncertain_boot_command_failure_invalidates_prior_command(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport(
+        [
+            CommandSuccessMessage(timestamp_us=100),
+            CommandSuccessMessage(timestamp_us=200),
+            CommandErrorMessage(error="invalid_argument", detail="rejected"),
+            CommandErrorMessage(error="hardware_fault", detail="driver failed"),
+        ]
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
+    runtime.configure_gpio_mode(
+        role="boot",
+        channel="CTRL1",
+        dut_signal="BOOT0",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+    )
+    runtime.set_boot_mode(mode="bootloader")
+
+    with pytest.raises(DeviceActionError) as rejection:
+        runtime.set_boot_mode(mode="normal")
+    assert rejection.value.error == "invalid_argument"
+    assert runtime.status().commanded_boot_mode == "bootloader"
+
+    with pytest.raises(DeviceActionError) as fault:
+        runtime.set_boot_mode(mode="normal")
+    assert fault.value.error == "hardware_fault"
+    assert runtime.status().commanded_boot_mode is None
+
+
+def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport(
+        [
+            CommandSuccessMessage(timestamp_us=100),
+            CommandSuccessMessage(timestamp_us=200),
+            CommandErrorMessage(error="invalid_argument", detail="rejected"),
+            CommandErrorMessage(error="hardware_fault", detail="driver failed"),
+        ]
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
+    def configure_boot() -> GpioControlChannelState:
+        return runtime.configure_gpio_mode(
+            role="boot",
+            channel="CTRL1",
+            dut_signal="BOOT0",
+            mode="push_pull",
+            active_level="high",
+            idle_level="low",
+        )
+
+    configure_boot()
+    runtime.set_boot_mode(mode="bootloader")
+
+    rejected = configure_boot()
+    assert rejected.last_rejected is not None
+    assert rejected.last_rejected.error == "invalid_argument"
+    assert runtime.status().commanded_boot_mode == "bootloader"
+
+    faulted = configure_boot()
+    assert faulted.last_rejected is not None
+    assert faulted.last_rejected.error == "hardware_fault"
+    assert runtime.status().commanded_boot_mode is None
 
 
 def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:

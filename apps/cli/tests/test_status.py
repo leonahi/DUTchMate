@@ -41,6 +41,7 @@ def test_format_status_renders_channel_first_state() -> None:
         },
         "active_session_id": None,
         "active_workflow": None,
+        "commanded_boot_mode": "bootloader",
         "reconnect_remaining_s": None,
         "retention": {
             "enabled": True,
@@ -71,6 +72,7 @@ def test_format_status_renders_channel_first_state() -> None:
             "Backend: enhanced",
             "Workflow: none",
             "Session: none",
+            "Commanded boot mode: bootloader",
             "Connection: connected",
             "Device: connected (dutchmate-rp2040, firmware 0.1.0)",
             "Port: /dev/ttyACM0",

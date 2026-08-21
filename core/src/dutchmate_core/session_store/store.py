@@ -32,6 +32,7 @@ from dutchmate_core.session_store.models import (
     BaselineError,
     BaselineMutationResult,
     BaselinePointer,
+    CommandedBootMode,
     EvidenceQuotaExceeded,
     FirstError,
     LineProcessing,
@@ -339,6 +340,7 @@ class SessionStore:
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        commanded_boot_mode: CommandedBootMode | None = None,
         wait_pattern: str | None = None,
         timeout_s: float | None = None,
     ) -> SessionHandle:
@@ -354,6 +356,7 @@ class SessionStore:
                 workflow=workflow,
                 duration_s=duration_s,
                 reconnect_timeout_s=reconnect_timeout_s,
+                commanded_boot_mode=commanded_boot_mode,
                 wait_pattern=wait_pattern,
                 timeout_s=timeout_s,
             )
@@ -369,6 +372,7 @@ class SessionStore:
         workflow: SessionWorkflow | None,
         duration_s: float | None,
         reconnect_timeout_s: float | None,
+        commanded_boot_mode: CommandedBootMode | None,
         wait_pattern: str | None,
         timeout_s: float | None,
     ) -> SessionHandle:
@@ -379,6 +383,7 @@ class SessionStore:
             workflow=workflow,
             duration_s=duration_s,
             reconnect_timeout_s=reconnect_timeout_s,
+            commanded_boot_mode=commanded_boot_mode,
             backend_snapshot=backend_snapshot,
             wait_pattern=wait_pattern,
             timeout_s=timeout_s,
@@ -402,6 +407,7 @@ class SessionStore:
             workflow=workflow,
             duration_s=duration_s,
             reconnect_timeout_s=reconnect_timeout_s,
+            commanded_boot_mode=commanded_boot_mode,
             wait_pattern=wait_pattern,
             timeout_s=timeout_s,
             evidence_budget_bytes=self._evidence_budget_bytes,

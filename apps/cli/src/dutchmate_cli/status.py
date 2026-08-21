@@ -17,6 +17,7 @@ def format_status(payload: Mapping[str, object]) -> str:
         f"Backend: {_display(payload.get('backend_mode'))}",
         f"Workflow: {_format_workflow(payload.get('active_workflow'))}",
         f"Session: {_display(payload.get('active_session_id'))}",
+        f"Commanded boot mode: {_display(payload.get('commanded_boot_mode'))}",
         f"Connection: {_format_connection(payload)}",
         f"Device: {_format_device(payload)}",
         f"Port: {_display(payload.get('port'))}",

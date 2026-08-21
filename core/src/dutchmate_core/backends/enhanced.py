@@ -88,7 +88,13 @@ class EnhancedDeviceControl(DeviceControl):
         )
 
     def _request_success(self, command: bytes, *, operation: str) -> int | None:
-        response = self._transport.request(command)
+        try:
+            response = self._transport.request(command)
+        except TransportTimeoutError as exc:
+            raise DeviceControlError(
+                error="timeout",
+                detail=f"Timed out waiting for {operation} response",
+            ) from exc
         if isinstance(response, CommandSuccessMessage):
             return response.timestamp_us
         if isinstance(response, CommandErrorMessage):

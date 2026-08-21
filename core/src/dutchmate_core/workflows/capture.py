@@ -20,6 +20,7 @@ from dutchmate_core.backends.contracts import (
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.log_processing.patterns import PatternMatch
 from dutchmate_core.session_store.models import (
+    CommandedBootMode,
     EvidenceQuotaExceeded,
     SessionHandle,
     SessionPersistenceError,
@@ -97,6 +98,7 @@ class CaptureSessionStorage(Protocol):
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        commanded_boot_mode: CommandedBootMode | None = None,
         wait_pattern: str | None = None,
         timeout_s: float | None = None,
     ) -> SessionHandle:
@@ -297,6 +299,7 @@ class CaptureRecorder:
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        commanded_boot_mode: CommandedBootMode | None = None,
         wait_pattern: str | None = None,
         timeout_s: float | None = None,
         mutation_lock: SessionMutationLock | None = None,
@@ -314,6 +317,7 @@ class CaptureRecorder:
                 workflow=workflow,
                 duration_s=duration_s,
                 reconnect_timeout_s=reconnect_timeout_s,
+                commanded_boot_mode=commanded_boot_mode,
                 wait_pattern=wait_pattern,
                 timeout_s=timeout_s,
             )
@@ -538,6 +542,7 @@ class CaptureWorkflow:
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
         backend_snapshot: BackendSnapshot | None = None,
         workflow: SessionWorkflow = "capture",
+        commanded_boot_mode: CommandedBootMode | None = None,
         start_action: Callable[[], object] | None = None,
         on_session_started: Callable[[str], None] | None = None,
         on_session_handle_started: Callable[[SessionHandle], None] | None = None,
@@ -581,6 +586,7 @@ class CaptureWorkflow:
                 else None
             ),
             reconnect_timeout_s=reconnect_timeout_s if native_session else None,
+            commanded_boot_mode=commanded_boot_mode if native_session else None,
             wait_pattern=requested_pattern if native_session else None,
             timeout_s=(
                 validated_duration_s

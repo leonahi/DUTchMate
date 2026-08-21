@@ -18,6 +18,7 @@ from dutchmate_core.backends.contracts import (
 from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.session_store.evidence import first_error as _first_error
 from dutchmate_core.session_store.models import (
+    CommandedBootMode,
     LineProcessing,
     SessionState,
     SessionSummary,
@@ -57,14 +58,23 @@ def _validate_native_lifecycle_inputs(
     workflow: SessionWorkflow | None,
     duration_s: float | None,
     reconnect_timeout_s: float | None,
+    commanded_boot_mode: CommandedBootMode | None,
     backend_snapshot: BackendSnapshot | None,
     wait_pattern: str | None,
     timeout_s: float | None,
 ) -> None:
+    if commanded_boot_mode not in {None, "normal", "bootloader"}:
+        raise ValueError("commanded_boot_mode must be normal, bootloader, or null")
     if workflow is None:
         if any(
             value is not None
-            for value in (duration_s, reconnect_timeout_s, wait_pattern, timeout_s)
+            for value in (
+                duration_s,
+                reconnect_timeout_s,
+                commanded_boot_mode,
+                wait_pattern,
+                timeout_s,
+            )
         ):
             raise ValueError("native lifecycle values require a workflow")
         return
@@ -105,6 +115,7 @@ def _initial_metadata(
     workflow: SessionWorkflow | None,
     duration_s: float | None,
     reconnect_timeout_s: float | None,
+    commanded_boot_mode: CommandedBootMode | None,
     wait_pattern: str | None,
     timeout_s: float | None,
     evidence_budget_bytes: int,
@@ -179,7 +190,7 @@ def _initial_metadata(
             "backend_capabilities": sorted(backend_snapshot.info.capabilities),
             "capabilities": sorted(backend_snapshot.capabilities),
             "capability_policy": _capability_policy_json(backend_snapshot.capability_policy),
-            "commanded_boot_mode": None,
+            "commanded_boot_mode": commanded_boot_mode,
             "integrity": _integrity_json(backend_snapshot.integrity),
             "line_processing": _line_processing_json(LineProcessing()),
             "storage": {

@@ -44,6 +44,7 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "integrity": None,
         "active_session_id": None,
         "active_workflow": None,
+        "commanded_boot_mode": None,
         "reconnect_remaining_s": None,
         "retention": {
             "enabled": False,
@@ -137,6 +138,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                 capabilities=hello.capabilities,
                 active_session_id="20260724T100000Z-abc12345",
                 control_channels=registry.snapshot(),
+                commanded_boot_mode="bootloader",
                 backend_mode="enhanced",
                 backend_capabilities=("gpio_control", "uart_receive"),
                 capability_policy=BackendCapabilityPolicy(
@@ -182,6 +184,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
     assert payload["connection_state"] == "connected"
     assert payload["active_workflow"] == "capture"
+    assert payload["commanded_boot_mode"] == "bootloader"
     assert payload["reconnect_remaining_s"] is None
     assert payload["control_channels"]["CTRL0"]["state"] == "configured"
     assert payload["control_channels"]["CTRL0"]["role"] == "reset"
