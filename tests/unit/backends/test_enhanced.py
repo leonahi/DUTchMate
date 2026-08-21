@@ -5,6 +5,7 @@ import pytest
 from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendInputError,
+    BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
     UartReceiveEvent,
@@ -12,12 +13,15 @@ from dutchmate_core.backends import (
 from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
     EnhancedNdjsonEventStream,
+    EnhancedUartSender,
     normalize_enhanced_message,
 )
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
+    CommandErrorMessage,
+    CommandSuccessMessage,
     HelloMessage,
     UartMessage,
 )
@@ -39,6 +43,55 @@ class FakeEnhancedMessageSource:
     def drain_pending_messages(self) -> tuple[DeviceMessage, ...]:
         self.drain_count += 1
         return ()
+
+
+class FakeCommandTransport:
+    def __init__(self, response: DeviceMessage | Exception) -> None:
+        self.response = response
+        self.requests: list[bytes] = []
+
+    def request(self, command: bytes) -> DeviceMessage:
+        self.requests.append(command)
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+def test_enhanced_uart_sender_requires_complete_timestamped_acknowledgement() -> None:
+    transport = FakeCommandTransport(
+        CommandSuccessMessage(timestamp_us=500, bytes_accepted=3)
+    )
+
+    result = EnhancedUartSender(transport).send_uart(b"go\n")
+
+    assert result.bytes_accepted == 3
+    assert result.device_timestamp_us == 500
+    assert transport.requests == [b'{"cmd":"uart_send","data_b64":"Z28K"}\n']
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        CommandSuccessMessage(timestamp_us=500, bytes_accepted=2),
+        CommandSuccessMessage(timestamp_us=None, bytes_accepted=3),
+        CommandSuccessMessage(timestamp_us=500, bytes_accepted=None),
+    ],
+)
+def test_enhanced_uart_sender_rejects_incomplete_acknowledgement(
+    response: CommandSuccessMessage,
+) -> None:
+    with pytest.raises(BackendWriteError):
+        EnhancedUartSender(FakeCommandTransport(response)).send_uart(b"go\n")
+
+
+def test_enhanced_uart_sender_preserves_firmware_error() -> None:
+    response = CommandErrorMessage(error="capture_active", detail="firmware busy")
+
+    with pytest.raises(BackendWriteError) as raised:
+        EnhancedUartSender(FakeCommandTransport(response)).send_uart(b"go\n")
+
+    assert raised.value.error == "capture_active"
+    assert raised.value.bytes_accepted is None
 
 
 def test_normalizes_uart_bytes_and_segment_relative_timestamp() -> None:

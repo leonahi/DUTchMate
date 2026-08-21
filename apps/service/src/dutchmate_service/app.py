@@ -22,6 +22,7 @@ from dutchmate_core.session_store.store import (
     WaitPatternResult,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
+from dutchmate_core.workflows.uart_send import UartSendResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
     BootModeRequest,
@@ -29,6 +30,7 @@ from dutchmate_service.schemas import (
     CaptureRequest,
     GpioModeRequest,
     ResetRequest,
+    UartSendRequest,
     WaitPatternRequest,
     capture_summary_payload,
     device_action_payload,
@@ -37,6 +39,7 @@ from dutchmate_service.schemas import (
     session_detail_payload,
     session_list_payload,
     status_payload,
+    uart_send_payload,
     wait_pattern_payload,
 )
 from dutchmate_service.startup import apply_startup_hardware_config, build_startup_runtime
@@ -74,6 +77,15 @@ class RuntimeProvider(Protocol):
 
     def wait_pattern(self, *, pattern: str, timeout_s: float) -> WaitPatternResult:
         """Wait for one literal in new UART evidence."""
+
+    def send_uart(
+        self,
+        *,
+        cmd: str,
+        append_newline: bool = True,
+        force: bool = False,
+    ) -> UartSendResult:
+        """Send one validated text command to the DUT UART."""
 
     def list_sessions(
         self,
@@ -184,6 +196,16 @@ def create_app(
             runtime_provider.wait_pattern(
                 pattern=request.pattern,
                 timeout_s=request.timeout_s,
+            )
+        )
+
+    @app.post("/dut/uart/send")
+    def send_uart(request: UartSendRequest) -> dict[str, object]:
+        return uart_send_payload(
+            runtime_provider.send_uart(
+                cmd=request.cmd,
+                append_newline=request.append_newline,
+                force=request.force,
             )
         )
 

@@ -9,6 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from dutchmate_core.validation import (
+    prepare_uart_send_payload,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_session_id,
@@ -143,6 +144,33 @@ def wait_for_pattern(
         ),
     )
     return _response_payload(response, description="wait-pattern response")
+
+
+def send_uart_command(
+    cmd: str,
+    *,
+    append_newline: bool = True,
+    force: bool = False,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Send one validated text command through the Device Core Service."""
+
+    prepare_uart_send_payload(cmd, append_newline=append_newline)
+    if not isinstance(force, bool):
+        raise ValueError("UART send force must be a boolean")
+    response = _request_service(
+        method="POST",
+        path="/dut/uart/send",
+        service_url=service_url,
+        transport=transport,
+        json={
+            "cmd": cmd,
+            "append_newline": append_newline,
+            "force": force,
+        },
+    )
+    return _response_payload(response, description="UART-send response")
 
 
 def configure_gpio_mode(
@@ -336,8 +364,23 @@ def _response_error_message(response: httpx.Response) -> str:
         detail = payload.get("detail")
         error = payload.get("error")
         if isinstance(detail, str) and detail:
+            suffix = _uart_send_error_suffix(payload.get("context"))
             if isinstance(error, str) and error:
-                return f"{prefix} [{error}]: {detail}"
-            return f"{prefix}: {detail}"
+                return f"{prefix} [{error}]: {detail}{suffix}"
+            return f"{prefix}: {detail}{suffix}"
 
     return f"{prefix}."
+
+
+def _uart_send_error_suffix(context: object) -> str:
+    if not isinstance(context, Mapping):
+        return ""
+    attempt_id = context.get("attempt_id")
+    if not isinstance(attempt_id, str) or not attempt_id:
+        return ""
+    accepted = context.get("bytes_accepted")
+    accepted_text = str(accepted) if isinstance(accepted, int) else "unknown"
+    return (
+        f" Attempt: {attempt_id}; accepted bytes: {accepted_text}."
+        " Warning: bytes may have reached the DUT."
+    )

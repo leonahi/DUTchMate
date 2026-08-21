@@ -298,7 +298,8 @@ def test_basic_send_retries_short_writes_in_order() -> None:
 
     accepted = connection.send_uart(b"reboot")
 
-    assert accepted == 6
+    assert accepted.bytes_accepted == 6
+    assert accepted.device_timestamp_us is None
     assert serial.write_calls == [b"reboot", b"boot", b"oot"]
 
 
@@ -315,6 +316,21 @@ def test_basic_send_reports_partial_acceptance_on_failure() -> None:
 
     assert exc_info.value.bytes_accepted == 2
     assert serial.write_calls == [b"reboot", b"boot"]
+
+
+def test_basic_send_maps_serial_timeout_with_partial_acceptance() -> None:
+    serial = ScriptedRawSerial()
+    serial.write_outcomes.extend([2, TimeoutError("write timeout")])
+    connection = open_basic_backend_connection(
+        _settings(tx_enabled=True),
+        serial_factory=lambda **_kwargs: serial,
+    )
+
+    with pytest.raises(BackendWriteError) as exc_info:
+        connection.send_uart(b"reboot")
+
+    assert exc_info.value.error == "timeout"
+    assert exc_info.value.bytes_accepted == 2
 
 
 @pytest.mark.parametrize("invalid_progress", [0, -1, 7, True])

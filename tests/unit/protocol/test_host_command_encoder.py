@@ -290,3 +290,13 @@ def test_rejects_empty_uart_send_bytes() -> None:
 def test_rejects_non_bytes_uart_send_data() -> None:
     with pytest.raises(ProtocolValidationError):
         uart_send_command("reboot")  # type: ignore[arg-type]
+
+
+def test_rejects_oversized_uart_send_bytes() -> None:
+    with pytest.raises(ProtocolValidationError, match="1024"):
+        uart_send_command(b"x" * 1025)
+
+
+def test_uart_send_text_preserves_existing_crlf_and_completes_trailing_cr() -> None:
+    assert uart_send_text_command("go\r\n").data == b"go\r\n"
+    assert uart_send_text_command("go\r").data == b"go\r\n"

@@ -29,6 +29,7 @@ MAX_GPIO_IDENTIFIER_BYTES: Final = 64
 MAX_SERIAL_PORT_BYTES: Final = 4096
 MAX_CAPTURE_DURATION_S: Final = 300.0
 MAX_WAIT_PATTERN_BYTES: Final = 256
+MAX_UART_SEND_BYTES: Final = 1024
 _MIB_BYTES: Final = 1024 * 1024
 DEFAULT_SESSION_MAX_SIZE_MB: Final = 50
 VALID_BOOT_MODES: Final = frozenset({"normal", "bootloader"})
@@ -43,6 +44,20 @@ IdentifierValidationReason: TypeAlias = Literal[
 
 class InputValidationError(ValueError):
     """Raised when an application input violates a Device Core contract."""
+
+
+class UartSendValidationError(InputValidationError):
+    """Raised when a public UART-send request has an invalid final payload."""
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        actual_bytes: int | None = None,
+    ) -> None:
+        self.actual_bytes = actual_bytes
+        self.max_bytes = MAX_UART_SEND_BYTES
+        super().__init__(detail)
 
 
 class GpioIdentifierValidationError(ValueError):
@@ -134,6 +149,32 @@ def validate_wait_pattern(pattern: object) -> str:
     if "\r" in pattern or "\n" in pattern:
         raise InputValidationError("wait pattern must not contain CR or LF")
     return pattern
+
+
+def prepare_uart_send_payload(cmd: object, *, append_newline: object = True) -> bytes:
+    """Encode one public text command and enforce its final UART payload bound."""
+
+    if not isinstance(cmd, str):
+        raise UartSendValidationError("UART send cmd must be a string")
+    if not isinstance(append_newline, bool):
+        raise UartSendValidationError("UART send append_newline must be a boolean")
+    try:
+        payload = cmd.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise UartSendValidationError("UART send cmd must be valid Unicode") from exc
+    if append_newline and not payload.endswith(b"\n"):
+        payload += b"\n"
+    if not payload:
+        raise UartSendValidationError(
+            f"UART send payload must contain 1..{MAX_UART_SEND_BYTES} bytes",
+            actual_bytes=0,
+        )
+    if len(payload) > MAX_UART_SEND_BYTES:
+        raise UartSendValidationError(
+            f"UART send payload must contain 1..{MAX_UART_SEND_BYTES} bytes",
+            actual_bytes=len(payload),
+        )
+    return payload
 
 
 def validate_session_max_size_mb(max_size_mb: object) -> int:

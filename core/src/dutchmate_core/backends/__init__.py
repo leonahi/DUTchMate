@@ -11,6 +11,7 @@ from dutchmate_core.backends.contracts import (
     BackendInputError,
     BackendMode,
     BackendSnapshot,
+    BackendUartSendResult,
     BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
@@ -22,6 +23,7 @@ from dutchmate_core.backends.contracts import (
     UartIntegrity,
     UartReceiveEvent,
     UartSendCapabilityPolicy,
+    UartSender,
     apply_capability_policy,
     integrity_for_backend,
 )
@@ -37,6 +39,7 @@ __all__ = [
     "BackendInputError",
     "BackendMode",
     "BackendSnapshot",
+    "BackendUartSendResult",
     "BufferOverflowEvent",
     "BufferStatusEvent",
     "DeviceControl",
@@ -48,6 +51,7 @@ __all__ = [
     "UartIntegrity",
     "UartReceiveEvent",
     "UartSendCapabilityPolicy",
+    "UartSender",
     "apply_capability_policy",
     "integrity_for_backend",
 ]

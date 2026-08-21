@@ -254,6 +254,27 @@ def test_parse_command_success_without_timestamp() -> None:
     assert message == CommandSuccessMessage()
 
 
+def test_parse_uart_send_success_acceptance_count() -> None:
+    message = parse_device_message(
+        '{"ok":true,"timestamp_us":182334400,"bytes_accepted":7}'
+    )
+
+    assert message == CommandSuccessMessage(
+        timestamp_us=182334400,
+        bytes_accepted=7,
+    )
+
+
+def test_rejects_negative_command_success_acceptance_count() -> None:
+    with pytest.raises(ProtocolValidationError):
+        parse_device_message('{"ok":true,"bytes_accepted":-1}')
+
+
+def test_rejects_oversized_command_success_acceptance_count() -> None:
+    with pytest.raises(ProtocolValidationError, match="1024"):
+        parse_device_message('{"ok":true,"bytes_accepted":1025}')
+
+
 def test_rejects_negative_command_success_timestamp() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message('{"ok":true,"timestamp_us":-1}')

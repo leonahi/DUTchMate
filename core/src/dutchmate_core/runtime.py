@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import datetime
 from functools import partial
 from threading import RLock
 from typing import Literal, Protocol
@@ -21,6 +22,7 @@ from dutchmate_core.backends.contracts import (
     SegmentContext,
     UartIntegrity,
     UartSendCapabilityPolicy,
+    UartSender,
     apply_capability_policy,
     integrity_for_backend,
 )
@@ -39,6 +41,7 @@ from dutchmate_core.session_store.models import (
     FirstError,
     RecentLogs,
     SessionDetail,
+    SessionHandle,
     SessionListPage,
     SessionSummary,
     SessionWorkflow,
@@ -46,6 +49,8 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import (
+    UartSendValidationError,
+    prepare_uart_send_payload,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_source,
@@ -64,6 +69,13 @@ from dutchmate_core.workflows.device_actions import (
     DeviceActionResult,
     DeviceActionRunner,
 )
+from dutchmate_core.workflows.uart_send import (
+    ActiveUartSendSession,
+    UartSendError,
+    UartSendResult,
+    UartSendSessionStorage,
+    UartSendWorkflow,
+)
 
 
 class DeviceCoreRuntimeError(RuntimeError):
@@ -73,7 +85,7 @@ class DeviceCoreRuntimeError(RuntimeError):
 ConnectionState = Literal["connected", "disconnected", "reconnecting"]
 
 
-class DeviceCoreSessionStorage(CaptureSessionStorage, Protocol):
+class DeviceCoreSessionStorage(CaptureSessionStorage, UartSendSessionStorage, Protocol):
     """Capture and bounded-query storage operations required by the runtime."""
 
     def list_session_page(
@@ -156,6 +168,7 @@ class DeviceCoreRuntime:
         self,
         *,
         device_control: DeviceControl,
+        uart_sender: UartSender | None = None,
         session_store: DeviceCoreSessionStorage,
         gpio_registry: GpioModeRegistry | None = None,
         message_source: CaptureEventSource | None = None,
@@ -166,13 +179,32 @@ class DeviceCoreRuntime:
         segment_context: SegmentContext | None = None,
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
         backend_reconnect: CaptureReconnect | None = None,
+        uart_wall_clock: Callable[[], datetime] | None = None,
+        uart_monotonic_ns: Callable[[], int] | None = None,
+        uart_attempt_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._message_source = message_source
         self._capture_clock = capture_clock
         self._status_clock = capture_clock or time.monotonic
         self._backend_reconnect = backend_reconnect
         self._session_store = session_store
-        self._capture_workflow = CaptureWorkflow(session_store=self._session_store)
+        self._session_mutation_lock = RLock()
+        self._capture_workflow = CaptureWorkflow(
+            session_store=self._session_store,
+            mutation_lock=self._session_mutation_lock,
+        )
+        self._uart_send_workflow = (
+            UartSendWorkflow(
+                sender=uart_sender,
+                session_store=self._session_store,
+                mutation_lock=self._session_mutation_lock,
+                wall_clock=uart_wall_clock,
+                monotonic_ns=uart_monotonic_ns,
+                attempt_id_factory=uart_attempt_id_factory,
+            )
+            if uart_sender is not None
+            else None
+        )
         self._gpio_registry = gpio_registry or GpioModeRegistry()
         self._gpio_configurator = GpioConfigurator(
             registry=self._gpio_registry,
@@ -202,6 +234,9 @@ class DeviceCoreRuntime:
             else None
         )
         self._active_session_id: str | None = None
+        self._active_session_handle: SessionHandle | None = None
+        self._active_segment_context: SegmentContext | None = None
+        self._active_session_terminalized = False
         self._active_workflow: SessionWorkflow | None = None
         self._capture_in_progress = False
         self._reconnect_timeout_s = reconnect_timeout_s
@@ -464,6 +499,71 @@ class DeviceCoreRuntime:
             match=match,
         )
 
+    def send_uart(
+        self,
+        *,
+        cmd: str,
+        append_newline: bool = True,
+        force: bool = False,
+    ) -> UartSendResult:
+        """Validate and transmit one public UTF-8 UART command."""
+
+        payload = prepare_uart_send_payload(cmd, append_newline=append_newline)
+        if not isinstance(force, bool):
+            raise UartSendValidationError("UART send force must be a boolean")
+        with self._session_mutation_lock, self._operation_lock:
+            effective_capabilities = apply_capability_policy(
+                self._backend_capabilities,
+                self._capability_policy,
+            )
+            if "uart_send" not in effective_capabilities:
+                disabled_by_policy = (
+                    ["hardware.uart.tx_enabled"]
+                    if "uart_send" in self._backend_capabilities
+                    and not self._capability_policy.uart_send.tx_policy_enabled
+                    else []
+                )
+                raise UartSendError(
+                    error="unsupported_capability",
+                    detail="Operation requires effective capability 'uart_send'",
+                    context={
+                        "operation": "uart_send",
+                        "backend_mode": self._backend_mode,
+                        "required_capabilities": ["uart_send"],
+                        "available_capabilities": sorted(effective_capabilities),
+                        "backend_capabilities": sorted(self._backend_capabilities),
+                        "disabled_by_policy": disabled_by_policy,
+                    },
+                )
+            active_session: ActiveUartSendSession | None = None
+            if self._capture_in_progress:
+                if not force:
+                    raise UartSendError(
+                        error="capture_active",
+                        detail="UART receive workflow is active; explicit force is required",
+                    )
+                if self._active_session_handle is None or self._active_segment_context is None:
+                    raise UartSendError(
+                        error="capture_active",
+                        detail="UART receive workflow has not published its session yet",
+                    )
+                active_session = ActiveUartSendSession(
+                    handle=self._active_session_handle,
+                    segment=self._active_segment_context,
+                )
+            self._require_connected()
+            if self._uart_send_workflow is None:
+                raise DeviceCoreRuntimeError("UART sender is not configured")
+            try:
+                return self._uart_send_workflow.run(
+                    payload,
+                    active_session=active_session,
+                )
+            except UartSendError as exc:
+                if exc.session_terminalized:
+                    self._active_session_terminalized = True
+                raise
+
     def _run_capture_workflow(
         self,
         *,
@@ -515,6 +615,9 @@ class DeviceCoreRuntime:
             device = self._backend_info.device if self._backend_info is not None else None
             self._capture_in_progress = True
             self._active_workflow = workflow
+            self._active_segment_context = (
+                source_segment if isinstance(source_segment, SegmentContext) else None
+            )
 
         reconnect = (
             partial(
@@ -538,11 +641,12 @@ class DeviceCoreRuntime:
                 workflow=workflow,
                 uart_processor=uart_processor,
                 start_action=start_action,
-                on_session_started=self._set_active_session,
+                on_session_handle_started=self._set_active_session,
                 reconnect=reconnect,
                 on_backend_disconnected=self._mark_backend_disconnected,
                 requested_pattern=requested_pattern,
                 discard_preexisting=discard_preexisting,
+                is_session_terminalized=self._is_active_session_terminalized,
             )
             if summary.integrity is not None:
                 with self._operation_lock:
@@ -552,12 +656,20 @@ class DeviceCoreRuntime:
             with self._operation_lock:
                 self._capture_in_progress = False
                 self._active_session_id = None
+                self._active_session_handle = None
+                self._active_segment_context = None
+                self._active_session_terminalized = False
                 self._active_workflow = None
                 self._reconnect_deadline = None
 
-    def _set_active_session(self, session_id: str) -> None:
+    def _set_active_session(self, handle: SessionHandle) -> None:
         with self._operation_lock:
-            self._active_session_id = session_id
+            self._active_session_id = handle.session_id
+            self._active_session_handle = handle
+
+    def _is_active_session_terminalized(self) -> bool:
+        with self._operation_lock:
+            return self._active_session_terminalized
 
     def _mark_backend_disconnected(self) -> None:
         with self._operation_lock:
@@ -596,6 +708,7 @@ class DeviceCoreRuntime:
                 self._backend_info = snapshot.info
                 self._backend_capabilities = snapshot.info.capabilities
                 self._segment_context = snapshot.segment
+                self._active_segment_context = snapshot.segment
                 self._integrity = snapshot.integrity
                 self._port = snapshot.info.port
             return replacement

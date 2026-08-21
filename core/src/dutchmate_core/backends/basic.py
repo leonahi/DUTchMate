@@ -21,6 +21,7 @@ from dutchmate_core.backends.contracts import (
     BackendInfo,
     BackendInputError,
     BackendSnapshot,
+    BackendUartSendResult,
     BackendWriteError,
     SegmentContext,
     SegmentTimestamp,
@@ -105,7 +106,7 @@ class BasicBackendConnection:
 
         return apply_capability_policy(self._info.capabilities, self._capability_policy)
 
-    def send_uart(self, data: bytes) -> int:
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
         """Write a complete UART payload, retrying ordered short writes."""
 
         if "uart_send" not in self.capabilities:
@@ -124,6 +125,12 @@ class BasicBackendConnection:
                     raise BackendWriteError(
                         "Basic UART write failed",
                         bytes_accepted=accepted,
+                        error=(
+                            "timeout"
+                            if isinstance(exc, TimeoutError)
+                            or type(exc).__name__ == "SerialTimeoutException"
+                            else "hardware_fault"
+                        ),
                     ) from exc
                 remaining = len(data) - accepted
                 if (
@@ -135,9 +142,14 @@ class BasicBackendConnection:
                     raise BackendWriteError(
                         "Basic UART write made invalid progress",
                         bytes_accepted=accepted,
+                        error=(
+                            "timeout"
+                            if written == 0 and not isinstance(written, bool)
+                            else "hardware_fault"
+                        ),
                     )
                 accepted += written
-        return accepted
+        return BackendUartSendResult(bytes_accepted=accepted)
 
     def close(self) -> None:
         """Close the underlying serial port."""

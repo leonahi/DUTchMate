@@ -33,6 +33,7 @@ from dutchmate_core.validation import (
     validate_wait_timeout,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
+from dutchmate_core.workflows.uart_send import UartSendResult
 
 
 def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
@@ -159,6 +160,21 @@ class WaitPatternRequest(BaseModel):
         return validate_wait_timeout(value)
 
 
+class UartSendRequest(BaseModel):
+    """Public text-only UART-send request."""
+
+    cmd: str
+    append_newline: bool = True
+    force: bool = False
+
+    @field_validator("append_newline", "force", mode="before")
+    @classmethod
+    def validate_boolean(cls, value: object, info: ValidationInfo) -> bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"{info.field_name} must be a boolean")
+        return value
+
+
 def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
     """Serialize a completed capture session summary."""
 
@@ -238,6 +254,18 @@ def wait_pattern_payload(result: WaitPatternResult) -> dict[str, object]:
         }
     )
     return payload
+
+
+def uart_send_payload(result: UartSendResult) -> dict[str, object]:
+    """Serialize one successful complete UART send."""
+
+    return {
+        "ok": True,
+        "performed_at": result.performed_at,
+        "device_timestamp_us": result.device_timestamp_us,
+        "attempt_id": result.attempt_id,
+        "perturbation_logged": result.perturbation_logged,
+    }
 
 
 def session_list_payload(page: SessionListPage) -> dict[str, object]:

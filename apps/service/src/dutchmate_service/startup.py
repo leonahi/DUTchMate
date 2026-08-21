@@ -15,6 +15,7 @@ from dutchmate_core.backends.basic import (
 from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
     EnhancedDeviceControl,
+    EnhancedUartSender,
     normalize_enhanced_hello,
 )
 from dutchmate_core.backends.settings import BackendSettings
@@ -36,6 +37,7 @@ from dutchmate_core.session_store.store import (
 )
 from dutchmate_service.backend_reconnect import (
     ReplaceableDeviceControl,
+    ReplaceableUartSender,
     build_basic_capture_reconnect,
     build_enhanced_capture_reconnect,
     read_enhanced_hello,
@@ -110,16 +112,19 @@ def build_startup_runtime(
     if backend_settings.mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
+        sender = ReplaceableUartSender(connection)
         control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
         reconnect = build_basic_capture_reconnect(
             settings=backend_settings,
             current_source=basic_source,
             open_connection=open_basic_backend_connection,
+            sender=sender,
             monotonic_clock=reconnect_clock,
             sleep=reconnect_sleep,
         )
         runtime = DeviceCoreRuntime(
             device_control=control,
+            uart_sender=sender,
             message_source=basic_source,
             session_store=session_store,
             capture_clock=monotonic_clock,
@@ -151,6 +156,7 @@ def build_startup_runtime(
         source_origin_us=None,
     )
     control = ReplaceableDeviceControl(EnhancedDeviceControl(transport))
+    sender = ReplaceableUartSender(EnhancedUartSender(transport))
     hello = read_startup_hello(transport)
     info = normalize_enhanced_hello(hello, port=serial_port)
     reconnect = build_enhanced_capture_reconnect(
@@ -158,12 +164,14 @@ def build_startup_runtime(
         current_source=enhanced_source,
         expected_info=info,
         control=control,
+        sender=sender,
         open_transport=open_serial_command_transport,
         monotonic_clock=reconnect_clock,
         sleep=reconnect_sleep,
     )
     runtime = DeviceCoreRuntime(
         device_control=control,
+        uart_sender=sender,
         message_source=enhanced_source,
         session_store=session_store,
         capture_clock=monotonic_clock,

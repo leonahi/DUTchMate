@@ -73,6 +73,7 @@ class CommandSuccessMessage:
     """Successful command response from the Debug Helper."""
 
     timestamp_us: int | None = None
+    bytes_accepted: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,6 +26,7 @@ from dutchmate_core.validation import (
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
+    prepare_uart_send_payload,
     validate_boot_mode,
     validate_gpio_channel,
     validate_gpio_mode_configuration,
@@ -168,6 +169,8 @@ def uart_send_command(data: bytes) -> UartSendCommand:
         raise ProtocolValidationError("UART send data must be bytes")
     if not data:
         raise ProtocolValidationError("UART send data must not be empty")
+    if len(data) > 1024:
+        raise ProtocolValidationError("UART send data must not exceed 1024 bytes")
 
     return UartSendCommand(data=data)
 
@@ -175,13 +178,10 @@ def uart_send_command(data: bytes) -> UartSendCommand:
 def uart_send_text_command(text: str, *, append_newline: bool = True) -> UartSendCommand:
     """Build a `uart_send` command from UTF-8 text."""
 
-    if not isinstance(text, str):
-        raise ProtocolValidationError("UART send text must be a string")
-
-    data = text.encode("utf-8")
-    if append_newline and not data.endswith(b"\n"):
-        data += b"\n"
-
+    try:
+        data = prepare_uart_send_payload(text, append_newline=append_newline)
+    except ValueError as exc:
+        raise ProtocolValidationError(str(exc)) from exc
     return uart_send_command(data)
 
 

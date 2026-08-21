@@ -15,6 +15,7 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.session_store.store import SessionDetail, SessionListPage, SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
+from dutchmate_core.workflows.uart_send import UartSendResult
 
 
 class FakeRuntime:
@@ -25,6 +26,7 @@ class FakeRuntime:
         self.boot_mode_requests: list[str] = []
         self.capture_requests: list[float] = []
         self.boot_test_requests: list[float] = []
+        self.uart_send_requests: list[dict[str, object]] = []
         self.hardware_configs: list[HardwareGpioConfig] = []
 
     def status(self) -> DeviceCoreStatus:
@@ -136,6 +138,27 @@ class FakeRuntime:
             pattern=pattern,
             matched=False,
             match=None,
+        )
+
+    def send_uart(
+        self,
+        *,
+        cmd: str,
+        append_newline: bool = True,
+        force: bool = False,
+    ) -> UartSendResult:
+        self.uart_send_requests.append(
+            {
+                "cmd": cmd,
+                "append_newline": append_newline,
+                "force": force,
+            }
+        )
+        return UartSendResult(
+            performed_at="2026-07-29T10:00:01Z",
+            device_timestamp_us=182334700,
+            attempt_id="attempt01" if force else None,
+            perturbation_logged=force,
         )
 
     def list_sessions(

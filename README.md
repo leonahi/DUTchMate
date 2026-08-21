@@ -69,10 +69,13 @@ The repository currently contains the first host-side Phase 1 foundation:
 - standalone new-evidence-only literal wait sessions through
   `POST /dut/wait-pattern` and `dutchmate wait`, with bounded validation,
   early match completion, ordinary successful timeouts, and stored match references
+- policy-gated text UART transmission through `POST /dut/uart/send` and
+  `dutchmate send`, with exact 1..1024-byte validation, complete-write backend
+  acknowledgements, and durable attempt/result evidence for forced in-session sends
 
 The full asynchronous Enhanced adapter, continuous background ingestion outside
-active workflows, admission for future control/TX evidence, retention,
-UART-send service/CLI exposure, generic Enhanced control actions,
+active workflows, admission for future control evidence, retention,
+generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
 Current UART, buffer telemetry, and finalized line-limit units enforce exact
 whole-unit evidence budgets and clean `size_limit` terminalization.

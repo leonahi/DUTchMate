@@ -292,6 +292,10 @@ protocol validation. Current behavior includes:
 - reset-triggered boot-test recording
 - active-session publication and conflict cleanup in `DeviceCoreRuntime`
 - required accepted `reset`/`boot` role checks
+- literal new-evidence-only wait-pattern sessions
+- text-only bounded UART send through an injected backend sender port
+- forced-send attempt/result persistence under the same mutation guard as
+  capture evidence and terminalization
 
 Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
@@ -303,9 +307,8 @@ precedence, the 32-segment stop, source replacement, and canonical reconnect
 failures through a small injected reopen port and does not own serial details.
 Service composition retries the configured Basic port or reopens Enhanced,
 validates an exact identity and timestamp provenance, and replaces the live
-control transport. Runtime publishes connected, disconnected, and reconnecting
-state plus the active workflow and remaining reconnect window. Wait-pattern
-and UART-send exposure remain Phase 1 work.
+control and UART-send transports. Runtime publishes connected, disconnected,
+and reconnecting state plus the active workflow and remaining reconnect window.
 
 ### `backends` (Contract Foundation)
 
@@ -328,7 +331,7 @@ own:
 
 - Enhanced NDJSON adaptation with device timestamp and telemetry provenance
 - continuous background ingestion and lifecycle ownership beyond finite captures
-- normalized UART-send completion results plus control and future event interfaces
+- future background lifecycle ownership for normalized UART-send and control interfaces
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
 format CLI output.
@@ -339,8 +342,8 @@ format CLI output.
 
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
-wait-pattern, GPIO mode, reset, boot mode, bounded session list/detail, and
-bounded recent UART replay. Handlers remain
+wait-pattern, bounded UART send, GPIO mode, reset, boot mode, bounded session
+list/detail, and bounded recent UART replay. Handlers remain
 thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
@@ -353,7 +356,7 @@ serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
-workflows, public UART send, baseline operations, and remaining
+workflows, baseline operations, and remaining
 error-specific structured contexts remain
 Phase 1 work.
 
@@ -366,7 +369,7 @@ not import low-level transport code or open serial ports for debug workflows.
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
 reset, boot mode, session listing, session detail, recent logs, and literal
-wait-pattern. UART send and baseline commands remain pending.
+wait-pattern, plus bounded UART send. Baseline commands remain pending.
 
 ### MCP Server
 

@@ -11,6 +11,8 @@ from dutchmate_core.backends.contracts import (
     BackendEvent,
     BackendInfo,
     BackendInputError,
+    BackendUartSendResult,
+    BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
     DeviceControl,
@@ -23,6 +25,7 @@ from dutchmate_core.device_connection.commands import (
     boot_mode_command,
     configure_gpio_mode_command,
     reset_command,
+    uart_send_command,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
 from dutchmate_core.device_connection.messages import (
@@ -93,6 +96,54 @@ class EnhancedDeviceControl(DeviceControl):
         raise DeviceControlError(
             error="unexpected_response",
             detail=f"Expected command response for {operation}, got {type(response).__name__}",
+        )
+
+
+class EnhancedUartSender:
+    """Translate complete UART payloads to Enhanced protocol commands."""
+
+    def __init__(self, transport: CommandTransport) -> None:
+        self._transport = transport
+
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        command = uart_send_command(data)
+        try:
+            response = self._transport.request(command.to_ndjson())
+        except TransportTimeoutError as exc:
+            raise BackendWriteError(
+                "Enhanced UART send timed out",
+                bytes_accepted=None,
+                error="timeout",
+            ) from exc
+        except Exception as exc:
+            raise BackendWriteError(
+                "Enhanced UART send transport failed",
+                bytes_accepted=None,
+            ) from exc
+        if isinstance(response, CommandErrorMessage):
+            raise BackendWriteError(
+                response.detail,
+                bytes_accepted=None,
+                error=response.error,
+            )
+        if not isinstance(response, CommandSuccessMessage):
+            raise BackendWriteError(
+                "Enhanced UART send received an unexpected response",
+                bytes_accepted=None,
+            )
+        if response.bytes_accepted != len(data):
+            raise BackendWriteError(
+                "Enhanced UART send acknowledgement did not accept the complete payload",
+                bytes_accepted=response.bytes_accepted,
+            )
+        if response.timestamp_us is None:
+            raise BackendWriteError(
+                "Enhanced UART send acknowledgement omitted timestamp_us",
+                bytes_accepted=response.bytes_accepted,
+            )
+        return BackendUartSendResult(
+            bytes_accepted=response.bytes_accepted,
+            device_timestamp_us=response.timestamp_us,
         )
 
 

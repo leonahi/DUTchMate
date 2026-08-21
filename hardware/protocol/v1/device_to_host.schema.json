@@ -146,6 +146,11 @@
         },
         "timestamp_us": {
           "$ref": "#/$defs/timestamp_us"
+        },
+        "bytes_accepted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
         }
       }
     },

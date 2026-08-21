@@ -106,6 +106,9 @@ class SessionStore:
             raise ValueError("session evidence budget must be a positive integer")
         self._evidence_budget_bytes = evidence_budget_bytes
         self._last_recovery = SessionRecoveryResult()
+        self._uart_tx_result_reservations: dict[
+            tuple[str, str], tuple[int, int, int]
+        ] = {}
 
     @property
     def root(self) -> Path:
@@ -488,6 +491,9 @@ class SessionStore:
         _require_metadata_capacity(serialized_metadata)
         _persistence.remove_file(handle.paths.terminal_reserve, missing_ok=True)
         _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        for reservation_key in tuple(self._uart_tx_result_reservations):
+            if reservation_key[0] == handle.session_id:
+                del self._uart_tx_result_reservations[reservation_key]
 
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
@@ -686,6 +692,7 @@ class SessionStore:
         channel: int | None,
         timestamp_us: int | None,
         rejected_metadata_mutator: Callable[[dict[str, object]], None] | None = None,
+        released_uart_tx_reservation: tuple[str, str] | None = None,
     ) -> None:
         metadata = _persistence.read_json_object(handle.paths.metadata)
         if metadata.get("schema_version") != 1:
@@ -697,7 +704,15 @@ class SessionStore:
         if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
             raise ValueError("native session evidence budget is invalid")
         current_bytes = _persistence.evidence_file_bytes(handle.paths)
-        projected_bytes = current_bytes + evidence_bytes
+        reserved_result_bytes = sum(
+            reserved_bytes
+            for reservation_key, (reserved_bytes, _payload_bytes, _segment_id) in (
+                self._uart_tx_result_reservations.items()
+            )
+            if reservation_key[0] == handle.session_id
+            and reservation_key != released_uart_tx_reservation
+        )
+        projected_bytes = current_bytes + evidence_bytes + reserved_result_bytes
         if projected_bytes <= budget:
             return
 
@@ -760,6 +775,138 @@ class SessionStore:
                 _require_metadata_capacity(serialized_metadata)
                 transaction.prepare_metadata(serialized_metadata)
                 _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
+    def append_uart_tx_attempt(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        segment_id: int,
+        attempted_at: str,
+        data: bytes,
+    ) -> None:
+        """Durably append a forced-send attempt and reserve its result record."""
+
+        _persistence.require_session_appendable(handle)
+        reservation_key = (handle.session_id, attempt_id)
+        if reservation_key in self._uart_tx_result_reservations:
+            raise ValueError("UART TX attempt ID is already active")
+        event_bytes = _persistence.serialize_jsonl(
+            _evidence.uart_tx_attempt_event_json(
+                attempt_id=attempt_id,
+                segment_id=segment_id,
+                attempted_at=attempted_at,
+                data=data,
+            )
+        )
+        result_reservation = len(
+            _persistence.serialize_jsonl(
+                _evidence.uart_tx_result_event_json(
+                    attempt_id=attempt_id,
+                    segment_id=segment_id,
+                    completed_at="9999-12-31T23:59:59.999999Z",
+                    outcome="failed",
+                    error="x" * 64,
+                    bytes_accepted=1024,
+                    timestamp_us=9_223_372_036_854_775_807,
+                    device_timestamp_us=9_223_372_036_854_775_807,
+                )
+            )
+        )
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        _metadata._metadata_segment(metadata, segment_id)
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes) + result_reservation,
+            rejected_unit_type="uart_tx_attempt",
+            rejected_uart_payload_bytes=None,
+            segment_id=segment_id,
+            channel=None,
+            timestamp_us=None,
+        )
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        self._uart_tx_result_reservations[reservation_key] = (
+            result_reservation,
+            len(data),
+            segment_id,
+        )
+
+    def append_uart_tx_result(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        segment_id: int,
+        completed_at: str,
+        outcome: Literal["success", "failed"],
+        error: str | None,
+        bytes_accepted: int | None,
+        timestamp_us: int | None,
+        device_timestamp_us: int | None,
+    ) -> None:
+        """Durably resolve one admitted forced-send attempt."""
+
+        _persistence.require_session_appendable(handle)
+        reservation_key = (handle.session_id, attempt_id)
+        reservation = self._uart_tx_result_reservations.get(reservation_key)
+        if reservation is None:
+            raise ValueError("UART TX result has no active attempt reservation")
+        reserved_bytes, payload_bytes, reserved_segment_id = reservation
+        if segment_id != reserved_segment_id:
+            raise ValueError("UART TX result segment does not match its attempt")
+        if outcome == "success" and bytes_accepted != payload_bytes:
+            raise ValueError("successful UART TX result must accept the complete payload")
+        event_bytes = _persistence.serialize_jsonl(
+            _evidence.uart_tx_result_event_json(
+                attempt_id=attempt_id,
+                segment_id=segment_id,
+                completed_at=completed_at,
+                outcome=outcome,
+                error=error,
+                bytes_accepted=bytes_accepted,
+                timestamp_us=timestamp_us,
+                device_timestamp_us=device_timestamp_us,
+            )
+        )
+        if len(event_bytes) > reserved_bytes:
+            raise ValueError("UART TX result exceeds its admitted reservation")
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes),
+            rejected_unit_type="hardware_event",
+            rejected_uart_payload_bytes=None,
+            segment_id=segment_id,
+            channel=None,
+            timestamp_us=timestamp_us,
+            released_uart_tx_reservation=reservation_key,
+        )
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        if timestamp_us is not None:
+            _metadata._record_metadata_segment_timestamp(
+                metadata,
+                segment_id=segment_id,
+                timestamp_us=timestamp_us,
+            )
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        del self._uart_tx_result_reservations[reservation_key]
 
     def append_buffer_overflow(
         self,

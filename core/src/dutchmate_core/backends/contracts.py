@@ -206,9 +206,31 @@ class BackendCapabilityError(RuntimeError):
 class BackendWriteError(RuntimeError):
     """Raised when a backend cannot accept a complete UART payload."""
 
-    def __init__(self, message: str, *, bytes_accepted: int | None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        bytes_accepted: int | None,
+        error: str = "hardware_fault",
+    ) -> None:
         super().__init__(message)
         self.bytes_accepted = bytes_accepted
+        self.error = error
+
+
+@dataclass(frozen=True, slots=True)
+class BackendUartSendResult:
+    """Complete backend acceptance of one UART payload."""
+
+    bytes_accepted: int
+    device_timestamp_us: int | None = None
+
+
+class UartSender(Protocol):
+    """Backend-neutral port for complete UART payload transmission."""
+
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        """Submit every payload byte or raise a backend write error."""
 
 
 class DeviceControlError(RuntimeError):

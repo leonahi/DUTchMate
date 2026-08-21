@@ -46,7 +46,7 @@ _BUFFER_STATUS_KEYS = {
     "dropped_bytes_total",
     "overflow_events",
 }
-_COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us"}
+_COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us", "bytes_accepted"}
 _COMMAND_ERROR_KEYS = {"ok", "error", "detail"}
 
 
@@ -277,7 +277,19 @@ def _parse_command_success(payload: dict[str, Any]) -> CommandSuccessMessage:
         raise ProtocolValidationError(f"Unexpected command success field(s): {names}")
 
     timestamp_us = _optional_non_negative_int(payload, "timestamp_us", "Command success")
-    return CommandSuccessMessage(timestamp_us=timestamp_us)
+    bytes_accepted = _optional_non_negative_int(
+        payload,
+        "bytes_accepted",
+        "Command success",
+    )
+    if bytes_accepted is not None and bytes_accepted > 1024:
+        raise ProtocolValidationError(
+            "Command success 'bytes_accepted' must not exceed 1024"
+        )
+    return CommandSuccessMessage(
+        timestamp_us=timestamp_us,
+        bytes_accepted=bytes_accepted,
+    )
 
 
 def _parse_command_error(payload: dict[str, Any]) -> CommandErrorMessage:

@@ -56,7 +56,7 @@ Current core modules:
 | `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
 | `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded reconnect segments, stable paginated list/detail projections, bounded native UART replay, pattern/line-limit evidence, and discovery. |
 | `gpio_config` | Control-channel mapping, validation, and accepted state. |
-| `workflows` | Shared normalized-event capture and guarded reset/boot actions. |
+| `workflows` | Shared normalized-event capture, guarded reset/boot actions, and policy-neutral UART-send dispatch/evidence coordination. |
 | `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
 | `validation.py` | Shared public input contracts and application validation errors. |
 
@@ -116,6 +116,8 @@ Service endpoints:
 - `GET /status`
 - `POST /dut/capture`
 - `POST /dut/boot-test`
+- `POST /dut/wait-pattern`
+- `POST /dut/uart/send`
 - `POST /gpio/mode`
 - `POST /dut/reset`
 - `POST /dut/boot-mode`
@@ -131,6 +133,7 @@ CLI commands:
 - `dutchmate sessions`, `session <session_id>`, and
   `logs [--session <session_id>] --last <lines>`
 - `dutchmate wait <pattern> --timeout <seconds>`
+- `dutchmate send <cmd> [--no-newline] [--force]`
 
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
@@ -140,8 +143,7 @@ coordinates disconnect/resume deadlines and segment-bound source replacement;
 service composition now retries the configured Basic port or validates an exact
 Enhanced identity/hello before publishing a prepared replacement. Major
 remaining Phase 1 areas are the full asynchronous Enhanced adapter, background
-ingestion outside active workflows, retention, UART-send public workflows,
-generic Enhanced control
+ingestion outside active workflows, retention, generic Enhanced control
 actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint

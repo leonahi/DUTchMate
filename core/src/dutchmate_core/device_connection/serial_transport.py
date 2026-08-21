@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 from collections import deque
 from collections.abc import Callable
+from threading import RLock
 from typing import Protocol, cast
 
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
@@ -40,6 +41,7 @@ class SerialCommandTransport:
     def __init__(self, serial_port: SerialPort) -> None:
         self._serial_port = serial_port
         self._pending_messages: deque[DeviceMessage] = deque()
+        self._io_lock = RLock()
 
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return the matching command response."""
@@ -49,28 +51,31 @@ class SerialCommandTransport:
         if not command.endswith(b"\n"):
             raise ValueError("serial commands must be newline-terminated NDJSON")
 
-        self._serial_port.write(command)
-        self._serial_port.flush()
+        with self._io_lock:
+            self._serial_port.write(command)
+            self._serial_port.flush()
 
-        while True:
-            message = self._read_serial_message()
-            if isinstance(message, CommandSuccessMessage | CommandErrorMessage):
-                return message
-            self._pending_messages.append(message)
+            while True:
+                message = self._read_serial_message()
+                if isinstance(message, CommandSuccessMessage | CommandErrorMessage):
+                    return message
+                self._pending_messages.append(message)
 
     def read_message(self) -> DeviceMessage:
         """Return the oldest queued or newly read Debug Helper message."""
 
-        if self._pending_messages:
-            return self._pending_messages.popleft()
-        return self._read_serial_message()
+        with self._io_lock:
+            if self._pending_messages:
+                return self._pending_messages.popleft()
+            return self._read_serial_message()
 
     def drain_pending_messages(self) -> tuple[DeviceMessage, ...]:
         """Return and clear messages queued during command requests."""
 
-        messages = tuple(self._pending_messages)
-        self._pending_messages.clear()
-        return messages
+        with self._io_lock:
+            messages = tuple(self._pending_messages)
+            self._pending_messages.clear()
+            return messages
 
     def _read_serial_message(self) -> DeviceMessage:
         line = self._serial_port.read_until(b"\n")

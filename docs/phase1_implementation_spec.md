@@ -74,8 +74,8 @@ then connected to each real backend in milestone order.
    the Basic backend adapter: one lazy-started reader owns raw serial reads,
    publishes FIFO normalized chunks with host-monotonic provenance, and drains
    accepted evidence before disconnect errors. Capability-gated writes retry
-   short writes to completion and report partial acceptance on failure. Public
-   Device Core/service/CLI UART-send exposure remains step 6 work.**
+   short writes to completion and report partial acceptance on failure. The
+   public Device Core/service/CLI send path is now implemented in step 6.**
 5. Expose backend mode, capabilities, timestamp provenance, and the UART
    loss-observation object through status, sessions, service responses, and CLI output.
    **Implemented for current runtime status and capture-like sessions/responses:
@@ -108,8 +108,11 @@ then connected to each real backend in milestone order.
    updates volatile connection state, and replaces Enhanced control transport.
    Bounded native/legacy session list/detail retrieval is implemented with
    stable opaque pagination and artifact/count summaries. Background reconnect
-   outside active workflows, log replay, wait-pattern, public UART send, and
-   retention remain.**
+   outside active workflows, retention, and baseline semantics remain. Native
+   log replay, literal wait-pattern, and public UART send are implemented. UART
+   send validates final UTF-8 payloads before policy/ownership/connection work,
+   requires complete Basic or Enhanced acceptance, and stores durable forced
+   attempt/result pairs without adding TX bytes to the receive log.**
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
    **Not started.**
@@ -169,11 +172,10 @@ The repository already contains:
   active-session guards, reset/boot action enforcement, and synchronous serial
   command transport.
 - Service endpoints and CLI commands for status, finite capture, boot-test,
-  GPIO mode, reset, and boot-mode.
+  wait-pattern, bounded UART send, GPIO mode, reset, and boot-mode.
 
-Native versioned log replay, wait-pattern, public UART-send workflows,
-retention/baseline semantics, RP2040 firmware, and both HIL paths remain
-incomplete.
+Retention/baseline semantics, continuous background ingestion, RP2040 firmware,
+and both HIL paths remain incomplete.
 
 ### Current Host-Side Core Flow
 
@@ -1464,12 +1466,11 @@ not imply electrical rollback.
 If result persistence fails after dispatch, Device Core returns
 `persistence_fault` with `attempt_id`; the durable unmatched attempt means the
 completion is unknown. A failed dispatched request returns its canonical
-backend error with `attempt_id` and `bytes_accepted` in `context`. The existing
-core command helper already performs UTF-8 encoding, default LF insertion, and
-explicit no-newline behavior. Service, CLI, backend workflow, and perturbation
-recording remain unimplemented. The helper and current v1 wire schema do not
-enforce the 1024-byte limit or accepted-byte response fields, and the current
-serial command transport does not verify or complete short writes.
+backend error with `attempt_id` and `bytes_accepted` in `context`. The host-side
+core workflow, service endpoint, CLI command, Basic/Enhanced adapters, result
+reservation, and perturbation recording are implemented. The v1 success schema
+and parser accept `bytes_accepted`; Enhanced send requires that count and a raw
+timestamp, while Basic retries ordered short writes to completion.
 
 UART-send completion is all-or-error at the API boundary, not electrically
 transactional. Basic loops until all final bytes are accepted by the serial

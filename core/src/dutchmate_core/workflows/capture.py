@@ -4,6 +4,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+from threading import RLock
+from types import TracebackType
 from typing import Protocol
 
 from dutchmate_core.backends.contracts import (
@@ -186,6 +188,22 @@ class CaptureSessionStorage(Protocol):
     def summarize_session(self, session_id: str) -> SessionSummary:
         """Return the stored session summary."""
 
+
+class SessionMutationLock(Protocol):
+    """Shared guard that serializes active-session evidence mutations."""
+
+    def __enter__(self) -> object:
+        """Acquire the mutation guard."""
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Release the mutation guard."""
+
+
 class TransportCaptureRunner:
     """Record parsed transport messages until one fixed workflow deadline."""
 
@@ -205,13 +223,18 @@ class TransportCaptureRunner:
         recorder: "CaptureRecorder",
         *,
         requested_pattern: str | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> "CaptureRecordResult | None":
         """Record supported messages until the host-monotonic deadline."""
 
-        while self._clock() < self._deadline:
+        while self._clock() < self._deadline and not (
+            stop_requested is not None and stop_requested()
+        ):
             event = self._transport.read_event()
 
-            if self._clock() >= self._deadline:
+            if self._clock() >= self._deadline or (
+                stop_requested is not None and stop_requested()
+            ):
                 break
             if event is not None:
                 segment = getattr(self._transport, "segment", None)
@@ -248,6 +271,7 @@ class CaptureRecorder:
         session_handle: SessionHandle,
         uart_processor: UartCaptureProcessor | None = None,
         segment_context: SegmentContext | None = None,
+        mutation_lock: SessionMutationLock | None = None,
     ) -> None:
         self._session_store = session_store
         self._session_handle = session_handle
@@ -257,6 +281,7 @@ class CaptureRecorder:
         )
         self._terminalized = False
         self._finalized = False
+        self._mutation_lock = mutation_lock or RLock()
 
     @classmethod
     def start(
@@ -274,26 +299,30 @@ class CaptureRecorder:
         reconnect_timeout_s: float | None = None,
         wait_pattern: str | None = None,
         timeout_s: float | None = None,
+        mutation_lock: SessionMutationLock | None = None,
     ) -> "CaptureRecorder":
         """Create a capture session and return a recorder for it."""
 
-        session_handle = session_store.create_session(
-            command=command,
-            firmware=firmware,
-            device=device,
-            baseline=baseline,
-            backend_snapshot=backend_snapshot,
-            workflow=workflow,
-            duration_s=duration_s,
-            reconnect_timeout_s=reconnect_timeout_s,
-            wait_pattern=wait_pattern,
-            timeout_s=timeout_s,
-        )
+        shared_lock = mutation_lock or RLock()
+        with shared_lock:
+            session_handle = session_store.create_session(
+                command=command,
+                firmware=firmware,
+                device=device,
+                baseline=baseline,
+                backend_snapshot=backend_snapshot,
+                workflow=workflow,
+                duration_s=duration_s,
+                reconnect_timeout_s=reconnect_timeout_s,
+                wait_pattern=wait_pattern,
+                timeout_s=timeout_s,
+            )
         return cls(
             session_store=session_store,
             session_handle=session_handle,
             uart_processor=uart_processor,
             segment_context=(backend_snapshot.segment if backend_snapshot is not None else None),
+            mutation_lock=shared_lock,
         )
 
     @property
@@ -313,6 +342,11 @@ class CaptureRecorder:
         """Whether storage has already ended this recorder's native session."""
 
         return self._terminalized
+
+    def mark_terminalized(self) -> None:
+        """Observe terminalization performed by a coordinated external evidence writer."""
+
+        self._terminalized = True
 
     def record_event(self, event: BackendEvent) -> CaptureRecordResult:
         """Record one normalized backend event into the session."""
@@ -392,7 +426,8 @@ class CaptureRecorder:
             if existing != context:
                 raise ValueError("capture segment timestamp provenance cannot change")
             return
-        self._session_store.record_segment_context(self._session_handle, context)
+        with self._mutation_lock:
+            self._session_store.record_segment_context(self._session_handle, context)
         self._segment_contexts[context.segment_id] = context
 
     def finalize(self) -> None:
@@ -469,7 +504,8 @@ class CaptureRecorder:
 
     def _record_with_quota(self, operation: Callable[[], None]) -> bool:
         try:
-            operation()
+            with self._mutation_lock:
+                operation()
         except EvidenceQuotaExceeded:
             self._terminalized = True
             return False
@@ -479,8 +515,14 @@ class CaptureRecorder:
 class CaptureWorkflow:
     """Own the complete lifecycle of one finite capture session."""
 
-    def __init__(self, *, session_store: CaptureSessionStorage) -> None:
+    def __init__(
+        self,
+        *,
+        session_store: CaptureSessionStorage,
+        mutation_lock: SessionMutationLock | None = None,
+    ) -> None:
         self._session_store = session_store
+        self.mutation_lock = mutation_lock or RLock()
 
     def run(
         self,
@@ -498,10 +540,12 @@ class CaptureWorkflow:
         workflow: SessionWorkflow = "capture",
         start_action: Callable[[], object] | None = None,
         on_session_started: Callable[[str], None] | None = None,
+        on_session_handle_started: Callable[[SessionHandle], None] | None = None,
         reconnect: CaptureReconnect | None = None,
         on_backend_disconnected: Callable[[], None] | None = None,
         requested_pattern: str | None = None,
         discard_preexisting: bool = False,
+        is_session_terminalized: Callable[[], bool] | None = None,
     ) -> SessionSummary:
         """Create, record, terminalize, and summarize one capture session."""
 
@@ -543,11 +587,14 @@ class CaptureWorkflow:
                 if native_session and workflow == "wait_pattern"
                 else None
             ),
+            mutation_lock=self.mutation_lock,
         )
         matched_pattern_index: int | None = None
         try:
             if on_session_started is not None:
                 on_session_started(recorder.session_id)
+            if on_session_handle_started is not None:
+                on_session_handle_started(recorder.session_handle)
             if start_action is not None:
                 start_action()
             workflow_deadline = clock() + validated_duration_s
@@ -563,7 +610,10 @@ class CaptureWorkflow:
                     record_result = runner.run(
                         recorder,
                         requested_pattern=requested_pattern,
+                        stop_requested=is_session_terminalized,
                     )
+                    if is_session_terminalized is not None and is_session_terminalized():
+                        recorder.mark_terminalized()
                     if record_result is not None and requested_pattern is not None:
                         matched_pattern_index = self._requested_pattern_index(
                             record_result,
@@ -629,13 +679,15 @@ class CaptureWorkflow:
             recorder.finalize()
             if native_session and not recorder.terminalized:
                 if workflow == "wait_pattern":
-                    self._session_store.complete_wait_pattern(
-                        recorder.session_handle,
-                        matched=matched_pattern_index is not None,
-                        detected_pattern_index=matched_pattern_index,
-                    )
+                    with self.mutation_lock:
+                        self._session_store.complete_wait_pattern(
+                            recorder.session_handle,
+                            matched=matched_pattern_index is not None,
+                            detected_pattern_index=matched_pattern_index,
+                        )
                 else:
-                    self._session_store.complete_session(recorder.session_handle)
+                    with self.mutation_lock:
+                        self._session_store.complete_session(recorder.session_handle)
         except Exception as exc:
             failure = exc
             if not isinstance(failure, SessionPersistenceError):
@@ -644,7 +696,8 @@ class CaptureWorkflow:
                 except SessionPersistenceError as finalize_error:
                     failure = finalize_error
             if recorder.terminalized:
-                return self._session_store.summarize_session(recorder.session_id)
+                with self.mutation_lock:
+                    return self._session_store.summarize_session(recorder.session_id)
             terminalization_safe = (
                 not isinstance(
                     failure,
@@ -653,20 +706,22 @@ class CaptureWorkflow:
                 or failure.terminalization_safe
             )
             if native_session and terminalization_safe:
-                self._session_store.fail_session(
-                    recorder.session_handle,
-                    end_reason=(
-                        "persistence_error"
-                        if isinstance(failure, SessionPersistenceError)
-                        else getattr(failure, "end_reason", "backend_error")
-                    ),
-                    error_code=self._failure_code(failure),
-                    detail=str(failure),
-                )
+                with self.mutation_lock:
+                    self._session_store.fail_session(
+                        recorder.session_handle,
+                        end_reason=(
+                            "persistence_error"
+                            if isinstance(failure, SessionPersistenceError)
+                            else getattr(failure, "end_reason", "backend_error")
+                        ),
+                        error_code=self._failure_code(failure),
+                        detail=str(failure),
+                    )
             if failure is not exc:
                 raise failure from exc
             raise
-        return self._session_store.summarize_session(recorder.session_id)
+        with self.mutation_lock:
+            return self._session_store.summarize_session(recorder.session_id)
 
     @staticmethod
     def _requested_pattern_index(

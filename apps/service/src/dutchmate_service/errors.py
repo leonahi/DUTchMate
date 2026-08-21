@@ -15,9 +15,10 @@ from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import SessionPersistenceError, SessionQueryError
-from dutchmate_core.validation import InputValidationError
+from dutchmate_core.validation import InputValidationError, UartSendValidationError
 from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
+from dutchmate_core.workflows.uart_send import UartSendError
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,30 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             detail=exc.detail,
             status_code=_status_for_error(exc.error),
             context=exc.context,
+        )
+
+    if isinstance(exc, UartSendError):
+        return _service_error(
+            error=exc.error,
+            detail=exc.detail,
+            status_code=_status_for_error(exc.error),
+            context=exc.context,
+        )
+
+    if isinstance(exc, UartSendValidationError):
+        context: dict[str, object] | None = (
+            {
+                "actual_bytes": exc.actual_bytes,
+                "max_bytes": exc.max_bytes,
+            }
+            if exc.actual_bytes is not None
+            else None
+        )
+        return _service_error(
+            error="invalid_argument",
+            detail=str(exc),
+            status_code=400,
+            context=context,
         )
 
     if isinstance(exc, SessionPersistenceError):
@@ -167,6 +192,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_device_action_error(
         request: Request,
         exc: DeviceActionError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(UartSendError)
+    async def handle_uart_send_error(
+        request: Request,
+        exc: UartSendError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

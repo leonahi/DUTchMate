@@ -18,6 +18,7 @@ from dutchmate_cli.client import (
     list_debug_sessions,
     reset_dut,
     run_boot_test,
+    send_uart_command,
     set_boot_mode,
     wait_for_pattern,
 )
@@ -31,6 +32,7 @@ from dutchmate_cli.lifecycle import (
     stop_service,
 )
 from dutchmate_cli.logs import format_recent_logs
+from dutchmate_cli.send import format_uart_send
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
 from dutchmate_cli.wait import format_wait_pattern
@@ -292,6 +294,41 @@ def wait_command(
     except ServiceClientError as exc:
         _fail(str(exc))
     typer.echo(format_wait_pattern(payload))
+
+
+@app.command("send")
+def send_command(
+    cmd: Annotated[str, typer.Argument(help="UTF-8 text command to send.")],
+    no_newline: Annotated[
+        bool,
+        typer.Option("--no-newline", help="Do not append the default LF terminator."),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Permit a visibly recorded send during capture."),
+    ] = False,
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Send one bounded text command to the DUT UART."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = send_uart_command(
+            cmd,
+            append_newline=not no_newline,
+            force=force,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_uart_send(payload))
 
 
 @app.command()

@@ -2,6 +2,8 @@ import pytest
 
 from dutchmate_core.validation import (
     GpioIdentifierValidationError,
+    UartSendValidationError,
+    prepare_uart_send_payload,
     session_evidence_budget_bytes,
     validate_capture_duration,
     validate_gpio_configuration,
@@ -11,6 +13,50 @@ from dutchmate_core.validation import (
     validate_wait_pattern,
     validate_wait_timeout,
 )
+
+
+@pytest.mark.parametrize(
+    ("cmd", "append_newline", "expected"),
+    [
+        ("", True, b"\n"),
+        ("é", True, "é\n".encode()),
+        ("go\n", True, b"go\n"),
+        ("go\r\n", True, b"go\r\n"),
+        ("go\r", True, b"go\r\n"),
+        ("go", False, b"go"),
+    ],
+)
+def test_uart_send_payload_applies_exact_text_terminator_rules(
+    cmd: str,
+    append_newline: bool,
+    expected: bytes,
+) -> None:
+    assert prepare_uart_send_payload(cmd, append_newline=append_newline) == expected
+
+
+def test_uart_send_payload_accepts_exact_1024_byte_boundary() -> None:
+    assert len(prepare_uart_send_payload("x" * 1023)) == 1024
+    assert len(prepare_uart_send_payload("x" * 1024, append_newline=False)) == 1024
+
+
+@pytest.mark.parametrize(
+    ("cmd", "append_newline", "actual_bytes"),
+    [
+        ("", False, 0),
+        ("x" * 1024, True, 1025),
+        ("é" * 512, True, 1025),
+    ],
+)
+def test_uart_send_payload_rejects_empty_or_oversized_final_bytes(
+    cmd: str,
+    append_newline: bool,
+    actual_bytes: int,
+) -> None:
+    with pytest.raises(UartSendValidationError) as raised:
+        prepare_uart_send_payload(cmd, append_newline=append_newline)
+
+    assert raised.value.actual_bytes == actual_bytes
+    assert raised.value.max_bytes == 1024
 
 
 @pytest.mark.parametrize("duration_s", [1, 0.1, 300])

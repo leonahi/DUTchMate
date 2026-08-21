@@ -17,15 +17,18 @@ from dutchmate_core.backends.contracts import (
     BackendInfo,
     BackendInputError,
     BackendSnapshot,
+    BackendUartSendResult,
     DeviceControl,
     SegmentContext,
     UartSendCapabilityPolicy,
+    UartSender,
     apply_capability_policy,
     integrity_for_backend,
 )
 from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
     EnhancedDeviceControl,
+    EnhancedUartSender,
     normalize_enhanced_hello,
 )
 from dutchmate_core.backends.settings import BackendSettings
@@ -172,15 +175,36 @@ class ReplaceableDeviceControl:
             return self._control.set_boot_mode(mode=mode)
 
 
+class ReplaceableUartSender:
+    """Keep the runtime UART-send port stable across backend replacement."""
+
+    def __init__(self, sender: UartSender) -> None:
+        self._sender = sender
+        self._lock = RLock()
+
+    def replace(self, sender: UartSender) -> None:
+        """Publish a newly connected UART-send adapter."""
+
+        with self._lock:
+            self._sender = sender
+
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        with self._lock:
+            return self._sender.send_uart(data)
+
+
 def build_basic_capture_reconnect(
     *,
     settings: BackendSettings,
     current_source: BasicBackendEventSource,
     open_connection: OpenBasicConnection,
+    sender: ReplaceableUartSender,
     monotonic_clock: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> RetryingCaptureReconnect:
     """Build the bounded reopen adapter for one selected Basic backend."""
+
+    opened_senders: dict[int, BasicBackendConnection] = {}
 
     def open_replacement(
         *,
@@ -190,14 +214,19 @@ def build_basic_capture_reconnect(
         del deadline
         connection = open_connection(settings)
         source = BasicBackendEventSource(connection, segment_id=segment_id)
+        opened_senders[id(source)] = connection
         return ReconnectedCaptureSource(
             source=source,
             backend_snapshot=source.snapshot,
         )
 
+    def publish_sender(replacement: ReconnectedCaptureSource) -> None:
+        sender.replace(opened_senders.pop(id(replacement.source)))
+
     return RetryingCaptureReconnect(
         current_source=current_source,
         open_replacement=open_replacement,
+        on_connected=publish_sender,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
     )
@@ -209,13 +238,14 @@ def build_enhanced_capture_reconnect(
     current_source: EnhancedCaptureEventSource,
     expected_info: BackendInfo,
     control: ReplaceableDeviceControl,
+    sender: ReplaceableUartSender,
     open_transport: OpenEnhancedTransport,
     monotonic_clock: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> RetryingCaptureReconnect:
     """Build bounded Enhanced reopen, hello, provenance, and control replacement."""
 
-    opened_controls: dict[int, EnhancedDeviceControl] = {}
+    opened_adapters: dict[int, tuple[EnhancedDeviceControl, EnhancedUartSender]] = {}
 
     def open_replacement(
         *,
@@ -253,15 +283,21 @@ def build_enhanced_capture_reconnect(
                     tx_enabled=settings.tx_enabled,
                 ),
             )
-            opened_controls[id(source)] = EnhancedDeviceControl(transport)
+            opened_adapters[id(source)] = (
+                EnhancedDeviceControl(transport),
+                EnhancedUartSender(transport),
+            )
             return replacement
         except Exception:
             transport.close()
             raise
 
     def publish_control(replacement: ReconnectedCaptureSource) -> None:
-        replacement_control = opened_controls.pop(id(replacement.source))
+        replacement_control, replacement_sender = opened_adapters.pop(
+            id(replacement.source)
+        )
         control.replace(replacement_control)
+        sender.replace(replacement_sender)
 
     return RetryingCaptureReconnect(
         current_source=current_source,
