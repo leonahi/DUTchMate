@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `e6191fd` on 2026-08-21
+> Code baseline reviewed: `eacf6a4` on 2026-08-21
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -11,8 +11,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A completion and acceptance preparation.
 - **Next step:** close the shared control and reporting contracts in checklist
   step 1 below.
-- **First implementation slice:** persist boot-test reset actions, including
-  accepted `pulse_ms`, as normalized session control evidence.
+- **First implementation slice:** remove the redundant native-v1
+  `timestamp_epoch` compatibility field after confirming all readers and
+  fixtures use `segment_id` exclusively.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -39,7 +40,7 @@ has not run.
 | Shared normalized host pipeline | Implemented | Basic and Enhanced fake sources use shared processing, workflow, and session boundaries. |
 | Phase 1A Basic host adapter | Implemented, acceptance open | Raw receive/send, provenance, reconnect, sessions, service, and CLI are tested; real generic-adapter HIL is not recorded. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
-| Shared control/status contract | Partial | Boot-test control evidence, atomic quota admission, native timestamp compatibility removal, and remaining structured error contexts remain. |
+| Shared control/status contract | Partial | Native timestamp compatibility removal and remaining structured error contexts remain. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
 | RP2040 Debug Helper firmware | Not started | `hardware/firmware/` contains no firmware implementation. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -51,11 +52,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `e6191fd`:
+Working tree based on `eacf6a4`:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 833 passed
+- Pytest: 836 passed
 - `git diff --check`: passed
 - Basic HIL: no committed run
 - Enhanced HIL: no committed run
@@ -78,6 +79,8 @@ The following items are no longer backlog work:
   boot mode, and RFC 3339 action completion reporting;
 - nullable commanded boot state with accepted-mapping initialization,
   certainty-aware invalidation, status/CLI reporting, and session snapshots.
+- normalized boot-test reset evidence, including accepted pulse duration,
+  segment timestamp provenance, atomic quota admission, and crash rollback.
 
 ## Active Queue — Phase 1
 
@@ -93,11 +96,11 @@ passes and the evidence is committed.
   `performed_at` values from Device Core, service, and CLI responses.
 - [x] Track nullable `commanded_boot_mode`, invalidate it on disconnect or
   unknown/external state, expose it in status, and snapshot it at session start.
-- [ ] Persist the boot-test reset action, including `pulse_ms`, as normalized
+- [x] Persist the boot-test reset action, including `pulse_ms`, as normalized
   session control evidence.
-- [ ] Admit control-action evidence as one atomic quota unit and remove the
-  redundant native-v1 `timestamp_epoch` compatibility field after all readers
-  and fixtures use `segment_id` exclusively.
+- [x] Admit control-action evidence as one atomic quota unit.
+- [ ] Remove the redundant native-v1 `timestamp_epoch` compatibility field
+  after all readers and fixtures use `segment_id` exclusively.
 - [ ] Complete remaining error-specific structured contexts identified by the
   Phase 1 API contract.
 

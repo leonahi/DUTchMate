@@ -707,6 +707,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         ),
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
+        action_wall_clock=_fixed_session_time,
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.configure_gpio_mode(
@@ -728,7 +729,19 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         b'"mode":"open_drain","active_level":"low"}\n',
         b'{"cmd":"reset","pulse_ms":100}\n',
     ]
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    session_root = tmp_path / summary.session_id
+    assert session_root.joinpath("uart_raw.log").read_bytes() == b"BOOT_OK\n"
+    assert _read_jsonl(session_root / "hardware_events.jsonl") == [
+        {
+            "type": "control_action",
+            "action": "reset",
+            "segment_id": 0,
+            "performed_at": "2026-07-27T12:00:00Z",
+            "pulse_ms": 100,
+            "timestamp_us": 30,
+            "device_timestamp_us": 30,
+        }
+    ]
     assert runtime.status().active_session_id is None
 
 
@@ -792,6 +805,7 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
         "detail": "reset pulse failed",
         "detail_truncated": False,
     }
+    assert (tmp_path / session_id / "hardware_events.jsonl").read_bytes() == b""
 
 
 @pytest.mark.parametrize("duration_s", [0, 300.1, True])
@@ -816,6 +830,10 @@ def test_run_boot_test_rejects_invalid_duration_before_creating_session(
 
 def _fixed_session_time() -> datetime:
     return datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc)
+
+
+def _read_jsonl(path: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line]
 
 
 def _replacement_snapshot(segment_id: int) -> BackendSnapshot:

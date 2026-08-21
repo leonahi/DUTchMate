@@ -10,8 +10,161 @@ from session_store_support import (
     read_jsonl,
 )
 
+import dutchmate_core.session_store.persistence as persistence
 from dutchmate_core.backends import BufferOverflowEvent, BufferStatusEvent, UartIntegrity
-from dutchmate_core.session_store.store import EvidenceQuotaExceeded, SessionStore
+from dutchmate_core.session_store.models import SessionHandle
+from dutchmate_core.session_store.store import (
+    EvidenceQuotaExceeded,
+    SessionPersistenceError,
+    SessionStore,
+)
+
+
+def test_append_control_action_writes_normalized_reset_evidence(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    store.append_control_action(
+        handle,
+        action="reset",
+        segment_id=0,
+        performed_at="2026-07-14T12:30:45Z",
+        pulse_ms=250,
+        timestamp_us=25,
+        device_timestamp_us=1025,
+    )
+
+    assert read_jsonl(handle.paths.hardware_events) == [
+        {
+            "type": "control_action",
+            "action": "reset",
+            "segment_id": 0,
+            "performed_at": "2026-07-14T12:30:45Z",
+            "pulse_ms": 250,
+            "timestamp_us": 25,
+            "device_timestamp_us": 1025,
+        }
+    ]
+    metadata = store.load_metadata(handle.session_id)
+    assert metadata["segments"][0]["first_timestamp_us"] == 25  # type: ignore[index]
+    assert metadata["segments"][0]["last_timestamp_us"] == 25  # type: ignore[index]
+    assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes(  # type: ignore[index]
+        handle
+    )
+
+
+def test_control_action_quota_admission_is_whole_unit(tmp_path: Path) -> None:
+    def append_action(store: SessionStore, handle: SessionHandle) -> None:
+        store.append_control_action(
+            handle,
+            action="reset",
+            segment_id=0,
+            performed_at="2026-07-14T12:30:45Z",
+            pulse_ms=100,
+            timestamp_us=25,
+            device_timestamp_us=1025,
+        )
+
+    reference = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    append_action(reference, reference_handle)
+    exact_budget = evidence_bytes(reference_handle)
+
+    exact = SessionStore(
+        root=tmp_path / "exact",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget,
+    )
+    exact_handle = exact.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    append_action(exact, exact_handle)
+    assert evidence_bytes(exact_handle) == exact_budget
+
+    rejected = SessionStore(
+        root=tmp_path / "rejected",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=exact_budget - 1,
+    )
+    rejected_handle = rejected.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    with pytest.raises(EvidenceQuotaExceeded) as exc_info:
+        append_action(rejected, rejected_handle)
+
+    assert rejected_handle.paths.hardware_events.read_bytes() == b""
+    metadata = rejected.load_metadata(rejected_handle.session_id)
+    assert metadata["state"] == "completed"
+    assert metadata["end_reason"] == "size_limit"
+    assert exc_info.value.truncation["rejected_unit_type"] == "control_action"
+
+
+def test_control_action_transaction_rolls_back_partial_append(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="boot-test --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="boot_test",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    metadata_before = handle.paths.metadata.read_bytes()
+    real_append = persistence.append_serialized
+
+    def append_then_fail(path: Path, data: bytes) -> None:
+        real_append(path, data)
+        if path == handle.paths.hardware_events:
+            raise SessionPersistenceError(
+                operation="append",
+                path=path,
+                detail="simulated control-action failure",
+            )
+
+    monkeypatch.setattr(persistence, "append_serialized", append_then_fail)
+
+    with pytest.raises(SessionPersistenceError, match="control-action failure"):
+        store.append_control_action(
+            handle,
+            action="reset",
+            segment_id=0,
+            performed_at="2026-07-14T12:30:45Z",
+            pulse_ms=100,
+            timestamp_us=25,
+            device_timestamp_us=1025,
+        )
+
+    assert handle.paths.hardware_events.read_bytes() == b""
+    assert handle.paths.metadata.read_bytes() == metadata_before
+    assert not (handle.paths.root / ".evidence-transaction.json").exists()
 
 
 def test_append_buffer_overflow_writes_hardware_event_and_marks_metadata(tmp_path: Path) -> None:

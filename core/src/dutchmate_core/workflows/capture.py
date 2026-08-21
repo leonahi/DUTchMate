@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from functools import partial
 from threading import RLock
 from types import TracebackType
-from typing import Protocol
+from typing import Literal, Protocol
 
 from dutchmate_core.backends.contracts import (
     BackendDisconnectedError,
     BackendEvent,
+    BackendInputError,
     BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
@@ -30,6 +31,7 @@ from dutchmate_core.session_store.models import (
 from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 from dutchmate_core.validation import validate_capture_duration
+from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
 class CaptureEventSource(Protocol):
@@ -113,6 +115,19 @@ class CaptureSessionStorage(Protocol):
         timestamp_epoch: int = 0,
     ) -> tuple[int, ...]:
         """Persist one UART evidence unit."""
+
+    def append_control_action(
+        self,
+        handle: SessionHandle,
+        *,
+        action: Literal["reset"],
+        segment_id: int,
+        performed_at: str,
+        pulse_ms: int,
+        timestamp_us: int | None,
+        device_timestamp_us: int | None,
+    ) -> None:
+        """Persist one accepted normalized control action."""
 
     def append_uart_processing_result(
         self,
@@ -434,6 +449,31 @@ class CaptureRecorder:
             self._session_store.record_segment_context(self._session_handle, context)
         self._segment_contexts[context.segment_id] = context
 
+    def record_control_action(self, result: DeviceActionResult) -> bool:
+        """Persist one successful boot-test reset within its active segment."""
+
+        pulse_ms = result.pulse_ms
+        if result.action != "reset" or pulse_ms is None:
+            raise ValueError("capture control evidence requires an accepted reset result")
+        context = self._segment_contexts.get(0)
+        if context is None:
+            raise ValueError("capture control evidence requires initial segment provenance")
+        timestamp_us = _normalized_control_timestamp(
+            context,
+            device_timestamp_us=result.device_timestamp_us,
+        )
+        return self._record_with_quota(
+            lambda: self._session_store.append_control_action(
+                self._session_handle,
+                action="reset",
+                segment_id=context.segment_id,
+                performed_at=result.performed_at,
+                pulse_ms=pulse_ms,
+                timestamp_us=timestamp_us,
+                device_timestamp_us=result.device_timestamp_us,
+            )
+        )
+
     def finalize(self) -> None:
         """Finalize bounded derived state at the end of this capture."""
 
@@ -543,7 +583,7 @@ class CaptureWorkflow:
         backend_snapshot: BackendSnapshot | None = None,
         workflow: SessionWorkflow = "capture",
         commanded_boot_mode: CommandedBootMode | None = None,
-        start_action: Callable[[], object] | None = None,
+        start_action: Callable[[], DeviceActionResult] | None = None,
         on_session_started: Callable[[str], None] | None = None,
         on_session_handle_started: Callable[[SessionHandle], None] | None = None,
         reconnect: CaptureReconnect | None = None,
@@ -601,8 +641,9 @@ class CaptureWorkflow:
                 on_session_started(recorder.session_id)
             if on_session_handle_started is not None:
                 on_session_handle_started(recorder.session_handle)
-            if start_action is not None:
-                start_action()
+            if start_action is not None and not recorder.record_control_action(start_action()):
+                with self.mutation_lock:
+                    return self._session_store.summarize_session(recorder.session_id)
             workflow_deadline = clock() + validated_duration_s
             current_source = source
             current_segment_id = self._segment_id(current_source, snapshot)
@@ -774,3 +815,23 @@ class CaptureWorkflow:
             session_id=session_id,
             reconnect_timeout_s=reconnect_timeout_s,
         )
+
+
+def _normalized_control_timestamp(
+    context: SegmentContext,
+    *,
+    device_timestamp_us: int | None,
+) -> int | None:
+    if context.timestamp.source == "host":
+        if device_timestamp_us is not None:
+            raise BackendInputError(
+                "Host-timestamped control action returned a device timestamp"
+            )
+        return None
+    if device_timestamp_us is None:
+        return None
+    if device_timestamp_us < context.timestamp.source_origin_us:
+        raise BackendInputError(
+            "Control-action device timestamp precedes the active segment origin"
+        )
+    return device_timestamp_us - context.timestamp.source_origin_us

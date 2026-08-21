@@ -228,6 +228,41 @@ def timestamp_discontinuity_event_json(
     }
 
 
+def control_action_event_json(
+    *,
+    action: Literal["reset"],
+    segment_id: int,
+    performed_at: str,
+    pulse_ms: int,
+    timestamp_us: int | None,
+    device_timestamp_us: int | None,
+) -> dict[str, object]:
+    """Build one accepted normalized control-action record."""
+
+    if action != "reset":
+        raise ValueError("Phase 1 control-action evidence supports only reset")
+    _non_negative_int(segment_id, "control action segment_id")
+    if not isinstance(performed_at, str) or not performed_at:
+        raise ValueError("control action performed_at must be a timestamp string")
+    if isinstance(pulse_ms, bool) or not isinstance(pulse_ms, int) or not 1 <= pulse_ms <= 10000:
+        raise ValueError("control action pulse_ms must be an integer from 1 through 10000")
+    for field, value in (
+        ("timestamp_us", timestamp_us),
+        ("device_timestamp_us", device_timestamp_us),
+    ):
+        if value is not None:
+            _non_negative_int(value, f"control action {field}")
+    return {
+        "type": "control_action",
+        "action": action,
+        "segment_id": segment_id,
+        "performed_at": performed_at,
+        "pulse_ms": pulse_ms,
+        "timestamp_us": timestamp_us,
+        "device_timestamp_us": device_timestamp_us,
+    }
+
+
 def uart_tx_attempt_event_json(
     *,
     attempt_id: str,

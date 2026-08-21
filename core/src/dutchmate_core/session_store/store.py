@@ -870,7 +870,11 @@ class SessionStore:
         *,
         evidence_bytes: int,
         rejected_unit_type: Literal[
-            "uart_receive", "hardware_event", "session_event", "uart_tx_attempt"
+            "uart_receive",
+            "hardware_event",
+            "session_event",
+            "control_action",
+            "uart_tx_attempt",
         ],
         rejected_uart_payload_bytes: int | None,
         segment_id: int | None,
@@ -960,6 +964,58 @@ class SessionStore:
                 _require_metadata_capacity(serialized_metadata)
                 transaction.prepare_metadata(serialized_metadata)
                 _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+
+    def append_control_action(
+        self,
+        handle: SessionHandle,
+        *,
+        action: Literal["reset"],
+        segment_id: int,
+        performed_at: str,
+        pulse_ms: int,
+        timestamp_us: int | None,
+        device_timestamp_us: int | None,
+    ) -> None:
+        """Append one accepted normalized control action atomically."""
+
+        _persistence.require_session_appendable(handle)
+        event_bytes = _persistence.serialize_jsonl(
+            _evidence.control_action_event_json(
+                action=action,
+                segment_id=segment_id,
+                performed_at=performed_at,
+                pulse_ms=pulse_ms,
+                timestamp_us=timestamp_us,
+                device_timestamp_us=device_timestamp_us,
+            )
+        )
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        _metadata._metadata_segment(metadata, segment_id)
+        self._preflight_evidence(
+            handle,
+            evidence_bytes=len(event_bytes),
+            rejected_unit_type="control_action",
+            rejected_uart_payload_bytes=None,
+            segment_id=segment_id,
+            channel=None,
+            timestamp_us=timestamp_us,
+        )
+        if timestamp_us is not None:
+            _metadata._record_metadata_segment_timestamp(
+                metadata,
+                segment_id=segment_id,
+                timestamp_us=timestamp_us,
+            )
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=[handle.paths.hardware_events],
+        ) as transaction:
+            _persistence.append_serialized(handle.paths.hardware_events, event_bytes)
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
     def append_uart_tx_attempt(
         self,
