@@ -1605,6 +1605,9 @@ Currently implemented workflow and session-query commands:
 - `dutchmate session <session_id>`
 - `dutchmate logs [--session <session_id>] --last <lines>`
 - `dutchmate wait <pattern> --timeout <seconds>`
+- `dutchmate send <cmd> [--no-newline] [--force]`
+- `dutchmate mark-baseline <session_id>`
+- `dutchmate clear-baseline <session_id>`
 
 `capture` must work with either backend. `boot-test` requires the Enhanced
 backend, `gpio_control`, and a configured `reset` role.
@@ -1615,12 +1618,6 @@ before sending HTTP. The service remains authoritative and applies the same
 validation. CLI request timeouts must cover the accepted duration plus a bounded
 transport/completion grace period; they must not silently increase the Device
 Core workflow deadline.
-
-Remaining target Phase 1 commands:
-
-- `dutchmate send <cmd> [--no-newline] [--force]`
-- `dutchmate mark-baseline <session_id>`
-- `dutchmate clear-baseline <session_id>`
 
 `dutchmate logs` defaults `--last` to 300 and preserves the service's active,
 then latest-terminal implicit selection when `--session` is absent. It prints

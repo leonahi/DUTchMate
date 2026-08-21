@@ -15,6 +15,7 @@ from dutchmate_core.runtime import (
 )
 from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    BaselineMutationResult,
     RecentLogs,
     SessionDetail,
     SessionListPage,
@@ -32,6 +33,7 @@ from dutchmate_service.schemas import (
     ResetRequest,
     UartSendRequest,
     WaitPatternRequest,
+    baseline_mutation_payload,
     capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
@@ -106,6 +108,12 @@ class RuntimeProvider(Protocol):
     ) -> RecentLogs:
         """Return bounded recent UART replay for one selected session."""
 
+    def mark_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Designate one eligible session as the project baseline."""
+
+    def clear_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Clear the baseline only when it names the requested session."""
+
     def apply_hardware_config(
         self,
         config: HardwareGpioConfig,
@@ -150,6 +158,14 @@ def create_app(
     @app.get("/sessions/{session_id}")
     def get_session(session_id: str) -> dict[str, object]:
         return session_detail_payload(runtime_provider.get_session(session_id))
+
+    @app.post("/sessions/{session_id}/baseline")
+    def mark_baseline(session_id: str) -> dict[str, object]:
+        return baseline_mutation_payload(runtime_provider.mark_baseline(session_id))
+
+    @app.delete("/sessions/{session_id}/baseline")
+    def clear_baseline(session_id: str) -> dict[str, object]:
+        return baseline_mutation_payload(runtime_provider.clear_baseline(session_id))
 
     @app.get("/dut/logs")
     def get_recent_logs(

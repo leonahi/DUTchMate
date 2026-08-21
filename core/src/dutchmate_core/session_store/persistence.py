@@ -52,6 +52,16 @@ def remove_file(path: Path, *, missing_ok: bool = False) -> None:
         raise _error("remove", path, exc) from exc
 
 
+def remove_durable_file(path: Path) -> None:
+    """Remove one existing file and durably publish the directory update."""
+
+    try:
+        path.unlink()
+        _fsync_directory(path.parent)
+    except OSError as exc:
+        raise _error("remove", path, exc) from exc
+
+
 def remove_session_directory(path: Path) -> None:
     """Remove one validated session tree and durably update its parent."""
 

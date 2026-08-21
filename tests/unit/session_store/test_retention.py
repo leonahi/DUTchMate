@@ -228,10 +228,19 @@ def test_reader_holds_store_lock_until_its_snapshot_is_complete(
     retention_finished = Event()
     original_get = store_module._get_session_detail
 
-    def held_get(root: Path, session_id: str) -> object:
+    def held_get(
+        root: Path,
+        session_id: str,
+        *,
+        baseline_session_id: str | None = None,
+    ) -> object:
         reader_started.set()
         assert release_reader.wait(timeout=1)
-        return original_get(root, session_id)
+        return original_get(
+            root,
+            session_id,
+            baseline_session_id=baseline_session_id,
+        )
 
     monkeypatch.setattr(store_module, "_get_session_detail", held_get)
     reader = Thread(target=store.get_session_detail, args=(first.session_id,))

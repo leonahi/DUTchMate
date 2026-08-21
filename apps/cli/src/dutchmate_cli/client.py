@@ -97,6 +97,42 @@ def get_debug_session(
     return _response_payload(response, description="session detail payload")
 
 
+def mark_session_baseline(
+    session_id: str,
+    *,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Designate one stored session as the project baseline."""
+
+    validated_id = validate_session_id(session_id)
+    response = _request_service(
+        method="POST",
+        path=f"/sessions/{quote(validated_id, safe='')}/baseline",
+        service_url=service_url,
+        transport=transport,
+    )
+    return _response_payload(response, description="baseline mark response")
+
+
+def clear_session_baseline(
+    session_id: str,
+    *,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Clear the project baseline only when it names the requested session."""
+
+    validated_id = validate_session_id(session_id)
+    response = _request_service(
+        method="DELETE",
+        path=f"/sessions/{quote(validated_id, safe='')}/baseline",
+        service_url=service_url,
+        transport=transport,
+    )
+    return _response_payload(response, description="baseline clear response")
+
+
 def fetch_recent_logs(
     *,
     session_id: str | None = None,

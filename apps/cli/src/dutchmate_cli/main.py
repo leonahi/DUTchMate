@@ -6,16 +6,19 @@ from typing import Annotated, NoReturn
 
 import typer
 
+from dutchmate_cli.baseline import format_baseline_mutation
 from dutchmate_cli.capture import format_boot_test_result, format_capture_result
 from dutchmate_cli.client import (
     ServiceClientError,
     ServiceUnavailableError,
     capture_uart,
+    clear_session_baseline,
     configure_gpio_mode,
     fetch_recent_logs,
     fetch_status,
     get_debug_session,
     list_debug_sessions,
+    mark_session_baseline,
     reset_dut,
     run_boot_test,
     send_uart_command,
@@ -228,6 +231,56 @@ def session_command(
     except ServiceClientError as exc:
         _fail(str(exc))
     typer.echo(format_session_detail(payload))
+
+
+@app.command("mark-baseline")
+def mark_baseline_command(
+    session_id: Annotated[str, typer.Argument(help="Eligible native debug-session ID.")],
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Designate one completed capture or boot test as the baseline."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = mark_session_baseline(
+            session_id,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_baseline_mutation(payload, action="mark"))
+
+
+@app.command("clear-baseline")
+def clear_baseline_command(
+    session_id: Annotated[str, typer.Argument(help="Exact debug-session ID to clear.")],
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Clear the baseline only if it names the requested session."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = clear_session_baseline(
+            session_id,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_baseline_mutation(payload, action="clear"))
 
 
 @app.command("logs")

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.models import (
+    BaselineMutationResult,
     LegacySessionDetail,
     LegacySessionListItem,
     NativeSessionListItem,
@@ -68,6 +69,19 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
             channel: asdict(channel_status)
             for channel, channel_status in status.control_channels.items()
         },
+    }
+
+
+def baseline_mutation_payload(result: BaselineMutationResult) -> dict[str, object]:
+    """Serialize an idempotent baseline designation mutation."""
+
+    return {
+        "ok": True,
+        "session_id": result.session_id,
+        "previous_session_id": result.previous_session_id,
+        "changed": result.changed,
+        "marked_at": result.marked_at,
+        "integrity": asdict(result.integrity) if result.integrity is not None else None,
     }
 
 

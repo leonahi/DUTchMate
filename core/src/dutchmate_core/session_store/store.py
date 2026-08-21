@@ -2,11 +2,13 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
 from typing import Literal
 
+import dutchmate_core.session_store.baseline as _baseline
 import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
@@ -26,6 +28,9 @@ from dutchmate_core.session_store.log_replay import (
     replay_recent_logs as _replay_recent_logs,
 )
 from dutchmate_core.session_store.models import (
+    BaselineError,
+    BaselineMutationResult,
+    BaselinePointer,
     EvidenceQuotaExceeded,
     FirstError,
     LineProcessing,
@@ -62,6 +67,9 @@ from dutchmate_core.validation import (
 
 __all__ = [
     "DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES",
+    "BaselineError",
+    "BaselineMutationResult",
+    "BaselinePointer",
     "EvidenceQuotaExceeded",
     "FirstError",
     "LineProcessing",
@@ -600,9 +608,16 @@ class SessionStore:
             metadata_summary = _metadata._summary_from_metadata(metadata, detected_patterns=[])
             if metadata_summary.session_id != session_name:
                 raise ValueError("session metadata ID must match its directory name")
-            return _metadata._summary_from_metadata(
+            summary = _metadata._summary_from_metadata(
                 metadata,
                 detected_patterns=_persistence.read_json_list(paths.detected_patterns),
+            )
+            if summary.schema_version != 1:
+                return summary
+            pointer = _baseline.read_baseline_pointer(self._root)
+            return replace(
+                summary,
+                baseline=pointer is not None and pointer.session_id == session_name,
             )
 
     def list_sessions(self, *, limit: int | None = None) -> tuple[SessionSummary, ...]:
@@ -646,13 +661,25 @@ class SessionStore:
         """Return one stable bounded native/legacy session page."""
 
         with self._store_lock:
-            return _list_session_page(self._root, limit=limit, cursor=cursor)
+            pointer = _baseline.read_baseline_pointer(self._root)
+            return _list_session_page(
+                self._root,
+                limit=limit,
+                cursor=cursor,
+                baseline_session_id=(pointer.session_id if pointer is not None else None),
+            )
 
     def get_session_detail(self, session_id: str) -> SessionDetail:
         """Return bounded schema-aware detail for one stored session."""
 
         with self._store_lock:
-            return _get_session_detail(self._root, session_id)
+            _metadata._validate_session_id(session_id)
+            pointer = _baseline.read_baseline_pointer(self._root)
+            return _get_session_detail(
+                self._root,
+                session_id,
+                baseline_session_id=(pointer.session_id if pointer is not None else None),
+            )
 
     def replay_recent_logs(
         self,
@@ -676,6 +703,32 @@ class SessionStore:
 
         with self._store_lock:
             return self._apply_retention_locked()
+
+    def read_baseline(self) -> BaselinePointer | None:
+        """Return the validated project-wide baseline pointer, if present."""
+
+        with self._store_lock:
+            return _baseline.read_baseline_pointer(self._root)
+
+    def mark_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Designate one eligible native session as the project baseline."""
+
+        with self._store_lock:
+            result = _baseline.mark_baseline(
+                self._root,
+                session_id,
+                clock=self._clock,
+            )
+            self._apply_retention_locked()
+            return result
+
+    def clear_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Clear the project baseline only when it names the requested session."""
+
+        with self._store_lock:
+            result = _baseline.clear_baseline(self._root, session_id)
+            self._apply_retention_locked()
+            return result
 
     def _apply_retention_locked(
         self,

@@ -38,6 +38,7 @@ from dutchmate_core.gpio_config.modes import (
 )
 from dutchmate_core.log_processing.patterns import DEFAULT_PATTERNS, PatternDetector
 from dutchmate_core.session_store.models import (
+    BaselineMutationResult,
     FirstError,
     RecentLogs,
     SessionDetail,
@@ -115,6 +116,12 @@ class DeviceCoreSessionStorage(CaptureSessionStorage, UartSendSessionStorage, Pr
         detected_pattern_index: int,
     ) -> FirstError:
         """Return one authoritative stored detected-pattern record."""
+
+    def mark_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Designate one eligible session as the project baseline."""
+
+    def clear_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Clear the project baseline only when it names the requested session."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +288,16 @@ class DeviceCoreRuntime:
             lines=lines,
             active_session_id=active_session_id,
         )
+
+    def mark_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Designate a stored session without requiring a backend connection."""
+
+        return self._session_store.mark_baseline(session_id)
+
+    def clear_baseline(self, session_id: str) -> BaselineMutationResult:
+        """Clear a named designation without requiring a backend connection."""
+
+        return self._session_store.clear_baseline(session_id)
 
     @property
     def gpio_registry(self) -> GpioModeRegistry:

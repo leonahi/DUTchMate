@@ -14,7 +14,11 @@ from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
-from dutchmate_core.session_store.models import SessionPersistenceError, SessionQueryError
+from dutchmate_core.session_store.models import (
+    BaselineError,
+    SessionPersistenceError,
+    SessionQueryError,
+)
 from dutchmate_core.validation import InputValidationError, UartSendValidationError
 from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
@@ -80,6 +84,14 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
 
     if isinstance(exc, SessionPersistenceError):
         return _service_error(error=exc.error, detail=str(exc), status_code=500)
+
+    if isinstance(exc, BaselineError):
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=_status_for_error(exc.error),
+            context=_baseline_context(exc),
+        )
 
     if isinstance(exc, SessionQueryError):
         return _service_error(
@@ -185,6 +197,22 @@ def _session_query_context(exc: SessionQueryError) -> dict[str, object]:
     return context
 
 
+def _baseline_context(exc: BaselineError) -> dict[str, object]:
+    context: dict[str, object] = {"operation": exc.operation}
+    if exc.session_id is not None:
+        context["session_id"] = exc.session_id
+    if exc.reason is not None:
+        context["reason"] = exc.reason
+    if exc.error == "unsupported_session_schema":
+        context.update(
+            {
+                "detected_schema_version": exc.detected_schema_version,
+                "supported_schema_versions": [1],
+            }
+        )
+    return context
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Register service exception handlers on an app."""
 
@@ -220,6 +248,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_session_persistence_error(
         request: Request,
         exc: SessionPersistenceError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(BaselineError)
+    async def handle_baseline_error(
+        request: Request,
+        exc: BaselineError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 
@@ -283,6 +318,8 @@ def _status_for_error(error: str) -> int:
     if error == "not_found":
         return 404
     if error == "unsupported_session_schema":
+        return 409
+    if error == "invalid_session_state":
         return 409
     if error == "persistence_fault":
         return 500

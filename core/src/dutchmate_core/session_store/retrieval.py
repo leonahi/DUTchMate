@@ -101,6 +101,7 @@ def list_session_page(
     *,
     limit: int = DEFAULT_SESSION_PAGE_LIMIT,
     cursor: str | None = None,
+    baseline_session_id: str | None = None,
 ) -> SessionListPage:
     """Return one stable newest-first page across native and legacy sessions."""
 
@@ -125,7 +126,11 @@ def list_session_page(
         paths = _persistence.session_paths(session_root)
         if not paths.metadata.is_file():
             continue
-        item = _list_item(paths, operation="list_sessions")
+        item = _list_item(
+            paths,
+            operation="list_sessions",
+            baseline_session_id=baseline_session_id,
+        )
         if boundary is None or _item_key(item) < boundary:
             items.append(item)
 
@@ -137,7 +142,12 @@ def list_session_page(
     return SessionListPage(items=tuple(page_items), next_cursor=next_cursor)
 
 
-def get_session_detail(root: Path, session_id: str) -> SessionDetail:
+def get_session_detail(
+    root: Path,
+    session_id: str,
+    *,
+    baseline_session_id: str | None = None,
+) -> SessionDetail:
     """Return bounded native detail or a legacy read-only compatibility view."""
 
     session_name = _metadata._validate_session_id(session_id)
@@ -181,13 +191,18 @@ def get_session_detail(root: Path, session_id: str) -> SessionDetail:
             session_id=session_name,
             detected=schema_version,
         )
-    return _native_detail(paths, metadata)
+    return _native_detail(
+        paths,
+        metadata,
+        baseline_session_id=baseline_session_id,
+    )
 
 
 def _list_item(
     paths: SessionPaths,
     *,
     operation: QueryOperation,
+    baseline_session_id: str | None,
 ) -> SessionListItem:
     metadata = _read_metadata(paths, operation=operation)
     session_id = paths.root.name
@@ -205,10 +220,15 @@ def _list_item(
             detected=schema_version,
         )
     summary, _patterns = _stable_native_summary(paths, metadata, operation=operation)
-    return _native_item(summary)
+    return _native_item(summary, baseline_session_id=baseline_session_id)
 
 
-def _native_detail(paths: SessionPaths, initial_metadata: dict[str, object]) -> NativeSessionDetail:
+def _native_detail(
+    paths: SessionPaths,
+    initial_metadata: dict[str, object],
+    *,
+    baseline_session_id: str | None,
+) -> NativeSessionDetail:
     operation: Literal["get_session"] = "get_session"
     metadata = initial_metadata
     for _attempt in range(_SNAPSHOT_ATTEMPTS):
@@ -253,6 +273,7 @@ def _native_detail(paths: SessionPaths, initial_metadata: dict[str, object]) -> 
                     hardware_counts=hardware_counts,
                     unresolved_uart_tx_attempts=unresolved,
                     artifacts=artifacts,
+                    baseline_session_id=baseline_session_id,
                 )
             except ValueError as exc:
                 raise _query_fault(
@@ -357,7 +378,11 @@ def _validated_summary(
         ) from exc
 
 
-def _native_item(summary: SessionSummary) -> NativeSessionListItem:
+def _native_item(
+    summary: SessionSummary,
+    *,
+    baseline_session_id: str | None,
+) -> NativeSessionListItem:
     if (
         summary.state is None
         or summary.workflow is None
@@ -373,7 +398,7 @@ def _native_item(summary: SessionSummary) -> NativeSessionListItem:
         ended_at=summary.ended_at,
         end_reason=summary.end_reason,
         backend_mode=summary.backend_mode,
-        baseline=summary.baseline,
+        baseline=summary.session_id == baseline_session_id,
         truncated=summary.truncated,
         truncation=_bounded_truncation(summary.truncation),
         interrupted=summary.interrupted,
@@ -407,6 +432,7 @@ def _build_native_detail(
     hardware_counts: Counter[str],
     unresolved_uart_tx_attempts: int,
     artifacts: tuple[SessionArtifact, ...],
+    baseline_session_id: str | None,
 ) -> NativeSessionDetail:
     backend_identity = _required_object(metadata, "backend_identity")
     storage = _required_object(metadata, "storage")
@@ -419,7 +445,7 @@ def _build_native_detail(
     segments = _metadata._contiguous_native_segments(metadata)
     _validate_storage(storage, artifacts)
     return NativeSessionDetail(
-        summary=_native_item(summary),
+        summary=_native_item(summary, baseline_session_id=baseline_session_id),
         command=summary.command,
         duration_s=summary.duration_s,
         reconnect_timeout_s=summary.reconnect_timeout_s,

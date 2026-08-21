@@ -7,11 +7,13 @@ from dutchmate_cli.client import (
     ServiceApiError,
     ServiceUnavailableError,
     capture_uart,
+    clear_session_baseline,
     configure_gpio_mode,
     fetch_recent_logs,
     fetch_status,
     get_debug_session,
     list_debug_sessions,
+    mark_session_baseline,
     reset_dut,
     run_boot_test,
     set_boot_mode,
@@ -111,6 +113,27 @@ def test_get_debug_session_fetches_exact_validated_id() -> None:
     )
 
     assert payload["compatibility"] == "native"
+
+
+@pytest.mark.parametrize(
+    ("operation", "method"),
+    [(mark_session_baseline, "POST"), (clear_session_baseline, "DELETE")],
+)
+def test_baseline_mutations_use_exact_validated_session_path(
+    operation: object,
+    method: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == method
+        assert request.url.path == "/sessions/20260820T120000Z-abc12345/baseline"
+        return httpx.Response(200, json={"changed": True})
+
+    payload = operation(  # type: ignore[operator]
+        "20260820T120000Z-abc12345",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert payload == {"changed": True}
 
 
 def test_fetch_recent_logs_forwards_selection_and_limit() -> None:

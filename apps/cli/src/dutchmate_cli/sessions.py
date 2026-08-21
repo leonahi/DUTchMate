@@ -48,6 +48,7 @@ def format_session_detail(payload: Mapping[str, object]) -> str:
                 f"State: {_display(payload.get('state'))}",
                 f"End reason: {_display(payload.get('end_reason'))}",
                 f"Backend: {_display(payload.get('backend_mode'))}",
+                f"Baseline: {_yes_no(payload.get('baseline'))}",
                 f"Segments: {_display(payload.get('segment_count'))}",
                 f"Integrity: {_nested_display(payload.get('integrity'), 'loss_status')}",
                 f"First error: {_format_first_error(payload.get('first_error'))}",
@@ -76,6 +77,7 @@ def _format_list_item(item: Mapping[str, object] | None) -> str:
         f"{session_id} [v{schema_version} {compatibility}] "
         f"{_display(item.get('state'))}/{_display(item.get('workflow'))} "
         f"backend={_display(item.get('backend_mode'))} "
+        f"baseline={_yes_no(item.get('baseline'))} "
         f"segments={_display(item.get('segment_count'))} "
         f"loss={_nested_display(item.get('integrity'), 'loss_status')}"
     )

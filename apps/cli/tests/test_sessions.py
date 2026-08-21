@@ -19,6 +19,7 @@ def test_format_session_list_discriminates_native_and_legacy_items() -> None:
                     "state": "completed",
                     "workflow": "capture",
                     "backend_mode": "enhanced",
+                    "baseline": False,
                     "segment_count": 2,
                     "integrity": {"loss_status": "none_reported"},
                 },
@@ -34,7 +35,7 @@ def test_format_session_list_discriminates_native_and_legacy_items() -> None:
     )
 
     assert "20260820T120000Z-native [v1 native] completed/capture" in output
-    assert "backend=enhanced segments=2 loss=none_reported" in output
+    assert "backend=enhanced baseline=no segments=2 loss=none_reported" in output
     assert "20260820T115900Z-legacy [v0 legacy_read_only]" in output
     assert "migration=required" in output
     assert output.endswith("Next cursor: opaque-next")

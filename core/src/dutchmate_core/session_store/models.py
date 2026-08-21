@@ -18,6 +18,51 @@ SessionCompatibility = Literal["native", "legacy_read_only"]
 
 
 @dataclass(frozen=True, slots=True)
+class BaselinePointer:
+    """Validated project-wide baseline designation."""
+
+    session_id: str
+    marked_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class BaselineMutationResult:
+    """Result of an idempotent baseline mark or clear operation."""
+
+    session_id: str
+    previous_session_id: str | None
+    changed: bool
+    marked_at: str | None
+    integrity: UartIntegrity | None = None
+
+
+class BaselineError(RuntimeError):
+    """Raised when a baseline read or mutation cannot be completed safely."""
+
+    def __init__(
+        self,
+        *,
+        error: Literal[
+            "not_found",
+            "invalid_session_state",
+            "unsupported_session_schema",
+            "persistence_fault",
+        ],
+        operation: Literal["read_baseline", "mark_baseline", "clear_baseline"],
+        detail: str,
+        session_id: str | None = None,
+        reason: str | None = None,
+        detected_schema_version: int | None = None,
+    ) -> None:
+        self.error = error
+        self.operation = operation
+        self.session_id = session_id
+        self.reason = reason
+        self.detected_schema_version = detected_schema_version
+        super().__init__(detail)
+
+
+@dataclass(frozen=True, slots=True)
 class SessionPaths:
     """Filesystem paths for the required Phase 1 session files."""
 

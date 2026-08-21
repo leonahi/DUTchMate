@@ -251,8 +251,11 @@ the exact resulting byte budget. When the count limit is configured, the store
 runs retention after startup recovery and terminal transitions under the same
 lock used by bounded readers. It removes oldest terminal native sessions while
 protecting active, legacy, baseline-designated, and in-progress read evidence;
-blocked or unsafe passes are exposed through service status. Baseline mutation
-and comparison remain.
+blocked or unsafe passes are exposed through service status. The adjacent
+baseline module owns the atomic versioned `baseline.json` pointer, target
+eligibility, idempotent mark/clear semantics, and pointer validation. Native
+list/detail baseline flags are derived only from that pointer. Comparison
+remains.
 Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
@@ -347,7 +350,7 @@ format CLI output.
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
 wait-pattern, bounded UART send, GPIO mode, reset, boot mode, bounded session
-list/detail, and bounded recent UART replay. Handlers remain
+list/detail, baseline mark/clear, and bounded recent UART replay. Handlers remain
 thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
@@ -360,9 +363,7 @@ serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
-workflows, baseline operations, and remaining
-error-specific structured contexts remain
-Phase 1 work.
+workflows and remaining error-specific structured contexts remain Phase 1 work.
 
 ### CLI
 
