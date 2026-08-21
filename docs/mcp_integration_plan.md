@@ -12,9 +12,13 @@ communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own
 hardware and does not open the serial port. It calls the already-running Device
 Core Service over local HTTP at `http://127.0.0.1:2040` by default.
 
-Current implementation note: `apps/mcp_server` is a package scaffold only. The
-`dutchmate mcp` CLI command exits with a placeholder error, and the
-`dutchmate-mcp` console script raises `NotImplementedError`.
+Current implementation note: `apps/mcp_server` contains the tested asynchronous
+Device Core HTTP client for the nine Phase 2 endpoint mappings. It validates
+tool-shaped arguments before dispatch, uses bounded workflow timeouts, preserves
+canonical service error payloads, and distinguishes unavailable or malformed
+service responses. The stdio tool server is still pending: `dutchmate mcp`
+exits with a placeholder error, and the `dutchmate-mcp` console script raises
+`NotImplementedError`.
 
 No current DUTchMate client or deployment requires an independently hosted MCP
 endpoint, so Streamable HTTP is outside Phase 2 scope. The deprecated HTTP+SSE

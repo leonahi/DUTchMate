@@ -380,9 +380,11 @@ wait-pattern, plus bounded UART send. Baseline commands remain pending.
 
 ### MCP Server
 
-`apps/mcp_server` is a Phase 2 package scaffold. The future stdio server calls
-the same Device Core Service API as the CLI and owns no serial, session, GPIO,
-or AI logic. See `docs/mcp_integration_plan.md`.
+`apps/mcp_server` is a Phase 2 delivery adapter in progress. Its asynchronous
+HTTP client maps the bounded Phase 2 tool surface to the Device Core Service,
+validates tool-shaped arguments before dispatch, and preserves structured
+service errors without owning serial, session, GPIO, or AI logic. Stdio server
+and tool registration remain pending. See `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 
