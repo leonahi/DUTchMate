@@ -289,6 +289,11 @@ Decision: **product decision, not architecture cleanup priority**.
 Either retain the scaffold explicitly or remove the package and failing CLI
 command until Phase 2 begins. Do not merge MCP into the service or CLI.
 
+Follow-up, 2026-08-21: Phase 2 has begun. The package now owns a tested Device
+Core HTTP client and is locked to MCP Python SDK 2.x / protocol `2026-07-28`.
+The original separation decision remains in force; stateless stdio composition
+and tool registration are tracked in `docs/mcp_integration_plan.md`.
+
 ## Module Classification
 
 | Area | Classification | Rationale |

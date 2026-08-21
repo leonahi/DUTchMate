@@ -163,7 +163,8 @@ across storage, runtime, and both backends.
 
 The CLI is a thin HTTP client and must validate workflows before they are
 exposed through MCP. The Phase 2 MCP server is another thin Device Core Service
-client over stdio; it does not own serial transport or invoke an LLM.
+client over stdio; it targets the stateless MCP `2026-07-28` protocol through
+the official Python SDK 2.x and does not own serial transport or invoke an LLM.
 
 The optional Phase 4 Debug Agent is separate from the Coding Agent. It may
 classify or summarize bounded session evidence through an explicitly selected
@@ -267,9 +268,10 @@ the normative implementation order and done checklist.
 ### Phase 2: MCP Integration
 
 Add a separate `dutchmate mcp` stdio process that maps a bounded tool set to the
-existing Device Core Service API. It returns deterministic Phase 1 evidence and
-does not invoke an LLM. `docs/mcp_integration_plan.md` owns the transport and
-tool contract.
+existing Device Core Service API. The MCP layer has no hidden connection/session
+state: Device Core session IDs and cursors remain explicit tool data. It returns
+deterministic Phase 1 evidence and does not invoke an LLM.
+`docs/mcp_integration_plan.md` owns the `2026-07-28` transport and tool contract.
 
 ### Phase 3: Hardware And Protocol Refinement
 

@@ -17,7 +17,7 @@ one dependency set. Run package entrypoints from the repository root.
 apps/
   cli/             Human CLI; owns `dutchmate` and `dm`.
   service/         Local FastAPI Device Core Service.
-  mcp_server/      Phase 2 MCP stdio adapter scaffold.
+  mcp_server/      Phase 2 stateless MCP stdio adapter in progress.
 
 core/
   src/             Reusable Python library.
@@ -43,7 +43,7 @@ Python packages:
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
-| `apps/mcp_server/` | `dutchmate-mcp-server` | Phase 2 HTTP client foundation; stdio runtime is pending. |
+| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28`/SDK 2.x HTTP client foundation; stateless stdio runtime is pending. |
 
 Current core modules:
 
@@ -200,6 +200,7 @@ uv run pytest tests/unit/uart_capture tests/unit/log_processing
 uv run pytest tests/unit/session_store tests/unit/workflows tests/unit/runtime
 uv run pytest apps/service/tests
 uv run pytest apps/cli/tests
+uv run pytest apps/mcp_server/tests
 uv run pytest
 ```
 

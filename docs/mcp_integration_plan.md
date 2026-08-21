@@ -7,6 +7,20 @@
 
 Phase 2 implements **MCP stdio transport only**.
 
+The normative protocol baseline is MCP `2026-07-28`. The MCP package requires
+the official Python SDK `mcp>=2.0,<3` and uses its `MCPServer` API. SDK 1.x,
+`FastMCP`, and code designed around the legacy `initialize` handshake are not
+accepted implementation foundations.
+
+For a modern client, DUTchMate is stateless at the MCP layer: there is no
+`initialize`/`notifications/initialized` exchange and no protocol session ID.
+Every request carries protocol version and client capabilities in `_meta`; the
+SDK owns that wire validation and the required `server/discover` implementation.
+The SDK's built-in handshake-era compatibility may remain available for older
+clients, but DUTchMate code must not depend on it or store per-connection state.
+Device Core session IDs and pagination cursors remain explicit ordinary tool
+arguments/results, not MCP transport state.
+
 The planned MCP server is launched by the coding agent as a subprocess and
 communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own
 hardware and does not open the serial port. It calls the already-running Device
@@ -16,7 +30,8 @@ Current implementation note: `apps/mcp_server` contains the tested asynchronous
 Device Core HTTP client for the nine Phase 2 endpoint mappings. It validates
 tool-shaped arguments before dispatch, uses bounded workflow timeouts, preserves
 canonical service error payloads, and distinguishes unavailable or malformed
-service responses. The stdio tool server is still pending: `dutchmate mcp`
+service responses. Its dependency and workspace lock now select MCP SDK 2.x and
+protocol `2026-07-28`. The stdio tool server is still pending: `dutchmate mcp`
 exits with a placeholder error, and the `dutchmate-mcp` console script raises
 `NotImplementedError`.
 
@@ -48,8 +63,14 @@ The planned MCP server is a thin adapter:
 - Validates tool arguments.
 - Calls the Device Core Service API.
 - Returns compact structured results.
+- Registers tools in one deterministic order and configures `tools/list` cache
+  hints with a private scope.
+- Returns ordinary complete results only; Phase 2 does not use Multi Round-Trip
+  Requests, protocol tasks, resources, prompts, or subscriptions.
 - Returns deterministic Device Core evidence and does not invoke an LLM,
   provider adapter, or Debug Agent report generator in Phase 2.
+- Does not implement deprecated Roots, Sampling, or protocol Logging; process
+  logs use stderr.
 - Never imports serial transport or firmware protocol code directly.
 - Never exposes raw GPIO writes as default tools.
 
@@ -103,7 +124,10 @@ Before implementation, a follow-up design decision must define:
 - localhost versus remote exposure and TLS/reverse-proxy ownership
 - authentication and authorization
 - mandatory `Origin` validation and DNS-rebinding protection
-- session, concurrency, cancellation, and reconnect behavior
+- stateless per-request concurrency, cancellation, and `subscriptions/listen`
+  behavior
+- required per-request `_meta`, `MCP-Protocol-Version`, `Mcp-Method`, and
+  conditional `Mcp-Name` header validation
 - audit logging and secret handling
 - integration and security tests
 
@@ -150,7 +174,21 @@ clock, observation point, and event granularity. MCP preserves
 
 ## Tool Response Rules
 
-MCP tools return compact JSON-compatible objects. They should preserve evidence quality flags rather than hiding them in text.
+MCP tools return compact JSON-compatible objects. The Python SDK wraps ordinary
+responses as `resultType: "complete"` and exposes their dictionaries as
+structured content. Device Core/API failures and input/business validation
+failures are tool execution errors (`isError: true`) with actionable bounded
+content, not JSON-RPC protocol errors. Unknown tools, malformed MCP requests,
+unsupported protocol versions, and internal protocol failures remain JSON-RPC
+errors. Tool results preserve evidence quality flags rather than hiding them in
+text.
+
+The tool catalog is static for one DUTchMate release. Registration order is
+therefore deterministic, `listChanged` is false, and `tools/list` uses a finite
+`ttlMs` with `cacheScope: "private"`. The private scope is conservative even
+though Phase 2 stdio has no shared HTTP intermediary. Every result's required
+`resultType` and modern server identity `_meta` are emitted by MCP SDK 2.x rather
+than being hand-assembled in DUTchMate handlers.
 
 Capture-like tools must include:
 
@@ -361,6 +399,12 @@ long-running MCP streams until the core workflow is stable. Capture, boot-test,
 and wait-pattern remain capped at 300 seconds even if an MCP client allows a
 longer tool-call timeout.
 
+Phase 2 does not advertise `subscriptions/listen` filters because its MCP tool
+catalog is fixed and it exposes no MCP resources or prompts. It also does not
+use Multi Round-Trip Requests: all required input is present in the original
+tool arguments, and user confirmation remains the responsibility of the MCP
+host/client UI.
+
 ## Registration Example
 
 Planned generic MCP client configuration shape:
@@ -383,10 +427,47 @@ This is not runnable yet because the MCP server is not implemented. Exact
 registration keys vary by coding agent. DUTchMate documentation should keep
 examples per client separate from the core architecture.
 
+## Updated Development Sequence
+
+Implement Phase 2 in these independently testable slices:
+
+1. **Protocol/dependency baseline (complete):** require MCP SDK 2.x, lock it,
+   record `2026-07-28` as normative, and retain the tested Device Core HTTP port.
+2. **Stateless server composition:** create one `MCPServer` with fixed identity,
+   instructions, private finite cache hints, deterministic tools, and stdio-only
+   `run()` wiring. Do not implement handshake/session state in application code.
+3. **Tool registration and error projection:** register the nine Phase 2 tools
+   in documented order, return structured complete results, and translate
+   actionable validation/service failures into `isError: true` tool results.
+4. **Modern protocol integration tests:** use the SDK v2 client in modern mode
+   to verify `server/discover`, per-request metadata, supported version,
+   deterministic cacheable tool listing, calls, cancellation, and clean EOF
+   shutdown. Add a legacy-client smoke test only for the SDK's compatibility
+   path; no DUTchMate behavior may depend on it.
+5. **CLI launch wiring:** replace both placeholders with `dutchmate mcp`, resolve
+   `--service-url`/`DUTCHMATE_SERVICE_URL` and stderr log level without writing
+   non-protocol data to stdout.
+6. **Host registration and acceptance:** document named host configurations and
+   run the official MCP conformance suite for the `2026-07-28` stdio server
+   before declaring Phase 2 complete.
+
 ## Test Requirements
 
 Minimum Phase 2 tests:
 
+- The locked official Python MCP SDK is major version 2 and reports latest
+  protocol version `2026-07-28`.
+- A modern stdio client can call `server/discover` and receives supported
+  version `2026-07-28`, the tools capability, server identity, `resultType`, and
+  cache hints without an `initialize` handshake or protocol session ID.
+- Every modern request is accepted only with the SDK-validated protocol version
+  and client-capability `_meta`; unsupported versions preserve the specified
+  `UnsupportedProtocolVersion` behavior.
+- `tools/list` is deterministic across calls, reports `listChanged: false`, and
+  returns finite private cache hints.
+- Successful and failed tool results carry `resultType: "complete"`; Device Core
+  and actionable validation failures use `isError: true` rather than ad hoc
+  JSON-RPC server codes.
 - MCP server starts over stdio without writing logs to stdout.
 - Phase 2 packaging and CLI expose no Streamable HTTP or legacy HTTP+SSE server
   command.
@@ -415,7 +496,16 @@ Minimum Phase 2 tests:
 - MCP server does not import serial transport modules.
 - MCP tool execution does not invoke an LLM or require model-provider
   configuration.
+- MCP server code does not use deprecated Roots, Sampling, protocol Logging,
+  HTTP+SSE, `ping`, or hidden connection/session state.
 
 ## References
 
-- MCP transports, version 2025-06-18: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
+- MCP specification release `2026-07-28`:
+  https://modelcontextprotocol.io/specification/2026-07-28
+- MCP `2026-07-28` changelog:
+  https://modelcontextprotocol.io/specification/2026-07-28/changelog
+- MCP stdio transport `2026-07-28`:
+  https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio
+- Official Python SDK v2 documentation:
+  https://github.com/modelcontextprotocol/python-sdk

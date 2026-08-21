@@ -376,15 +376,19 @@ not import low-level transport code or open serial ports for debug workflows.
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
 reset, boot mode, session listing, session detail, recent logs, and literal
-wait-pattern, plus bounded UART send. Baseline commands remain pending.
+wait-pattern, plus bounded UART send and baseline mark/clear.
 
 ### MCP Server
 
 `apps/mcp_server` is a Phase 2 delivery adapter in progress. Its asynchronous
 HTTP client maps the bounded Phase 2 tool surface to the Device Core Service,
 validates tool-shaped arguments before dispatch, and preserves structured
-service errors without owning serial, session, GPIO, or AI logic. Stdio server
-and tool registration remain pending. See `docs/mcp_integration_plan.md`.
+service errors without owning serial, session, GPIO, or AI logic. The package is
+locked to official MCP Python SDK 2.x and the stateless `2026-07-28` protocol
+model; Device Core IDs remain explicit tool data rather than hidden MCP session
+state. SDK-owned discovery, per-request metadata, result typing, deterministic
+private-cache tool listing, stdio server composition, and tool registration are
+the next delivery boundary. See `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 

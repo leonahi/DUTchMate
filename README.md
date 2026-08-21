@@ -128,7 +128,7 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 | `docs/reconnect_session_semantics.md` | Reconnect, segment, timestamp, resume, and restart behavior. |
 | `docs/ring_buffer_sizing_plan.md` | Phase 1B buffer baseline, telemetry, and validation method. |
 | `hardware/validation/phase1_ring_buffer.md` | Measurement record; currently an unvalidated template. |
-| `docs/mcp_integration_plan.md` | Phase 2 MCP transport, tool set, responses, and tests. |
+| `docs/mcp_integration_plan.md` | Phase 2 stateless MCP `2026-07-28` transport, tool set, responses, and tests. |
 | `docs/debug_agent_context_contract.md` | Phase 4 bounded context, provider boundary, and report contract. |
 
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
