@@ -1,6 +1,5 @@
 # Debug Agent Context Contract
 
-> Status: accepted Phase 4 boundary
 > Scope: Evidence and optional source context supplied to the AI-assisted Debug Agent, plus the provider boundary used to analyze it.
 
 ## Decision Summary

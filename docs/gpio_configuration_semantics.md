@@ -1,6 +1,5 @@
 # GPIO Configuration Semantics
 
-> Status: accepted Phase 1 target contract
 > Scope: Device Core, Device Core Service, CLI, and Debug Helper firmware behavior for generic CTRLn modes and configured control roles.
 
 ## Goal
@@ -10,8 +9,7 @@ GPIO configuration must make hardware control explicit without making every norm
 ## Channel State Model
 
 Phase 1 treats `CTRL0` to `CTRL3` as the primary configured DUT control
-resources. The current host-side state model therefore keys state by physical
-channel:
+resources. The state model keys state by physical channel:
 
 ```text
 CTRL0
@@ -21,7 +19,7 @@ CTRL3
 ```
 
 The hardware channel mapping model is defined in
-`docs/dutchmate_hardware_architecture.md`. In that model, physical channels
+`hardware/schematics/revision_a.md`. In that model, physical channels
 such as `CTRL0` are separate from workflow roles such as `reset` and DUT
 schematic names such as `RESET_N`. Phase 1 host code accepts custom control
 roles as project metadata, while built-in workflows only assign semantics to
@@ -86,7 +84,7 @@ Configured channels also track:
 
 ## Startup Behavior
 
-Target startup behavior for `dutchmate start` with the Enhanced backend:
+Startup behavior for `dutchmate start` with the Enhanced backend:
 
 1. Loads `.dutchmate/config.toml`.
 2. Connects to the Debug Helper.
@@ -103,11 +101,6 @@ A mode loaded from `.dutchmate/config.toml` counts as explicit configuration bec
 
 If a required role is omitted from `[hardware.control.*]`, it remains
 `unconfigured`.
-
-Current implementation note: service startup loads `[hardware.control.*]` and,
-when connected to a selected Debug Helper, applies each mapping after validating
-the firmware `hello`. Without a selected device, the service starts disconnected
-and leaves the mappings unapplied.
 
 ## Runtime Override Behavior
 
@@ -160,27 +153,10 @@ defense in depth. While applying an accepted configuration, firmware keeps the
 channel high impedance until all fields are validated; it then enters
 open-drain release or the explicit push-pull idle level.
 
-The current host-side `gpio_config` package implements two pieces of this
-boundary:
-
-- config-file validation for `[hardware.control.*]`
-- semantic control/result handling for `configure_gpio_mode`
-
-It validates channel, role, mode, level, DUT signal, DUT I/O voltage, and
-duplicate channel assignments before startup integration code tries to apply the
-mapping. It calls an injected backend-neutral device-control port and updates
-the registry only after the operation succeeds or returns a device-control
-error. The Enhanced adapter owns command encoding and response translation;
-service startup supplies that adapter when a device is selected. The
-service-facing runtime rejects GPIO configuration with
-`capture_active` while a finite capture, boot-test, or target wait-pattern
-session owns the serial message stream.
-
-Current host implementation: one shared validator enforces the identifier and
-electrical contracts above for config loading, runtime state, command encoding,
-service requests, and CLI dispatch. The v1 host-to-device JSON Schema enforces
-the same electrical matrix. Accepted identifiers remain byte-for-byte exact;
-no layer trims or normalizes them.
+One shared validator enforces the identifier and electrical contracts for config
+loading, runtime state, command encoding, service requests, and CLI dispatch.
+The v1 host-to-device JSON Schema enforces the same electrical matrix. Accepted
+identifiers remain byte-for-byte exact; no layer trims or normalizes them.
 
 Recommended error mapping:
 
@@ -221,9 +197,8 @@ channel before dispatch. Firmware action commands remain role-neutral:
 `pulse_control(channel, pulse_ms)` applies configured active then idle behavior,
 and `set_control_state(channel, active|idle)` selects one configured behavior.
 The public reset and boot-mode APIs remain semantic safety boundaries; Phase 1
-does not expose arbitrary raw levels. Current draft protocol files still use
-legacy `reset` and `set_boot_mode` action names and a wire `role` field. Phase
-1B must remove that field and migrate the actions atomically with their schemas,
+does not expose arbitrary raw levels. The Phase 1B protocol migration removes
+legacy role-specific actions and wire role metadata atomically across schemas,
 examples, encoders, tests, and firmware.
 
 Before `reset_dut()`:
@@ -261,8 +236,7 @@ Read-only operations do not require GPIO configuration.
 
 A successful reset response echoes the accepted `pulse_ms`. A reset recorded
 inside a boot-test session stores that value with the normalized control-action
-event. Current reset execution validates the range, but response echo and
-control-action persistence remain Phase 1 implementation work.
+event.
 
 ## Service API Reporting
 
@@ -308,10 +282,6 @@ configured, the boot state is externally controlled or otherwise unknown, or
 the connection/safety state invalidates the last command. Capture-like session
 metadata snapshots this nullable value when the session begins.
 
-Current implementation note: boot-mode commands are sent and role-gated, but
-Device Core does not yet retain `commanded_boot_mode`, expose it in status, or
-store its session-start snapshot.
-
 `POST /gpio/mode` success response:
 
 ```json
@@ -334,12 +304,11 @@ preserve the exact accepted `role` and `dut_signal`; display layers do not
 normalize them. The CLI may quote or escape a value for unambiguous presentation
 but must not alter the underlying returned string.
 
-The current endpoint implementation still names the last field
-`timestamp_us`; Phase 1 must complete the host API rename shown above. The
-Debug Helper wire response continues to use `timestamp_us` for the raw device
-timer. If configuration is recorded as part of a session, its hardware event
-uses `segment_id` and normalized segment-relative `timestamp_us`, while the raw
-value may be retained only as explicitly named `device_timestamp_us`.
+The Debug Helper wire response uses `timestamp_us` for the raw device timer;
+public APIs name it `device_timestamp_us`. If configuration is recorded as part
+of a session, its hardware event uses `segment_id` and normalized
+segment-relative `timestamp_us`, while the raw value may be retained only as
+explicitly named `device_timestamp_us`.
 
 Rejected response:
 

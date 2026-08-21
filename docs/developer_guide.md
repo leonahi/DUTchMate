@@ -1,6 +1,5 @@
 # Developer Guide
 
-> Status: current implementation guide
 > Scope: workspace layout, local development, package boundaries, and contribution patterns.
 
 This guide is for contributors working on the current Python repository. Target
@@ -17,7 +16,7 @@ one dependency set. Run package entrypoints from the repository root.
 apps/
   cli/             Human CLI; owns `dutchmate` and `dm`.
   service/         Local FastAPI Device Core Service.
-  mcp_server/      Phase 2 stateless MCP stdio adapter in progress.
+  mcp_server/      MCP stdio delivery adapter.
 
 core/
   src/             Reusable Python library.
@@ -43,24 +42,9 @@ Python packages:
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
-| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28`/SDK 2.x HTTP client and stateless stdio composition; tool registration is pending. |
+| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28` stdio delivery adapter and Device Core HTTP client. |
 
-Current core modules:
-
-| Module | Ownership |
-|---|---|
-| `backends` | Backend-neutral identity/contracts, Basic raw serial event/send adapter, and interim Enhanced wire adapters. |
-| `device_connection` | Enhanced v1 protocol, framing, discovery, and synchronous transport. |
-| `diagnostics.py` | Shared sanitized, UTF-8-safe, 1024-byte diagnostic projection. |
-| `uart_capture` | Backend-independent bounded UART buffering by segment/channel, complete-line boundaries, and oversized-line descriptors. |
-| `log_processing` | Case-sensitive bounded-literal detection with first raw-byte match offsets. |
-| `session_store` | Filesystem sessions, crash-recoverable evidence units, bounded reconnect segments, stable paginated list/detail projections, bounded native UART replay, pattern/line-limit evidence, and discovery. |
-| `gpio_config` | Control-channel mapping, validation, and accepted state. |
-| `workflows` | Shared normalized-event capture, guarded reset/boot actions, and policy-neutral UART-send dispatch/evidence coordination. |
-| `runtime.py` | Service-facing state, active workflow coordination, and boot-test orchestration. |
-| `validation.py` | Shared public input contracts and application validation errors. |
-
-See `docs/software_architecture.md` for current data flow and ownership details.
+See `docs/software_architecture.md` for module ownership and data flow.
 
 ## Local Setup
 
@@ -109,43 +93,6 @@ Use `uv lock` after dependency declarations change. Commit the shared
 - `hardware/protocol/v1` is the Enhanced firmware/host wire contract. Its
   schemas, examples, parser/encoder models, tests, and firmware change together.
 
-## Current Surface
-
-Service endpoints:
-
-- `GET /status`
-- `POST /dut/capture`
-- `POST /dut/boot-test`
-- `POST /dut/wait-pattern`
-- `POST /dut/uart/send`
-- `POST /gpio/mode`
-- `POST /dut/reset`
-- `POST /dut/boot-mode`
-
-CLI commands:
-
-- `dutchmate start`, `stop`, `devices [--all]`, and `status`
-- `dutchmate capture --seconds <seconds>`
-- `dutchmate boot-test --seconds <seconds>`
-- `dutchmate gpio mode <channel> <role> <dut_signal> ...`
-- `dutchmate dut reset`
-- `dutchmate dut boot-mode <normal|bootloader>`
-- `dutchmate sessions`, `session <session_id>`, and
-  `logs [--session <session_id>] --last <lines>`
-- `dutchmate wait <pattern> --timeout <seconds>`
-- `dutchmate send <cmd> [--no-newline] [--force]`
-
-The runtime performs finite transport-backed capture and reset-triggered
-boot-test orchestration, with active-workflow conflict guards. Backend-neutral
-contracts and shared event processing now exist; Enhanced wire messages are
-translated only by the Enhanced backend adapter. The core capture workflow now
-coordinates disconnect/resume deadlines and segment-bound source replacement;
-service composition now retries the configured Basic port or validates an exact
-Enhanced identity/hello before publishing a prepared replacement. Major
-remaining Phase 1 areas are the full asynchronous Enhanced adapter, background
-ingestion outside active workflows, retention, generic Enhanced control
-actions, RP2040 firmware, and real HIL tests.
-
 ## Adding A Service Endpoint
 
 1. Add or extend core behavior under `core/src/dutchmate_core/`.
@@ -155,7 +102,8 @@ actions, RP2040 firmware, and real HIL tests.
 4. Register the route in `apps/service/src/dutchmate_service/app.py`.
 5. Map expected failures in `apps/service/src/dutchmate_service/errors.py`.
 6. Add service tests under `apps/service/tests/`.
-7. Update documents that list the current endpoint surface.
+7. Update the owning contract and `docs/development_status.md` when the slice
+   changes milestone progress.
 
 Validation order and state transitions belong in core. Service handlers own
 HTTP serialization, not a parallel behavior implementation.
@@ -166,7 +114,8 @@ HTTP serialization, not a parallel behavior implementation.
 2. Add focused output formatting in the relevant CLI module.
 3. Register the Typer command in `apps/cli/src/dutchmate_cli/main.py`.
 4. Add CLI/client tests under `apps/cli/tests/`.
-5. Update documents that list current commands.
+5. Update the owning contract and `docs/development_status.md` when the slice
+   changes milestone progress.
 
 Preserve service errors. When the service is unavailable, commands fail with:
 
@@ -211,15 +160,15 @@ passes through fake backends.
 
 ## Documentation
 
-- `README.md` is the entry point and current status summary.
-- `docs/project_context.md` owns product architecture, scope, and roadmap.
-- `docs/software_architecture.md` owns current code structure and migration
-  boundaries.
+- `README.md` is the short repository entry point.
+- `docs/development_status.md` is the only progress tracker and next-step queue.
+- `docs/project_context.md` owns durable product scope, safety, invariants, and
+  phase definitions.
+- `docs/software_architecture.md` owns code structure and dependency boundaries.
 - `docs/phase1_implementation_spec.md` owns Phase 1 requirements and done
   criteria.
 - Focused contract documents own their named subsystem and are referenced
   rather than copied into broader documents.
-- Use **current** only for runnable repository behavior and **target** or
-  **planned** for unimplemented work.
-- Update current endpoint/command lists in the same change as code.
+- Only `docs/development_status.md` may contain progress markers, completed
+  slices, or the next implementation step.
 - Keep links and protocol examples valid when moving or renaming content.

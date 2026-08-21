@@ -1,6 +1,5 @@
 # MCP Integration Plan
 
-> Status: accepted Phase 2 transport decision
 > Scope: Phase 2 MCP server transport, launch model, and tool contract.
 
 ## Decision Summary
@@ -26,17 +25,7 @@ communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own
 hardware and does not open the serial port. It calls the already-running Device
 Core Service over local HTTP at `http://127.0.0.1:2040` by default.
 
-Current implementation note: `apps/mcp_server` contains the tested asynchronous
-Device Core HTTP client for the nine Phase 2 endpoint mappings. It validates
-tool-shaped arguments before dispatch, uses bounded workflow timeouts, preserves
-canonical service error payloads, and distinguishes unavailable or malformed
-service responses. Its dependency and workspace lock select MCP SDK 2.x and
-protocol `2026-07-28`. The `dutchmate-mcp` console script now runs a stateless,
-stdio-only `MCPServer` with fixed identity and finite private discovery/catalog
-cache hints. Its catalog is intentionally empty until the next tool-registration
-slice. The `dutchmate mcp` CLI command remains a placeholder until CLI wiring.
-
-No current DUTchMate client or deployment requires an independently hosted MCP
+No Phase 2 DUTchMate client or deployment requires an independently hosted MCP
 endpoint, so Streamable HTTP is outside Phase 2 scope. The deprecated HTTP+SSE
 transport will not be implemented.
 
@@ -47,7 +36,7 @@ Coding Agent / IDE Agent
         |
         | MCP stdio
         v
-MCP Server process (`dutchmate mcp`, planned)
+MCP Server process (`dutchmate mcp`)
         |
         | HTTP Device Core Service API
         v
@@ -77,21 +66,21 @@ The planned MCP server is a thin adapter:
 
 ## Launch Commands
 
-Planned default Phase 2 command:
+Required Phase 2 command:
 
 ```bash
 dutchmate mcp
 ```
 
-Optional flags:
+Required optional flags:
 
 ```bash
 dutchmate mcp --service-url http://127.0.0.1:2040
 dutchmate mcp --log-level info
 ```
 
-These flags are not implemented yet. When implemented, the command must write
-only valid MCP JSON-RPC messages to stdout. Logs go to stderr.
+The command writes only valid MCP JSON-RPC messages to stdout. Logs go to
+stderr.
 
 If the Device Core Service is not running, MCP tool calls return a structured
 tool error that tells the agent to select one backend, for example:
@@ -424,17 +413,19 @@ Planned generic MCP client configuration shape:
 }
 ```
 
-This is not runnable yet because the MCP server is not implemented. Exact
-registration keys vary by coding agent. DUTchMate documentation should keep
+Exact registration keys vary by coding agent. DUTchMate documentation keeps
 examples per client separate from the core architecture.
 
-## Updated Development Sequence
+## Implementation Sequence
+
+This section defines dependency order only. `docs/development_status.md` selects
+the active phase and next slice.
 
 Implement Phase 2 in these independently testable slices:
 
-1. **Protocol/dependency baseline (complete):** require MCP SDK 2.x, lock it,
+1. **Protocol/dependency baseline:** require MCP SDK 2.x, lock it,
    record `2026-07-28` as normative, and retain the tested Device Core HTTP port.
-2. **Stateless server composition (complete):** create one `MCPServer` with fixed
+2. **Stateless server composition:** create one `MCPServer` with fixed
    identity, instructions, private finite cache hints, a deterministic initially
    empty catalog, and stdio-only `run()` wiring. No application handshake/session
    state is introduced.

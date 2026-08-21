@@ -1,8 +1,6 @@
 # Reconnect and Session Semantics
 
-> Status: accepted Phase 1 target contract
 > Scope: Device Core lifecycle and timestamp behavior when either Phase 1 backend disconnects or reconnects during a capture-like workflow.
-> Implementation: durable session mutations, deterministic capture/boot-test deadline coordination, bounded Basic/Enhanced reopening, and volatile runtime status are present; continuous monitoring outside an active workflow remains.
 
 ## Goal
 
@@ -419,8 +417,8 @@ Session: 20260704T120000Z-a1b2c3d4
 Connection: reconnecting (2.1s remaining)
 ```
 
-The current `GET /status` payload supplies this without reconstructing volatile
-state from session files: `connection_state` is `connected`, `disconnected`, or
+`GET /status` supplies this without reconstructing volatile state from session
+files: `connection_state` is `connected`, `disconnected`, or
 `reconnecting`; nullable `active_workflow` names the finite owner; and nullable
 `reconnect_remaining_s` is the non-negative monotonic time remaining for that
 active session. The existing `connected` boolean remains true only in the

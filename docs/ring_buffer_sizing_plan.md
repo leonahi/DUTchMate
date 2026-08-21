@@ -1,6 +1,5 @@
 # Ring Buffer Sizing Plan
 
-> Status: Phase 1B implementation baseline; hardware acceptance pending.
 > Scope: RP2040 Debug Helper UART RX buffering for Phase 1.
 
 ## Decision Summary
@@ -202,7 +201,7 @@ If Phase 1 measurements show recurring overflow:
 - Move from NDJSON/base64 to MessagePack + COBS in Phase 3.
 - Use DMA/PIO-based capture in a later hardware evidence phase.
 
-## Remaining Evidence
+## Required Evidence
 
 - Exact Zephyr RAM usage after USB CDC, UART, logging, and stacks are enabled.
 - Real representative boot-log high-water marks and overflow counts.

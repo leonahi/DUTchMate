@@ -1,7 +1,6 @@
 # Project Context: DUTchMate
 
-> Status: accepted architecture overview
-> Purpose: durable product context, architecture decisions, scope, and roadmap.
+> Purpose: durable product context, architecture decisions, scope, and phase definitions.
 
 This document explains what DUTchMate is and why its major boundaries exist.
 It intentionally does not duplicate executable contracts. The Phase 1 API,
@@ -263,7 +262,8 @@ HIL tests against the same DUT fixture.
 
 Phase 1 is complete only when both backend modes pass shared mocked tests and
 their real-hardware acceptance paths. `docs/phase1_implementation_spec.md` is
-the normative implementation order and done checklist.
+the normative requirements and done checklist. Progress is tracked only in
+`docs/development_status.md`.
 
 ### Phase 2: MCP Integration
 
@@ -309,7 +309,7 @@ Phase 2 succeeds when a coding agent can request those deterministic workflows
 through MCP without manual log copying. Phase 4 analysis remains optional and
 advisory.
 
-## Known Limitations
+## Design Constraints And Deferred Scope
 
 - **Zephyr RP2040 PIO support:** Phase 1 uses supported UART, GPIO, timer, and
   USB CDC peripherals. Future PIO-based event/timing work may require custom
@@ -324,24 +324,14 @@ advisory.
 - **No galvanic isolation:** the Revision A Debug Helper shares ground with the
   DUT. Translation and connector protection reduce risk but do not isolate
   ground offsets, shorts, or fault energy. Prototype validation remains a
-  release gate; see `docs/dutchmate_hardware_architecture.md`.
+  release gate; see `hardware/schematics/revision_a.md`.
 - **NDJSON overhead:** JSON and base64 increase Enhanced USB traffic. Phase 3
   may adopt a binary framed protocol if measured throughput requires it.
 - **Firmware-sampled UART timestamps:** RP2040 timestamps are taken at firmware
   event handling granularity and are suitable for boot analysis, not precision
   logic analysis.
-- **Continuous serial architecture is pending:** the current transport is
-  synchronous. Phase 1 will use the pinned `pyserial-asyncio` dependency for
-  one continuous reader per backend.
-- **Ring buffer is selected but unvalidated:** Phase 1B starts at 32 KiB and
-  records RAM and HIL measurements in
-  `hardware/validation/phase1_ring_buffer.md` before acceptance.
-- **Windows is not supported yet:** current service lifecycle management is
-  POSIX-specific and serial naming differs.
+- **Platform scope:** service lifecycle management is POSIX-specific and serial
+  naming differs across operating systems.
 - **Local API has no authentication:** the service binds to loopback by default
   and assumes a trusted single-developer machine. It must not be exposed to a
   network; shared or remote deployment requires an authentication design.
-
-No unresolved architecture choices are currently recorded. Remaining work is
-either implementation or an explicit empirical validation gate in its owning
-document.

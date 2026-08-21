@@ -1,6 +1,5 @@
-# DUTchMate Voltage-Domain GPIO and UART Interface
+# DUTchMate Revision A Voltage-Domain GPIO and UART Interface
 
-**Status:** Phase 1 Revision A design baseline; prototype validation pending<br>
 **Revision:** 1.0<br>
 **Date:** 2026-08-11<br>
 **Scope:** Four debugger-to-DUT control signals, four DUT-to-debugger event signals, and one UART pair across different logic-voltage domains.
@@ -168,7 +167,7 @@ mode. Unconfigured, rejected, startup, unpowered-domain, and fault conditions
 keep the channel high impedance. Releasing an `open_drain` channel also enters
 the high-impedance drive state without changing its configured mode.
 
-Phase 1 host software currently exposes `reset` and `boot` as configured DUT
+Phase 1 semantic workflows expose `reset` and `boot` as configured DUT
 signal roles. That is a role-level API, not a hardware limitation. The hardware
 model should remain channel-based so later software can represent mappings such
 as:
@@ -984,7 +983,7 @@ stop_bits = 1
 
 Software must reject structural conflicts it can prove from configuration, such
 as assigning a control role to an `EVENTn` channel or assigning one physical
-channel more than once. The current schema does not carry authoritative DUT net
+channel more than once. Configuration does not carry authoritative DUT net
 direction and cannot prove that a schematic signal is safe to drive. The user
 remains responsible for mapping `CTRLn` only to DUT inputs or safely drivable
 open-drain nets and `EVENTn` only to DUT outputs; configuration tools must show
@@ -1146,7 +1145,7 @@ optional pull-ups remain subject to measurement and layout review.
 - Texas Instruments, **Schematic Checklist — A Guide to Designing With Fixed or Direction Control Translators**:  
   <https://www.ti.com/lit/pdf/spradm1>
 
-## 17. Current recommendation
+## 17. Revision A Recommendation
 
 Proceed with the following five-IC implementation and the Revision A Pico pin
 mapping in section 10.1 for the first DUTchMate prototype:

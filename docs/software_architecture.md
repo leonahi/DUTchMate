@@ -1,12 +1,10 @@
 # Software Architecture
 
-> Status: current implementation with Phase 1 migration boundaries
 > Scope: host-side Python layers, dependency direction, data flow, and code ownership.
 
-This document describes how the repository is organized today. It records
-target behavior only when needed to explain a current migration boundary.
-`docs/phase1_implementation_spec.md` owns the complete target contracts and done
-criteria.
+This document describes repository organization and ownership. Requirements
+belong to their contract documents; progress and next-step status belong only
+to `docs/development_status.md`.
 
 ## Goals
 
@@ -54,7 +52,7 @@ core/device_connection
   -> no higher DUTchMate layer
 ```
 
-Shared capture, UART processing, and storage now use the target normalized event
+Shared capture, UART processing, and storage use this normalized event
 dependency direction:
 
 ```text
@@ -76,9 +74,8 @@ device_connection
 Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
-`docs/phase1_implementation_spec.md`. The remaining migration boundary is the
-synchronous interim source: Phase 1 replaces it with one asynchronous
-background reader and complete connection/segment coordinator.
+`docs/phase1_implementation_spec.md`. Production Enhanced input currently enters
+through the synchronous compatibility source described below.
 
 ## Data Flow
 
@@ -102,7 +99,7 @@ NDJSON bytes
 Production workflows receive normalized events and never import Enhanced wire
 messages, parsers, commands, or transports.
 
-The implemented finite serial path is:
+The finite serial path is:
 
 ```text
 SerialCommandTransport queued/new messages
@@ -118,10 +115,9 @@ SerialCommandTransport queued/new messages
 ```
 
 `DeviceCoreRuntime` publishes the active session while a finite workflow runs
-and rejects conflicting capture or hardware-changing operations. The current
-serial path is synchronous and Debug Helper-oriented. Phase 1 replaces its
-input edge with one continuous reader and a FIFO normalized event source for
-either backend; downstream processing remains shared.
+and rejects conflicting capture or hardware-changing operations. The Enhanced
+serial path is synchronous and Debug Helper-oriented; downstream processing is
+shared with Basic.
 
 ## Supported Core Facades
 
@@ -148,18 +144,19 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 - queuing non-response UART/telemetry messages while waiting for a command
   response, then returning them in FIFO order
 
-Current limitations that move together in Phase 1B:
+The committed v1 wire still contains these compatibility details:
 
 - the capability is still named `uart_capture` rather than `uart_receive`
 - wire actions are role-specific `reset`/`set_boot_mode` rather than generic
   configured-channel actions
 - `configure_gpio_mode` still sends host role metadata
 - receive framing is unbounded and uses generic surrounding-whitespace removal
-- schemas and runtime validators do not yet enforce all target byte limits
-- the transport does not yet prove complete acceptance of short serial writes
+- framing uses generic surrounding-whitespace removal and is not bounded at the
+  final protocol limit
+- transport writes do not expose a complete-acceptance contract
 
-Schemas, examples, parser/encoder models, tests, and firmware must change
-atomically. `hardware/protocol/v1/` is the wire authority.
+`hardware/protocol/v1/` is the wire authority. Its schemas, examples,
+parser/encoder models, tests, and firmware handling change atomically.
 
 ### `uart_capture`
 
@@ -263,7 +260,7 @@ retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
 or schema-v1 evidence formats.
-The remaining rules are centralized in the Phase 1 spec and
+Evidence and reconnect requirements are centralized in the Phase 1 spec and
 `docs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
@@ -331,16 +328,11 @@ reading a `hello`. Its event source lazily starts one serial-reader thread,
 converts each delivered byte chunk to one FIFO normalized event with
 host-monotonic provenance, and exposes a blocking compatibility read to the
 current shared capture runner. Basic UART writes are capability-gated and retry
-ordered short writes to completion. An interim Enhanced adapter translates
+ordered short writes to completion. The Enhanced adapter translates
 parsed v1 messages and synchronous read timeouts before shared capture. When
 its device-timer origin is unavailable at connection creation, the first
 timestamped evidence event establishes the segment origin and is normalized to
-zero before its immutable context is persisted. The package will additionally
-own:
-
-- Enhanced NDJSON adaptation with device timestamp and telemetry provenance
-- continuous background ingestion and lifecycle ownership beyond finite captures
-- future background lifecycle ownership for normalized UART-send and control interfaces
+zero before its immutable context is persisted.
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
 format CLI output.
@@ -364,8 +356,7 @@ and may start disconnected without one. Status and finite capture responses
 serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
-Enhanced hello before resuming. Continuous background ingestion outside active
-workflows and remaining error-specific structured contexts remain Phase 1 work.
+Enhanced hello before resuming.
 
 ### CLI
 
@@ -380,7 +371,7 @@ wait-pattern, plus bounded UART send and baseline mark/clear.
 
 ### MCP Server
 
-`apps/mcp_server` is a Phase 2 delivery adapter in progress. Its asynchronous
+`apps/mcp_server` is a delivery adapter. Its asynchronous
 HTTP client maps the bounded Phase 2 tool surface to the Device Core Service,
 validates tool-shaped arguments before dispatch, and preserves structured
 service errors without owning serial, session, GPIO, or AI logic. The package is
@@ -388,8 +379,7 @@ locked to official MCP Python SDK 2.x and the stateless `2026-07-28` protocol
 model; Device Core IDs remain explicit tool data rather than hidden MCP session
 state. Its fixed-identity `MCPServer` composition delegates discovery, per-request
 metadata, result typing, private cache hints, and stdio framing to the SDK. The
-catalog remains empty until the next delivery boundary registers the nine
-documented tools and projects their errors. See `docs/mcp_integration_plan.md`.
+tool contract is defined in `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 
@@ -403,27 +393,5 @@ documented tools and projects their errors. See `docs/mcp_integration_plan.md`.
 - `workflows` coordinate lower layers but do not duplicate wire validation.
 - Service and CLI layers do not reinterpret core state or error semantics.
 
-## Current Verification Surface
-
-The test suite currently covers protocol parsing/encoding and NDJSON buffering;
-UART line processing and patterns; session creation, evidence writes, telemetry,
-summaries, and discovery; GPIO configuration state; fixture and finite transport
-capture; reset/boot-mode and boot-test orchestration; runtime conflict cleanup;
-service endpoints; CLI clients; serial discovery and backend selection; Basic
-no-hello raw opening, normalized FIFO receive/provenance, shared capture, and
-full-write behavior; capability-policy filtering; backend/session identity,
-per-segment provenance, and integrity serialization; Enhanced startup `hello`
-validation; and startup hardware mapping.
-
-Use focused tests during development and the full suite before a commit:
-
-```bash
-uv run pytest tests/unit/protocol
-uv run pytest tests/unit/uart_capture tests/unit/log_processing
-uv run pytest tests/unit/session_store tests/unit/workflows tests/unit/runtime
-uv run pytest apps/service/tests apps/cli/tests
-uv run pytest
-```
-
-Phase 1 test requirements, backend-specific coverage, HIL fixture behavior, and
-done criteria are maintained only in `docs/phase1_implementation_spec.md`.
+Testing commands live in `docs/developer_guide.md`; Phase 1 acceptance coverage
+lives in `docs/phase1_implementation_spec.md`.

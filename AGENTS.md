@@ -66,3 +66,14 @@ Before completing a structural change, run:
 
 Update architecture documentation when module ownership or dependency direction
 changes.
+
+## Development Status
+
+- Read `docs/development_status.md` before selecting development work.
+- `docs/development_status.md` is the only source for progress, active phase,
+  completed slices, and the next step.
+- Update its review date, current milestone, next step, checklist, and
+  validation evidence in the same commit as each completed development slice.
+  Reconcile its code-baseline reference after commits are created.
+- Requirements, architecture, plans, and validation records must not maintain
+  competing progress summaries or next-step lists.

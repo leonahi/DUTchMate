@@ -1,6 +1,5 @@
 # Phase 1 Implementation Spec
 
-> Status: draft
 > Scope: Basic generic USB-to-UART backend, Enhanced RP2040 Debug Helper backend, Device Core Service, host CLI, and shared protocol/session contracts.
 
 ## Goal
@@ -43,205 +42,59 @@ introducing a second host processing architecture.
 - JTAG/SWD debugging
 - Firmware flashing
 
-Phase 2 MCP integration is planned in `docs/mcp_integration_plan.md`. Phase 1
-should keep the Device Core Service API stable enough for the later MCP stdio
-adapter, but must not implement MCP before CLI workflows are validated. The
-current `dutchmate mcp` CLI command and `dutchmate-mcp` console script are
-placeholders only.
+Phase 2 MCP requirements live in `docs/mcp_integration_plan.md`. MCP does not
+contribute to Phase 1 acceptance.
 
 ## Implementation Order
 
 Phase 1 should be built host-side first with fake backends and protocol fixtures,
 then connected to each real backend in milestone order.
 
+This is the required dependency order, not a progress tracker. Progress and the
+next implementation step live only in `docs/development_status.md`.
+
 ### Phase 1A: Basic Backend
 
 1. Define the normalized UART receive interface and backend capability model.
-   **Implemented in `dutchmate_core.backends.contracts` with shared fake Basic
-   and Enhanced source contract tests.**
 2. Refactor the shared UART processing/session path to consume normalized UART
-   events independent of backend framing. **Implemented for UART processing,
-   capture recording, and legacy session evidence writes. Enhanced NDJSON and
-   synchronous transport messages are translated at explicit compatibility
-   adapters before entering the shared path.**
+   events independent of backend framing.
 3. Implement explicit Basic-backend selection and serial settings without a
-   DUTchMate `hello` requirement. **Implemented across shared config parsing,
-   CLI/service startup, Enhanced candidate resolution, and raw Basic 8-N-1
-   connection setup. Basic requires an explicit port; Enhanced may remain
-   selected but disconnected when no candidate exists.**
+   DUTchMate `hello` requirement.
 4. Implement generic USB-to-UART receive using raw serial bytes and host
-   timestamp provenance. Add UART send when TX is enabled. **Implemented for
-   the Basic backend adapter: one lazy-started reader owns raw serial reads,
-   publishes FIFO normalized chunks with host-monotonic provenance, and drains
-   accepted evidence before disconnect errors. Capability-gated writes retry
-   short writes to completion and report partial acceptance on failure. The
-   public Device Core/service/CLI send path is now implemented in step 6.**
+   timestamp provenance. Add UART send when TX is enabled.
 5. Expose backend mode, capabilities, timestamp provenance, and the UART
-   loss-observation object through status, sessions, service responses, and CLI output.
-   **Implemented for current runtime status and capture-like sessions/responses:
-   backend support is separated from TX-policy-filtered effective capabilities,
-   per-segment provenance remains attached to its segment ID, Basic reports
-   `not_observable`, and Enhanced telemetry promotes integrity to
-   `loss_reported`. Status and capture/boot-test CLI output expose the same
-   facts. Runtime capture/boot-test sessions with a complete backend snapshot
-   now use native schema-v1 lifecycle metadata; bounded retrieval remains step
-   6 work.**
+   loss-observation object through status, sessions, service responses, and CLI
+   output.
 6. Complete deterministic `first_error` selection plus shared log/session,
    wait-pattern, UART-send, reconnect, and retention work required by the Phase
-   1 done criteria. **In progress: admitted complete lines now retain event/byte
-   boundaries, detected records carry first-occurrence raw offsets and bounded
-   exact-byte excerpts, and capture/boot-test summaries select and expose
-   deterministic `first_error` while excluding `BOOT_OK`. Derived line state is
-   now independently capped at 65536 bytes per segment/channel, with exact
-   oversized descriptors, persistent status/counts, and recovery after LF.
-   Native capture/boot-test sessions now publish `active` metadata with a
-   terminal reserve and transition once to `completed` or bounded-error
-   `failed`, while recognized unversioned sessions remain v0. Startup now
-   abandons stale native active sessions before backend opening and reports
-   reserve/schema diagnostics without mutating legacy or unsupported schemas.
-   Whole-unit quota enforcement now covers UART, telemetry, derived line-limit,
-   and disconnect/reconnect evidence. Capture/boot-test coordination preserves
-   one monotonic deadline across replacement sources, finalizes old-segment line
-   state, enforces the 32-segment boundary, and distinguishes disconnect,
-   reconnect timeout, and fatal backend input. Service composition now performs
-   bounded Basic reopen attempts or Enhanced reopen/hello/identity validation,
-   updates volatile connection state, and replaces Enhanced control transport.
-   Bounded native/legacy session list/detail retrieval is implemented with
-   stable opaque pagination and artifact/count summaries. Background reconnect
-   outside active workflows, retention, and baseline semantics remain. Native
-   log replay, literal wait-pattern, and public UART send are implemented. UART
-   send validates final UTF-8 payloads before policy/ownership/connection work,
-   requires complete Basic or Enhanced acceptance, and stores durable forced
-   attempt/result pairs without adding TX bytes to the receive log.**
+   1 done criteria.
 7. Pass mocked Basic-backend tests and a real generic-adapter + Zephyr DUT
    fixture smoke test as defined under "DUT Firmware Validation Fixture".
-   **Not started.**
 
 ### Phase 1B: Enhanced Backend
 
 8. Rename the legacy Debug Helper wire capability `uart_capture` to
    `uart_receive` atomically across schemas, examples, parser, tests, and future
-   firmware. **Not started.**
-9. Adapt the implemented Debug Helper NDJSON parser/transport to the same UART
-   receive interface used by Phase 1A. **An interim synchronous adapter and
-   fixture-stream adapter now normalize UART and telemetry messages. The target
-   asynchronous background reader, complete framing limits, and segment-origin
-   coordination remain.**
+   firmware.
+9. Adapt the Debug Helper NDJSON parser/transport to the same UART
+   receive interface used by Phase 1A.
 10. Preserve the existing channel-aware `CTRLn` configuration and guarded
     reset/boot workflows behind Enhanced-backend capability checks. Replace
     the legacy role-specific wire actions with generic configured-channel pulse
     and active/idle actions, and remove user role metadata from firmware
-    commands. **Host-side workflow behavior is substantially implemented;
-    wire-action/configuration migration is not started.**
+    commands.
 11. Implement RP2040 firmware for UART receive/send, device timestamps, buffer
     telemetry, and `CTRLn` control. Start with the 32 KiB UART RX ring-buffer
     baseline and close its measurement gate as defined in
-    `docs/ring_buffer_sizing_plan.md`. **Not started.**
+    `docs/ring_buffer_sizing_plan.md`.
 12. Define the Enhanced backend as the sole future owner of `EVENTn` input, but
     defer the `gpio_events` implementation and HIL criteria to Phase 5.
 13. Pass mocked Enhanced-backend tests and a real RP2040 + the same Zephyr DUT
     fixture smoke test for reset, boot-test, UART evidence, timestamps, and
-    overflow telemetry. **Not started.**
+    overflow telemetry.
 
-### Existing Shared Host Foundation
-
-The repository already contains:
-
-- Backend-neutral identity, timestamp provenance, normalized UART/telemetry
-  event, asynchronous event-source, disconnect, and invalid-input contracts.
-- Explicit Basic/Enhanced startup selection, exact serial-port validation,
-  backend-specific baudrate defaults, 8-N-1 validation, and raw Basic opening
-  without a Debug Helper `hello` probe.
-- Basic raw-byte ingestion through one FIFO reader, per-read host-monotonic
-  timestamps, and a TX-policy-gated full-write primitive that reports partial
-  acceptance on failure.
-- Runtime/backend snapshots containing mode, exact identity, pre-policy backend
-  capabilities, effective capabilities, policy source, per-segment timestamp
-  provenance, and UART-loss integrity, serialized through status and current
-  capture/boot-test responses and CLI output.
-- Shared UART processing, capture recording, and session evidence writes that
-  consume normalized events, plus interim Enhanced transport/NDJSON adapters.
-- Channel-aware Debug Helper v1 schemas, canonical examples, parser, and event
-  models using the legacy `uart_capture` capability name.
-- UART byte preservation, lossy UTF-8 display text, complete-line buffering,
-  and pattern detection.
-- Session creation, incremental UART/event writes, telemetry, summaries,
-  newest-first discovery, stable opaque pagination, bounded native detail, and
-  legacy read-only identity/artifact projections.
-- Enhanced NDJSON adapter fixtures, finite transport capture, reset-triggered boot-test,
-  active-session guards, reset/boot action enforcement, and synchronous serial
-  command transport.
-- Service endpoints and CLI commands for status, finite capture, boot-test,
-  wait-pattern, bounded UART send, GPIO mode, reset, and boot-mode.
-
-Retention/baseline semantics, continuous background ingestion, RP2040 firmware,
-and both HIL paths remain incomplete.
-
-### Current Host-Side Core Flow
-
-The Enhanced adapter fixture path is:
-
-```text
-NDJSON byte chunks
-  -> device_connection.NdjsonStreamParser
-  -> device_connection.parse_device_message
-  -> backends.enhanced.EnhancedNdjsonEventStream
-  -> normalized backend events
-  -> test fixture composition
-  -> workflows.CaptureRecorder
-  -> uart_capture.UartCaptureProcessor
-  -> log_processing.PatternDetector
-  -> session_store.SessionStore
-  -> session_store.SessionSummary
-```
-
-Enhanced-only byte-chunk composition is test support rather than a production
-workflow API. Production capture accepts injected normalized event sources and
-does not open a serial port.
-
-The service-facing core path currently reaches the same recorder through one
-of the selected backend adapters:
-
-```text
-Basic raw serial -> backends.basic.BasicBackendEventSource
-Enhanced serial -> backends.enhanced.EnhancedCaptureEventSource
-  -> normalized backend events
-  -> runtime.DeviceCoreRuntime.capture_uart
-  -> workflows.TransportCaptureRunner
-  -> workflows.CaptureRecorder
-  -> session_store.SessionStore
-  -> session_store.SessionSummary
-```
-
-The runtime publishes `active_session_id` while this loop is running and
-rejects overlapping GPIO, reset, boot-mode, or capture operations with
-`capture_active`.
-
-Both current paths are Debug Helper-oriented. The target shared flow is:
-
-```text
-Selected Device Backend (Basic or Enhanced)
-  -> one background serial reader
-  -> BackendEventSource FIFO
-  -> normalized backend events
-  -> uart_capture processing
-  -> log_processing
-  -> session_store
-```
-
-`receive` is the directional backend capability, paired with `uart_send`.
-`capture` remains the higher-level workflow that records received evidence into
-a session, and `uart_capture` remains the existing processing package name. The
-target `BackendEventSource` is asynchronous and returns `UartReceiveEvent`,
-`BufferOverflowEvent`, or `BufferStatusEvent`; it never returns Debug Helper
-wire-protocol messages or command responses.
-
-The normalized event and source types should live in a backend-neutral module,
-targeted as `dutchmate_core.backends.contracts`. Basic and Enhanced adapters
-implement that contract. Enhanced NDJSON schemas, parsing, and command encoding
-remain in `device_connection`; they are implementation details of the Enhanced
-adapter. Shared `uart_capture`, `workflows`, and `session_store` modules must
-depend on normalized contracts rather than `device_connection.messages`.
+Implementation ownership and current data flow are documented only in
+`docs/software_architecture.md`.
 
 ## Normalized Backend Contract
 
@@ -417,7 +270,7 @@ tests/
 
 ## Enhanced Backend Hardware Mapping Contract
 
-`docs/dutchmate_hardware_architecture.md` owns the Revision A voltage-domain
+`hardware/schematics/revision_a.md` owns the Revision A voltage-domain
 design, Pico pin map, provisional BOM, and electrical validation checklist.
 Firmware board configuration, schematic capture, and mapping tests must preserve
 that baseline; a pin or component substitution is a reviewed hardware revision.
@@ -467,19 +320,6 @@ mode = "push_pull"
 active_level = "high"
 idle_level = "low"
 ```
-
-Current implementation status:
-
-- Runtime state is already channel-first, startup applies configured mappings
-  after Enhanced `hello`, and rejected overrides preserve accepted state.
-- One shared validator now enforces and preserves the exact 1..64-byte UTF-8
-  role/DUT-signal contract across config, runtime, service, and CLI paths.
-- Host validators and the v1 command schema enforce the complete
-  open-drain/push-pull matrix; suggestions use `power_enable` while legacy
-  `power_en` remains a valid custom role.
-- Current wire schemas and encoders still send role-specific actions and a
-  configuration `role`. Phase 1B migrates them atomically to the generic control
-  contract below while preserving semantic host APIs.
 
 ## Enhanced Backend Protocol Contract
 
@@ -570,32 +410,28 @@ action. Device Core resolves the exact host role to its accepted channel:
 and `normal` uses idle. These safe semantic host APIs remain unchanged and no
 public raw-level GPIO operation is introduced.
 
-The current draft command schema still requires `configure_gpio_mode.role`.
-Phase 1B removes that property and rejects it as an extra field after migration.
+The atomic Phase 1B protocol migration removes `configure_gpio_mode.role` and
+rejects it as an extra wire field.
 The shared 1..64-byte identifier validation remains authoritative at every host
 configuration/API boundary; firmware validates only channel and electrical
 fields because neither host identifier consumes wire-frame space.
 
 Protocol changes must update the schema files, examples, parser tests, and firmware handling in the same change.
 
-The current parser has no frame limit, strips surrounding whitespace, and may
-lose valid earlier frames from a chunk when a later frame fails. The current
-schemas also omit the target maximum lengths. Framing, parser/encoder behavior,
-schemas, examples, firmware, and tests must change atomically.
+Framing, parser/encoder behavior, schemas, examples, firmware, and tests change
+atomically and enforce the limits above.
 
-The current draft v1 schema advertises legacy `uart_capture`. Phase 1B must
-rename this capability to `uart_receive`, consistent with `uart_send`, in one
-atomic protocol change. The target Enhanced capability set is
+The v1 Enhanced capability set is
 `uart_receive`, `uart_send`, `gpio_control`, `device_timestamp`, and
-`overflow_telemetry`. `gpio_events` remains Phase 5. Reset and boot are
-configured roles, not capabilities.
+`overflow_telemetry`. The migration from legacy `uart_capture` to
+`uart_receive` is atomic; mixed capability vocabularies are invalid.
+`gpio_events` remains Phase 5. Reset and boot are configured roles, not
+capabilities.
 
-The current draft v1 host-command schema likewise still contains legacy
-`reset` and `set_boot_mode`. The same Phase 1B protocol migration must replace
-them with `pulse_control` and `set_control_state` across schema, canonical
-examples, encoders/parser models, tests, and firmware, while removing
-`configure_gpio_mode.role`. Mixed old/new action/configuration vocabularies are
-not supported.
+The same migration replaces legacy `reset` and `set_boot_mode` commands with
+`pulse_control` and `set_control_state` across schema, canonical examples,
+encoders/parser models, tests, and firmware. Mixed old/new
+action/configuration vocabularies are not supported.
 
 ## Device Core Requirements
 
@@ -1021,66 +857,6 @@ Reconnect and resume behavior is defined in
 after a reconnect must include `segment_id`; that segment selects the timestamp
 origin and provenance.
 
-Current implementation notes:
-
-- `uart_raw.log` preserves bytes delivered to Device Core incrementally and
-  exactly.
-- `uart_events.jsonl` currently records raw device `timestamp_us`, base64 UART
-  payloads, lossy display text, `segment_id`, and redundant `timestamp_epoch`.
-- `hardware_events.jsonl` records `buffer_overflow` and `buffer_status` events.
-  Target `uart_tx_attempt` / `uart_tx_result` perturbation recording is not
-  implemented.
-- `UartLineBuffer` enforces the 65536-byte derived-line limit independently per
-  segment/channel. Byte 65537 discards only the derived copy, switches to
-  constant-memory counting, and yields one exact boundary/count descriptor at
-  LF or session close; raw logs and UART events remain complete. Persistent
-  `line_processing` status/counts and `line_limit_exceeded` session events expose
-  the limitation, and processing resumes after LF. Normal completed lines retain
-  source event/byte boundaries; detected-pattern records retain first-occurrence
-  raw offsets and at-most-4096-byte exact excerpts, and session summaries select
-  the earliest failure by segment/event order while excluding `BOOT_OK`.
-- Runtime-created capture/boot-test sessions with complete backend snapshots now
-  write `schema_version: 1`, typed workflow/duration/reconnect policy, one-way
-  active/terminal state, bounded failure details, storage accounting, and an
-  allocated terminal reserve that is removed on atomic metadata replacement.
-  Capture responses and CLI output expose lifecycle state/end reason. Direct
-  store fixtures without workflow facts remain recognized unversioned v0 rather
-  than receiving inferred lifecycle data. Before backend opening, startup scans
-  stored metadata, atomically abandons stale native active sessions with
-  `service_restart`, retains recovery diagnostics, and leaves terminal, legacy,
-  malformed, and unsupported-schema evidence unmodified as appropriate. Removal
-  of redundant `timestamp_epoch`, the project baseline pointer, quota admission
-  for future control-action and UART-TX evidence, and retention remain to be
-  implemented.
-  Native UART receive, buffer overflow/status, and finalized line-limit session
-  events now preflight their exact whole-unit evidence bytes atomically.
-  Filesystem persistence retries short writes, fsyncs append records, rolls a
-  failed partial append back to its prior length, and atomically replaces complete
-  JSON documents with a parent-directory fsync. Failures propagate as the typed
-  `persistence_fault` contract and native workflows terminalize them as
-  `persistence_error` when terminal metadata can still be written.
-  Existing multi-file UART, buffer-telemetry, and finalized line-limit units use
-  a durable internal transaction marker, saved append offsets, and hard-linked
-  metadata/pattern preimages. Metadata is the final data write. Startup keeps a
-  unit whose expected metadata digest is present and otherwise restores every
-  preimage before stale-session lifecycle recovery.
-  Equality is admitted; the first over-budget unit is omitted whole and
-  completes the session as `size_limit` with bounded truncation context.
-  Rejected overflow/status evidence still applies its bounded loss, overflow,
-  and segment-timestamp summary facts in terminal metadata.
-- Disconnect/resume persistence now closes the current segment, admits explicit
-  lifecycle/discontinuity events, validates exact backend identity and contiguous
-  IDs, and caps sessions at 32 segments. The capture workflow now coordinates
-  monotonic deadline precedence, per-segment derived-state finalization,
-  replacement-source publication, reconnect timeout, and the segment limit
-  through an injected backend reopen operation. Service/runtime composition now
-  retries Basic opening, validates Enhanced hello identity and timestamp
-  provenance, replaces the live source/control adapters, and exposes volatile
-  reconnect status. Continuous monitoring outside active workflows remains.
-- Capture and boot-test reject non-numeric, boolean, non-finite, non-positive,
-  and over-300-second durations consistently across core, service, and CLI.
-  Native sessions persist and echo the accepted duration and reconnect policy.
-
 ## Device Core Service Requirements
 
 The Device Core Service is a persistent FastAPI process that owns the selected
@@ -1090,7 +866,7 @@ DUTchMate `hello`. Enhanced startup opens the Debug Helper transport, validates
 the first `hello`, and applies configured hardware mappings. Without a selected
 backend/port, the service runs in a disconnected state.
 
-Currently implemented endpoints:
+Required endpoints:
 
 - `GET /status`
 - `POST /dut/capture`
@@ -1146,12 +922,10 @@ projection and always includes `detail_truncated`. Schema-defined context is
 bounded by its field contracts and never carries arbitrary exception text, a
 wire frame, or a UART payload.
 
-The current mapper returns `internal_error` for otherwise unmapped exceptions,
-applies the shared bounded diagnostic projection, and always emits
-`detail_truncated`. Reconnect timeout and reconnect-limit failures also return
-their exact schema-defined context. Remaining error-specific context contracts,
-including complete `backend_input_error` classification, are implemented with
-their owning workflows rather than inferred from arbitrary exception text.
+Otherwise unmapped exceptions return `internal_error`. Every mapping applies
+the shared bounded diagnostic projection and emits `detail_truncated`.
+Error-specific context belongs to the originating workflow and is never inferred
+from arbitrary exception text.
 
 `unsupported_session_schema` context contains `session_id`,
 `detected_schema_version`, `supported_schema_versions: [1]`, and `operation`.
@@ -1219,11 +993,7 @@ port, preserve pre-policy `backend_capabilities`, report filtered
 `uart_send.tx_policy_enabled` plus source `hardware.uart.tx_enabled`. This is
 software permission, not physical TX state or readback. Operations gate only on
 effective `capabilities`. Status omits or marks unsupported control/event state
-for the Basic backend. The current status model implements the identity,
-capability layers, TX-policy source, current segment provenance, initial
-backend-specific integrity, connection state, active workflow, bounded
-reconnect countdown, and CLI reconnect presentation. Commanded-boot-mode state
-remains pending.
+for the Basic backend.
 
 `GET /dut/logs` accepts optional `session_id` and integer `lines`, default 300,
 in the inclusive range 1..1000. Booleans and path-unsafe IDs are
@@ -1373,8 +1143,7 @@ RFC 3339 UTC `configured_at`, and optional raw firmware
 `device_timestamp_us`. Reset and boot-mode responses return RFC 3339 UTC
 `performed_at` and optional raw `device_timestamp_us`; boot-mode success also
 echoes the accepted `mode`. Rejections must leave
-prior accepted state unchanged. Current action endpoints expose the raw command
-timestamp as legacy `timestamp_us`; this host API rename remains Phase 1 work.
+prior accepted state unchanged.
 
 Wire command acknowledgements retain raw `timestamp_us`. A control action
 recorded in a session uses `segment_id` and normalized segment-relative
@@ -1388,8 +1157,6 @@ and out-of-range values return `invalid_argument` before capability checks,
 role checks, or transport dispatch. Success returns the accepted `pulse_ms`,
 `performed_at`, and optional `device_timestamp_us`. A reset performed within a
 boot-test session stores `pulse_ms` in its normalized control-action evidence.
-Core command validation already enforces the numeric range; response echo and
-session control-action persistence are not implemented yet.
 
 `POST /dut/boot-mode` maps `normal` to the boot role's configured idle behavior
 and `bootloader` to its active behavior. The accepted command persists until it
@@ -1397,8 +1164,6 @@ is changed, the mapping is replaced/reapplied, the backend disconnects, or a
 safety fault forces high impedance. An accepted mapping starts in `normal`.
 `POST /dut/boot-test` requires only `reset`, snapshots nullable
 `commanded_boot_mode` in the session, and does not issue a boot-mode command.
-Current code sends and role-gates boot-mode commands but does not yet echo the
-mode, track/report commanded state, or store its session snapshot.
 
 `POST /dut/wait-pattern` accepts a Unicode `pattern` and numeric `timeout_s`.
 The UTF-8-encoded pattern must be 1..256 bytes and contain neither CR nor LF.
@@ -1476,8 +1241,8 @@ If result persistence fails after dispatch, Device Core returns
 completion is unknown. A failed dispatched request returns its canonical
 backend error with `attempt_id` and `bytes_accepted` in `context`. The host-side
 core workflow, service endpoint, CLI command, Basic/Enhanced adapters, result
-reservation, and perturbation recording are implemented. The v1 success schema
-and parser accept `bytes_accepted`; Enhanced send requires that count and a raw
+reservation, and perturbation recording use one contract. The v1 success schema
+and parser include `bytes_accepted`; Enhanced send requires that count and a raw
 timestamp, while Basic retries ordered short writes to completion.
 
 UART-send completion is all-or-error at the API boundary, not electrically
@@ -1495,8 +1260,6 @@ This response field remains a count for compatibility. Native
 `metadata.json.segments` is the bounded object array; session list summaries
 name its integer projection `segment_count`, while native session detail
 includes the validated metadata array.
-The current `overflow: bool` response field is replaced during the Phase 1A
-metadata/API migration.
 
 `POST /dut/capture` and `POST /dut/boot-test` require explicit numeric
 `duration_s` with no default. It must be finite and satisfy
@@ -1525,7 +1288,7 @@ Minimum Phase 1 commands:
 - `dutchmate stop`
 - `dutchmate status`
 
-Currently implemented startup/discovery behavior:
+Required startup/discovery behavior:
 
 - `dutchmate devices [--all]` lists DUTchMate candidates or all serial ports.
 - `dutchmate start --serial-port <device>` selects an explicit device.
@@ -1533,7 +1296,7 @@ Currently implemented startup/discovery behavior:
   starts disconnected when there are none, and rejects ambiguous multiple
   candidates.
 
-Target Phase 1 startup must require an explicit Basic or Enhanced backend mode
+Phase 1 startup requires an explicit Basic or Enhanced backend mode
 from CLI `--backend` or `[backend].mode`; there is no default. CLI values
 override configuration. Basic mode requires `--serial-port` or
 `[backend].serial_port`, opens that port as raw UART using `[hardware.uart]`
@@ -1546,7 +1309,7 @@ must pass `hello` and protocol-version validation, and a validation failure must
 not fall back to Basic. Startup selects only one backend and must not compose
 capabilities from multiple serial devices.
 
-Target CLI/config surface:
+CLI/config surface:
 
 ```text
 dutchmate start --backend <basic|enhanced> [--serial-port <device>] [--baudrate <rate>]
@@ -1584,12 +1347,12 @@ so enabling receive also enables the debugger-to-DUT channel and may drive
 UART idle. Independent Enhanced TX isolation requires a later hardware
 revision; it is not a Phase 1 firmware behavior.
 
-Target `dutchmate devices` lists all ports from metadata and never opens them.
+`dutchmate devices` lists all ports from metadata and never opens them.
 It labels trusted DUTchMate USB identity matches as `enhanced_candidate` and all
 others as unverified `generic`. Fixed VID/PID and finalized USB identity are the
-long-term match; the current free-text hint is temporary.
+authoritative Enhanced match.
 
-Currently implemented hardware-control commands:
+Required hardware-control commands:
 
 - `dutchmate gpio mode <channel> <role> <dut_signal> --mode <open_drain|push_pull> --active-level <low|high> [--idle-level <low|high>]`
 - `dutchmate dut reset [--pulse-ms <ms>]`
@@ -1605,7 +1368,7 @@ accepted role mapping they return `not_configured`.
 prints the exact strings without trimming or normalization. Service and Device
 Core repeat the validation and remain authoritative.
 
-Currently implemented workflow and session-query commands:
+Required workflow and session-query commands:
 
 - `dutchmate capture --seconds <seconds>`
 - `dutchmate boot-test --seconds <seconds>`
@@ -2094,7 +1857,7 @@ Additional ecosystems may be added after this baseline is stable.
 - The Enhanced Debug Helper implements the same UART receive interface and uses
   the same downstream capture/session pipeline as Phase 1A.
 - The schematic and firmware use the complete Phase 1 Revision A Pico mapping
-  from `docs/dutchmate_hardware_architecture.md` section 10.1 without implicit
+  from `hardware/schematics/revision_a.md` section 10.1 without implicit
   channel swaps.
 - The first prototype uses the Revision A provisional logic-device MPNs and
   records results for leakage, sequencing, isolation, voltage-level, and UART

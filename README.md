@@ -14,74 +14,19 @@ Phase 1 supports two mutually exclusive backends:
 Both use one shared host processing and session pipeline. Hybrid operation is
 not supported.
 
-## Current Status
+## Development
 
-The repository currently contains the first host-side Phase 1 foundation:
+Always resume work from [`docs/development_status.md`](docs/development_status.md).
+It is the only source for the active phase, completed work, and next step.
 
-- backend-neutral identity, timestamp provenance, normalized event, event-source,
-  and backend-error contracts with shared fake-source tests
-- backend-independent UART processing, capture recording, and session evidence
-  writes behind normalized backend and storage contracts
-- Enhanced v1 NDJSON schemas, examples, parser, command encoders, discovery,
-  and synchronous serial transport
-- exact UART byte preservation, complete-line reconstruction, and keyword
-  pattern detection with source event/byte coordinates and bounded evidence
-  excerpts
-- deterministic capture/boot-test `first_error` summaries that exclude the
-  `BOOT_OK` success marker
-- independently bounded derived UART lines with exact oversized-line
-  descriptors while preserving all admitted raw evidence
-- filesystem sessions with configurable per-session evidence budgets, durable
-  retrying appends, atomic complete-document replacement, crash-recoverable
-  multi-file evidence units, summaries, and discovery
-- GPIO control-channel configuration state and guarded reset/boot actions
-- shared exact GPIO identifier/electrical validation across config, core,
-  service, CLI, and the Enhanced v1 command schema
-- explicit Basic/Enhanced startup selection with validated backend-specific
-  serial settings and Basic raw-port opening without a `hello` probe
-- Basic raw-byte FIFO ingestion with per-read host-monotonic provenance, shared
-  capture recording, and TX-gated ordered writes that cannot report partial
-  success
-- explicit backend support versus effective TX-policy capabilities, exact
-  identity, per-segment timestamp provenance, and UART-loss integrity in
-  runtime sessions, service status/capture responses, and CLI output
-- finite capture and reset-triggered boot-test orchestration with an explicit
-  `0 < duration_s <= 300` boundary
-- schema-v1 runtime capture/boot-test lifecycle metadata with active ownership,
-  terminal completion/failure, bounded errors, and legacy-v0 separation
-- durable disconnect/reconnect session mutations with contiguous bounded
-  segments, explicit discontinuity evidence, and whole-unit quota admission
-- deterministic capture/boot-test reconnect coordination that preserves the
-  original monotonic deadline, replaces segment-bound sources, and never joins
-  derived UART lines across a disconnect
-- bounded Basic port reopening and Enhanced reopen/hello validation with live
-  runtime connection-state reporting and replaceable control transport
-- pre-backend startup recovery that resolves interrupted evidence transactions
-  and abandons stale native active sessions while preserving legacy and
-  unsupported-schema evidence
-- FastAPI endpoints and CLI commands for service lifecycle, device listing,
-  status, capture, boot-test, GPIO mode, reset, and boot mode
-- bounded native/legacy session list and detail queries with stable opaque
-  pagination, artifact manifests, and read-only legacy compatibility output
-- bounded native UART replay through `GET /dut/logs` and `dutchmate logs`, with
-  active/latest-terminal selection, exact bytes, partial/oversized records,
-  provenance, evidence-quality facts, and a deterministic response-size cap
-- standalone new-evidence-only literal wait sessions through
-  `POST /dut/wait-pattern` and `dutchmate wait`, with bounded validation,
-  early match completion, ordinary successful timeouts, and stored match references
-- policy-gated text UART transmission through `POST /dut/uart/send` and
-  `dutchmate send`, with exact 1..1024-byte validation, complete-write backend
-  acknowledgements, and durable attempt/result evidence for forced in-session sends
+Durable requirements and architecture are intentionally separate from progress:
 
-The full asynchronous Enhanced adapter, continuous background ingestion outside
-active workflows, admission for future control evidence, retention,
-generic Enhanced control actions,
-RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
-Current UART, buffer telemetry, and finalized line-limit units enforce exact
-whole-unit evidence budgets and clean `size_limit` terminalization.
-
-The ordered Phase 1 backlog and acceptance criteria are in
-`docs/phase1_implementation_spec.md`.
+- [`docs/phase1_implementation_spec.md`](docs/phase1_implementation_spec.md)
+  defines Phase 1 behavior and acceptance criteria.
+- [`docs/software_architecture.md`](docs/software_architecture.md) defines code
+  ownership and dependency direction.
+- [`docs/developer_guide.md`](docs/developer_guide.md) defines setup, commands,
+  and contribution workflow.
 
 ## Quick Start
 
@@ -118,16 +63,16 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 
 | Document | Canonical purpose |
 |---|---|
-| `docs/project_context.md` | Product architecture, scope, safety, roadmap, and known limitations. |
-| `docs/phase1_implementation_spec.md` | Normative Phase 1 order, backend/API/session/protocol requirements, tests, and done criteria. |
-| `docs/software_architecture.md` | Current Python data flow, module ownership, and migration boundaries. |
-| `docs/architecture_audit.md` | 2026-08-17 constraint-based code-structure audit and refactoring sequence. |
+| `docs/development_status.md` | Only progress tracker: active phase, next step, completed work, and ordered queue. |
+| `docs/project_context.md` | Durable product scope, safety, invariants, and phase definitions. |
+| `docs/phase1_implementation_spec.md` | Normative Phase 1 backend/API/session/protocol requirements, tests, and done criteria. |
+| `docs/software_architecture.md` | Python data flow, module ownership, and dependency boundaries. |
 | `docs/developer_guide.md` | Workspace layout, setup, package boundaries, and contribution workflow. |
-| `docs/dutchmate_hardware_architecture.md` | Revision A voltage-domain hardware, pin map, BOM, and validation checklist. |
+| `hardware/schematics/revision_a.md` | Revision A voltage-domain hardware, pin map, BOM, and validation checklist. |
 | `docs/gpio_configuration_semantics.md` | Control-channel identifiers, electrical modes, state, workflows, and reporting. |
 | `docs/reconnect_session_semantics.md` | Reconnect, segment, timestamp, resume, and restart behavior. |
 | `docs/ring_buffer_sizing_plan.md` | Phase 1B buffer baseline, telemetry, and validation method. |
-| `hardware/validation/phase1_ring_buffer.md` | Measurement record; currently an unvalidated template. |
+| `hardware/validation/phase1_ring_buffer.md` | Ring-buffer measurements and final empirical decision record. |
 | `docs/mcp_integration_plan.md` | Phase 2 stateless MCP `2026-07-28` transport, tool set, responses, and tests. |
 | `docs/debug_agent_context_contract.md` | Phase 4 bounded context, provider boundary, and report contract. |
 
