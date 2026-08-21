@@ -43,7 +43,7 @@ Python packages:
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
-| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28`/SDK 2.x HTTP client foundation; stateless stdio runtime is pending. |
+| `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28`/SDK 2.x HTTP client and stateless stdio composition; tool registration is pending. |
 
 Current core modules:
 

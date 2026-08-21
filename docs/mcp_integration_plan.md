@@ -30,10 +30,11 @@ Current implementation note: `apps/mcp_server` contains the tested asynchronous
 Device Core HTTP client for the nine Phase 2 endpoint mappings. It validates
 tool-shaped arguments before dispatch, uses bounded workflow timeouts, preserves
 canonical service error payloads, and distinguishes unavailable or malformed
-service responses. Its dependency and workspace lock now select MCP SDK 2.x and
-protocol `2026-07-28`. The stdio tool server is still pending: `dutchmate mcp`
-exits with a placeholder error, and the `dutchmate-mcp` console script raises
-`NotImplementedError`.
+service responses. Its dependency and workspace lock select MCP SDK 2.x and
+protocol `2026-07-28`. The `dutchmate-mcp` console script now runs a stateless,
+stdio-only `MCPServer` with fixed identity and finite private discovery/catalog
+cache hints. Its catalog is intentionally empty until the next tool-registration
+slice. The `dutchmate mcp` CLI command remains a placeholder until CLI wiring.
 
 No current DUTchMate client or deployment requires an independently hosted MCP
 endpoint, so Streamable HTTP is outside Phase 2 scope. The deprecated HTTP+SSE
@@ -433,9 +434,10 @@ Implement Phase 2 in these independently testable slices:
 
 1. **Protocol/dependency baseline (complete):** require MCP SDK 2.x, lock it,
    record `2026-07-28` as normative, and retain the tested Device Core HTTP port.
-2. **Stateless server composition:** create one `MCPServer` with fixed identity,
-   instructions, private finite cache hints, deterministic tools, and stdio-only
-   `run()` wiring. Do not implement handshake/session state in application code.
+2. **Stateless server composition (complete):** create one `MCPServer` with fixed
+   identity, instructions, private finite cache hints, a deterministic initially
+   empty catalog, and stdio-only `run()` wiring. No application handshake/session
+   state is introduced.
 3. **Tool registration and error projection:** register the nine Phase 2 tools
    in documented order, return structured complete results, and translate
    actionable validation/service failures into `isError: true` tool results.

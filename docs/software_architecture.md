@@ -386,9 +386,10 @@ validates tool-shaped arguments before dispatch, and preserves structured
 service errors without owning serial, session, GPIO, or AI logic. The package is
 locked to official MCP Python SDK 2.x and the stateless `2026-07-28` protocol
 model; Device Core IDs remain explicit tool data rather than hidden MCP session
-state. SDK-owned discovery, per-request metadata, result typing, deterministic
-private-cache tool listing, stdio server composition, and tool registration are
-the next delivery boundary. See `docs/mcp_integration_plan.md`.
+state. Its fixed-identity `MCPServer` composition delegates discovery, per-request
+metadata, result typing, private cache hints, and stdio framing to the SDK. The
+catalog remains empty until the next delivery boundary registers the nine
+documented tools and projects their errors. See `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 
