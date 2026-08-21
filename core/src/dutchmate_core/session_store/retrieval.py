@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, Literal, cast
 
+import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
 from dutchmate_core.session_store.models import (
@@ -219,6 +220,7 @@ def _native_detail(paths: SessionPaths, initial_metadata: dict[str, object]) -> 
             _artifact_size(paths.detected_patterns)
             patterns = _persistence.read_json_list(paths.detected_patterns)
             summary = _validated_summary(metadata, patterns, paths, operation=operation)
+            _validate_wait_reference(summary, patterns)
             uart_records = _count_jsonl(paths.uart_events)
             hardware_records, hardware_counts, unresolved = _hardware_summary(
                 paths.hardware_events
@@ -283,6 +285,7 @@ def _stable_native_summary(
             _artifact_size(paths.detected_patterns)
             patterns = _persistence.read_json_list(paths.detected_patterns)
             summary = _validated_summary(metadata, patterns, paths, operation=operation)
+            _validate_wait_reference(summary, patterns)
             metadata_after = _read_metadata(paths, operation=operation)
         except (
             OSError,
@@ -382,6 +385,20 @@ def _native_item(summary: SessionSummary) -> NativeSessionListItem:
     )
 
 
+def _validate_wait_reference(
+    summary: SessionSummary,
+    patterns: list[object],
+) -> None:
+    if summary.workflow != "wait_pattern" or summary.detected_pattern_index is None:
+        return
+    detected = _evidence.detected_pattern_at(
+        patterns,
+        summary.detected_pattern_index,
+    )
+    if detected.pattern != summary.wait_pattern:
+        raise ValueError("wait-pattern metadata does not reference its requested pattern")
+
+
 def _build_native_detail(
     *,
     metadata: dict[str, object],
@@ -419,6 +436,12 @@ def _build_native_detail(
         hardware_event_counts=_counter_projection(hardware_counts),
         unresolved_uart_tx_attempts=unresolved_uart_tx_attempts,
         artifacts=artifacts,
+        wait_pattern=summary.wait_pattern,
+        match_mode=summary.match_mode,
+        case_sensitive=summary.case_sensitive,
+        timeout_s=summary.timeout_s,
+        matched=summary.matched,
+        detected_pattern_index=summary.detected_pattern_index,
     )
 
 

@@ -1099,10 +1099,10 @@ Currently implemented endpoints:
 - `GET /sessions`
 - `GET /sessions/{id}`
 - `GET /dut/logs`
+- `POST /dut/wait-pattern`
 
 Remaining target Phase 1 endpoints:
 
-- `POST /dut/wait-pattern`
 - `POST /dut/uart/send`
 - `POST /sessions/{id}/baseline`
 - `DELETE /sessions/{id}/baseline`
@@ -1603,6 +1603,7 @@ Currently implemented workflow and session-query commands:
 - `dutchmate sessions [--limit <count>] [--cursor <opaque>]`
 - `dutchmate session <session_id>`
 - `dutchmate logs [--session <session_id>] --last <lines>`
+- `dutchmate wait <pattern> --timeout <seconds>`
 
 `capture` must work with either backend. `boot-test` requires the Enhanced
 backend, `gpio_control`, and a configured `reset` role.
@@ -1616,7 +1617,6 @@ Core workflow deadline.
 
 Remaining target Phase 1 commands:
 
-- `dutchmate wait <pattern> --timeout <seconds>`
 - `dutchmate send <cmd> [--no-newline] [--force]`
 - `dutchmate mark-baseline <session_id>`
 - `dutchmate clear-baseline <session_id>`

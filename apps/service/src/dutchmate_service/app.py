@@ -19,6 +19,7 @@ from dutchmate_core.session_store.store import (
     SessionDetail,
     SessionListPage,
     SessionSummary,
+    WaitPatternResult,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.errors import register_error_handlers
@@ -28,6 +29,7 @@ from dutchmate_service.schemas import (
     CaptureRequest,
     GpioModeRequest,
     ResetRequest,
+    WaitPatternRequest,
     capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
@@ -35,6 +37,7 @@ from dutchmate_service.schemas import (
     session_detail_payload,
     session_list_payload,
     status_payload,
+    wait_pattern_payload,
 )
 from dutchmate_service.startup import apply_startup_hardware_config, build_startup_runtime
 
@@ -68,6 +71,9 @@ class RuntimeProvider(Protocol):
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
         """Reset the DUT and capture boot evidence into a session."""
+
+    def wait_pattern(self, *, pattern: str, timeout_s: float) -> WaitPatternResult:
+        """Wait for one literal in new UART evidence."""
 
     def list_sessions(
         self,
@@ -171,5 +177,14 @@ def create_app(
     def run_boot_test(request: BootTestRequest) -> dict[str, object]:
         summary = runtime_provider.run_boot_test(duration_s=request.duration_s)
         return capture_summary_payload(summary)
+
+    @app.post("/dut/wait-pattern")
+    def wait_pattern(request: WaitPatternRequest) -> dict[str, object]:
+        return wait_pattern_payload(
+            runtime_provider.wait_pattern(
+                pattern=request.pattern,
+                timeout_s=request.timeout_s,
+            )
+        )
 
     return app

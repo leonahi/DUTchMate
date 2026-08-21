@@ -34,17 +34,23 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
+from dutchmate_core.log_processing.patterns import DEFAULT_PATTERNS, PatternDetector
 from dutchmate_core.session_store.models import (
+    FirstError,
     RecentLogs,
     SessionDetail,
     SessionListPage,
     SessionSummary,
     SessionWorkflow,
+    WaitPatternResult,
 )
+from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_source,
+    validate_wait_pattern,
+    validate_wait_timeout,
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
@@ -90,6 +96,13 @@ class DeviceCoreSessionStorage(CaptureSessionStorage, Protocol):
     ) -> RecentLogs:
         """Return bounded recent UART replay for one selected native session."""
 
+    def load_detected_pattern(
+        self,
+        session_id: str,
+        detected_pattern_index: int,
+    ) -> FirstError:
+        """Return one authoritative stored detected-pattern record."""
+
 
 @dataclass(frozen=True, slots=True)
 class DeviceCoreStatus:
@@ -127,6 +140,13 @@ class _SessionCaptureSource:
         if event.segment_id != self._source_segment_id:
             raise BackendInputError("backend event source changed its bound segment ID")
         return replace(event, segment_id=0)
+
+    def discard_pending_events(self) -> None:
+        """Advance a wait cursor on the wrapped source when supported."""
+
+        discard = getattr(self._source, "discard_pending_events", None)
+        if callable(discard):
+            discard()
 
 
 class DeviceCoreRuntime:
@@ -399,6 +419,51 @@ class DeviceCoreRuntime:
             start_action=self._action_runner.reset_dut,
         )
 
+    def wait_pattern(
+        self,
+        *,
+        pattern: str,
+        timeout_s: float,
+    ) -> WaitPatternResult:
+        """Capture new UART evidence until one literal completes or time expires."""
+
+        validated_pattern = validate_wait_pattern(pattern)
+        validated_timeout = validate_wait_timeout(timeout_s)
+        detector_patterns = (validated_pattern,) + tuple(
+            pattern_name
+            for pattern_name in DEFAULT_PATTERNS
+            if pattern_name != validated_pattern
+        )
+        summary = self._run_capture_workflow(
+            duration_s=validated_timeout,
+            command="wait-pattern",
+            workflow="wait_pattern",
+            required_capability="uart_receive",
+            uart_processor=UartCaptureProcessor(
+                pattern_detector=PatternDetector(detector_patterns)
+            ),
+            requested_pattern=validated_pattern,
+            discard_preexisting=True,
+        )
+        if summary.matched is None or summary.wait_pattern != validated_pattern:
+            raise DeviceCoreRuntimeError("Wait-pattern session result is incomplete")
+        match = (
+            self._session_store.load_detected_pattern(
+                summary.session_id,
+                summary.detected_pattern_index,
+            )
+            if summary.detected_pattern_index is not None
+            else None
+        )
+        if match is not None and match.pattern != validated_pattern:
+            raise DeviceCoreRuntimeError("Wait-pattern detected record does not match request")
+        return WaitPatternResult(
+            summary=summary,
+            pattern=validated_pattern,
+            matched=summary.matched,
+            match=match,
+        )
+
     def _run_capture_workflow(
         self,
         *,
@@ -406,9 +471,33 @@ class DeviceCoreRuntime:
         command: str,
         workflow: SessionWorkflow,
         required_role: str | None = None,
+        required_capability: BackendCapability | None = None,
         start_action: Callable[[], DeviceActionResult] | None = None,
+        uart_processor: UartCaptureProcessor | None = None,
+        requested_pattern: str | None = None,
+        discard_preexisting: bool = False,
     ) -> SessionSummary:
         with self._operation_lock:
+            effective_capabilities = apply_capability_policy(
+                self._backend_capabilities,
+                self._capability_policy,
+            )
+            if (
+                required_capability is not None
+                and required_capability not in effective_capabilities
+            ):
+                raise DeviceActionError(
+                    error="unsupported_capability",
+                    detail=f"Operation requires effective capability '{required_capability}'",
+                    context={
+                        "operation": workflow,
+                        "backend_mode": self._backend_mode,
+                        "required_capabilities": [required_capability],
+                        "available_capabilities": sorted(effective_capabilities),
+                        "backend_capabilities": sorted(self._backend_capabilities),
+                        "disabled_by_policy": [],
+                    },
+                )
             self._require_connected()
             self._require_no_active_capture()
             if self._message_source is None:
@@ -447,10 +536,13 @@ class DeviceCoreRuntime:
                 reconnect_timeout_s=self._reconnect_timeout_s,
                 backend_snapshot=backend_snapshot,
                 workflow=workflow,
+                uart_processor=uart_processor,
                 start_action=start_action,
                 on_session_started=self._set_active_session,
                 reconnect=reconnect,
                 on_backend_disconnected=self._mark_backend_disconnected,
+                requested_pattern=requested_pattern,
+                discard_preexisting=discard_preexisting,
             )
             if summary.integrity is not None:
                 with self._operation_lock:

@@ -95,6 +95,8 @@ class CaptureSessionStorage(Protocol):
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        wait_pattern: str | None = None,
+        timeout_s: float | None = None,
     ) -> SessionHandle:
         """Create one capture session."""
 
@@ -105,7 +107,7 @@ class CaptureSessionStorage(Protocol):
         event: UartReceiveEvent,
         result: UartCaptureResult,
         timestamp_epoch: int = 0,
-    ) -> None:
+    ) -> tuple[int, ...]:
         """Persist one UART evidence unit."""
 
     def append_uart_processing_result(
@@ -162,6 +164,15 @@ class CaptureSessionStorage(Protocol):
     ) -> None:
         """Complete an active native session."""
 
+    def complete_wait_pattern(
+        self,
+        handle: SessionHandle,
+        *,
+        matched: bool,
+        detected_pattern_index: int | None,
+    ) -> None:
+        """Complete an active wait-pattern session."""
+
     def fail_session(
         self,
         handle: SessionHandle,
@@ -174,7 +185,6 @@ class CaptureSessionStorage(Protocol):
 
     def summarize_session(self, session_id: str) -> SessionSummary:
         """Return the stored session summary."""
-
 
 class TransportCaptureRunner:
     """Record parsed transport messages until one fixed workflow deadline."""
@@ -190,7 +200,12 @@ class TransportCaptureRunner:
         self._deadline = deadline
         self._clock = monotonic_clock or time.monotonic
 
-    def run(self, recorder: "CaptureRecorder") -> None:
+    def run(
+        self,
+        recorder: "CaptureRecorder",
+        *,
+        requested_pattern: str | None = None,
+    ) -> "CaptureRecordResult | None":
         """Record supported messages until the host-monotonic deadline."""
 
         while self._clock() < self._deadline:
@@ -204,7 +219,12 @@ class TransportCaptureRunner:
                     recorder.record_segment_context(segment)
                 result = recorder.record_event(event)
                 if result.event_type == "size_limit":
-                    break
+                    return None
+                if requested_pattern is not None and any(
+                    match.pattern == requested_pattern for match in result.matches
+                ):
+                    return result
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +235,7 @@ class CaptureRecordResult:
     event_type: str
     lines: tuple[UartLine, ...] = ()
     matches: tuple[PatternMatch, ...] = ()
+    detected_pattern_indexes: tuple[int, ...] = ()
 
 
 class CaptureRecorder:
@@ -251,6 +272,8 @@ class CaptureRecorder:
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        wait_pattern: str | None = None,
+        timeout_s: float | None = None,
     ) -> "CaptureRecorder":
         """Create a capture session and return a recorder for it."""
 
@@ -263,6 +286,8 @@ class CaptureRecorder:
             workflow=workflow,
             duration_s=duration_s,
             reconnect_timeout_s=reconnect_timeout_s,
+            wait_pattern=wait_pattern,
+            timeout_s=timeout_s,
         )
         return cls(
             session_store=session_store,
@@ -298,14 +323,18 @@ class CaptureRecorder:
         if isinstance(event, UartReceiveEvent):
             candidate_processor = self._uart_processor.clone()
             result = candidate_processor.process_event(event)
-            if not self._record_with_quota(
-                lambda: self._session_store.append_uart_capture(
+            detected_pattern_indexes: tuple[int, ...] = ()
+
+            def record_uart() -> None:
+                nonlocal detected_pattern_indexes
+                detected_pattern_indexes = self._session_store.append_uart_capture(
                     self._session_handle,
                     event=event,
                     result=result,
                     timestamp_epoch=event.segment_id,
                 )
-            ):
+
+            if not self._record_with_quota(record_uart):
                 return CaptureRecordResult(
                     session_id=self.session_id,
                     event_type="size_limit",
@@ -316,6 +345,7 @@ class CaptureRecorder:
                 event_type="uart_receive",
                 lines=result.lines,
                 matches=result.matches,
+                detected_pattern_indexes=detected_pattern_indexes,
             )
 
         if isinstance(event, BufferOverflowEvent):
@@ -470,6 +500,8 @@ class CaptureWorkflow:
         on_session_started: Callable[[str], None] | None = None,
         reconnect: CaptureReconnect | None = None,
         on_backend_disconnected: Callable[[], None] | None = None,
+        requested_pattern: str | None = None,
+        discard_preexisting: bool = False,
     ) -> SessionSummary:
         """Create, record, terminalize, and summarize one capture session."""
 
@@ -484,6 +516,12 @@ class CaptureWorkflow:
             else None
         )
         native_session = snapshot is not None
+        if (workflow == "wait_pattern") != (requested_pattern is not None):
+            raise ValueError("wait-pattern workflow requires exactly one requested pattern")
+        if discard_preexisting:
+            discard = getattr(source, "discard_pending_events", None)
+            if callable(discard):
+                discard()
         recorder = CaptureRecorder.start(
             session_store=self._session_store,
             command=command,
@@ -493,9 +531,20 @@ class CaptureWorkflow:
             uart_processor=uart_processor,
             backend_snapshot=snapshot,
             workflow=workflow if native_session else None,
-            duration_s=validated_duration_s if native_session else None,
+            duration_s=(
+                validated_duration_s
+                if native_session and workflow in {"capture", "boot_test"}
+                else None
+            ),
             reconnect_timeout_s=reconnect_timeout_s if native_session else None,
+            wait_pattern=requested_pattern if native_session else None,
+            timeout_s=(
+                validated_duration_s
+                if native_session and workflow == "wait_pattern"
+                else None
+            ),
         )
+        matched_pattern_index: int | None = None
         try:
             if on_session_started is not None:
                 on_session_started(recorder.session_id)
@@ -511,7 +560,15 @@ class CaptureWorkflow:
                     monotonic_clock=clock,
                 )
                 try:
-                    runner.run(recorder)
+                    record_result = runner.run(
+                        recorder,
+                        requested_pattern=requested_pattern,
+                    )
+                    if record_result is not None and requested_pattern is not None:
+                        matched_pattern_index = self._requested_pattern_index(
+                            record_result,
+                            requested_pattern,
+                        )
                     break
                 except BackendDisconnectedError as disconnect_error:
                     if on_backend_disconnected is not None:
@@ -571,7 +628,14 @@ class CaptureWorkflow:
                     current_source = replacement.source
             recorder.finalize()
             if native_session and not recorder.terminalized:
-                self._session_store.complete_session(recorder.session_handle)
+                if workflow == "wait_pattern":
+                    self._session_store.complete_wait_pattern(
+                        recorder.session_handle,
+                        matched=matched_pattern_index is not None,
+                        detected_pattern_index=matched_pattern_index,
+                    )
+                else:
+                    self._session_store.complete_session(recorder.session_handle)
         except Exception as exc:
             failure = exc
             if not isinstance(failure, SessionPersistenceError):
@@ -603,6 +667,22 @@ class CaptureWorkflow:
                 raise failure from exc
             raise
         return self._session_store.summarize_session(recorder.session_id)
+
+    @staticmethod
+    def _requested_pattern_index(
+        result: CaptureRecordResult,
+        requested_pattern: str,
+    ) -> int:
+        if len(result.matches) != len(result.detected_pattern_indexes):
+            raise ValueError("persisted detected-pattern indexes do not match scan results")
+        for match, detected_index in zip(
+            result.matches,
+            result.detected_pattern_indexes,
+            strict=True,
+        ):
+            if match.pattern == requested_pattern:
+                return detected_index
+        raise ValueError("requested pattern match has no persisted detected record")
 
     @staticmethod
     def _failure_code(exc: Exception) -> str:

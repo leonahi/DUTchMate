@@ -66,10 +66,13 @@ The repository currently contains the first host-side Phase 1 foundation:
 - bounded native UART replay through `GET /dut/logs` and `dutchmate logs`, with
   active/latest-terminal selection, exact bytes, partial/oversized records,
   provenance, evidence-quality facts, and a deterministic response-size cap
+- standalone new-evidence-only literal wait sessions through
+  `POST /dut/wait-pattern` and `dutchmate wait`, with bounded validation,
+  early match completion, ordinary successful timeouts, and stored match references
 
 The full asynchronous Enhanced adapter, continuous background ingestion outside
 active workflows, admission for future control/TX evidence, retention,
-wait-pattern, UART-send service/CLI exposure, generic Enhanced control actions,
+UART-send service/CLI exposure, generic Enhanced control actions,
 RP2040 firmware, MCP runtime, and HIL validation are not implemented yet.
 Current UART, buffer telemetry, and finalized line-limit units enforce exact
 whole-unit evidence budgets and clean `size_limit` terminalization.

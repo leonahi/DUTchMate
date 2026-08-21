@@ -247,6 +247,20 @@ class BasicBackendEventSource:
 
         return self._next_event(self._read_timeout_s)
 
+    def discard_pending_events(self) -> None:
+        """Advance a workflow ingestion cursor past already-normalized UART events."""
+
+        retained: list[_ReaderOutcome] = []
+        while True:
+            try:
+                outcome = self._outcomes.get_nowait()
+            except Empty:
+                break
+            if not isinstance(outcome, UartReceiveEvent):
+                retained.append(outcome)
+        for outcome in retained:
+            self._outcomes.put(outcome)
+
     def close(self) -> None:
         """Stop the reader and close the Basic serial connection."""
 

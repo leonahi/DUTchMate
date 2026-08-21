@@ -231,6 +231,8 @@ Owns filesystem-backed sessions under
 - selects an explicit, active, or newest terminal native session and replays
   persisted UART events through the shared segment/channel line buffer, retaining
   bounded complete, partial, and oversized records with evidence coordinates
+- records wait-pattern policy and authoritative detected-pattern references in
+  the same native lifecycle/evidence schema used by other capture-like workflows
 - rejects path-unsafe session IDs
 
 Session persistence and service delivery share the core `diagnostics`
@@ -337,8 +339,8 @@ format CLI output.
 
 `apps/service` owns the local FastAPI process, selected serial connection, and
 runtime composition. Current endpoints cover status, finite capture, boot-test,
-GPIO mode, reset, boot mode, bounded session list/detail, and bounded recent
-UART replay. Handlers remain
+wait-pattern, GPIO mode, reset, boot mode, bounded session list/detail, and
+bounded recent UART replay. Handlers remain
 thin: core code owns
 validation order, state transitions, and deterministic behavior; service code
 owns request/response serialization and HTTP error mapping.
@@ -351,7 +353,7 @@ serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
 Enhanced hello before resuming. Continuous background ingestion outside active
-workflows, wait-pattern, public UART send, baseline operations, and remaining
+workflows, public UART send, baseline operations, and remaining
 error-specific structured contexts remain
 Phase 1 work.
 
@@ -363,8 +365,8 @@ not import low-level transport code or open serial ports for debug workflows.
 
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
-reset, boot mode, session listing, session detail, and recent logs. Wait-pattern,
-UART send, and baseline commands remain pending.
+reset, boot mode, session listing, session detail, recent logs, and literal
+wait-pattern. UART send and baseline commands remain pending.
 
 ### MCP Server
 

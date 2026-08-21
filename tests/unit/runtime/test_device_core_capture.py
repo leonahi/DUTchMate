@@ -220,6 +220,8 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.run_boot_test(duration_s=0.1)
         with pytest.raises(DeviceActionError, match="capture is already active"):
+            runtime.wait_pattern(pattern="READY", timeout_s=0.1)
+        with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.reset_dut()
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.set_boot_mode(mode="normal")

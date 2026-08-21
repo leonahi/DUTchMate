@@ -28,6 +28,43 @@ def test_create_session_initializes_required_files(tmp_path: Path) -> None:
     assert handle.paths.root == tmp_path / "20260714T123045Z-abc12345"
     assert handle.paths.metadata.exists()
     assert handle.paths.uart_raw.read_bytes() == b""
+
+
+def test_wait_session_stores_policy_and_requires_authoritative_match_index(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="wait-pattern",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="wait_pattern",
+        reconnect_timeout_s=5.0,
+        wait_pattern="READY",
+        timeout_s=2.0,
+    )
+    metadata = store.load_metadata(handle.session_id)
+
+    assert metadata["duration_s"] is None
+    assert metadata["pattern"] == "READY"
+    assert metadata["match_mode"] == "literal"
+    assert metadata["case_sensitive"] is True
+    assert metadata["timeout_s"] == 2.0
+    assert metadata["matched"] is None
+    with pytest.raises(ValueError, match="out of range"):
+        store.complete_wait_pattern(
+            handle,
+            matched=True,
+            detected_pattern_index=0,
+        )
+
+    store.complete_wait_pattern(
+        handle,
+        matched=False,
+        detected_pattern_index=None,
+    )
+    summary = store.summarize_session(handle.session_id)
+    assert summary.end_reason == "timeout"
+    assert summary.matched is False
     assert handle.paths.uart_events.read_text(encoding="utf-8") == ""
     assert handle.paths.hardware_events.read_text(encoding="utf-8") == ""
     assert json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8")) == []

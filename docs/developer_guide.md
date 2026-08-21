@@ -130,6 +130,7 @@ CLI commands:
 - `dutchmate dut boot-mode <normal|bootloader>`
 - `dutchmate sessions`, `session <session_id>`, and
   `logs [--session <session_id>] --last <lines>`
+- `dutchmate wait <pattern> --timeout <seconds>`
 
 The runtime performs finite transport-backed capture and reset-triggered
 boot-test orchestration, with active-workflow conflict guards. Backend-neutral
@@ -139,8 +140,8 @@ coordinates disconnect/resume deadlines and segment-bound source replacement;
 service composition now retries the configured Basic port or validates an exact
 Enhanced identity/hello before publishing a prepared replacement. Major
 remaining Phase 1 areas are the full asynchronous Enhanced adapter, background
-ingestion outside active workflows, retention, wait-pattern, UART-send public
-workflows, generic Enhanced control
+ingestion outside active workflows, retention, UART-send public workflows,
+generic Enhanced control
 actions, RP2040 firmware, and real HIL tests.
 
 ## Adding A Service Endpoint

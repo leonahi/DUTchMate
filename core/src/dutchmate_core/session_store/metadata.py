@@ -24,7 +24,11 @@ from dutchmate_core.session_store.models import (
     SessionWorkflow,
 )
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
-from dutchmate_core.validation import validate_session_id
+from dutchmate_core.validation import (
+    validate_session_id,
+    validate_wait_pattern,
+    validate_wait_timeout,
+)
 
 METADATA_MAX_BYTES = 262144
 MAX_SESSION_SEGMENTS = 32
@@ -54,17 +58,27 @@ def _validate_native_lifecycle_inputs(
     duration_s: float | None,
     reconnect_timeout_s: float | None,
     backend_snapshot: BackendSnapshot | None,
+    wait_pattern: str | None,
+    timeout_s: float | None,
 ) -> None:
     if workflow is None:
-        if duration_s is not None or reconnect_timeout_s is not None:
+        if any(
+            value is not None
+            for value in (duration_s, reconnect_timeout_s, wait_pattern, timeout_s)
+        ):
             raise ValueError("native lifecycle values require a workflow")
         return
     if backend_snapshot is None:
         raise ValueError("native sessions require a backend snapshot")
     if workflow in {"capture", "boot_test"}:
         _require_positive_number(duration_s, "duration_s")
+        if wait_pattern is not None or timeout_s is not None:
+            raise ValueError("capture/boot-test sessions cannot contain wait inputs")
     elif duration_s is not None:
         raise ValueError("wait-pattern duration_s must be null")
+    else:
+        validate_wait_pattern(wait_pattern)
+        validate_wait_timeout(timeout_s)
     _require_positive_number(reconnect_timeout_s, "reconnect_timeout_s")
 
 
@@ -91,6 +105,8 @@ def _initial_metadata(
     workflow: SessionWorkflow | None,
     duration_s: float | None,
     reconnect_timeout_s: float | None,
+    wait_pattern: str | None,
+    timeout_s: float | None,
     evidence_budget_bytes: int,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
@@ -178,6 +194,17 @@ def _initial_metadata(
             "overflow": False,
             "segments": [_backend_segment_json(backend_snapshot, started_at=started_at)],
         }
+        if workflow == "wait_pattern":
+            metadata.update(
+                {
+                    "pattern": wait_pattern,
+                    "match_mode": "literal",
+                    "case_sensitive": True,
+                    "timeout_s": timeout_s,
+                    "matched": None,
+                    "detected_pattern_index": None,
+                }
+            )
     return metadata
 
 
@@ -204,6 +231,12 @@ def _summary_from_metadata(
     reconnect_timeout_s = (
         _optional_positive_number(metadata.get("reconnect_timeout_s")) if native else None
     )
+    wait_pattern = _optional_str(metadata, "pattern") if native else None
+    match_mode = metadata.get("match_mode") if native else None
+    case_sensitive = metadata.get("case_sensitive") if native else None
+    timeout_s = _optional_positive_number(metadata.get("timeout_s")) if native else None
+    matched = metadata.get("matched") if native else None
+    detected_pattern_index = metadata.get("detected_pattern_index") if native else None
     ended_at = _optional_str(metadata, "ended_at") if native else None
     end_reason = _optional_str(metadata, "end_reason") if native else None
     error = _optional_object(metadata.get("error"), "error") if native else None
@@ -214,6 +247,36 @@ def _summary_from_metadata(
             raise ValueError("native session must contain 1..32 segments")
         if workflow in {"capture", "boot_test"} and duration_s is None:
             raise ValueError("native capture-like session duration_s is required")
+        if workflow == "wait_pattern":
+            validate_wait_pattern(wait_pattern)
+            validate_wait_timeout(timeout_s)
+            if match_mode != "literal" or case_sensitive is not True:
+                raise ValueError("native wait-pattern matching policy is invalid")
+            if detected_pattern_index is not None and (
+                isinstance(detected_pattern_index, bool)
+                or not isinstance(detected_pattern_index, int)
+                or detected_pattern_index < 0
+            ):
+                raise ValueError("native wait-pattern detected index is invalid")
+            if state == "active":
+                if matched is not None or detected_pattern_index is not None:
+                    raise ValueError("active wait-pattern result fields must be null")
+            elif not isinstance(matched, bool):
+                raise ValueError("terminal wait-pattern matched flag is invalid")
+            elif matched != (detected_pattern_index is not None):
+                raise ValueError("native wait-pattern match fields disagree")
+        elif any(
+            value is not None
+            for value in (
+                wait_pattern,
+                match_mode,
+                case_sensitive,
+                timeout_s,
+                matched,
+                detected_pattern_index,
+            )
+        ):
+            raise ValueError("non-wait session contains wait-pattern fields")
         if reconnect_timeout_s is None:
             raise ValueError("native session reconnect_timeout_s is required")
         _validate_native_lifecycle_metadata(
@@ -260,6 +323,17 @@ def _summary_from_metadata(
         end_reason=end_reason,
         error=error,
         truncation=_optional_object(metadata.get("truncation"), "truncation") if native else None,
+        wait_pattern=wait_pattern,
+        match_mode=("literal" if match_mode == "literal" else None),
+        case_sensitive=(case_sensitive if isinstance(case_sensitive, bool) else None),
+        timeout_s=timeout_s,
+        matched=(matched if isinstance(matched, bool) else None),
+        detected_pattern_index=(
+            detected_pattern_index
+            if isinstance(detected_pattern_index, int)
+            and not isinstance(detected_pattern_index, bool)
+            else None
+        ),
     )
 
 

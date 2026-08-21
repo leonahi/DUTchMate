@@ -50,6 +50,7 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             error=exc.error,
             detail=exc.detail,
             status_code=_status_for_error(exc.error),
+            context=exc.context,
         )
 
     if isinstance(exc, SessionPersistenceError):
@@ -253,7 +254,7 @@ def _status_for_error(error: str) -> int:
         return 409
     if error == "persistence_fault":
         return 500
-    if error in {"not_configured", "capture_active"}:
+    if error in {"not_configured", "capture_active", "unsupported_capability"}:
         return 409
     if error in {"timeout", "hardware_fault"}:
         return 502

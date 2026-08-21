@@ -40,6 +40,7 @@ from dutchmate_core.session_store.models import (
     SessionState,
     SessionSummary,
     SessionWorkflow,
+    WaitPatternResult,
 )
 from dutchmate_core.session_store.retrieval import (
     DEFAULT_SESSION_PAGE_LIMIT,
@@ -75,6 +76,7 @@ __all__ = [
     "SessionStore",
     "SessionSummary",
     "SessionWorkflow",
+    "WaitPatternResult",
 ]
 
 DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES = session_evidence_budget_bytes(
@@ -286,6 +288,8 @@ class SessionStore:
         workflow: SessionWorkflow | None = None,
         duration_s: float | None = None,
         reconnect_timeout_s: float | None = None,
+        wait_pattern: str | None = None,
+        timeout_s: float | None = None,
     ) -> SessionHandle:
         """Create a new session directory and initialize required files."""
 
@@ -295,6 +299,8 @@ class SessionStore:
             duration_s=duration_s,
             reconnect_timeout_s=reconnect_timeout_s,
             backend_snapshot=backend_snapshot,
+            wait_pattern=wait_pattern,
+            timeout_s=timeout_s,
         )
 
         started_at = self._clock()
@@ -315,6 +321,8 @@ class SessionStore:
             workflow=workflow,
             duration_s=duration_s,
             reconnect_timeout_s=reconnect_timeout_s,
+            wait_pattern=wait_pattern,
+            timeout_s=timeout_s,
             evidence_budget_bytes=self._evidence_budget_bytes,
         )
 
@@ -348,6 +356,65 @@ class SessionStore:
             error=None,
             truncation=None,
         )
+
+    def complete_wait_pattern(
+        self,
+        handle: SessionHandle,
+        *,
+        matched: bool,
+        detected_pattern_index: int | None,
+    ) -> None:
+        """Complete one wait session with an authoritative optional match index."""
+
+        if not isinstance(matched, bool):
+            raise ValueError("wait matched must be a boolean")
+        if matched != (detected_pattern_index is not None):
+            raise ValueError("wait match flag and detected index must agree")
+        if detected_pattern_index is not None and (
+            isinstance(detected_pattern_index, bool)
+            or not isinstance(detected_pattern_index, int)
+            or detected_pattern_index < 0
+        ):
+            raise ValueError("wait detected-pattern index must be non-negative")
+        detected_pattern = (
+            _evidence.detected_pattern_at(
+                _persistence.read_json_list(handle.paths.detected_patterns),
+                detected_pattern_index,
+            )
+            if detected_pattern_index is not None
+            else None
+        )
+
+        def record_wait_result(metadata: dict[str, object]) -> None:
+            if metadata.get("workflow") != "wait_pattern":
+                raise ValueError("wait completion requires a wait-pattern session")
+            if detected_pattern is not None and detected_pattern.pattern != metadata.get(
+                "pattern"
+            ):
+                raise ValueError("wait detected record does not match requested pattern")
+            metadata["matched"] = matched
+            metadata["detected_pattern_index"] = detected_pattern_index
+
+        self._terminalize_session(
+            handle,
+            state="completed",
+            end_reason="pattern_matched" if matched else "timeout",
+            error=None,
+            truncation=None,
+            metadata_mutator=record_wait_result,
+        )
+
+    def load_detected_pattern(
+        self,
+        session_id: str,
+        detected_pattern_index: int,
+    ) -> FirstError:
+        """Load one authoritative reference-bearing detected-pattern record."""
+
+        session_name = _metadata._validate_session_id(session_id)
+        paths = _persistence.session_paths(self._root / session_name)
+        patterns = _persistence.read_json_list(paths.detected_patterns)
+        return _evidence.detected_pattern_at(patterns, detected_pattern_index)
 
     def fail_session(
         self,
@@ -395,6 +462,9 @@ class SessionStore:
             raise ValueError("session lifecycle transition requires active state")
         if metadata_mutator is not None:
             metadata_mutator(metadata)
+        if metadata.get("workflow") == "wait_pattern" and metadata.get("matched") is None:
+            metadata["matched"] = False
+            metadata["detected_pattern_index"] = None
         ended_at = _metadata._format_utc_timestamp(self._clock())
         metadata["state"] = state
         metadata["ended_at"] = ended_at
@@ -509,7 +579,7 @@ class SessionStore:
         event: UartReceiveEvent,
         result: UartCaptureResult,
         timestamp_epoch: int = 0,
-    ) -> None:
+    ) -> tuple[int, ...]:
         """Append one processed normalized UART event to a session."""
 
         _persistence.require_session_appendable(handle)
@@ -530,9 +600,14 @@ class SessionStore:
         )
         detected_patterns_bytes: bytes | None = None
         detected_patterns_delta = 0
+        detected_pattern_indexes: tuple[int, ...] = ()
         if pattern_records:
             detected_patterns = _persistence.read_json_list(handle.paths.detected_patterns)
+            first_index = len(detected_patterns)
             detected_patterns.extend(pattern_records)
+            detected_pattern_indexes = tuple(
+                range(first_index, first_index + len(pattern_records))
+            )
             detected_patterns_bytes = _persistence.serialize_json(detected_patterns)
             detected_patterns_delta = (
                 len(detected_patterns_bytes) - handle.paths.detected_patterns.stat().st_size
@@ -596,6 +671,7 @@ class SessionStore:
             _require_metadata_capacity(serialized_metadata)
             transaction.prepare_metadata(serialized_metadata)
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        return detected_pattern_indexes
 
     def _preflight_evidence(
         self,

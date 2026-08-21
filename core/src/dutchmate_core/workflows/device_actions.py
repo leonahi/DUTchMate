@@ -20,10 +20,17 @@ DeviceActionName: TypeAlias = Literal["reset", "set_boot_mode"]
 class DeviceActionError(RuntimeError):
     """Raised when firmware rejects a hardware action command."""
 
-    def __init__(self, *, error: str, detail: str) -> None:
+    def __init__(
+        self,
+        *,
+        error: str,
+        detail: str,
+        context: dict[str, object] | None = None,
+    ) -> None:
         super().__init__(detail)
         self.error = error
         self.detail = detail
+        self.context = context.copy() if context is not None else None
 
 
 @dataclass(frozen=True, slots=True)

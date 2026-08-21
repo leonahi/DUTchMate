@@ -19,6 +19,7 @@ from dutchmate_cli.client import (
     reset_dut,
     run_boot_test,
     set_boot_mode,
+    wait_for_pattern,
 )
 from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
 from dutchmate_cli.devices import DeviceSelectionError, format_devices, resolve_start_serial_port
@@ -32,6 +33,7 @@ from dutchmate_cli.lifecycle import (
 from dutchmate_cli.logs import format_recent_logs
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
+from dutchmate_cli.wait import format_wait_pattern
 from dutchmate_core.backends.settings import (
     BackendConfigError,
     resolve_backend_mode,
@@ -256,6 +258,40 @@ def logs_command(
     except ServiceClientError as exc:
         _fail(str(exc))
     typer.echo(format_recent_logs(payload))
+
+
+@app.command("wait")
+def wait_command(
+    pattern: Annotated[str, typer.Argument(help="Case-sensitive literal pattern.")],
+    timeout_s: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            callback=_validate_positive_seconds,
+            help="Maximum wait in seconds.",
+        ),
+    ],
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Wait for a literal in new complete UART lines."""
+
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = wait_for_pattern(
+            pattern=pattern,
+            timeout_s=timeout_s,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_wait_pattern(payload))
 
 
 @app.command()

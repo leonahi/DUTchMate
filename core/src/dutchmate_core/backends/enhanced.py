@@ -129,6 +129,14 @@ class EnhancedCaptureEventSource:
             return self._pending_events.popleft()
         return self._read_event()
 
+    def discard_pending_events(self) -> None:
+        """Advance a workflow ingestion cursor past already-normalized events."""
+
+        self._pending_events.clear()
+        drain = getattr(self._source, "drain_pending_messages", None)
+        if callable(drain):
+            drain()
+
     def prime_segment(self) -> SegmentContext | None:
         """Establish timestamp provenance while retaining the first evidence event."""
 

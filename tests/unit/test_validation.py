@@ -8,6 +8,8 @@ from dutchmate_core.validation import (
     validate_gpio_identifier,
     validate_gpio_mode_configuration,
     validate_session_max_size_mb,
+    validate_wait_pattern,
+    validate_wait_timeout,
 )
 
 
@@ -23,6 +25,31 @@ def test_capture_duration_accepts_phase_one_range(duration_s: int | float) -> No
 def test_capture_duration_rejects_values_outside_exact_contract(duration_s: object) -> None:
     with pytest.raises(ValueError, match="positive finite.*300"):
         validate_capture_duration(duration_s)
+
+
+@pytest.mark.parametrize("pattern", ["x", "x" * 256, "é" * 128, ".*[]?"])
+def test_wait_pattern_accepts_exact_bounded_literals(pattern: str) -> None:
+    assert validate_wait_pattern(pattern) == pattern
+
+
+@pytest.mark.parametrize("pattern", ["", "x" * 257, "é" * 129, "bad\r", "bad\n", 1])
+def test_wait_pattern_rejects_invalid_literals(pattern: object) -> None:
+    with pytest.raises(ValueError):
+        validate_wait_pattern(pattern)
+
+
+@pytest.mark.parametrize("timeout_s", [0.1, 1, 300])
+def test_wait_timeout_accepts_phase_one_range(timeout_s: int | float) -> None:
+    assert validate_wait_timeout(timeout_s) == float(timeout_s)
+
+
+@pytest.mark.parametrize(
+    "timeout_s",
+    [0, -1, 300.1, True, float("inf"), float("nan"), "1"],
+)
+def test_wait_timeout_rejects_values_outside_contract(timeout_s: object) -> None:
+    with pytest.raises(ValueError, match="positive finite.*300"):
+        validate_wait_timeout(timeout_s)
 
 
 @pytest.mark.parametrize("max_size_mb", [1, 10, 50])

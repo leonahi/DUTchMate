@@ -8,7 +8,11 @@ from dutchmate_core.backends import (
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioModeRegistry
 from dutchmate_core.runtime import DeviceCoreStatus
-from dutchmate_core.session_store.models import RecentLogs, SessionQueryError
+from dutchmate_core.session_store.models import (
+    RecentLogs,
+    SessionQueryError,
+    WaitPatternResult,
+)
 from dutchmate_core.session_store.store import SessionDetail, SessionListPage, SessionSummary
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
@@ -123,6 +127,15 @@ class FakeRuntime:
             reconnect_timeout_s=5.0,
             ended_at="2026-07-29T10:00:03Z",
             end_reason="duration_elapsed",
+        )
+
+    def wait_pattern(self, *, pattern: str, timeout_s: float) -> WaitPatternResult:
+        summary = self.capture_uart(duration_s=timeout_s)
+        return WaitPatternResult(
+            summary=summary,
+            pattern=pattern,
+            matched=False,
+            match=None,
         )
 
     def list_sessions(

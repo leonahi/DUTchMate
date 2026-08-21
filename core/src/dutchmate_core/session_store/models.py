@@ -195,6 +195,12 @@ class SessionSummary:
     end_reason: str | None = None
     error: dict[str, object] | None = None
     truncation: dict[str, object] | None = None
+    wait_pattern: str | None = None
+    match_mode: Literal["literal"] | None = None
+    case_sensitive: bool | None = None
+    timeout_s: float | None = None
+    matched: bool | None = None
+    detected_pattern_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +304,12 @@ class NativeSessionDetail:
     hardware_event_counts: tuple[EvidenceTypeCount, ...]
     unresolved_uart_tx_attempts: int
     artifacts: tuple[SessionArtifact, ...]
+    wait_pattern: str | None = None
+    match_mode: Literal["literal"] | None = None
+    case_sensitive: bool | None = None
+    timeout_s: float | None = None
+    matched: bool | None = None
+    detected_pattern_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,6 +321,16 @@ class LegacySessionDetail:
 
 
 SessionDetail = NativeSessionDetail | LegacySessionDetail
+
+
+@dataclass(frozen=True, slots=True)
+class WaitPatternResult:
+    """Terminal wait-pattern session plus its authoritative requested match."""
+
+    summary: SessionSummary
+    pattern: str
+    matched: bool
+    match: FirstError | None
 
 
 SessionSelection = Literal["explicit", "active", "latest_terminal"]

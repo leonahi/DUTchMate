@@ -12,6 +12,8 @@ from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
     validate_session_id,
+    validate_wait_pattern,
+    validate_wait_timeout,
 )
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
@@ -116,6 +118,31 @@ def fetch_recent_logs(
         params=params,
     )
     return _response_payload(response, description="recent logs payload")
+
+
+def wait_for_pattern(
+    *,
+    pattern: str,
+    timeout_s: float,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Run one finite literal wait against new UART evidence."""
+
+    validated_pattern = validate_wait_pattern(pattern)
+    validated_timeout = validate_wait_timeout(timeout_s)
+    response = _request_service(
+        method="POST",
+        path="/dut/wait-pattern",
+        service_url=service_url,
+        transport=transport,
+        json={"pattern": validated_pattern, "timeout_s": validated_timeout},
+        timeout_s=max(
+            DEFAULT_TIMEOUT_SECONDS,
+            validated_timeout + CAPTURE_TIMEOUT_GRACE_SECONDS,
+        ),
+    )
+    return _response_payload(response, description="wait-pattern response")
 
 
 def configure_gpio_mode(
@@ -307,7 +334,10 @@ def _response_error_message(response: httpx.Response) -> str:
 
     if isinstance(payload, Mapping):
         detail = payload.get("detail")
+        error = payload.get("error")
         if isinstance(detail, str) and detail:
+            if isinstance(error, str) and error:
+                return f"{prefix} [{error}]: {detail}"
             return f"{prefix}: {detail}"
 
     return f"{prefix}."

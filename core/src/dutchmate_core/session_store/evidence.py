@@ -96,23 +96,7 @@ def first_error(
         segment_id = _pattern_int(pattern, "segment_id")
         ingestion_index = _pattern_int(pattern, "ingestion_index")
         line_index_in_event = _pattern_int(pattern, "line_index_in_event")
-        error = FirstError(
-            pattern=pattern_name,
-            detected_pattern_index=detected_pattern_index,
-            segment_id=segment_id,
-            timestamp_us=_pattern_int(pattern, "timestamp_us"),
-            channel=_pattern_int(pattern, "channel"),
-            ingestion_index=ingestion_index,
-            line_index_in_event=line_index_in_event,
-            line_start_ingestion_index=_pattern_int(pattern, "line_start_ingestion_index"),
-            line_start_event_offset=_pattern_int(pattern, "line_start_event_offset"),
-            line_end_ingestion_index=_pattern_int(pattern, "line_end_ingestion_index"),
-            line_end_event_offset=_pattern_int(pattern, "line_end_event_offset"),
-            total_line_bytes=_pattern_int(pattern, "total_line_bytes"),
-            match_start_byte=_pattern_int(pattern, "match_start_byte"),
-            match_end_byte=_pattern_int(pattern, "match_end_byte"),
-            match_excerpt=_pattern_excerpt(pattern.get("match_excerpt")),
-        )
+        error = detected_pattern_at(detected_patterns, detected_pattern_index)
         candidates.append(
             (
                 (
@@ -128,6 +112,44 @@ def first_error(
     if not candidates:
         return None
     return min(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def detected_pattern_at(
+    detected_patterns: list[object],
+    detected_pattern_index: int,
+) -> FirstError:
+    """Return one validated reference-bearing stored detected-pattern record."""
+
+    if (
+        isinstance(detected_pattern_index, bool)
+        or not isinstance(detected_pattern_index, int)
+        or not 0 <= detected_pattern_index < len(detected_patterns)
+    ):
+        raise ValueError("detected-pattern index is out of range")
+    raw_pattern = detected_patterns[detected_pattern_index]
+    if not isinstance(raw_pattern, dict):
+        raise ValueError("detected patterns must contain JSON objects")
+    pattern = cast(dict[str, object], raw_pattern)
+    pattern_name = pattern.get("pattern")
+    if not isinstance(pattern_name, str) or not pattern_name:
+        raise ValueError("detected pattern name is invalid")
+    return FirstError(
+        pattern=pattern_name,
+        detected_pattern_index=detected_pattern_index,
+        segment_id=_pattern_int(pattern, "segment_id"),
+        timestamp_us=_pattern_int(pattern, "timestamp_us"),
+        channel=_pattern_int(pattern, "channel"),
+        ingestion_index=_pattern_int(pattern, "ingestion_index"),
+        line_index_in_event=_pattern_int(pattern, "line_index_in_event"),
+        line_start_ingestion_index=_pattern_int(pattern, "line_start_ingestion_index"),
+        line_start_event_offset=_pattern_int(pattern, "line_start_event_offset"),
+        line_end_ingestion_index=_pattern_int(pattern, "line_end_ingestion_index"),
+        line_end_event_offset=_pattern_int(pattern, "line_end_event_offset"),
+        total_line_bytes=_pattern_int(pattern, "total_line_bytes"),
+        match_start_byte=_pattern_int(pattern, "match_start_byte"),
+        match_end_byte=_pattern_int(pattern, "match_end_byte"),
+        match_excerpt=_pattern_excerpt(pattern.get("match_excerpt")),
+    )
 
 
 def uart_event_json(

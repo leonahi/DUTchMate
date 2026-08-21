@@ -28,12 +28,17 @@ from dutchmate_core.device_connection.transport import TransportTimeoutError
 class FakeEnhancedMessageSource:
     def __init__(self, outcomes: list[DeviceMessage | Exception]) -> None:
         self._outcomes = outcomes
+        self.drain_count = 0
 
     def read_message(self) -> DeviceMessage:
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+    def drain_pending_messages(self) -> tuple[DeviceMessage, ...]:
+        self.drain_count += 1
+        return ()
 
 
 def test_normalizes_uart_bytes_and_segment_relative_timestamp() -> None:
@@ -174,6 +179,22 @@ def test_sync_adapter_primes_origin_without_losing_first_event() -> None:
         channel=0,
         data=b"ready\n",
     )
+
+
+def test_sync_adapter_discards_local_and_transport_pre_cursor_events() -> None:
+    message_source = FakeEnhancedMessageSource(
+        [UartMessage(channel=0, timestamp_us=8_500, data=b"old\n", text="old\n")]
+    )
+    source = EnhancedCaptureEventSource(
+        message_source,
+        segment_id=0,
+        source_origin_us=None,
+    )
+    source.prime_segment()
+
+    source.discard_pending_events()
+
+    assert message_source.drain_count == 1
 
 
 def test_rejects_event_timestamp_before_segment_origin() -> None:

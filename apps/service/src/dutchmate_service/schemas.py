@@ -18,6 +18,7 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionListItem,
     SessionListPage,
+    WaitPatternResult,
 )
 from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.validation import (
@@ -28,6 +29,8 @@ from dutchmate_core.validation import (
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_identifier,
+    validate_wait_pattern,
+    validate_wait_timeout,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 
@@ -139,6 +142,23 @@ class BootTestRequest(_TimedCaptureRequest):
     """Request body for a reset-triggered boot capture."""
 
 
+class WaitPatternRequest(BaseModel):
+    """Request body for a finite new-evidence-only literal wait."""
+
+    pattern: str
+    timeout_s: float
+
+    @field_validator("pattern", mode="before")
+    @classmethod
+    def validate_pattern(cls, value: object) -> str:
+        return validate_wait_pattern(value)
+
+    @field_validator("timeout_s", mode="before")
+    @classmethod
+    def validate_timeout(cls, value: object) -> float:
+        return validate_wait_timeout(value)
+
+
 def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
     """Serialize a completed capture session summary."""
 
@@ -175,6 +195,49 @@ def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
         "overflow": summary.overflow,
         "segments": summary.segment_count,
     }
+
+
+def wait_pattern_payload(result: WaitPatternResult) -> dict[str, object]:
+    """Serialize one successful matched or unmatched wait-pattern outcome."""
+
+    payload = capture_summary_payload(result.summary)
+    match = result.match
+    payload.update(
+        {
+            "matched": result.matched,
+            "pattern": result.pattern,
+            "match_mode": result.summary.match_mode,
+            "case_sensitive": result.summary.case_sensitive,
+            "timeout_s": result.summary.timeout_s,
+            "match_excerpt": (
+                asdict(match.match_excerpt) if match is not None else None
+            ),
+            "detected_pattern_index": (
+                match.detected_pattern_index if match is not None else None
+            ),
+            "channel": match.channel if match is not None else None,
+            "segment_id": match.segment_id if match is not None else None,
+            "timestamp_us": match.timestamp_us if match is not None else None,
+            "ingestion_index": match.ingestion_index if match is not None else None,
+            "line_index_in_event": match.line_index_in_event if match is not None else None,
+            "match_start_byte": match.match_start_byte if match is not None else None,
+            "match_end_byte": match.match_end_byte if match is not None else None,
+            "total_line_bytes": match.total_line_bytes if match is not None else None,
+            "line_start_ingestion_index": (
+                match.line_start_ingestion_index if match is not None else None
+            ),
+            "line_start_event_offset": (
+                match.line_start_event_offset if match is not None else None
+            ),
+            "line_end_ingestion_index": (
+                match.line_end_ingestion_index if match is not None else None
+            ),
+            "line_end_event_offset": (
+                match.line_end_event_offset if match is not None else None
+            ),
+        }
+    )
+    return payload
 
 
 def session_list_payload(page: SessionListPage) -> dict[str, object]:
@@ -217,6 +280,12 @@ def session_detail_payload(detail: SessionDetail) -> dict[str, object]:
             },
             "unresolved_uart_tx_attempts": detail.unresolved_uart_tx_attempts,
             "artifact_manifest": [asdict(artifact) for artifact in detail.artifacts],
+            "pattern": detail.wait_pattern,
+            "match_mode": detail.match_mode,
+            "case_sensitive": detail.case_sensitive,
+            "timeout_s": detail.timeout_s,
+            "matched": detail.matched,
+            "detected_pattern_index": detail.detected_pattern_index,
         }
     )
     return payload

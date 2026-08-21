@@ -15,6 +15,7 @@ from dutchmate_cli.client import (
     reset_dut,
     run_boot_test,
     set_boot_mode,
+    wait_for_pattern,
 )
 
 
@@ -46,6 +47,23 @@ def test_fetch_status_includes_service_error_detail() -> None:
         fetch_status(transport=httpx.MockTransport(handler))
 
     assert str(error.value) == "Device Core Service returned HTTP 500: runtime failed"
+
+
+def test_service_error_message_preserves_structured_error_code() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={"error": "capture_active", "detail": "capture is already active"},
+        )
+
+    with pytest.raises(ServiceApiError) as error:
+        wait_for_pattern(
+            pattern="READY",
+            timeout_s=1,
+            transport=httpx.MockTransport(handler),
+        )
+
+    assert "[capture_active]: capture is already active" in str(error.value)
 
 
 def test_list_debug_sessions_forwards_bounded_page_arguments() -> None:
@@ -111,6 +129,36 @@ def test_fetch_recent_logs_forwards_selection_and_limit() -> None:
     )
 
     assert payload["session_id"] == "20260820T120000Z-abc12345"
+
+
+def test_wait_for_pattern_forwards_literal_and_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/wait-pattern"
+        assert request.read() == b'{"pattern":"READY.*","timeout_s":2.5}'
+        return httpx.Response(200, json={"matched": False, "session_id": "wait-1"})
+
+    payload = wait_for_pattern(
+        pattern="READY.*",
+        timeout_s=2.5,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert payload == {"matched": False, "session_id": "wait-1"}
+
+
+@pytest.mark.parametrize(
+    ("pattern", "timeout_s"),
+    [("", 1.0), ("bad\rpattern", 1.0), ("x" * 257, 1.0), ("READY", True)],
+)
+def test_wait_for_pattern_rejects_invalid_input_before_http(
+    pattern: object,
+    timeout_s: object,
+) -> None:
+    with pytest.raises(ValueError):
+        wait_for_pattern(  # type: ignore[arg-type]
+            pattern=pattern,
+            timeout_s=timeout_s,
+        )
 
 
 @pytest.mark.parametrize("lines", [0, 1001, True, 1.5])

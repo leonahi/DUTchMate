@@ -4,6 +4,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from dutchmate_core.uart_capture.line_buffer import UartLine
+from dutchmate_core.validation import validate_wait_pattern
 
 DEFAULT_PATTERNS = ("ERROR", "ASSERT", "PANIC", "HardFault", "BOOT_OK")
 
@@ -89,13 +90,10 @@ def _validate_patterns(patterns: Sequence[str]) -> tuple[str, ...]:
     for pattern in validated:
         if not isinstance(pattern, str):
             raise TypeError("patterns must be strings")
-        if pattern == "":
-            raise ValueError("patterns must not be empty")
-        encoded = pattern.encode("utf-8")
-        if len(encoded) > 256:
-            raise ValueError("patterns must contain at most 256 UTF-8 bytes")
-        if "\r" in pattern or "\n" in pattern:
-            raise ValueError("patterns must not contain CR or LF")
+        try:
+            validate_wait_pattern(pattern)
+        except ValueError as exc:
+            raise ValueError(f"invalid detector pattern: {exc}") from exc
         if pattern in seen:
             raise ValueError(f"duplicate pattern: {pattern}")
         seen.add(pattern)

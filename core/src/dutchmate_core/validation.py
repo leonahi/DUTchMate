@@ -28,6 +28,7 @@ WELL_KNOWN_GPIO_ROLES: Final = frozenset({"reset", "boot", "power_enable", "wake
 MAX_GPIO_IDENTIFIER_BYTES: Final = 64
 MAX_SERIAL_PORT_BYTES: Final = 4096
 MAX_CAPTURE_DURATION_S: Final = 300.0
+MAX_WAIT_PATTERN_BYTES: Final = 256
 _MIB_BYTES: Final = 1024 * 1024
 DEFAULT_SESSION_MAX_SIZE_MB: Final = 50
 VALID_BOOT_MODES: Final = frozenset({"normal", "bootloader"})
@@ -98,6 +99,41 @@ def validate_capture_duration(duration_s: object) -> float:
             f"{MAX_CAPTURE_DURATION_S:g} seconds"
         )
     return float(duration_s)
+
+
+def validate_wait_timeout(timeout_s: object) -> float:
+    """Return a valid Phase 1 wait-pattern timeout in seconds."""
+
+    if (
+        isinstance(timeout_s, bool)
+        or not isinstance(timeout_s, int | float)
+        or not math.isfinite(timeout_s)
+        or timeout_s <= 0
+        or timeout_s > MAX_CAPTURE_DURATION_S
+    ):
+        raise InputValidationError(
+            "wait timeout must be a positive finite number no greater than "
+            f"{MAX_CAPTURE_DURATION_S:g} seconds"
+        )
+    return float(timeout_s)
+
+
+def validate_wait_pattern(pattern: object) -> str:
+    """Validate and preserve one case-sensitive literal wait pattern."""
+
+    if not isinstance(pattern, str):
+        raise InputValidationError("wait pattern must be a string")
+    try:
+        actual_bytes = len(pattern.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise InputValidationError("wait pattern must be valid Unicode") from exc
+    if not 1 <= actual_bytes <= MAX_WAIT_PATTERN_BYTES:
+        raise InputValidationError(
+            f"wait pattern must encode to 1..{MAX_WAIT_PATTERN_BYTES} UTF-8 bytes"
+        )
+    if "\r" in pattern or "\n" in pattern:
+        raise InputValidationError("wait pattern must not contain CR or LF")
+    return pattern
 
 
 def validate_session_max_size_mb(max_size_mb: object) -> int:
