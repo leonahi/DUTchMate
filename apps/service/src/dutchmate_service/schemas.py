@@ -147,7 +147,7 @@ def gpio_mode_payload(state: GpioControlChannelState) -> dict[str, object]:
         "active_level": state.active_level,
         "idle_level": state.idle_level,
         "source": state.source,
-        "timestamp_us": state.device_timestamp_us,
+        "device_timestamp_us": state.device_timestamp_us,
     }
 
 
@@ -470,7 +470,13 @@ def _native_session_list_item_payload(item: NativeSessionListItem) -> dict[str, 
 def device_action_payload(result: DeviceActionResult) -> dict[str, object]:
     """Serialize a successful hardware action response."""
 
-    return {
+    payload: dict[str, object] = {
         "ok": True,
-        "timestamp_us": result.timestamp_us,
+        "performed_at": result.performed_at,
+        "device_timestamp_us": result.device_timestamp_us,
     }
+    if result.action == "reset":
+        payload["pulse_ms"] = result.pulse_ms
+    else:
+        payload["mode"] = result.mode
+    return payload

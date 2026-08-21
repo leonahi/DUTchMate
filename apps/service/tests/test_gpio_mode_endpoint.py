@@ -42,7 +42,7 @@ def test_configure_gpio_mode_calls_runtime_and_returns_accepted_mode() -> None:
         "active_level": "low",
         "idle_level": None,
         "source": "runtime",
-        "timestamp_us": 182334400,
+        "device_timestamp_us": 182334400,
     }
 
 

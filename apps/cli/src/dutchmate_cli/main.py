@@ -566,7 +566,7 @@ def dut_boot_mode(
     except ServiceClientError as exc:
         _fail(str(exc))
 
-    typer.echo(format_boot_mode_result(mode, payload))
+    typer.echo(format_boot_mode_result(payload))
 
 
 @app.command()

@@ -6,7 +6,7 @@ from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_service.app import create_app
 
 
-def test_reset_uses_default_pulse_and_returns_timestamp() -> None:
+def test_reset_uses_default_pulse_and_returns_accepted_action() -> None:
     runtime = FakeRuntime(connected_status())
     app = create_app(runtime)
 
@@ -16,7 +16,9 @@ def test_reset_uses_default_pulse_and_returns_timestamp() -> None:
     assert runtime.reset_requests == [100]
     assert response.json() == {
         "ok": True,
-        "timestamp_us": 182334500,
+        "pulse_ms": 100,
+        "performed_at": "2026-08-21T10:00:00Z",
+        "device_timestamp_us": 182334500,
     }
 
 
@@ -28,6 +30,7 @@ def test_reset_passes_explicit_pulse_to_runtime() -> None:
 
     assert response.status_code == 200
     assert runtime.reset_requests == [250]
+    assert response.json()["pulse_ms"] == 250
 
 
 def test_reset_not_configured_uses_service_error_contract() -> None:
@@ -62,7 +65,7 @@ def test_reset_validation_error_uses_service_error_contract() -> None:
     }
 
 
-def test_boot_mode_passes_mode_to_runtime_and_returns_timestamp() -> None:
+def test_boot_mode_passes_mode_to_runtime_and_returns_accepted_action() -> None:
     runtime = FakeRuntime(connected_status())
     app = create_app(runtime)
 
@@ -72,7 +75,9 @@ def test_boot_mode_passes_mode_to_runtime_and_returns_timestamp() -> None:
     assert runtime.boot_mode_requests == ["bootloader"]
     assert response.json() == {
         "ok": True,
-        "timestamp_us": 182334600,
+        "mode": "bootloader",
+        "performed_at": "2026-08-21T10:00:00Z",
+        "device_timestamp_us": 182334600,
     }
 
 
@@ -84,6 +89,7 @@ def test_boot_mode_accepts_normal_mode() -> None:
 
     assert response.status_code == 200
     assert runtime.boot_mode_requests == ["normal"]
+    assert response.json()["mode"] == "normal"
 
 
 def test_boot_mode_not_configured_uses_service_error_contract() -> None:

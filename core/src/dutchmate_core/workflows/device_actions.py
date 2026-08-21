@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal, TypeAlias
 
 from dutchmate_core.backends.contracts import DeviceControl, DeviceControlError
@@ -38,7 +39,18 @@ class DeviceActionResult:
     """Successful hardware action result."""
 
     action: DeviceActionName
-    timestamp_us: int | None = None
+    performed_at: str
+    device_timestamp_us: int | None = None
+    pulse_ms: int | None = None
+    mode: Literal["normal", "bootloader"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.action == "reset":
+            if self.pulse_ms is None or self.mode is not None:
+                raise ValueError("reset results require pulse_ms and omit mode")
+            return
+        if self.mode is None or self.pulse_ms is not None:
+            raise ValueError("boot-mode results require mode and omit pulse_ms")
 
 
 class DeviceActionRunner:
@@ -49,9 +61,11 @@ class DeviceActionRunner:
         *,
         registry: GpioModeRegistry,
         control: DeviceControl,
+        wall_clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._registry = registry
         self._control = control
+        self._wall_clock = wall_clock or (lambda: datetime.now(timezone.utc))
 
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
         """Pulse the DUT reset role after confirming reset GPIO configuration."""
@@ -61,9 +75,14 @@ class DeviceActionRunner:
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
         self._registry.require_role_configured("reset")
-        return self._run_action(
-            action="reset",
+        device_timestamp_us = self._run_action(
             operation=lambda: self._control.reset_dut(pulse_ms=pulse_ms_value),
+        )
+        return DeviceActionResult(
+            action="reset",
+            pulse_ms=pulse_ms_value,
+            performed_at=_format_utc(self._wall_clock()),
+            device_timestamp_us=device_timestamp_us,
         )
 
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
@@ -74,19 +93,28 @@ class DeviceActionRunner:
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
         self._registry.require_role_configured("boot")
-        return self._run_action(
-            action="set_boot_mode",
+        device_timestamp_us = self._run_action(
             operation=lambda: self._control.set_boot_mode(mode=mode_name),
+        )
+        return DeviceActionResult(
+            action="set_boot_mode",
+            mode=mode_name,
+            performed_at=_format_utc(self._wall_clock()),
+            device_timestamp_us=device_timestamp_us,
         )
 
     def _run_action(
         self,
         *,
-        action: DeviceActionName,
         operation: Callable[[], int | None],
-    ) -> DeviceActionResult:
+    ) -> int | None:
         try:
-            timestamp_us = operation()
+            return operation()
         except DeviceControlError as exc:
             raise DeviceActionError(error=exc.error, detail=exc.detail) from exc
-        return DeviceActionResult(action=action, timestamp_us=timestamp_us)
+
+
+def _format_utc(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

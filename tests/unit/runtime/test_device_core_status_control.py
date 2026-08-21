@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -92,7 +93,8 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
@@ -144,7 +146,9 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+        device_control=EnhancedDeviceControl(transport),
+        session_store=SessionStore(root=tmp_path),
+        action_wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
     )
     runtime.record_backend_connection(enhanced_info())
     runtime.configure_gpio_mode(
@@ -157,7 +161,12 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
 
     result = runtime.reset_dut(pulse_ms=250)
 
-    assert result == DeviceActionResult(action="reset", timestamp_us=300)
+    assert result == DeviceActionResult(
+        action="reset",
+        pulse_ms=250,
+        performed_at="2026-08-21T10:00:00Z",
+        device_timestamp_us=300,
+    )
     assert transport.requests == [
         b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
         b'"mode":"open_drain","active_level":"low"}\n',

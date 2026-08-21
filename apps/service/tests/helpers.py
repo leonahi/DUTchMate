@@ -67,11 +67,21 @@ class FakeRuntime:
 
     def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
         self.reset_requests.append(pulse_ms)
-        return DeviceActionResult(action="reset", timestamp_us=182334500)
+        return DeviceActionResult(
+            action="reset",
+            pulse_ms=pulse_ms,
+            performed_at="2026-08-21T10:00:00Z",
+            device_timestamp_us=182334500,
+        )
 
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         self.boot_mode_requests.append(mode)
-        return DeviceActionResult(action="set_boot_mode", timestamp_us=182334600)
+        return DeviceActionResult(
+            action="set_boot_mode",
+            mode=mode,
+            performed_at="2026-08-21T10:00:00Z",
+            device_timestamp_us=182334600,
+        )
 
     def capture_uart(self, *, duration_s: float) -> SessionSummary:
         self.capture_requests.append(duration_s)

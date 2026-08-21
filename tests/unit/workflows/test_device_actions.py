@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl
@@ -28,7 +30,11 @@ class FakeTransport:
 def test_reset_requires_configured_reset_role() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(transport),
+        wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
+    )
 
     with pytest.raises(GpioConfigurationError, match="not configured"):
         runner.reset_dut()
@@ -47,11 +53,20 @@ def test_reset_sends_command_after_reset_role_is_configured() -> None:
         source="runtime",
     )
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=182334400))
-    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(transport),
+        wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
+    )
 
     result = runner.reset_dut(pulse_ms=250)
 
-    assert result == DeviceActionResult(action="reset", timestamp_us=182334400)
+    assert result == DeviceActionResult(
+        action="reset",
+        pulse_ms=250,
+        performed_at="2026-08-21T10:00:00Z",
+        device_timestamp_us=182334400,
+    )
     assert transport.requests == [b'{"cmd":"reset","pulse_ms":250}\n']
 
 
@@ -69,7 +84,11 @@ def test_reset_rejected_state_uses_rejection_detail() -> None:
         detail="push_pull is not supported for reset",
     )
     transport = FakeTransport(CommandSuccessMessage())
-    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(transport),
+        wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
+    )
 
     with pytest.raises(GpioConfigurationError, match="push_pull is not supported"):
         runner.reset_dut()
@@ -110,11 +129,20 @@ def test_boot_mode_sends_command_after_boot_role_is_configured() -> None:
         source="runtime",
     )
     transport = FakeTransport(CommandSuccessMessage(timestamp_us=99))
-    runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(transport),
+        wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
+    )
 
     result = runner.set_boot_mode(mode="bootloader")
 
-    assert result == DeviceActionResult(action="set_boot_mode", timestamp_us=99)
+    assert result == DeviceActionResult(
+        action="set_boot_mode",
+        mode="bootloader",
+        performed_at="2026-08-21T10:00:00Z",
+        device_timestamp_us=99,
+    )
     assert transport.requests == [b'{"cmd":"set_boot_mode","mode":"bootloader"}\n']
 
 
@@ -127,6 +155,26 @@ def test_boot_mode_validates_mode_before_configuration_check() -> None:
         runner.set_boot_mode(mode="factory")
 
     assert transport.requests == []
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {
+            "action": "reset",
+            "performed_at": "2026-08-21T10:00:00Z",
+            "mode": "normal",
+        },
+        {
+            "action": "set_boot_mode",
+            "performed_at": "2026-08-21T10:00:00Z",
+            "pulse_ms": 100,
+        },
+    ],
+)
+def test_action_result_rejects_mismatched_accepted_fields(result: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="results require"):
+        DeviceActionResult(**result)  # type: ignore[arg-type]
 
 
 def test_command_error_response_raises_device_action_error() -> None:

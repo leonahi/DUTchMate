@@ -192,6 +192,7 @@ class DeviceCoreRuntime:
         segment_context: SegmentContext | None = None,
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
         backend_reconnect: CaptureReconnect | None = None,
+        action_wall_clock: Callable[[], datetime] | None = None,
         uart_wall_clock: Callable[[], datetime] | None = None,
         uart_monotonic_ns: Callable[[], int] | None = None,
         uart_attempt_id_factory: Callable[[], str] | None = None,
@@ -226,6 +227,7 @@ class DeviceCoreRuntime:
         self._action_runner = DeviceActionRunner(
             registry=self._gpio_registry,
             control=device_control,
+            wall_clock=action_wall_clock,
         )
         self._port = port
         self._connected = False

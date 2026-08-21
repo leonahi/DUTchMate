@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `cc3b437` on 2026-08-21
+> Code baseline reviewed: `4473d50` on 2026-08-21
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -11,9 +11,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A completion and acceptance preparation.
 - **Next step:** close the shared control and reporting contracts in checklist
   step 1 below.
-- **First implementation slice:** replace legacy action/API `timestamp_us`
-  projections with `device_timestamp_us` and add accepted action fields without
-  changing the Enhanced wire response field.
+- **First implementation slice:** track nullable `commanded_boot_mode`, update
+  it only after accepted commands, invalidate it when device state becomes
+  unknown, and expose it through status and session-start snapshots.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -52,11 +52,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Code baseline `cc3b437`:
+Working tree based on `4473d50`:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 826 passed
+- Pytest: 828 passed
 - `git diff --check`: passed
 - Basic HIL: no committed run
 - Enhanced HIL: no committed run
@@ -75,6 +75,8 @@ The following items are no longer backlog work:
 - project baseline mark/replace/clear and bounded comparison;
 - finite-workflow reconnect coordination and live reconnect status;
 - deterministic line processing, pattern detection, and `first_error`.
+- explicit public `device_timestamp_us` action fields plus accepted reset pulse,
+  boot mode, and RFC 3339 action completion reporting.
 
 ## Active Queue — Phase 1
 
@@ -83,10 +85,10 @@ passes and the evidence is committed.
 
 ### 1. Close Shared Control And Reporting Contracts
 
-- [ ] Replace legacy action/API `timestamp_us` fields with explicit
+- [x] Replace legacy action/API `timestamp_us` fields with explicit
   `device_timestamp_us` while retaining raw wire naming inside the Enhanced
   protocol adapter.
-- [ ] Return accepted reset `pulse_ms`, boot `mode`, and RFC 3339
+- [x] Return accepted reset `pulse_ms`, boot `mode`, and RFC 3339
   `performed_at` values from Device Core, service, and CLI responses.
 - [ ] Track nullable `commanded_boot_mode`, invalidate it on disconnect or
   unknown/external state, expose it in status, and snapshot it at session start.

@@ -220,7 +220,7 @@ def test_configure_gpio_mode_posts_request_payload() -> None:
                 "active_level": "high",
                 "idle_level": "low",
                 "source": "runtime",
-                "timestamp_us": 182334400,
+                "device_timestamp_us": 182334400,
             },
         )
 
@@ -292,11 +292,24 @@ def test_reset_dut_posts_pulse_width() -> None:
         assert request.url.path == "/dut/reset"
         assert request.method == "POST"
         assert request.read() == b'{"pulse_ms":250}'
-        return httpx.Response(200, json={"ok": True, "timestamp_us": 182334500})
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "pulse_ms": 250,
+                "performed_at": "2026-08-21T10:00:00Z",
+                "device_timestamp_us": 182334500,
+            },
+        )
 
     payload = reset_dut(pulse_ms=250, transport=httpx.MockTransport(handler))
 
-    assert payload == {"ok": True, "timestamp_us": 182334500}
+    assert payload == {
+        "ok": True,
+        "pulse_ms": 250,
+        "performed_at": "2026-08-21T10:00:00Z",
+        "device_timestamp_us": 182334500,
+    }
 
 
 def test_set_boot_mode_posts_mode() -> None:
@@ -304,11 +317,24 @@ def test_set_boot_mode_posts_mode() -> None:
         assert request.url.path == "/dut/boot-mode"
         assert request.method == "POST"
         assert request.read() == b'{"mode":"bootloader"}'
-        return httpx.Response(200, json={"ok": True, "timestamp_us": 182334600})
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "mode": "bootloader",
+                "performed_at": "2026-08-21T10:00:00Z",
+                "device_timestamp_us": 182334600,
+            },
+        )
 
     payload = set_boot_mode(mode="bootloader", transport=httpx.MockTransport(handler))
 
-    assert payload == {"ok": True, "timestamp_us": 182334600}
+    assert payload == {
+        "ok": True,
+        "mode": "bootloader",
+        "performed_at": "2026-08-21T10:00:00Z",
+        "device_timestamp_us": 182334600,
+    }
 
 
 def test_capture_uart_posts_duration_with_duration_aware_timeout() -> None:
