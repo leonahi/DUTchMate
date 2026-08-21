@@ -25,6 +25,7 @@ def format_status(payload: Mapping[str, object]) -> str:
         f"UART TX policy: {_format_tx_policy(payload.get('capability_policy'))}",
         f"Timestamp provenance: {_format_timestamp(payload.get('timestamp_provenance'))}",
         f"UART loss: {_format_integrity(payload.get('integrity'))}",
+        f"Retention: {_format_retention(payload.get('retention'))}",
         "Control channels:",
     ]
     lines.extend(_format_control_channels(payload.get("control_channels")))
@@ -41,8 +42,7 @@ def _format_connection(payload: Mapping[str, object]) -> str:
     value = payload.get("connection_state")
     state = (
         value
-        if isinstance(value, str)
-        and value in {"connected", "disconnected", "reconnecting"}
+        if isinstance(value, str) and value in {"connected", "disconnected", "reconnecting"}
         else None
     )
     if state is None:
@@ -118,6 +118,20 @@ def _format_integrity(value: object) -> str:
     if scope is None and dropped is None:
         return loss_status
     return f"{loss_status} (scope={_display(scope)}, dropped_bytes={_display(dropped)})"
+
+
+def _format_retention(value: object) -> str:
+    retention = _as_mapping(value)
+    if retention is None:
+        return "unknown"
+    if retention.get("enabled") is not True:
+        return "disabled"
+    diagnostic = retention.get("diagnostic")
+    count = _display(retention.get("session_count"))
+    maximum = _display(retention.get("max_count"))
+    if isinstance(diagnostic, str) and diagnostic:
+        return f"{diagnostic} ({count}/{maximum} sessions)"
+    return f"healthy ({count}/{maximum} sessions)"
 
 
 def _format_control_channels(value: object) -> list[str]:

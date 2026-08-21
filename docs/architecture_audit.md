@@ -184,16 +184,16 @@ the repository. Prefer a small stable facade for runtime and normalized backend
 contracts. Tests for internal modules should import those modules directly
 rather than accidentally defining a broad package API.
 
-### A6 — Medium: session configuration contains accepted but inert settings
+### A6 — Resolved: session limits are effective end to end
 
 Evidence:
 
 - CLI configuration parses `sessions.max_count` and `sessions.max_size_mb`;
-- only `sessions.path` is passed when starting the service;
-- service startup always constructs `SessionStore` with its default evidence
-  budget;
-- a configured `max_size_mb` is therefore validated but ignored;
-- `max_count` has no retention implementation yet.
+- both settings are propagated through CLI lifecycle and service startup;
+- `max_size_mb` becomes the exact per-session evidence budget;
+- optional `max_count` enables oldest-eligible terminal-session retention;
+- retention protects active, legacy, baseline-designated, and in-progress read
+  evidence and exposes blocked or unsafe passes through status.
 
 Decision: **wire or remove from the current surface**.
 
@@ -202,8 +202,9 @@ one contract change. Keep `max_count` explicitly planned without accepting it as
 effective configuration, or implement retention before advertising it as
 active behavior.
 
-Implemented: `max_size_mb` now reaches `SessionStore` as an exact byte budget,
-and CLI configuration rejects `max_count` until retention is implemented.
+Implemented: both settings now reach `SessionStore`; omitted `max_count` keeps
+retention disabled, while a configured positive value is enforced after startup
+recovery and terminal transitions.
 
 ### A7 — Medium: the largest tests mirror production monoliths
 
@@ -371,7 +372,8 @@ Each numbered item should be independently reviewed, validated, and committed.
    an empty set.
 7. **Resolve inert session configuration.** Wire effective limits or remove
    them from the accepted current configuration surface.
-   Implemented by wiring `max_size_mb` end to end and rejecting `max_count`.
+   Implemented by wiring both limits end to end and enforcing optional
+   `max_count` through protected session retention.
 8. **Reorganize CLI registration only if still useful.** Reuse existing concern
    modules; do not optimize for fewer files.
    Assessed and intentionally skipped: registration remains declarative, while

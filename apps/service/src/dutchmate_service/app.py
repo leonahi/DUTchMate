@@ -118,6 +118,7 @@ def create_app(
     *,
     session_root: Path | str = Path(".dutchmate/sessions"),
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    session_max_count: int | None = None,
     hardware_config: HardwareGpioConfig | None = None,
     backend_settings: BackendSettings | None = None,
 ) -> FastAPI:
@@ -128,6 +129,7 @@ def create_app(
     runtime_provider = runtime or build_startup_runtime(
         session_root=session_root,
         session_evidence_budget_bytes=session_evidence_budget_bytes,
+        session_max_count=session_max_count,
         backend_settings=backend_settings,
     )
     if hardware_config is not None:

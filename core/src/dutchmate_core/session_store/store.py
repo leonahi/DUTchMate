@@ -4,11 +4,13 @@ import json
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from threading import RLock
 from typing import Literal
 
 import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
+import dutchmate_core.session_store.retention as _retention
 import dutchmate_core.session_store.transactions as _transactions
 from dutchmate_core.backends.contracts import (
     BackendSnapshot,
@@ -37,6 +39,7 @@ from dutchmate_core.session_store.models import (
     SessionRecoveryDiagnostic,
     SessionRecoveryError,
     SessionRecoveryResult,
+    SessionRetentionStatus,
     SessionState,
     SessionSummary,
     SessionWorkflow,
@@ -72,6 +75,7 @@ __all__ = [
     "SessionRecoveryDiagnostic",
     "SessionRecoveryError",
     "SessionRecoveryResult",
+    "SessionRetentionStatus",
     "SessionState",
     "SessionStore",
     "SessionSummary",
@@ -94,6 +98,7 @@ class SessionStore:
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
         evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+        max_count: int | None = None,
     ) -> None:
         self._root = Path(root)
         self._clock = clock or _metadata._utc_now
@@ -105,7 +110,18 @@ class SessionStore:
         ):
             raise ValueError("session evidence budget must be a positive integer")
         self._evidence_budget_bytes = evidence_budget_bytes
+        if max_count is not None and (
+            isinstance(max_count, bool) or not isinstance(max_count, int) or max_count <= 0
+        ):
+            raise ValueError("session max count must be a positive integer or null")
+        self._max_count = max_count
+        self._store_lock = RLock()
+        self._recovering = False
         self._last_recovery = SessionRecoveryResult()
+        self._retention_status = SessionRetentionStatus(
+            enabled=max_count is not None,
+            max_count=max_count,
+        )
         self._uart_tx_result_reservations: dict[
             tuple[str, str], tuple[int, int, int]
         ] = {}
@@ -122,8 +138,27 @@ class SessionStore:
 
         return self._last_recovery
 
+    @property
+    def retention_status(self) -> SessionRetentionStatus:
+        """Return the outcome of the most recent retention pass."""
+
+        with self._store_lock:
+            return self._retention_status
+
     def recover_stale_sessions(self) -> SessionRecoveryResult:
         """Abandon stale native active sessions without mutating other schemas."""
+
+        with self._store_lock:
+            self._recovering = True
+            try:
+                result = self._recover_stale_sessions_locked()
+            finally:
+                self._recovering = False
+            self._apply_retention_locked()
+            return result
+
+    def _recover_stale_sessions_locked(self) -> SessionRecoveryResult:
+        """Perform startup recovery while the store-wide lock is held."""
 
         if not self._root.exists():
             self._last_recovery = SessionRecoveryResult()
@@ -296,6 +331,36 @@ class SessionStore:
     ) -> SessionHandle:
         """Create a new session directory and initialize required files."""
 
+        with self._store_lock:
+            return self._create_session_locked(
+                command=command,
+                firmware=firmware,
+                device=device,
+                baseline=baseline,
+                backend_snapshot=backend_snapshot,
+                workflow=workflow,
+                duration_s=duration_s,
+                reconnect_timeout_s=reconnect_timeout_s,
+                wait_pattern=wait_pattern,
+                timeout_s=timeout_s,
+            )
+
+    def _create_session_locked(
+        self,
+        *,
+        command: str,
+        firmware: str | None,
+        device: str | None,
+        baseline: bool,
+        backend_snapshot: BackendSnapshot | None,
+        workflow: SessionWorkflow | None,
+        duration_s: float | None,
+        reconnect_timeout_s: float | None,
+        wait_pattern: str | None,
+        timeout_s: float | None,
+    ) -> SessionHandle:
+        """Create one session while the store-wide lock is held."""
+
         _metadata._validate_session_command(command)
         _metadata._validate_native_lifecycle_inputs(
             workflow=workflow,
@@ -458,6 +523,28 @@ class SessionStore:
         truncation: dict[str, object] | None,
         metadata_mutator: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
+        with self._store_lock:
+            self._terminalize_session_locked(
+                handle,
+                state=state,
+                end_reason=end_reason,
+                error=error,
+                truncation=truncation,
+                metadata_mutator=metadata_mutator,
+            )
+            if not self._recovering:
+                self._apply_retention_locked(held_session_ids=frozenset({handle.session_id}))
+
+    def _terminalize_session_locked(
+        self,
+        handle: SessionHandle,
+        *,
+        state: Literal["completed", "failed", "abandoned"],
+        end_reason: str,
+        error: dict[str, object] | None,
+        truncation: dict[str, object] | None,
+        metadata_mutator: Callable[[dict[str, object]], None] | None = None,
+    ) -> None:
         metadata = _persistence.read_json_object(handle.paths.metadata)
         if metadata.get("schema_version") != 1:
             raise ValueError("only native schema-v1 sessions can be terminalized")
@@ -498,48 +585,51 @@ class SessionStore:
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
 
-        session_name = _metadata._validate_session_id(session_id)
-        metadata_path = _persistence.session_paths(self._root / session_name).metadata
-        return _persistence.read_json_object(metadata_path)
+        with self._store_lock:
+            session_name = _metadata._validate_session_id(session_id)
+            metadata_path = _persistence.session_paths(self._root / session_name).metadata
+            return _persistence.read_json_object(metadata_path)
 
     def summarize_session(self, session_id: str) -> SessionSummary:
         """Load and summarize one session's metadata."""
 
-        session_name = _metadata._validate_session_id(session_id)
-        paths = _persistence.session_paths(self._root / session_name)
-        metadata = self.load_metadata(session_name)
-        metadata_summary = _metadata._summary_from_metadata(metadata, detected_patterns=[])
-        if metadata_summary.session_id != session_name:
-            raise ValueError("session metadata ID must match its directory name")
-        return _metadata._summary_from_metadata(
-            metadata,
-            detected_patterns=_persistence.read_json_list(paths.detected_patterns),
-        )
+        with self._store_lock:
+            session_name = _metadata._validate_session_id(session_id)
+            paths = _persistence.session_paths(self._root / session_name)
+            metadata = self.load_metadata(session_name)
+            metadata_summary = _metadata._summary_from_metadata(metadata, detected_patterns=[])
+            if metadata_summary.session_id != session_name:
+                raise ValueError("session metadata ID must match its directory name")
+            return _metadata._summary_from_metadata(
+                metadata,
+                detected_patterns=_persistence.read_json_list(paths.detected_patterns),
+            )
 
     def list_sessions(self, *, limit: int | None = None) -> tuple[SessionSummary, ...]:
         """Return stored session summaries in newest-first order."""
 
-        _metadata._validate_session_limit(limit)
-        if not self._root.exists():
-            return ()
+        with self._store_lock:
+            _metadata._validate_session_limit(limit)
+            if not self._root.exists():
+                return ()
 
-        summaries: list[SessionSummary] = []
-        for session_root in self._root.iterdir():
-            if (
-                session_root.is_symlink()
-                or not session_root.is_dir()
-                or not _persistence.session_paths(session_root).metadata.is_file()
-            ):
-                continue
-            summaries.append(self.summarize_session(session_root.name))
+            summaries: list[SessionSummary] = []
+            for session_root in self._root.iterdir():
+                if (
+                    session_root.is_symlink()
+                    or not session_root.is_dir()
+                    or not _persistence.session_paths(session_root).metadata.is_file()
+                ):
+                    continue
+                summaries.append(self.summarize_session(session_root.name))
 
-        summaries.sort(
-            key=lambda summary: (summary.started_at, summary.session_id),
-            reverse=True,
-        )
-        if limit is not None:
-            summaries = summaries[:limit]
-        return tuple(summaries)
+            summaries.sort(
+                key=lambda summary: (summary.started_at, summary.session_id),
+                reverse=True,
+            )
+            if limit is not None:
+                summaries = summaries[:limit]
+            return tuple(summaries)
 
     def latest_session(self) -> SessionSummary | None:
         """Return the newest stored session summary, if one exists."""
@@ -555,12 +645,14 @@ class SessionStore:
     ) -> SessionListPage:
         """Return one stable bounded native/legacy session page."""
 
-        return _list_session_page(self._root, limit=limit, cursor=cursor)
+        with self._store_lock:
+            return _list_session_page(self._root, limit=limit, cursor=cursor)
 
     def get_session_detail(self, session_id: str) -> SessionDetail:
         """Return bounded schema-aware detail for one stored session."""
 
-        return _get_session_detail(self._root, session_id)
+        with self._store_lock:
+            return _get_session_detail(self._root, session_id)
 
     def replay_recent_logs(
         self,
@@ -571,12 +663,34 @@ class SessionStore:
     ) -> RecentLogs:
         """Return bounded replayed UART lines for one selected native session."""
 
-        return _replay_recent_logs(
+        with self._store_lock:
+            return _replay_recent_logs(
+                self._root,
+                session_id=session_id,
+                lines=lines,
+                active_session_id=active_session_id,
+            )
+
+    def run_retention(self) -> SessionRetentionStatus:
+        """Apply the configured count limit and return its current status."""
+
+        with self._store_lock:
+            return self._apply_retention_locked()
+
+    def _apply_retention_locked(
+        self,
+        *,
+        held_session_ids: frozenset[str] = frozenset(),
+    ) -> SessionRetentionStatus:
+        if self._max_count is None:
+            self._retention_status = SessionRetentionStatus()
+            return self._retention_status
+        self._retention_status = _retention.apply_session_retention(
             self._root,
-            session_id=session_id,
-            lines=lines,
-            active_session_id=active_session_id,
+            max_count=self._max_count,
+            held_session_ids=held_session_ids,
         )
+        return self._retention_status
 
     def append_uart_capture(
         self,

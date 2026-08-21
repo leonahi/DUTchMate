@@ -43,6 +43,7 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionHandle,
     SessionListPage,
+    SessionRetentionStatus,
     SessionSummary,
     SessionWorkflow,
     WaitPatternResult,
@@ -135,6 +136,7 @@ class DeviceCoreStatus:
     connection_state: ConnectionState = "disconnected"
     active_workflow: SessionWorkflow | None = None
     reconnect_remaining_s: float | None = None
+    retention: SessionRetentionStatus = SessionRetentionStatus()
 
 
 class _SessionCaptureSource:
@@ -330,6 +332,11 @@ class DeviceCoreRuntime:
                 if self._connected
                 else "disconnected"
             )
+            retention = getattr(
+                self._session_store,
+                "retention_status",
+                SessionRetentionStatus(),
+            )
             return DeviceCoreStatus(
                 connected=self._connected,
                 port=self._port,
@@ -357,6 +364,7 @@ class DeviceCoreRuntime:
                 connection_state=connection_state,
                 active_workflow=self._active_workflow,
                 reconnect_remaining_s=reconnect_remaining_s,
+                retention=retention,
             )
 
     def apply_hardware_config(

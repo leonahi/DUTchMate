@@ -34,6 +34,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         type=int,
         default=DEFAULT_SESSION_MAX_SIZE_MB,
     )
+    parser.add_argument("--session-max-count", type=int)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--backend", choices=("basic", "enhanced"))
     parser.add_argument("--serial-port")
@@ -52,6 +53,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         session_budget_bytes = session_evidence_budget_bytes(args.session_max_size_mb)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.session_max_count is not None and args.session_max_count <= 0:
+        parser.error("session max count must be a positive integer")
     hardware_config = load_startup_hardware_config(args.config)
     try:
         try:
@@ -76,6 +79,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         create_app(
             session_root=args.session_root,
             session_evidence_budget_bytes=session_budget_bytes,
+            session_max_count=args.session_max_count,
             hardware_config=hardware_config,
             backend_settings=backend_settings,
         ),

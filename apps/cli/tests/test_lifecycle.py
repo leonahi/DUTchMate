@@ -71,6 +71,7 @@ def test_start_service_spawns_background_process_and_writes_pid(
         backend_settings=enhanced_settings(),
         host="127.0.0.1",
         port=2041,
+        session_max_count=25,
         pid_file=pid_file,
         log_file=log_file,
         wait_timeout_s=0,
@@ -104,6 +105,8 @@ def test_start_service_spawns_background_process_and_writes_pid(
             "--reconnect-timeout-s",
             "5.0",
             "--no-tx-enabled",
+            "--session-max-count",
+            "25",
         ]
     ]
     assert pid_file.read_text(encoding="utf-8") == "4242\n"
@@ -188,12 +191,14 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
         port: int,
         session_root: Path,
         session_max_size_mb: int,
+        session_max_count: int | None,
         backend_settings: BackendSettings,
     ) -> ServiceStartResult:
         assert host == "127.0.0.1"
         assert port == 2040
         assert session_root == Path(".dutchmate/sessions")
         assert session_max_size_mb == 50
+        assert session_max_count is None
         assert backend_settings == enhanced_settings()
         return ServiceStartResult(
             pid=4242,
@@ -235,9 +240,11 @@ def test_start_command_resolves_basic_without_enhanced_discovery(
         port: int,
         session_root: Path,
         session_max_size_mb: int,
+        session_max_count: int | None,
         backend_settings: BackendSettings,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
+        assert session_max_count is None
         assert backend_settings == basic_settings(baudrate=230400)
         return ServiceStartResult(
             pid=4242,
@@ -274,9 +281,11 @@ def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) 
         port: int,
         session_root: Path,
         session_max_size_mb: int,
+        session_max_count: int | None,
         backend_settings: BackendSettings,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
+        assert session_max_count is None
         raise LifecycleError("Device Core Service is already running (pid 4242).")
 
     monkeypatch.setattr(main, "start_service", fake_start_service)
@@ -295,12 +304,14 @@ def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> 
         port: int,
         session_root: Path,
         session_max_size_mb: int,
+        session_max_count: int | None,
         backend_settings: BackendSettings,
     ) -> ServiceStartResult:
         assert host == "localhost"
         assert port == 2041
         assert session_root == Path(".dutchmate/custom-sessions")
         assert session_max_size_mb == 10
+        assert session_max_count == 25
         assert backend_settings == enhanced_settings()
         return ServiceStartResult(
             pid=4242,
@@ -318,6 +329,7 @@ def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> 
             sessions=SessionsConfig(
                 path=Path(".dutchmate/custom-sessions"),
                 max_size_mb=10,
+                max_count=25,
             ),
             backend=BackendConfig(mode="enhanced"),
         ),
@@ -340,9 +352,11 @@ def test_start_command_auto_selects_single_dutchmate_candidate(
         port: int,
         session_root: Path,
         session_max_size_mb: int,
+        session_max_count: int | None,
         backend_settings: BackendSettings,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
+        assert session_max_count is None
         assert backend_settings == enhanced_settings("/dev/ttyACM0")
         return ServiceStartResult(
             pid=4242,

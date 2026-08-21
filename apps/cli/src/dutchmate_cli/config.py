@@ -42,6 +42,7 @@ class SessionsConfig:
 
     path: Path = DEFAULT_SESSION_PATH
     max_size_mb: int = DEFAULT_SESSION_MAX_SIZE_MB
+    max_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,15 +91,18 @@ def _parse_daemon_config(raw_daemon: Mapping[str, object]) -> DaemonConfig:
 
 
 def _parse_sessions_config(raw_sessions: Mapping[str, object]) -> SessionsConfig:
-    if "max_count" in raw_sessions:
-        raise CliConfigError("[sessions].max_count is not supported yet")
     path = Path(_optional_str(raw_sessions, "path", str(DEFAULT_SESSION_PATH), "[sessions].path"))
     raw_max_size_mb = raw_sessions.get("max_size_mb", DEFAULT_SESSION_MAX_SIZE_MB)
     try:
         max_size_mb = validate_session_max_size_mb(raw_max_size_mb)
     except ValueError as exc:
         raise CliConfigError("[sessions].max_size_mb must be a positive integer") from exc
-    return SessionsConfig(path=path, max_size_mb=max_size_mb)
+    max_count = (
+        _optional_positive_int(raw_sessions, "max_count", 1, "[sessions].max_count")
+        if "max_count" in raw_sessions
+        else None
+    )
+    return SessionsConfig(path=path, max_size_mb=max_size_mb, max_count=max_count)
 
 
 def _optional_table(raw_config: Mapping[str, object], key: str) -> Mapping[str, object]:

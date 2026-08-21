@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 from contextlib import suppress
 from pathlib import Path
 from typing import cast
@@ -49,6 +50,18 @@ def remove_file(path: Path, *, missing_ok: bool = False) -> None:
         path.unlink(missing_ok=missing_ok)
     except OSError as exc:
         raise _error("remove", path, exc) from exc
+
+
+def remove_session_directory(path: Path) -> None:
+    """Remove one validated session tree and durably update its parent."""
+
+    try:
+        if path.is_symlink() or not path.is_dir():
+            raise OSError("session retention target must be a non-symlink directory")
+        shutil.rmtree(path)
+        _fsync_directory(path.parent)
+    except OSError as exc:
+        raise _error("remove session", path, exc) from exc
 
 
 def refresh_storage_accounting(

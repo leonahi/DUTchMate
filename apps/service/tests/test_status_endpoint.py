@@ -45,6 +45,15 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "active_session_id": None,
         "active_workflow": None,
         "reconnect_remaining_s": None,
+        "retention": {
+            "enabled": False,
+            "max_count": None,
+            "session_count": 0,
+            "protected_session_ids": [],
+            "deleted_session_ids": [],
+            "diagnostic": None,
+            "detail": None,
+        },
         "control_channels": {
             "CTRL0": {
                 "channel": "CTRL0",

@@ -88,6 +88,7 @@ def build_startup_runtime(
     *,
     session_root: Path | str,
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
+    session_max_count: int | None = None,
     backend_settings: BackendSettings | None = None,
     monotonic_clock: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
@@ -97,6 +98,7 @@ def build_startup_runtime(
     session_store = SessionStore(
         root=session_root,
         evidence_budget_bytes=session_evidence_budget_bytes,
+        max_count=session_max_count,
     )
     session_store.recover_stale_sessions()
     reconnect_clock = monotonic_clock or time.monotonic

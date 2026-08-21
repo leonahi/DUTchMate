@@ -63,6 +63,7 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         "active_session_id": status.active_session_id,
         "active_workflow": status.active_workflow,
         "reconnect_remaining_s": status.reconnect_remaining_s,
+        "retention": asdict(status.retention),
         "control_channels": {
             channel: asdict(channel_status)
             for channel, channel_status in status.control_channels.items()

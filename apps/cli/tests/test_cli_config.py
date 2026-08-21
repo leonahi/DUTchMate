@@ -101,9 +101,16 @@ def test_rejects_invalid_daemon_port() -> None:
         parse_cli_config({"daemon": {"port": 70000}})
 
 
-def test_rejects_unsupported_session_max_count() -> None:
-    with pytest.raises(CliConfigError, match=r"\[sessions\]\.max_count is not supported yet"):
-        parse_cli_config({"sessions": {"max_count": 25}})
+def test_parses_positive_session_max_count() -> None:
+    config = parse_cli_config({"sessions": {"max_count": 25}})
+
+    assert config.sessions.max_count == 25
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 1.5])
+def test_rejects_invalid_session_max_count(value: object) -> None:
+    with pytest.raises(CliConfigError, match=r"\[sessions\]\.max_count"):
+        parse_cli_config({"sessions": {"max_count": value}})
 
 
 def test_rejects_boolean_session_max_size() -> None:

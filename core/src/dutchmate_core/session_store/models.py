@@ -55,6 +55,19 @@ class SessionRecoveryResult:
     diagnostics: tuple[SessionRecoveryDiagnostic, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class SessionRetentionStatus:
+    """Outcome of the most recent configured session-retention pass."""
+
+    enabled: bool = False
+    max_count: int | None = None
+    session_count: int = 0
+    protected_session_ids: tuple[str, ...] = ()
+    deleted_session_ids: tuple[str, ...] = ()
+    diagnostic: str | None = None
+    detail: str | None = None
+
+
 class SessionRecoveryError(RuntimeError):
     """Raised when stale native session metadata cannot be safely replaced."""
 

@@ -42,6 +42,12 @@ def test_format_status_renders_channel_first_state() -> None:
         "active_session_id": None,
         "active_workflow": None,
         "reconnect_remaining_s": None,
+        "retention": {
+            "enabled": True,
+            "max_count": 25,
+            "session_count": 3,
+            "diagnostic": None,
+        },
         "control_channels": {
             "CTRL0": {
                 "channel": "CTRL0",
@@ -74,6 +80,7 @@ def test_format_status_renders_channel_first_state() -> None:
             "Timestamp provenance: segment 0: device/rp2040_timer, "
             "debug_helper_uart_receive/uart_event",
             "UART loss: none_reported (scope=debug_helper_rx_buffer, dropped_bytes=0)",
+            "Retention: healthy (3/25 sessions)",
             "Control channels:",
             "  CTRL0: reset -> RESET_N (mode=open_drain, active=low, idle=high, source=config)",
             "  CTRL1: unconfigured",
@@ -143,6 +150,21 @@ def test_format_status_renders_active_reconnect_window() -> None:
     assert "Workflow: boot-test (active)" in output
     assert "Session: 20260820T120000Z-a1b2c3d4" in output
     assert "Connection: reconnecting (2.1s remaining)" in output
+
+
+def test_format_status_renders_retention_diagnostic() -> None:
+    output = format_status(
+        {
+            "retention": {
+                "enabled": True,
+                "max_count": 1,
+                "session_count": 3,
+                "diagnostic": "retention_blocked",
+            }
+        }
+    )
+
+    assert "Retention: retention_blocked (3/1 sessions)" in output
 
 
 @pytest.mark.parametrize("remaining", [None, True, -0.1, float("inf"), "2.1"])

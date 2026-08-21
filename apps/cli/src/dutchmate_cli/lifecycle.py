@@ -68,6 +68,7 @@ def start_service(
     config_path: Path = DEFAULT_CONFIG_PATH,
     session_root: Path = DEFAULT_SESSION_ROOT,
     session_max_size_mb: int = DEFAULT_SESSION_MAX_SIZE_MB,
+    session_max_count: int | None = None,
     pid_file: Path = DEFAULT_PID_FILE,
     log_file: Path = DEFAULT_LOG_FILE,
     command: Sequence[str] | None = None,
@@ -117,6 +118,8 @@ def start_service(
         ]
         if backend_settings.serial_port is not None:
             service_command.extend(["--serial-port", backend_settings.serial_port])
+        if session_max_count is not None:
+            service_command.extend(["--session-max-count", str(session_max_count)])
     else:
         service_command = list(command)
 

@@ -245,10 +245,14 @@ Runtime capture/boot-test sessions with complete backend identity now use schema
 version 1 and snapshot backend facts, accepted timing policy, integrity, line
 processing, storage accounting, and one-way lifecycle state. Older direct-store
 fixtures retain their recognized unversioned legacy shape. The CLI propagates
-the positive `sessions.max_size_mb` setting through service startup, and each
-native session snapshots and enforces the exact resulting byte budget.
-`sessions.max_count` is rejected until retention exists. Quota admission for
-future control/TX events, retention, baseline, and reconnect coordination remain.
+the positive `sessions.max_size_mb` and optional positive `sessions.max_count`
+settings through service startup. Each native session snapshots and enforces
+the exact resulting byte budget. When the count limit is configured, the store
+runs retention after startup recovery and terminal transitions under the same
+lock used by bounded readers. It removes oldest terminal native sessions while
+protecting active, legacy, baseline-designated, and in-progress read evidence;
+blocked or unsafe passes are exposed through service status. Baseline mutation
+and comparison remain.
 Startup recovery
 retains structured diagnostics for malformed/reserve conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a

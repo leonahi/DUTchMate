@@ -209,24 +209,30 @@ def test_build_startup_runtime_passes_session_evidence_budget_to_store(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    observed: list[tuple[Path | str, int]] = []
+    observed: list[tuple[Path | str, int, int | None]] = []
 
     def tracking_session_store(
         *,
         root: Path | str,
         evidence_budget_bytes: int,
+        max_count: int | None,
     ) -> SessionStore:
-        observed.append((root, evidence_budget_bytes))
-        return SessionStore(root=root, evidence_budget_bytes=evidence_budget_bytes)
+        observed.append((root, evidence_budget_bytes, max_count))
+        return SessionStore(
+            root=root,
+            evidence_budget_bytes=evidence_budget_bytes,
+            max_count=max_count,
+        )
 
     monkeypatch.setattr(startup, "SessionStore", tracking_session_store)
 
     startup.build_startup_runtime(
         session_root=tmp_path,
         session_evidence_budget_bytes=10 * 1024 * 1024,
+        session_max_count=25,
     )
 
-    assert observed == [(tmp_path, 10 * 1024 * 1024)]
+    assert observed == [(tmp_path, 10 * 1024 * 1024, 25)]
 
 
 def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
