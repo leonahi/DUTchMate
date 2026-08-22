@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 BackendMode: TypeAlias = Literal["basic", "enhanced"]
+BackendInputKind: TypeAlias = Literal[
+    "frame_too_large",
+    "invalid_utf8",
+    "invalid_json",
+    "invalid_message",
+]
 BackendCapability: TypeAlias = Literal[
     "uart_receive",
     "uart_send",
@@ -197,6 +203,74 @@ class BackendInputError(RuntimeError):
 
     error = "backend_input_error"
     end_reason = "backend_input_error"
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        input_error: BackendInputKind = "invalid_message",
+        operation: str | None = None,
+        backend_mode: BackendMode | None = None,
+        observed_frame_bytes: int | None = None,
+        max_frame_bytes: int | None = None,
+    ) -> None:
+        super().__init__(detail)
+        if input_error not in {
+            "frame_too_large",
+            "invalid_utf8",
+            "invalid_json",
+            "invalid_message",
+        }:
+            raise ValueError("backend input classification is invalid")
+        if (observed_frame_bytes is None) != (max_frame_bytes is None):
+            raise ValueError("backend frame-size context must be complete or omitted")
+        if input_error == "frame_too_large" and observed_frame_bytes is None:
+            raise ValueError("frame_too_large input requires frame-size context")
+        if input_error != "frame_too_large" and observed_frame_bytes is not None:
+            raise ValueError("backend frame sizes require frame_too_large input")
+        if observed_frame_bytes is not None and (
+            observed_frame_bytes <= 0
+            or max_frame_bytes is None
+            or max_frame_bytes <= 0
+            or observed_frame_bytes < max_frame_bytes
+        ):
+            raise ValueError("backend frame-size context is invalid")
+        self.input_error = input_error
+        self.operation = operation
+        self.backend_mode = backend_mode
+        self.observed_frame_bytes = observed_frame_bytes
+        self.max_frame_bytes = max_frame_bytes
+        self.context = self._structured_context()
+
+    def with_context(
+        self,
+        *,
+        operation: str,
+        backend_mode: BackendMode,
+    ) -> "BackendInputError":
+        """Return the same classified failure with workflow-owned context."""
+
+        return BackendInputError(
+            str(self),
+            input_error=self.input_error,
+            operation=self.operation or operation,
+            backend_mode=self.backend_mode or backend_mode,
+            observed_frame_bytes=self.observed_frame_bytes,
+            max_frame_bytes=self.max_frame_bytes,
+        )
+
+    def _structured_context(self) -> dict[str, object] | None:
+        if self.operation is None or self.backend_mode is None:
+            return None
+        context: dict[str, object] = {
+            "operation": self.operation,
+            "backend_mode": self.backend_mode,
+            "input_error": self.input_error,
+        }
+        if self.observed_frame_bytes is not None and self.max_frame_bytes is not None:
+            context["observed_frame_bytes"] = self.observed_frame_bytes
+            context["max_frame_bytes"] = self.max_frame_bytes
+        return context
 
 
 class BackendCapabilityError(RuntimeError):

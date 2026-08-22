@@ -6,8 +6,15 @@ from typing import Literal
 import pytest
 from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
 
-from dutchmate_core.backends import BackendUartSendResult, BackendWriteError, UartReceiveEvent
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
+from dutchmate_core.backends import (
+    BackendUartSendResult,
+    BackendWriteError,
+    UartReceiveEvent,
+    UartSender,
+)
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl, EnhancedUartSender
+from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.models import (
     NativeSessionDetail,
@@ -32,6 +39,15 @@ class FakeSender:
         if isinstance(outcome, BackendWriteError):
             raise outcome
         return outcome
+
+
+class ProtocolFailingTransport:
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+
+    def request(self, command: bytes) -> DeviceMessage:
+        del command
+        raise ProtocolValidationError(self.detail)
 
 
 def test_standalone_send_appends_one_lf_and_creates_no_attempt(tmp_path: Path) -> None:
@@ -205,6 +221,56 @@ def test_forced_backend_failure_records_known_partial_acceptance(tmp_path: Path)
     assert result["bytes_accepted"] == 2
 
 
+def test_forced_backend_input_failure_closes_source_and_fails_session(
+    tmp_path: Path,
+) -> None:
+    secret = "DUT-SECRET-MESSAGE-TYPE"
+    clock = FakeMonotonicClock()
+    errors: list[UartSendError] = []
+    runtime: DeviceCoreRuntime
+
+    def send_during_capture() -> None:
+        try:
+            runtime.send_uart(cmd="go", force=True)
+        except UartSendError as exc:
+            errors.append(exc)
+
+    source = FakeCaptureSource(
+        [UartReceiveEvent(0, 200, 0, b"must-not-be-admitted\n")],
+        clock=clock,
+        on_read=send_during_capture,
+    )
+    runtime = _runtime(
+        tmp_path,
+        sender=EnhancedUartSender(
+            ProtocolFailingTransport(f"Unsupported device message type: {secret}")
+        ),
+        source=source,
+        capture_clock=clock,
+    )
+
+    summary = runtime.capture_uart(duration_s=0.25)
+
+    assert errors[0].error == "backend_input_error"
+    assert errors[0].context == {
+        "attempt_id": "attempt01",
+        "operation": "uart_send",
+        "backend_mode": "enhanced",
+        "input_error": "invalid_message",
+    }
+    assert secret not in str(errors[0])
+    assert summary.state == "failed"
+    assert summary.end_reason == "backend_input_error"
+    assert summary.error is not None
+    assert summary.error["code"] == "backend_input_error"
+    assert secret not in json.dumps(summary.error)
+    assert source.close_count == 1
+    events = _hardware_events(tmp_path / summary.session_id)
+    assert [event["type"] for event in events] == ["uart_tx_attempt", "uart_tx_result"]
+    assert events[1]["error"] == "backend_input_error"
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b""
+
+
 class FailingAttemptStore(SessionStore):
     def append_uart_tx_attempt(
         self,
@@ -374,7 +440,7 @@ def test_attempt_quota_rejection_stops_capture_without_dispatch(tmp_path: Path) 
 def _runtime(
     tmp_path: Path,
     *,
-    sender: FakeSender,
+    sender: UartSender,
     tx_enabled: bool = True,
     source: FakeCaptureSource | None = None,
     capture_clock: FakeMonotonicClock | None = None,

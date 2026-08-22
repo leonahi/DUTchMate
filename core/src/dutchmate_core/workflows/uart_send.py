@@ -10,6 +10,8 @@ from typing import Literal, Protocol
 from uuid import uuid4
 
 from dutchmate_core.backends.contracts import (
+    BackendInputError,
+    BackendMode,
     BackendUartSendResult,
     BackendWriteError,
     SegmentContext,
@@ -101,6 +103,7 @@ class UartSendWorkflow:
         wall_clock: Callable[[], datetime] | None = None,
         monotonic_ns: Callable[[], int] | None = None,
         attempt_id_factory: Callable[[], str] | None = None,
+        backend_mode: BackendMode | None = None,
     ) -> None:
         self._sender = sender
         self._session_store = session_store
@@ -108,6 +111,7 @@ class UartSendWorkflow:
         self._wall_clock = wall_clock or (lambda: datetime.now(timezone.utc))
         self._monotonic_ns = monotonic_ns or time.monotonic_ns
         self._attempt_id_factory = attempt_id_factory or (lambda: uuid4().hex)
+        self._backend_mode = backend_mode
 
     def run(
         self,
@@ -173,6 +177,34 @@ class UartSendWorkflow:
                 raise UartSendError(
                     error=exc.error,
                     detail=str(exc),
+                    context=context,
+                ) from exc
+            except BackendInputError as exc:
+                backend_mode = exc.backend_mode or self._backend_mode
+                contextual_error = (
+                    exc.with_context(
+                        operation="uart_send",
+                        backend_mode=backend_mode,
+                    )
+                    if backend_mode is not None
+                    else exc
+                )
+                self._record_failed_result(
+                    active_session=active_session,
+                    attempt_id=attempt_id,
+                    error=contextual_error.error,
+                    bytes_accepted=None,
+                )
+                context = (
+                    contextual_error.context.copy()
+                    if contextual_error.context is not None
+                    else {"input_error": contextual_error.input_error}
+                )
+                if attempt_id is not None:
+                    context["attempt_id"] = attempt_id
+                raise UartSendError(
+                    error=contextual_error.error,
+                    detail=str(contextual_error),
                     context=context,
                 ) from exc
 

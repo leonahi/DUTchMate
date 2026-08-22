@@ -8,8 +8,10 @@ from collections.abc import Callable
 from threading import RLock
 from typing import Protocol, cast
 
+from dutchmate_core.device_connection.errors import FrameTooLargeError
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
+from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
 from dutchmate_core.device_connection.transport import TransportTimeoutError
 
 DEFAULT_BAUDRATE = 115200
@@ -78,9 +80,19 @@ class SerialCommandTransport:
             return messages
 
     def _read_serial_message(self) -> DeviceMessage:
-        line = self._serial_port.read_until(b"\n")
+        line = self._serial_port.read_until(b"\n", size=MAX_DEVICE_FRAME_BYTES)
         if not line:
             raise TransportTimeoutError("Timed out waiting for Debug Helper message")
+        if len(line) >= MAX_DEVICE_FRAME_BYTES and not line.endswith(b"\n"):
+            raise FrameTooLargeError(
+                observed_frame_bytes=len(line),
+                max_frame_bytes=MAX_DEVICE_FRAME_BYTES,
+            )
+        if len(line) > MAX_DEVICE_FRAME_BYTES:
+            raise FrameTooLargeError(
+                observed_frame_bytes=len(line),
+                max_frame_bytes=MAX_DEVICE_FRAME_BYTES,
+            )
         if not line.endswith(b"\n"):
             raise TransportTimeoutError("Timed out waiting for complete Debug Helper message")
         return parse_device_message(line)

@@ -72,7 +72,8 @@ class EnhancedDeviceControl(DeviceControl):
         )
         return self._request_success(
             command.to_ndjson(),
-            operation="GPIO mode configuration",
+            operation="configure_gpio_mode",
+            response_label="GPIO mode configuration",
         )
 
     def reset_dut(self, *, pulse_ms: int) -> int | None:
@@ -87,21 +88,30 @@ class EnhancedDeviceControl(DeviceControl):
             operation="set_boot_mode",
         )
 
-    def _request_success(self, command: bytes, *, operation: str) -> int | None:
+    def _request_success(
+        self,
+        command: bytes,
+        *,
+        operation: str,
+        response_label: str | None = None,
+    ) -> int | None:
+        label = response_label or operation
         try:
             response = self._transport.request(command)
         except TransportTimeoutError as exc:
             raise DeviceControlError(
                 error="timeout",
-                detail=f"Timed out waiting for {operation} response",
+                detail=f"Timed out waiting for {label} response",
             ) from exc
+        except ProtocolError as exc:
+            raise backend_input_error_from_protocol(exc, operation=operation) from exc
         if isinstance(response, CommandSuccessMessage):
             return response.timestamp_us
         if isinstance(response, CommandErrorMessage):
             raise DeviceControlError(error=response.error, detail=response.detail)
         raise DeviceControlError(
             error="unexpected_response",
-            detail=f"Expected command response for {operation}, got {type(response).__name__}",
+            detail=f"Expected command response for {label}, got {type(response).__name__}",
         )
 
 
@@ -121,6 +131,8 @@ class EnhancedUartSender:
                 bytes_accepted=None,
                 error="timeout",
             ) from exc
+        except ProtocolError as exc:
+            raise backend_input_error_from_protocol(exc, operation="uart_send") from exc
         except Exception as exc:
             raise BackendWriteError(
                 "Enhanced UART send transport failed",
@@ -219,7 +231,7 @@ class EnhancedCaptureEventSource:
         except TransportTimeoutError:
             return None
         except ProtocolError as exc:
-            raise BackendInputError(str(exc)) from exc
+            raise backend_input_error_from_protocol(exc) from exc
         except Exception as exc:
             raise BackendDisconnectedError("Enhanced serial read failed") from exc
 
@@ -282,7 +294,7 @@ class EnhancedNdjsonEventStream:
         try:
             messages = self._parser.feed(chunk)
         except ProtocolError as exc:
-            raise BackendInputError(str(exc)) from exc
+            raise backend_input_error_from_protocol(exc) from exc
 
         events: list[BackendEvent] = []
         for message in messages:
@@ -335,8 +347,36 @@ def _relative_timestamp(timestamp_us: int, source_origin_us: int) -> int:
     if source_origin_us < 0:
         raise ValueError("Enhanced source origin must be non-negative")
     if timestamp_us < source_origin_us:
-        raise BackendInputError("Enhanced event timestamp precedes its segment origin")
+        raise BackendInputError(
+            "Enhanced event timestamp precedes its segment origin",
+            backend_mode="enhanced",
+        )
     return timestamp_us - source_origin_us
+
+
+def backend_input_error_from_protocol(
+    exc: ProtocolError,
+    *,
+    operation: str | None = None,
+) -> BackendInputError:
+    """Preserve bounded Enhanced protocol classification across the adapter."""
+
+    detail = {
+        "frame_too_large": "Enhanced protocol frame exceeds the device-to-host size limit",
+        "invalid_utf8": "Enhanced protocol frame is not valid UTF-8",
+        "invalid_json": "Enhanced protocol frame is not valid JSON",
+        "invalid_message": (
+            "Enhanced protocol message does not match the expected schema"
+        ),
+    }[exc.input_error]
+    return BackendInputError(
+        detail,
+        input_error=exc.input_error,
+        operation=operation,
+        backend_mode="enhanced",
+        observed_frame_bytes=exc.observed_frame_bytes,
+        max_frame_bytes=exc.max_frame_bytes,
+    )
 
 
 def _enhanced_segment_context(

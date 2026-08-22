@@ -176,6 +176,13 @@ class _SessionCaptureSource:
         if callable(discard):
             discard()
 
+    def close(self) -> None:
+        """Close the live source represented by this session-local view."""
+
+        close = getattr(self._source, "close", None)
+        if callable(close):
+            close()
+
 
 class DeviceCoreRuntime:
     """Compose Phase 1 core services behind one service-facing object."""
@@ -218,6 +225,7 @@ class DeviceCoreRuntime:
                 wall_clock=uart_wall_clock,
                 monotonic_ns=uart_monotonic_ns,
                 attempt_id_factory=uart_attempt_id_factory,
+                backend_mode=backend_mode,
             )
             if uart_sender is not None
             else None
@@ -638,6 +646,18 @@ class DeviceCoreRuntime:
                     active_session=active_session,
                 )
             except UartSendError as exc:
+                if exc.error == "backend_input_error":
+                    if self._message_source is not None:
+                        self._close_event_source(self._message_source)
+                    self._mark_backend_disconnected()
+                    if active_session is not None:
+                        self._session_store.fail_session(
+                            active_session.handle,
+                            end_reason="backend_input_error",
+                            error_code="backend_input_error",
+                            detail=exc.detail,
+                        )
+                        self._active_session_terminalized = True
                 if exc.session_terminalized:
                     self._active_session_terminalized = True
                 raise
@@ -735,6 +755,9 @@ class DeviceCoreRuntime:
                 with self._operation_lock:
                     self._integrity = summary.integrity
             return summary
+        except BackendInputError:
+            self._mark_backend_disconnected()
+            raise
         finally:
             with self._operation_lock:
                 self._capture_in_progress = False

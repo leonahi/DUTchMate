@@ -51,6 +51,7 @@ class ScriptedCaptureSource:
         self._script = script
         self._clock = clock
         self._read_duration_s = read_duration_s
+        self.close_count = 0
 
     def read_event(self) -> BackendEvent | None:
         self._clock.advance(self._read_duration_s)
@@ -60,6 +61,9 @@ class ScriptedCaptureSource:
         if isinstance(result, Exception):
             raise result
         return result
+
+    def close(self) -> None:
+        self.close_count += 1
 
 
 class ScriptedReconnect:
@@ -303,13 +307,20 @@ def test_backend_input_error_is_fatal_without_reconnect_attempt(tmp_path: Path) 
     initial_snapshot = _snapshot(0)
     source = ScriptedCaptureSource(
         segment=_required_segment(initial_snapshot),
-        script=[BackendInputError("invalid enhanced frame")],
+        script=[
+            BackendInputError(
+                "invalid enhanced frame",
+                input_error="frame_too_large",
+                observed_frame_bytes=65536,
+                max_frame_bytes=65536,
+            )
+        ],
         clock=clock,
     )
     reconnect = ScriptedReconnect([])
     store = _store(tmp_path)
 
-    with pytest.raises(BackendInputError, match="invalid enhanced frame"):
+    with pytest.raises(BackendInputError, match="invalid enhanced frame") as raised:
         CaptureWorkflow(session_store=store).run(
             source=source,
             duration_s=1.0,
@@ -319,12 +330,22 @@ def test_backend_input_error_is_fatal_without_reconnect_attempt(tmp_path: Path) 
             reconnect=reconnect,
         )
 
+    assert raised.value.operation == "capture"
+    assert raised.value.backend_mode == "enhanced"
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == 65536
+    assert raised.value.max_frame_bytes == 65536
+
     summary = store.summarize_session("20260714T123045Z-reconnect")
     assert summary.state == "failed"
     assert summary.end_reason == "backend_input_error"
     assert summary.interrupted is False
     assert summary.error is not None
     assert summary.error["code"] == "backend_input_error"
+    assert "input_error" not in summary.error
+    assert "observed_frame_bytes" not in summary.error
+    assert "max_frame_bytes" not in summary.error
+    assert source.close_count == 1
     assert reconnect.calls == []
 
 

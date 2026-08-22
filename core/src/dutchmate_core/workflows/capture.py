@@ -2,6 +2,7 @@
 
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 from threading import RLock
@@ -658,6 +659,9 @@ class CaptureWorkflow:
                             requested_pattern,
                         )
                     break
+                except BackendInputError:
+                    self._close_source(current_source)
+                    raise
                 except BackendDisconnectedError as disconnect_error:
                     if on_backend_disconnected is not None:
                         on_backend_disconnected()
@@ -727,7 +731,14 @@ class CaptureWorkflow:
                     with self.mutation_lock:
                         self._session_store.complete_session(recorder.session_handle)
         except Exception as exc:
-            failure = exc
+            failure = (
+                exc.with_context(
+                    operation=workflow,
+                    backend_mode=snapshot.info.mode,
+                )
+                if isinstance(exc, BackendInputError) and snapshot is not None
+                else exc
+            )
             if not isinstance(failure, SessionPersistenceError):
                 try:
                     recorder.finalize()
@@ -781,6 +792,13 @@ class CaptureWorkflow:
     def _failure_code(exc: Exception) -> str:
         code = getattr(exc, "error", None)
         return code if isinstance(code, str) and code else "internal_error"
+
+    @staticmethod
+    def _close_source(source: CaptureEventSource) -> None:
+        close = getattr(source, "close", None)
+        if callable(close):
+            with suppress(Exception):
+                close()
 
     @staticmethod
     def _segment_id(

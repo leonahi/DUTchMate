@@ -12,11 +12,15 @@ from dutchmate_core.backends import (
 )
 from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
+    EnhancedDeviceControl,
     EnhancedNdjsonEventStream,
     EnhancedUartSender,
     normalize_enhanced_message,
 )
-from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.errors import (
+    FrameTooLargeError,
+    ProtocolValidationError,
+)
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
@@ -171,14 +175,24 @@ def test_sync_adapter_maps_transport_timeout_to_inactivity() -> None:
 
 
 def test_sync_adapter_maps_protocol_failure_to_backend_input_error() -> None:
+    secret = "DUT-SECRET-CAPABILITY"
     source = EnhancedCaptureEventSource(
-        FakeEnhancedMessageSource([ProtocolValidationError("invalid message")]),
+        FakeEnhancedMessageSource(
+            [ProtocolValidationError(f"Unknown hello capability: {secret}")]
+        ),
         segment_id=0,
         source_origin_us=0,
     )
 
-    with pytest.raises(BackendInputError, match="invalid message"):
+    with pytest.raises(
+        BackendInputError,
+        match="Enhanced protocol message does not match the expected schema",
+    ) as raised:
         source.read_event()
+
+    assert secret not in str(raised.value)
+    assert raised.value.input_error == "invalid_message"
+    assert raised.value.backend_mode == "enhanced"
 
 
 def test_sync_adapter_maps_transport_failure_to_backend_disconnect() -> None:
@@ -274,5 +288,65 @@ def test_ndjson_stream_emits_only_normalized_evidence_events() -> None:
 def test_ndjson_stream_maps_invalid_input_to_backend_input_error() -> None:
     stream = EnhancedNdjsonEventStream()
 
-    with pytest.raises(BackendInputError):
+    with pytest.raises(BackendInputError) as raised:
         stream.feed(b"not-json\n")
+
+    assert raised.value.input_error == "invalid_json"
+    assert raised.value.backend_mode == "enhanced"
+
+
+def test_ndjson_stream_delivers_valid_events_before_terminal_invalid_frame() -> None:
+    stream = EnhancedNdjsonEventStream()
+
+    events = stream.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":1,"data_b64":"WA=="}\n'
+        b'{"type":"unknown-DUT-SECRET"}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":2,"data_b64":"WQ=="}\n'
+    )
+
+    assert events == [UartReceiveEvent(segment_id=0, timestamp_us=1, channel=0, data=b"X")]
+    with pytest.raises(BackendInputError) as raised:
+        stream.feed(b"")
+    assert str(raised.value) == (
+        "Enhanced protocol message does not match the expected schema"
+    )
+    assert raised.value.input_error == "invalid_message"
+    assert "DUT-SECRET" not in str(raised.value)
+
+
+def test_ndjson_stream_preserves_bounded_frame_size_context() -> None:
+    stream = EnhancedNdjsonEventStream()
+
+    with pytest.raises(BackendInputError) as raised:
+        stream.feed(b"x" * 65536)
+
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == 65536
+    assert raised.value.max_frame_bytes == 65536
+
+
+def test_uart_sender_classifies_invalid_enhanced_response() -> None:
+    failure = FrameTooLargeError(
+        observed_frame_bytes=65537,
+        max_frame_bytes=65536,
+    )
+
+    with pytest.raises(BackendInputError) as raised:
+        EnhancedUartSender(FakeCommandTransport(failure)).send_uart(b"go\n")
+
+    assert raised.value.operation == "uart_send"
+    assert raised.value.backend_mode == "enhanced"
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == 65537
+    assert raised.value.max_frame_bytes == 65536
+
+
+def test_device_control_classifies_invalid_enhanced_response() -> None:
+    failure = ProtocolValidationError("invalid command response")
+
+    with pytest.raises(BackendInputError) as raised:
+        EnhancedDeviceControl(FakeCommandTransport(failure)).reset_dut(pulse_ms=100)
+
+    assert raised.value.operation == "reset"
+    assert raised.value.backend_mode == "enhanced"
+    assert raised.value.input_error == "invalid_message"

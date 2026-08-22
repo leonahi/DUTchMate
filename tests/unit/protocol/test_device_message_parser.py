@@ -3,6 +3,7 @@ import json
 import pytest
 
 from dutchmate_core.device_connection.errors import (
+    InvalidUtf8Error,
     MalformedMessageError,
     ProtocolValidationError,
     ProtocolVersionError,
@@ -52,13 +53,24 @@ def test_parse_hello_from_bytes() -> None:
 
 
 def test_rejects_malformed_json() -> None:
-    with pytest.raises(MalformedMessageError):
+    with pytest.raises(MalformedMessageError) as raised:
         parse_device_message('{"type":"hello"')
+
+    assert raised.value.input_error == "invalid_json"
+
+
+def test_rejects_invalid_utf8_with_distinct_classification() -> None:
+    with pytest.raises(InvalidUtf8Error) as raised:
+        parse_device_message(b"\xff")
+
+    assert raised.value.input_error == "invalid_utf8"
 
 
 def test_rejects_non_object_json() -> None:
-    with pytest.raises(MalformedMessageError):
+    with pytest.raises(ProtocolValidationError) as raised:
         parse_device_message("[]")
+
+    assert raised.value.input_error == "invalid_message"
 
 
 def test_rejects_protocol_version_mismatch() -> None:

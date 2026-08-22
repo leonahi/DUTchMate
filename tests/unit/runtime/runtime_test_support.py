@@ -85,6 +85,7 @@ class FakeCaptureSource:
         self._clock = clock
         self._on_read = on_read
         self._read_duration_s = read_duration_s
+        self.close_count = 0
         self.segment = SegmentContext(
             segment_id=0,
             timestamp=SegmentTimestamp(
@@ -111,6 +112,9 @@ class FakeCaptureSource:
         if isinstance(result, Exception):
             raise result
         return result
+
+    def close(self) -> None:
+        self.close_count += 1
 
 
 def enhanced_info(

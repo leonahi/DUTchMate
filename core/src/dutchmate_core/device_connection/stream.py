@@ -1,6 +1,10 @@
 """NDJSON stream parsing for serial byte chunks."""
 
+from dutchmate_core.device_connection.errors import FrameTooLargeError, ProtocolError
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
+
+MAX_DEVICE_FRAME_BYTES = 65536
+MAX_PENDING_DEVICE_FRAME_BYTES = MAX_DEVICE_FRAME_BYTES - 1
 
 
 class NdjsonStreamParser:
@@ -8,6 +12,7 @@ class NdjsonStreamParser:
 
     def __init__(self) -> None:
         self._buffer = b""
+        self._terminal_error: ProtocolError | None = None
 
     @property
     def pending_bytes(self) -> bytes:
@@ -18,6 +23,8 @@ class NdjsonStreamParser:
     def feed(self, chunk: bytes) -> list[DeviceMessage]:
         """Consume a serial byte chunk and return parsed complete messages."""
 
+        if self._terminal_error is not None:
+            raise self._terminal_error
         if not isinstance(chunk, bytes):
             raise TypeError("NDJSON stream chunks must be bytes")
         if not chunk:
@@ -29,9 +36,34 @@ class NdjsonStreamParser:
 
         messages: list[DeviceMessage] = []
         for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            messages.append(parse_device_message(line))
+            try:
+                observed_frame_bytes = len(line) + 1
+                if observed_frame_bytes > MAX_DEVICE_FRAME_BYTES:
+                    raise FrameTooLargeError(
+                        observed_frame_bytes=observed_frame_bytes,
+                        max_frame_bytes=MAX_DEVICE_FRAME_BYTES,
+                    )
+                line = line.strip()
+                if not line:
+                    continue
+                messages.append(parse_device_message(line))
+            except ProtocolError as exc:
+                self._buffer = b""
+                self._terminal_error = exc
+                if messages:
+                    return messages
+                raise
+
+        if len(self._buffer) > MAX_PENDING_DEVICE_FRAME_BYTES:
+            observed_frame_bytes = len(self._buffer)
+            self._buffer = b""
+            error = FrameTooLargeError(
+                observed_frame_bytes=observed_frame_bytes,
+                max_frame_bytes=MAX_DEVICE_FRAME_BYTES,
+            )
+            self._terminal_error = error
+            if messages:
+                return messages
+            raise error
 
         return messages

@@ -126,7 +126,12 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
         )
 
     if isinstance(exc, BackendInputError):
-        return _service_error(error=exc.error, detail=str(exc), status_code=502)
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=502,
+            context=exc.context,
+        )
 
     if isinstance(exc, GpioConfigurationError):
         return _service_error(
@@ -424,6 +429,6 @@ def _status_for_error(error: str) -> int:
         return 500
     if error in {"not_configured", "capture_active", "unsupported_capability"}:
         return 409
-    if error in {"timeout", "hardware_fault"}:
+    if error in {"backend_input_error", "timeout", "hardware_fault"}:
         return 502
     return 400

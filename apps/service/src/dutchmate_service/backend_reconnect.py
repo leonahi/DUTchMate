@@ -29,6 +29,7 @@ from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
     EnhancedDeviceControl,
     EnhancedUartSender,
+    backend_input_error_from_protocol,
     normalize_enhanced_hello,
 )
 from dutchmate_core.backends.settings import BackendSettings
@@ -262,8 +263,12 @@ def build_enhanced_capture_reconnect(
         try:
             try:
                 hello = read_enhanced_hello(transport)
-            except (ProtocolError, RuntimeError) as exc:
-                raise BackendInputError(str(exc)) from exc
+            except BackendInputError:
+                raise
+            except ProtocolError as exc:
+                raise backend_input_error_from_protocol(exc) from exc
+            except RuntimeError as exc:
+                raise BackendInputError(str(exc), backend_mode="enhanced") from exc
             info = normalize_enhanced_hello(hello, port=serial_port)
             _require_matching_enhanced_identity(expected_info, info)
             source = EnhancedCaptureEventSource(
@@ -346,4 +351,7 @@ def _require_matching_enhanced_identity(
         or replacement.device != expected.device
         or replacement.firmware != expected.firmware
     ):
-        raise BackendInputError("Reconnected Debug Helper identity changed")
+        raise BackendInputError(
+            "Reconnected Debug Helper identity changed",
+            backend_mode="enhanced",
+        )

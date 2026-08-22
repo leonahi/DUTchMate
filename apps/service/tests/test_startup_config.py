@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from threading import Event as ThreadEvent
 
@@ -293,6 +294,111 @@ def test_build_startup_runtime_with_serial_port_records_hello(
     assert status.firmware == "0.1.0"
     assert status.device == "dutchmate-rp2040"
     assert status.backend_mode == "enhanced"
+
+
+def test_enhanced_uart_send_projects_malformed_response_without_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret = "DUT-SECRET-MESSAGE-TYPE"
+    serial = ScriptedEnhancedSerial(
+        [
+            b'{"type":"hello","v":1,"firmware":"0.1.0",'
+            b'"device":"dutchmate-rp2040","capabilities":["uart_send"]}\n',
+            f'{{"type":"{secret}"}}\n'.encode(),
+        ]
+    )
+
+    def fake_open_serial_command_transport(
+        *,
+        port: str,
+        baudrate: int,
+    ) -> SerialCommandTransport:
+        assert port == "/dev/ttyACM0"
+        assert baudrate == 460800
+        return SerialCommandTransport(serial)
+
+    monkeypatch.setattr(
+        startup,
+        "open_serial_command_transport",
+        fake_open_serial_command_transport,
+    )
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+            tx_enabled=True,
+        ),
+    )
+
+    response = TestClient(create_app(runtime)).post(
+        "/dut/uart/send",
+        json={"cmd": "go"},
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "ok": False,
+        "error": "backend_input_error",
+        "detail": "Enhanced protocol message does not match the expected schema",
+        "detail_truncated": False,
+        "context": {
+            "operation": "uart_send",
+            "backend_mode": "enhanced",
+            "input_error": "invalid_message",
+        },
+    }
+    assert secret not in json.dumps(response.json())
+    assert list(tmp_path.iterdir()) == []
+    assert serial.closed is True
+    assert runtime.status().connection_state == "disconnected"
+
+
+def test_enhanced_capture_closes_source_on_malformed_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret = "DUT-SECRET-MESSAGE-TYPE"
+    serial = ScriptedEnhancedSerial(
+        [
+            b'{"type":"hello","v":1,"firmware":"0.1.0",'
+            b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n',
+            f'{{"type":"{secret}"}}\n'.encode(),
+        ]
+    )
+
+    monkeypatch.setattr(
+        startup,
+        "open_serial_command_transport",
+        lambda **_kwargs: SerialCommandTransport(serial),
+    )
+    clock = AdvancingClock()
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+        ),
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    with pytest.raises(
+        BackendInputError,
+        match="Enhanced protocol message does not match the expected schema",
+    ) as raised:
+        runtime.capture_uart(duration_s=0.2)
+
+    summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
+    assert secret not in str(raised.value)
+    assert summary.state == "failed"
+    assert summary.error is not None
+    assert secret not in json.dumps(summary.error)
+    assert serial.closed is True
+    assert runtime.status().connection_state == "disconnected"
 
 
 def test_build_startup_runtime_opens_basic_without_hello(

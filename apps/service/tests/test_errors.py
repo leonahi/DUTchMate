@@ -171,6 +171,32 @@ def test_maps_backend_input_error_to_bad_gateway() -> None:
     )
 
 
+def test_maps_classified_backend_input_error_with_bounded_context() -> None:
+    error = service_error_from_exception(
+        BackendInputError(
+            "Enhanced protocol frame exceeds the device-to-host size limit",
+            input_error="frame_too_large",
+            operation="capture",
+            backend_mode="enhanced",
+            observed_frame_bytes=65537,
+            max_frame_bytes=65536,
+        )
+    )
+
+    assert error == ServiceError(
+        error="backend_input_error",
+        detail="Enhanced protocol frame exceeds the device-to-host size limit",
+        status_code=502,
+        context={
+            "operation": "capture",
+            "backend_mode": "enhanced",
+            "input_error": "frame_too_large",
+            "observed_frame_bytes": 65537,
+            "max_frame_bytes": 65536,
+        },
+    )
+
+
 def test_maps_validation_errors_to_invalid_argument() -> None:
     protocol_error = service_error_from_exception(ProtocolValidationError("bad protocol"))
     input_error = service_error_from_exception(InputValidationError("bad input"))

@@ -1,19 +1,20 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `ad8cd80` on 2026-08-22
+> Code baseline reviewed: `93c606a` on 2026-08-23
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A completion and acceptance preparation.
-- **Next step:** close the shared control and reporting contracts in checklist
-  step 1 below.
-- **First implementation slice:** classify Enhanced backend input failures at
-  their parser/framing boundaries and preserve the normative bounded context
-  without copying offending input into responses or session metadata.
+- **Current milestone:** establish the deterministic DUT fixture and accept
+  Phase 1A on the real Basic hardware path.
+- **Next step:** add the small deterministic Zephyr DUT fixture in checklist
+  step 2 below.
+- **First implementation slice:** add the fixture firmware/configuration for one
+  supported board, with deterministic UART receive/send scenarios and local
+  build/flash instructions.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -40,7 +41,7 @@ has not run.
 | Shared normalized host pipeline | Implemented | Basic and Enhanced fake sources use shared processing, workflow, and session boundaries. |
 | Phase 1A Basic host adapter | Implemented, acceptance open | Raw receive/send, provenance, reconnect, sessions, service, and CLI are tested; real generic-adapter HIL is not recorded. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
-| Shared control/status contract | Partial | Enhanced backend-input classification is the final remaining shared context contract. |
+| Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
 | RP2040 Debug Helper firmware | Not started | `hardware/firmware/` contains no firmware implementation. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -52,11 +53,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `ad8cd80`:
+Working tree based on `93c606a`:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 841 passed
+- Pytest: 855 passed
 - `git diff --check`: passed
 - Basic HIL: no committed run
 - Enhanced HIL: no committed run
@@ -87,6 +88,8 @@ The following items are no longer backlog work:
   `dut_signal` identifier type, length, whitespace, and control errors.
 - typed `not_configured` context with originating operation, required role,
   and exact unconfigured or rejected role state.
+- typed Enhanced backend-input classification with operation/backend context
+  and bounded frame sizes kept out of session metadata.
 
 ## Active Queue — Phase 1
 
@@ -111,7 +114,7 @@ passes and the evidence is committed.
   applicable `actual_bytes` context through service validation.
 - [x] Return `operation`, `required_role`, and `role_state` for every
   `not_configured` workflow failure.
-- [ ] Classify Enhanced `backend_input_error` context, including bounded frame
+- [x] Classify Enhanced `backend_input_error` context, including bounded frame
   sizes where required, without exposing offending input.
 
 Exit gate: focused core/service/CLI tests and the full suite prove identical

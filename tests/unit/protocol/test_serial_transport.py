@@ -1,5 +1,6 @@
 import pytest
 
+from dutchmate_core.device_connection.errors import FrameTooLargeError
 from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
     CommandErrorMessage,
@@ -20,6 +21,7 @@ class FakeSerial:
         self.writes: list[bytes] = []
         self.flush_count = 0
         self.closed = False
+        self.read_sizes: list[int | None] = []
 
     def write(self, data: bytes) -> int:
         self.writes.append(data)
@@ -29,6 +31,7 @@ class FakeSerial:
         self.flush_count += 1
 
     def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
+        self.read_sizes.append(size)
         if not self.reads:
             return b""
         return self.reads.pop(0)
@@ -164,6 +167,18 @@ def test_read_message_times_out_on_incomplete_line() -> None:
 
     with pytest.raises(TransportTimeoutError, match="complete Debug Helper message"):
         transport.read_message()
+
+
+def test_read_message_bounds_serial_read_and_rejects_full_pending_frame() -> None:
+    serial = FakeSerial([b"x" * 65536])
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(FrameTooLargeError) as raised:
+        transport.read_message()
+
+    assert serial.read_sizes == [65536]
+    assert raised.value.observed_frame_bytes == 65536
+    assert raised.value.max_frame_bytes == 65536
 
 
 def test_request_rejects_non_newline_terminated_command() -> None:

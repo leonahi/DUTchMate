@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from dutchmate_core.device_connection.errors import (
+    InvalidUtf8Error,
     MalformedMessageError,
     ProtocolValidationError,
     ProtocolVersionError,
@@ -84,7 +85,7 @@ def _load_json_object(line: str | bytes) -> dict[str, Any]:
         try:
             line = line.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise MalformedMessageError("Protocol line is not valid UTF-8") from exc
+            raise InvalidUtf8Error("Protocol line is not valid UTF-8") from exc
 
     try:
         payload = json.loads(line)
@@ -92,7 +93,7 @@ def _load_json_object(line: str | bytes) -> dict[str, Any]:
         raise MalformedMessageError("Protocol line is not valid JSON") from exc
 
     if not isinstance(payload, dict):
-        raise MalformedMessageError("Protocol line must decode to a JSON object")
+        raise ProtocolValidationError("Protocol line must decode to a JSON object")
 
     return payload
 
