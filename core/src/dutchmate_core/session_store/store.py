@@ -769,7 +769,6 @@ class SessionStore:
         *,
         event: UartReceiveEvent,
         result: UartCaptureResult,
-        timestamp_epoch: int = 0,
     ) -> tuple[int, ...]:
         """Append one processed normalized UART event to a session."""
 
@@ -781,14 +780,25 @@ class SessionStore:
         if event.timestamp_us != result.timestamp_us:
             raise ValueError("UART event and capture result timestamps must match")
 
+        metadata = _persistence.read_json_object(handle.paths.metadata)
         uart_event_bytes = _persistence.serialize_jsonl(
-            _evidence.uart_event_json(event, timestamp_epoch)
+            _session_evidence_record(
+                _evidence.uart_event_json(event),
+                metadata=metadata,
+                segment_id=event.segment_id,
+            )
         )
-        pattern_records = _evidence.detected_pattern_records(
-            result,
-            segment_id=event.segment_id,
-            timestamp_epoch=timestamp_epoch,
-        )
+        pattern_records = [
+            _session_evidence_record(
+                record,
+                metadata=metadata,
+                segment_id=event.segment_id,
+            )
+            for record in _evidence.detected_pattern_records(
+                result,
+                segment_id=event.segment_id,
+            )
+        ]
         detected_patterns_bytes: bytes | None = None
         detected_patterns_delta = 0
         detected_pattern_indexes: tuple[int, ...] = ()
@@ -805,10 +815,10 @@ class SessionStore:
             )
         hardware_event_bytes = tuple(
             _persistence.serialize_jsonl(
-                _evidence.line_limit_exceeded_event_json(
-                    result,
-                    oversized_line,
-                    timestamp_epoch=timestamp_epoch,
+                _session_evidence_record(
+                    _evidence.line_limit_exceeded_event_json(result, oversized_line),
+                    metadata=metadata,
+                    segment_id=result.segment_id,
                 )
             )
             for oversized_line in result.oversized_lines
@@ -829,7 +839,6 @@ class SessionStore:
             timestamp_us=event.timestamp_us,
         )
 
-        metadata = _persistence.read_json_object(handle.paths.metadata)
         if result.newly_oversized_line_count:
             _metadata._record_line_processing(
                 metadata,
@@ -931,17 +940,17 @@ class SessionStore:
         handle: SessionHandle,
         *,
         result: UartCaptureResult,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Persist derived records finalized at segment or session close."""
 
         _persistence.require_session_appendable(handle)
         for oversized_line in result.oversized_lines:
+            metadata = _persistence.read_json_object(handle.paths.metadata)
             event_bytes = _persistence.serialize_jsonl(
-                _evidence.line_limit_exceeded_event_json(
-                    result,
-                    oversized_line,
-                    timestamp_epoch=timestamp_epoch,
+                _session_evidence_record(
+                    _evidence.line_limit_exceeded_event_json(result, oversized_line),
+                    metadata=metadata,
+                    segment_id=result.segment_id,
                 )
             )
             self._preflight_evidence(
@@ -953,7 +962,6 @@ class SessionStore:
                 channel=result.channel,
                 timestamp_us=oversized_line.timestamp_us,
             )
-            metadata = _persistence.read_json_object(handle.paths.metadata)
             with _transactions.evidence_transaction(
                 handle.paths,
                 append_paths=[handle.paths.hardware_events],
@@ -1154,13 +1162,17 @@ class SessionStore:
         handle: SessionHandle,
         *,
         event: BufferOverflowEvent,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Append one buffer overflow event to a session."""
 
         _persistence.require_session_appendable(handle)
+        metadata = _persistence.read_json_object(handle.paths.metadata)
         event_bytes = _persistence.serialize_jsonl(
-            _evidence.buffer_overflow_event_json(event, timestamp_epoch)
+            _session_evidence_record(
+                _evidence.buffer_overflow_event_json(event),
+                metadata=metadata,
+                segment_id=event.segment_id,
+            )
         )
 
         def record_summary(metadata: dict[str, object]) -> None:
@@ -1186,7 +1198,6 @@ class SessionStore:
             timestamp_us=event.timestamp_us,
             rejected_metadata_mutator=record_summary,
         )
-        metadata = _persistence.read_json_object(handle.paths.metadata)
         record_summary(metadata)
 
         with _transactions.evidence_transaction(
@@ -1205,13 +1216,17 @@ class SessionStore:
         handle: SessionHandle,
         *,
         event: BufferStatusEvent,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Append one buffer status telemetry event to a session."""
 
         _persistence.require_session_appendable(handle)
+        metadata = _persistence.read_json_object(handle.paths.metadata)
         event_bytes = _persistence.serialize_jsonl(
-            _evidence.buffer_status_event_json(event, timestamp_epoch)
+            _session_evidence_record(
+                _evidence.buffer_status_event_json(event),
+                metadata=metadata,
+                segment_id=event.segment_id,
+            )
         )
 
         def record_summary(metadata: dict[str, object]) -> None:
@@ -1238,7 +1253,6 @@ class SessionStore:
             timestamp_us=event.timestamp_us,
             rejected_metadata_mutator=record_summary,
         )
-        metadata = _persistence.read_json_object(handle.paths.metadata)
         record_summary(metadata)
 
         with _transactions.evidence_transaction(
@@ -1399,3 +1413,16 @@ class SessionStore:
 def _require_metadata_capacity(serialized_metadata: bytes) -> None:
     if len(serialized_metadata) > _metadata.METADATA_MAX_BYTES:
         raise ValueError("session metadata exceeds its fixed size limit")
+
+
+def _session_evidence_record(
+    record: dict[str, object],
+    *,
+    metadata: dict[str, object],
+    segment_id: int,
+) -> dict[str, object]:
+    """Retain the recognized unversioned evidence shape without polluting v1."""
+
+    if metadata.get("schema_version", 0) == 0:
+        return {**record, "timestamp_epoch": segment_id}
+    return record

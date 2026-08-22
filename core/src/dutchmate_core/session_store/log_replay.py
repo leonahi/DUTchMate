@@ -42,7 +42,6 @@ _UART_EVENT_KEYS: Final = frozenset(
     {
         "type",
         "segment_id",
-        "timestamp_epoch",
         "timestamp_us",
         "channel",
         "data_b64",
@@ -439,7 +438,6 @@ def _decode_uart_event(
     segment_id = _non_negative_int(event.get("segment_id"), "segment_id")
     if segment_id not in valid_segment_ids:
         raise ValueError("UART evidence references an unknown segment")
-    _non_negative_int(event.get("timestamp_epoch"), "timestamp_epoch")
     timestamp_us = _non_negative_int(event.get("timestamp_us"), "timestamp_us")
     channel = _non_negative_int(event.get("channel"), "channel")
     data_b64 = event.get("data_b64")

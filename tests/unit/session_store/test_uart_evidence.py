@@ -73,9 +73,13 @@ def test_native_uart_evidence_admits_exact_budget_with_pattern_growth(
     assert metadata["storage"]["evidence_bytes_written"] == exact_budget  # type: ignore[index]
     assert metadata["truncated"] is False
     assert metadata["state"] == "active"
-    assert json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8"))[0][
-        "pattern"
-    ] == "BOOT_OK"
+    uart_record = read_jsonl(handle.paths.uart_events)[0]
+    pattern_record = json.loads(handle.paths.detected_patterns.read_text(encoding="utf-8"))[0]
+    assert uart_record["segment_id"] == 0
+    assert pattern_record["segment_id"] == 0
+    assert pattern_record["pattern"] == "BOOT_OK"
+    assert "timestamp_epoch" not in uart_record
+    assert "timestamp_epoch" not in pattern_record
 
 
 def test_native_uart_evidence_rejects_one_byte_over_without_counted_mutation(
@@ -552,7 +556,7 @@ def test_append_uart_capture_updates_segment_device_timestamps(tmp_path: Path) -
     assert segment["last_device_timestamp_us"] == 250
 
 
-def test_append_uart_capture_can_write_nonzero_segment_and_epoch(tmp_path: Path) -> None:
+def test_append_uart_capture_can_write_nonzero_segment(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
@@ -576,7 +580,6 @@ def test_append_uart_capture_can_write_nonzero_segment_and_epoch(tmp_path: Path)
         handle,
         event=event,
         result=processor.process_event(event),
-        timestamp_epoch=1,
     )
 
     event = read_jsonl(handle.paths.uart_events)[0]

@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `eacf6a4` on 2026-08-21
+> Code baseline reviewed: `8346c5b` on 2026-08-22
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -11,9 +11,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A completion and acceptance preparation.
 - **Next step:** close the shared control and reporting contracts in checklist
   step 1 below.
-- **First implementation slice:** remove the redundant native-v1
-  `timestamp_epoch` compatibility field after confirming all readers and
-  fixtures use `segment_id` exclusively.
+- **First implementation slice:** audit the canonical Phase 1 service-error
+  vocabulary against current core contexts and delivery projections, then
+  implement the first missing error-specific structured context.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -40,7 +40,7 @@ has not run.
 | Shared normalized host pipeline | Implemented | Basic and Enhanced fake sources use shared processing, workflow, and session boundaries. |
 | Phase 1A Basic host adapter | Implemented, acceptance open | Raw receive/send, provenance, reconnect, sessions, service, and CLI are tested; real generic-adapter HIL is not recorded. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
-| Shared control/status contract | Partial | Native timestamp compatibility removal and remaining structured error contexts remain. |
+| Shared control/status contract | Partial | Remaining error-specific structured contexts must be reconciled with the Phase 1 API contract. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
 | RP2040 Debug Helper firmware | Not started | `hardware/firmware/` contains no firmware implementation. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -52,7 +52,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `eacf6a4`:
+Working tree based on `8346c5b`:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
@@ -81,6 +81,8 @@ The following items are no longer backlog work:
   certainty-aware invalidation, status/CLI reporting, and session snapshots.
 - normalized boot-test reset evidence, including accepted pulse duration,
   segment timestamp provenance, atomic quota admission, and crash rollback.
+- native-v1 evidence and log replay using `segment_id` as the sole timestamp
+  epoch selector while retaining the recognized unversioned legacy shape.
 
 ## Active Queue — Phase 1
 
@@ -99,8 +101,8 @@ passes and the evidence is committed.
 - [x] Persist the boot-test reset action, including `pulse_ms`, as normalized
   session control evidence.
 - [x] Admit control-action evidence as one atomic quota unit.
-- [ ] Remove the redundant native-v1 `timestamp_epoch` compatibility field
-  after all readers and fixtures use `segment_id` exclusively.
+- [x] Remove the redundant native-v1 `timestamp_epoch` compatibility field
+  after all native readers and fixtures use `segment_id` exclusively.
 - [ ] Complete remaining error-specific structured contexts identified by the
   Phase 1 API contract.
 

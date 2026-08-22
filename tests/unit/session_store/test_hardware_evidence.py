@@ -239,7 +239,10 @@ def test_native_hardware_event_admits_exact_budget(tmp_path: Path) -> None:
     assert metadata["storage"]["evidence_bytes_written"] == exact_budget  # type: ignore[index]
     assert metadata["state"] == "active"
     assert metadata["truncated"] is False
-    assert read_jsonl(handle.paths.hardware_events)[0]["type"] == "buffer_status"
+    hardware_record = read_jsonl(handle.paths.hardware_events)[0]
+    assert hardware_record["type"] == "buffer_status"
+    assert hardware_record["segment_id"] == 0
+    assert "timestamp_epoch" not in hardware_record
 
 
 def test_rejected_overflow_event_preserves_summary_facts_without_evidence(
@@ -340,7 +343,7 @@ def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path
     assert segment["last_device_timestamp_us"] == 250
 
 
-def test_append_buffer_overflow_can_write_nonzero_segment_and_epoch(tmp_path: Path) -> None:
+def test_append_buffer_overflow_can_write_nonzero_segment(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
@@ -366,7 +369,6 @@ def test_append_buffer_overflow_can_write_nonzero_segment_and_epoch(tmp_path: Pa
             timestamp_us=500,
             dropped_bytes=64,
         ),
-        timestamp_epoch=1,
     )
 
     event = read_jsonl(handle.paths.hardware_events)[0]
@@ -390,7 +392,6 @@ def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
                 timestamp_us=100,
                 dropped_bytes=10,
             ),
-            timestamp_epoch=99,
         )
 
     assert handle.paths.hardware_events.read_text(encoding="utf-8") == ""
@@ -517,7 +518,7 @@ def test_append_buffer_status_updates_segment_device_timestamps(tmp_path: Path) 
     assert segment["last_device_timestamp_us"] == 250
 
 
-def test_append_buffer_status_can_write_nonzero_segment_and_epoch(tmp_path: Path) -> None:
+def test_append_buffer_status_can_write_nonzero_segment(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
@@ -546,7 +547,6 @@ def test_append_buffer_status_can_write_nonzero_segment_and_epoch(tmp_path: Path
             dropped_bytes_total=0,
             overflow_events=0,
         ),
-        timestamp_epoch=1,
     )
 
     event = read_jsonl(handle.paths.hardware_events)[0]
@@ -573,7 +573,6 @@ def test_append_buffer_status_rejects_missing_segment(tmp_path: Path) -> None:
                 dropped_bytes_total=1,
                 overflow_events=1,
             ),
-            timestamp_epoch=99,
         )
 
     assert handle.paths.hardware_events.read_text(encoding="utf-8") == ""

@@ -20,7 +20,6 @@ def detected_pattern_records(
     result: UartCaptureResult,
     *,
     segment_id: int,
-    timestamp_epoch: int,
 ) -> list[dict[str, object]]:
     if not result.matches:
         return []
@@ -38,7 +37,6 @@ def detected_pattern_records(
             {
                 "pattern": match.pattern,
                 "segment_id": segment_id,
-                "timestamp_epoch": timestamp_epoch,
                 "timestamp_us": result.timestamp_us,
                 "channel": result.channel,
                 "ingestion_index": _match_coordinate(match.ingestion_index, "ingestion_index"),
@@ -152,14 +150,10 @@ def detected_pattern_at(
     )
 
 
-def uart_event_json(
-    event: UartReceiveEvent,
-    timestamp_epoch: int,
-) -> dict[str, object]:
+def uart_event_json(event: UartReceiveEvent) -> dict[str, object]:
     return {
         "type": "uart",
         "segment_id": event.segment_id,
-        "timestamp_epoch": timestamp_epoch,
         "timestamp_us": event.timestamp_us,
         "channel": event.channel,
         "data_b64": _bytes_to_b64(event.data),
@@ -167,28 +161,20 @@ def uart_event_json(
     }
 
 
-def buffer_overflow_event_json(
-    event: BufferOverflowEvent,
-    timestamp_epoch: int,
-) -> dict[str, object]:
+def buffer_overflow_event_json(event: BufferOverflowEvent) -> dict[str, object]:
     return {
         "type": "buffer_overflow",
         "segment_id": event.segment_id,
-        "timestamp_epoch": timestamp_epoch,
         "timestamp_us": event.timestamp_us,
         "channel": event.channel,
         "dropped_bytes": event.dropped_bytes,
     }
 
 
-def buffer_status_event_json(
-    event: BufferStatusEvent,
-    timestamp_epoch: int,
-) -> dict[str, object]:
+def buffer_status_event_json(event: BufferStatusEvent) -> dict[str, object]:
     return {
         "type": "buffer_status",
         "segment_id": event.segment_id,
-        "timestamp_epoch": timestamp_epoch,
         "timestamp_us": event.timestamp_us,
         "uart_rx_size_bytes": event.size_bytes,
         "uart_rx_used_bytes": event.used_bytes,
@@ -335,13 +321,10 @@ def uart_tx_result_event_json(
 def line_limit_exceeded_event_json(
     result: UartCaptureResult,
     line: OversizedUartLine,
-    *,
-    timestamp_epoch: int,
 ) -> dict[str, object]:
     return {
         "type": "line_limit_exceeded",
         "segment_id": result.segment_id,
-        "timestamp_epoch": timestamp_epoch,
         "timestamp_us": line.timestamp_us,
         "channel": result.channel,
         "ingestion_index": _match_coordinate(line.ingestion_index, "ingestion_index"),

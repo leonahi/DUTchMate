@@ -112,7 +112,6 @@ class CaptureSessionStorage(Protocol):
         *,
         event: UartReceiveEvent,
         result: UartCaptureResult,
-        timestamp_epoch: int = 0,
     ) -> tuple[int, ...]:
         """Persist one UART evidence unit."""
 
@@ -134,7 +133,6 @@ class CaptureSessionStorage(Protocol):
         handle: SessionHandle,
         *,
         result: UartCaptureResult,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Persist derived UART records finalized at capture close."""
 
@@ -143,7 +141,6 @@ class CaptureSessionStorage(Protocol):
         handle: SessionHandle,
         *,
         event: BufferOverflowEvent,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Persist one buffer-overflow evidence unit."""
 
@@ -152,7 +149,6 @@ class CaptureSessionStorage(Protocol):
         handle: SessionHandle,
         *,
         event: BufferStatusEvent,
-        timestamp_epoch: int = 0,
     ) -> None:
         """Persist one buffer-status evidence unit."""
 
@@ -384,7 +380,6 @@ class CaptureRecorder:
                     self._session_handle,
                     event=event,
                     result=result,
-                    timestamp_epoch=event.segment_id,
                 )
 
             if not self._record_with_quota(record_uart):
@@ -406,7 +401,6 @@ class CaptureRecorder:
                 lambda: self._session_store.append_buffer_overflow(
                     self._session_handle,
                     event=event,
-                    timestamp_epoch=event.segment_id,
                 )
             ):
                 return CaptureRecordResult(
@@ -423,7 +417,6 @@ class CaptureRecorder:
                 lambda: self._session_store.append_buffer_status(
                     self._session_handle,
                     event=event,
-                    timestamp_epoch=event.segment_id,
                 )
             ):
                 return CaptureRecordResult(
@@ -486,7 +479,6 @@ class CaptureRecorder:
                     self._session_store.append_uart_processing_result,
                     self._session_handle,
                     result=result,
-                    timestamp_epoch=result.segment_id,
                 )
             ):
                 break
@@ -503,7 +495,6 @@ class CaptureRecorder:
                     self._session_store.append_uart_processing_result,
                     self._session_handle,
                     result=result,
-                    timestamp_epoch=result.segment_id,
                 )
             ):
                 break

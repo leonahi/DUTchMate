@@ -135,8 +135,8 @@ def test_capture_resumes_without_joining_uart_lines_across_segments(tmp_path: Pa
     session_root = tmp_path / summary.session_id
     assert json.loads(session_root.joinpath("detected_patterns.json").read_text()) == []
     uart_events = _read_jsonl(session_root / "uart_events.jsonl")
-    assert [event["timestamp_epoch"] for event in uart_events] == [0, 1]
     assert [event["segment_id"] for event in uart_events] == [0, 1]
+    assert all("timestamp_epoch" not in event for event in uart_events)
     assert [event["type"] for event in _read_jsonl(session_root / "hardware_events.jsonl")] == [
         "usb_disconnect",
         "usb_reconnect",

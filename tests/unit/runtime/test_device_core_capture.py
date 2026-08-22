@@ -238,7 +238,7 @@ def test_new_capture_remaps_live_connection_to_session_segment_zero(tmp_path: Pa
         for line in (tmp_path / summary.session_id / "uart_events.jsonl").read_text().splitlines()
     ]
     assert uart_events[0]["segment_id"] == 0
-    assert uart_events[0]["timestamp_epoch"] == 0
+    assert "timestamp_epoch" not in uart_events[0]
     status = runtime.status()
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 3
