@@ -96,9 +96,12 @@ def test_reset_rejected_state_uses_rejection_detail() -> None:
         wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
     )
 
-    with pytest.raises(GpioConfigurationError, match="push_pull is not supported"):
+    with pytest.raises(GpioConfigurationError, match="push_pull is not supported") as exc_info:
         runner.reset_dut()
 
+    assert exc_info.value.operation == "reset"
+    assert exc_info.value.required_role == "reset"
+    assert exc_info.value.role_state == "rejected"
     assert transport.requests == []
 
 
@@ -118,9 +121,12 @@ def test_boot_mode_requires_configured_boot_role() -> None:
     transport = FakeTransport(CommandSuccessMessage())
     runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))
 
-    with pytest.raises(GpioConfigurationError, match="not configured"):
+    with pytest.raises(GpioConfigurationError, match="not configured") as exc_info:
         runner.set_boot_mode(mode="bootloader")
 
+    assert exc_info.value.operation == "set_boot_mode"
+    assert exc_info.value.required_role == "boot"
+    assert exc_info.value.role_state == "unconfigured"
     assert transport.requests == []
 
 

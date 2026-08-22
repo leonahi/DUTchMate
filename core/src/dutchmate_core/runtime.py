@@ -681,7 +681,10 @@ class DeviceCoreRuntime:
             if self._message_source is None:
                 raise DeviceCoreRuntimeError("Capture message source is not configured")
             if required_role is not None:
-                self._gpio_registry.require_role_configured(required_role)
+                self._gpio_registry.require_role_configured(
+                    required_role,
+                    operation=workflow,
+                )
             source = self._session_capture_source(self._message_source)
             source_segment = getattr(source, "segment", None)
             backend_snapshot = self._backend_snapshot(

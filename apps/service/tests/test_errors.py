@@ -44,13 +44,23 @@ def test_maps_device_action_error_with_embedded_code() -> None:
 
 def test_maps_not_configured_workflow_error() -> None:
     error = service_error_from_exception(
-        GpioConfigurationError("GPIO role 'reset' is not configured")
+        GpioConfigurationError(
+            "GPIO role 'reset' is not configured",
+            operation="reset",
+            required_role="reset",
+            role_state="unconfigured",
+        )
     )
 
     assert error == ServiceError(
         error="not_configured",
         detail="GPIO role 'reset' is not configured",
         status_code=409,
+        context={
+            "operation": "reset",
+            "required_role": "reset",
+            "role_state": "unconfigured",
+        },
     )
 
 
@@ -210,7 +220,12 @@ def test_exception_handlers_return_json_error_response() -> None:
 
     @app.get("/raise-not-configured")
     def raise_not_configured() -> None:
-        raise GpioConfigurationError("GPIO role 'reset' is not configured")
+        raise GpioConfigurationError(
+            "GPIO role 'reset' is not configured",
+            operation="boot_test",
+            required_role="reset",
+            role_state="unconfigured",
+        )
 
     response = TestClient(app).get("/raise-not-configured")
 
@@ -220,6 +235,11 @@ def test_exception_handlers_return_json_error_response() -> None:
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
         "detail_truncated": False,
+        "context": {
+            "operation": "boot_test",
+            "required_role": "reset",
+            "role_state": "unconfigured",
+        },
     }
 
 

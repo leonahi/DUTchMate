@@ -259,8 +259,12 @@ def test_require_role_configured_returns_configured_state() -> None:
 def test_require_role_configured_rejects_unconfigured_role() -> None:
     registry = GpioModeRegistry(clock=fixed_clock)
 
-    with pytest.raises(GpioConfigurationError, match="not configured"):
-        registry.require_role_configured("reset")
+    with pytest.raises(GpioConfigurationError, match="not configured") as exc_info:
+        registry.require_role_configured("reset", operation="boot_test")
+
+    assert exc_info.value.operation == "boot_test"
+    assert exc_info.value.required_role == "reset"
+    assert exc_info.value.role_state == "unconfigured"
 
 
 def test_require_role_configured_uses_rejection_detail_for_rejected_role() -> None:
@@ -277,8 +281,12 @@ def test_require_role_configured_uses_rejection_detail_for_rejected_role() -> No
         detail="unsupported reset mode",
     )
 
-    with pytest.raises(GpioConfigurationError, match="unsupported reset mode"):
-        registry.require_role_configured("reset")
+    with pytest.raises(GpioConfigurationError, match="unsupported reset mode") as exc_info:
+        registry.require_role_configured("reset", operation="reset")
+
+    assert exc_info.value.operation == "reset"
+    assert exc_info.value.required_role == "reset"
+    assert exc_info.value.role_state == "rejected"
 
 
 def test_snapshot_returns_all_channel_states() -> None:

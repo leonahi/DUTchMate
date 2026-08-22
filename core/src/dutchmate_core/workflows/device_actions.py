@@ -74,7 +74,7 @@ class DeviceActionRunner:
             pulse_ms_value = validate_reset_pulse(pulse_ms)
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
-        self._registry.require_role_configured("reset")
+        self._registry.require_role_configured("reset", operation="reset")
         device_timestamp_us = self._run_action(
             operation=lambda: self._control.reset_dut(pulse_ms=pulse_ms_value),
         )
@@ -92,7 +92,7 @@ class DeviceActionRunner:
             mode_name = validate_boot_mode(mode)
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
-        self._registry.require_role_configured("boot")
+        self._registry.require_role_configured("boot", operation="set_boot_mode")
         device_timestamp_us = self._run_action(
             operation=lambda: self._control.set_boot_mode(mode=mode_name),
         )

@@ -29,10 +29,24 @@ from dutchmate_core.validation import (
 )
 
 GpioModeState: TypeAlias = Literal["unconfigured", "configured", "rejected"]
+GpioRoleRequirementState: TypeAlias = Literal["unconfigured", "rejected"]
 
 
 class GpioConfigurationError(RuntimeError):
     """Raised when a GPIO-controlled workflow cannot run with current state."""
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        operation: str | None = None,
+        required_role: GpioRoleName | None = None,
+        role_state: GpioRoleRequirementState | None = None,
+    ) -> None:
+        super().__init__(detail)
+        self.operation = operation
+        self.required_role = required_role
+        self.role_state = role_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,7 +223,12 @@ class GpioModeRegistry:
         self._states[request.channel] = state
         return state
 
-    def require_role_configured(self, role: str) -> GpioControlChannelState:
+    def require_role_configured(
+        self,
+        role: str,
+        *,
+        operation: str | None = None,
+    ) -> GpioControlChannelState:
         """Return configured channel state for a role or raise a workflow-facing error."""
 
         role_name = validate_gpio_role(role)
@@ -218,8 +237,18 @@ class GpioModeRegistry:
             return state
         rejection = self._latest_rejection_for_role(role_name)
         if rejection is not None:
-            raise GpioConfigurationError(rejection.detail)
-        raise GpioConfigurationError(f"GPIO role '{role_name}' is not configured")
+            raise GpioConfigurationError(
+                rejection.detail,
+                operation=operation,
+                required_role=role_name,
+                role_state="rejected",
+            )
+        raise GpioConfigurationError(
+            f"GPIO role '{role_name}' is not configured",
+            operation=operation,
+            required_role=role_name,
+            role_state="unconfigured",
+        )
 
     def _clear_role_from_other_channels(
         self,

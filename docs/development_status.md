@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `9c9c7df` on 2026-08-22
+> Code baseline reviewed: `ad8cd80` on 2026-08-22
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -11,9 +11,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A completion and acceptance preparation.
 - **Next step:** close the shared control and reporting contracts in checklist
   step 1 below.
-- **First implementation slice:** add the normative `not_configured` context
-  at the originating role-requirement boundary and preserve it through the
-  service response for reset, boot-mode, and boot-test operations.
+- **First implementation slice:** classify Enhanced backend input failures at
+  their parser/framing boundaries and preserve the normative bounded context
+  without copying offending input into responses or session metadata.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -40,7 +40,7 @@ has not run.
 | Shared normalized host pipeline | Implemented | Basic and Enhanced fake sources use shared processing, workflow, and session boundaries. |
 | Phase 1A Basic host adapter | Implemented, acceptance open | Raw receive/send, provenance, reconnect, sessions, service, and CLI are tested; real generic-adapter HIL is not recorded. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
-| Shared control/status contract | Partial | Unconfigured-role and Enhanced backend-input contexts remain after completing structured GPIO identifier errors. |
+| Shared control/status contract | Partial | Enhanced backend-input classification is the final remaining shared context contract. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
 | RP2040 Debug Helper firmware | Not started | `hardware/firmware/` contains no firmware implementation. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -52,7 +52,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `9c9c7df`:
+Working tree based on `ad8cd80`:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
@@ -85,6 +85,8 @@ The following items are no longer backlog work:
   epoch selector while retaining the recognized unversioned legacy shape.
 - bounded structured `invalid_argument` context for GPIO `role` and
   `dut_signal` identifier type, length, whitespace, and control errors.
+- typed `not_configured` context with originating operation, required role,
+  and exact unconfigured or rejected role state.
 
 ## Active Queue — Phase 1
 
@@ -107,7 +109,7 @@ passes and the evidence is committed.
   after all native readers and fixtures use `segment_id` exclusively.
 - [x] Preserve bounded GPIO identifier `field`, `reason`, `max_bytes`, and
   applicable `actual_bytes` context through service validation.
-- [ ] Return `operation`, `required_role`, and `role_state` for every
+- [x] Return `operation`, `required_role`, and `role_state` for every
   `not_configured` workflow failure.
 - [ ] Classify Enhanced `backend_input_error` context, including bounded frame
   sizes where required, without exposing offending input.

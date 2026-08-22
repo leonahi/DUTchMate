@@ -758,9 +758,12 @@ def test_run_boot_test_requires_reset_role_before_creating_session(
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
-    with pytest.raises(GpioConfigurationError, match="'reset'.*not configured"):
+    with pytest.raises(GpioConfigurationError, match="'reset'.*not configured") as exc_info:
         runtime.run_boot_test(duration_s=0.2)
 
+    assert exc_info.value.operation == "boot_test"
+    assert exc_info.value.required_role == "reset"
+    assert exc_info.value.role_state == "unconfigured"
     assert transport.requests == []
     assert list(tmp_path.iterdir()) == []
 

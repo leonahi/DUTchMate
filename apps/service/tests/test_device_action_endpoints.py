@@ -36,7 +36,12 @@ def test_reset_passes_explicit_pulse_to_runtime() -> None:
 def test_reset_not_configured_uses_service_error_contract() -> None:
     class UnconfiguredResetRuntime(FakeRuntime):
         def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
-            raise GpioConfigurationError("GPIO role 'reset' is not configured")
+            raise GpioConfigurationError(
+                "GPIO role 'reset' is not configured",
+                operation="reset",
+                required_role="reset",
+                role_state="unconfigured",
+            )
 
     app = create_app(UnconfiguredResetRuntime(connected_status()))
 
@@ -48,6 +53,11 @@ def test_reset_not_configured_uses_service_error_contract() -> None:
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
         "detail_truncated": False,
+        "context": {
+            "operation": "reset",
+            "required_role": "reset",
+            "role_state": "unconfigured",
+        },
     }
 
 
@@ -95,7 +105,12 @@ def test_boot_mode_accepts_normal_mode() -> None:
 def test_boot_mode_not_configured_uses_service_error_contract() -> None:
     class UnconfiguredBootRuntime(FakeRuntime):
         def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
-            raise GpioConfigurationError("GPIO role 'boot' is not configured")
+            raise GpioConfigurationError(
+                "GPIO role 'boot' is not configured",
+                operation="set_boot_mode",
+                required_role="boot",
+                role_state="unconfigured",
+            )
 
     app = create_app(UnconfiguredBootRuntime(connected_status()))
 
@@ -107,6 +122,11 @@ def test_boot_mode_not_configured_uses_service_error_contract() -> None:
         "error": "not_configured",
         "detail": "GPIO role 'boot' is not configured",
         "detail_truncated": False,
+        "context": {
+            "operation": "set_boot_mode",
+            "required_role": "boot",
+            "role_state": "unconfigured",
+        },
     }
 
 

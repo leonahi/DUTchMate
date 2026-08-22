@@ -129,7 +129,12 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
         return _service_error(error=exc.error, detail=str(exc), status_code=502)
 
     if isinstance(exc, GpioConfigurationError):
-        return _service_error(error="not_configured", detail=str(exc), status_code=409)
+        return _service_error(
+            error="not_configured",
+            detail=str(exc),
+            status_code=409,
+            context=_gpio_configuration_context(exc),
+        )
 
     if isinstance(exc, DeviceCoreRuntimeError):
         return _service_error(error="service_unavailable", detail=str(exc), status_code=503)
@@ -229,6 +234,22 @@ def _gpio_identifier_service_error(exc: GpioIdentifierValidationError) -> Servic
         status_code=400,
         context=context,
     )
+
+
+def _gpio_configuration_context(
+    exc: GpioConfigurationError,
+) -> dict[str, object] | None:
+    if (
+        exc.operation is None
+        or exc.required_role is None
+        or exc.role_state is None
+    ):
+        return None
+    return {
+        "operation": exc.operation,
+        "required_role": exc.required_role,
+        "role_state": exc.role_state,
+    }
 
 
 def _session_query_context(exc: SessionQueryError) -> dict[str, object]:

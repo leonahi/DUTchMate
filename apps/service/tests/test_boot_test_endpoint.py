@@ -155,7 +155,12 @@ def test_boot_test_rejects_invalid_duration(duration_s: object) -> None:
 def test_boot_test_requires_configured_reset_role() -> None:
     class UnconfiguredBootTestRuntime(FakeRuntime):
         def run_boot_test(self, *, duration_s: float) -> SessionSummary:
-            raise GpioConfigurationError("GPIO role 'reset' is not configured")
+            raise GpioConfigurationError(
+                "GPIO role 'reset' is not configured",
+                operation="boot_test",
+                required_role="reset",
+                role_state="unconfigured",
+            )
 
     app = create_app(UnconfiguredBootTestRuntime(connected_status()))
 
@@ -167,6 +172,11 @@ def test_boot_test_requires_configured_reset_role() -> None:
         "error": "not_configured",
         "detail": "GPIO role 'reset' is not configured",
         "detail_truncated": False,
+        "context": {
+            "operation": "boot_test",
+            "required_role": "reset",
+            "role_state": "unconfigured",
+        },
     }
 
 
