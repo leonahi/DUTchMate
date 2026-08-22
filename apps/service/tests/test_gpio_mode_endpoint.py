@@ -118,7 +118,7 @@ def test_configure_gpio_mode_validation_error_uses_service_error_contract() -> N
         "/gpio/mode",
         json={
             "channel": "GPIO0",
-            "role": " ",
+            "role": "reset",
             "dut_signal": "RESET_N",
             "mode": "open_drain",
             "active_level": "low",
@@ -132,6 +132,79 @@ def test_configure_gpio_mode_validation_error_uses_service_error_contract() -> N
         "detail": "Request validation failed",
         "detail_truncated": False,
     }
+
+
+@pytest.mark.parametrize(
+    ("overrides", "detail", "context"),
+    [
+        (
+            {"role": 42},
+            "GPIO role must be a string",
+            {
+                "field": "role",
+                "reason": "invalid_type",
+                "max_bytes": 64,
+            },
+        ),
+        (
+            {"role": "x" * 65},
+            "GPIO role must encode to 1..64 UTF-8 bytes",
+            {
+                "field": "role",
+                "reason": "invalid_length",
+                "max_bytes": 64,
+                "actual_bytes": 65,
+            },
+        ),
+        (
+            {"role": " reset"},
+            "GPIO role must not have leading or trailing Unicode whitespace",
+            {
+                "field": "role",
+                "reason": "edge_whitespace",
+                "max_bytes": 64,
+                "actual_bytes": 6,
+            },
+        ),
+        (
+            {"dut_signal": "RESET\x00N"},
+            "GPIO dut_signal must not contain Unicode control characters",
+            {
+                "field": "dut_signal",
+                "reason": "control_character",
+                "max_bytes": 64,
+                "actual_bytes": 7,
+            },
+        ),
+    ],
+)
+def test_configure_gpio_mode_preserves_identifier_validation_context(
+    overrides: dict[str, object],
+    detail: str,
+    context: dict[str, object],
+) -> None:
+    runtime = FakeRuntime(connected_status())
+    app = create_app(runtime)
+    request = {
+        "channel": "CTRL0",
+        "role": "reset",
+        "dut_signal": "RESET_N",
+        "mode": "open_drain",
+        "active_level": "low",
+        **overrides,
+    }
+
+    response = TestClient(app).post("/gpio/mode", json=request)
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_argument",
+        "detail": detail,
+        "detail_truncated": False,
+        "context": context,
+    }
+    assert runtime.gpio_mode_requests == []
 
 
 @pytest.mark.parametrize(

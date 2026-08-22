@@ -20,7 +20,11 @@ from dutchmate_core.session_store.models import (
     SessionPersistenceError,
     SessionQueryError,
 )
-from dutchmate_core.validation import InputValidationError, UartSendValidationError
+from dutchmate_core.validation import (
+    GpioIdentifierValidationError,
+    InputValidationError,
+    UartSendValidationError,
+)
 from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_core.workflows.uart_send import UartSendError
@@ -83,6 +87,9 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             context=context,
         )
 
+    if isinstance(exc, GpioIdentifierValidationError):
+        return _gpio_identifier_service_error(exc)
+
     if isinstance(exc, SessionPersistenceError):
         return _service_error(error=exc.error, detail=str(exc), status_code=500)
 
@@ -128,6 +135,9 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
         return _service_error(error="service_unavailable", detail=str(exc), status_code=503)
 
     if isinstance(exc, RequestValidationError):
+        identifier_error = _request_gpio_identifier_error(exc)
+        if identifier_error is not None:
+            return _gpio_identifier_service_error(identifier_error)
         return _service_error(
             error="invalid_argument",
             detail="Request validation failed",
@@ -190,6 +200,35 @@ def _reconnect_context(exc: CaptureReconnectError) -> dict[str, object] | None:
             "max_segments": exc.max_segments,
         }
     return None
+
+
+def _request_gpio_identifier_error(
+    exc: RequestValidationError,
+) -> GpioIdentifierValidationError | None:
+    for error in exc.errors():
+        context = error.get("ctx")
+        if not isinstance(context, dict):
+            continue
+        cause = context.get("error")
+        if isinstance(cause, GpioIdentifierValidationError):
+            return cause
+    return None
+
+
+def _gpio_identifier_service_error(exc: GpioIdentifierValidationError) -> ServiceError:
+    context: dict[str, object] = {
+        "field": exc.field,
+        "reason": exc.reason,
+        "max_bytes": exc.max_bytes,
+    }
+    if exc.actual_bytes is not None:
+        context["actual_bytes"] = exc.actual_bytes
+    return _service_error(
+        error="invalid_argument",
+        detail=str(exc),
+        status_code=400,
+        context=context,
+    )
 
 
 def _session_query_context(exc: SessionQueryError) -> dict[str, object]:
@@ -329,6 +368,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_gpio_config_error(
         request: Request,
         exc: GpioConfigError,
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
+
+    @app.exception_handler(GpioIdentifierValidationError)
+    async def handle_gpio_identifier_validation_error(
+        request: Request,
+        exc: GpioIdentifierValidationError,
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 

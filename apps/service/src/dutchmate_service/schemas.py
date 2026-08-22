@@ -118,9 +118,9 @@ class GpioModeRequest(BaseModel):
     active_level: GpioLevel
     idle_level: GpioLevel | None = None
 
-    @field_validator("role", "dut_signal")
+    @field_validator("role", "dut_signal", mode="before")
     @classmethod
-    def validate_required_identifier(cls, value: str, info: ValidationInfo) -> str:
+    def validate_required_identifier(cls, value: object, info: ValidationInfo) -> str:
         return validate_gpio_identifier(value, field=info.field_name or "identifier")
 
     @model_validator(mode="after")

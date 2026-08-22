@@ -8,7 +8,7 @@ from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import SessionPersistenceError
-from dutchmate_core.validation import InputValidationError
+from dutchmate_core.validation import GpioIdentifierValidationError, InputValidationError
 from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
@@ -180,6 +180,28 @@ def test_maps_validation_errors_to_invalid_argument() -> None:
         error="invalid_argument",
         detail="bad config",
         status_code=400,
+    )
+
+
+def test_maps_gpio_identifier_error_with_exact_structured_context() -> None:
+    error = service_error_from_exception(
+        GpioIdentifierValidationError(
+            field="dut_signal",
+            reason="invalid_length",
+            actual_bytes=65,
+        )
+    )
+
+    assert error == ServiceError(
+        error="invalid_argument",
+        detail="GPIO dut_signal must encode to 1..64 UTF-8 bytes",
+        status_code=400,
+        context={
+            "field": "dut_signal",
+            "reason": "invalid_length",
+            "max_bytes": 64,
+            "actual_bytes": 65,
+        },
     )
 
 
