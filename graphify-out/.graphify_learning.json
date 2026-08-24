@@ -1,5 +1,38 @@
 {
-  "generated_at": "2026-08-22T22:01:52.026455+00:00",
-  "nodes": {},
+  "generated_at": "2026-08-24T21:06:47.044228+00:00",
+  "nodes": {
+    "docs_development_status_development_status": {
+      "code_fingerprint": "7b9fd86a5571c5752161b0ed03d8dcb148ae4296081d4ebcc299bbca58f4416b",
+      "label": "Development Status",
+      "last": "2026-08-22T22:28:23.795688+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-22T22:28:23.795688+00:00",
+          "outcome": "useful",
+          "q": "commit and tell me what is next development step in phase-1"
+        }
+      ],
+      "score": 0.956092768,
+      "source_file": "docs/development_status.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "docs_development_status_zephyr_dut_fixture": {
+      "code_fingerprint": "7b9fd86a5571c5752161b0ed03d8dcb148ae4296081d4ebcc299bbca58f4416b",
+      "label": "Zephyr DUT Fixture Work",
+      "last": "2026-08-22T22:28:23.795688+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-22T22:28:23.795688+00:00",
+          "outcome": "useful",
+          "q": "commit and tell me what is next development step in phase-1"
+        }
+      ],
+      "score": 0.956092768,
+      "source_file": "docs/development_status.md",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
   "version": 1
 }

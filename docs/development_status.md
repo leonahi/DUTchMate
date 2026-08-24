@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `93c606a` on 2026-08-23
+> Code baseline reviewed: `f6f9a3d` on 2026-08-25
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -10,11 +10,11 @@ Read this document first whenever development resumes.
 
 - **Current milestone:** establish the deterministic DUT fixture and accept
   Phase 1A on the real Basic hardware path.
-- **Next step:** add the small deterministic Zephyr DUT fixture in checklist
-  step 2 below.
-- **First implementation slice:** add the fixture firmware/configuration for one
-  supported board, with deterministic UART receive/send scenarios and local
-  build/flash instructions.
+- **Next step:** add the reproducible Basic HIL procedure and report template in
+  checklist step 2 below.
+- **First implementation slice:** define the generic USB-to-UART wiring,
+  scenario sequence, DUTchMate commands, objective assertions, provenance, and
+  report fields for a real Raspberry Pi Pico 1 acceptance run.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -30,11 +30,12 @@ must not duplicate this progress checklist.
 ## Phase 1 Assessment
 
 Phase 1 is not complete. The shared host pipeline and most Phase 1A software are
-implemented and covered by fake-backend tests, but Phase 1A has no recorded
-real-hardware acceptance result. Phase 1B is partial: its host path still uses
-an interim synchronous compatibility adapter, the target wire migration is not
-complete, RP2040 firmware is absent, and prototype/ring-buffer/HIL validation
-has not run.
+implemented and covered by fake-backend tests. Its deterministic Raspberry Pi
+Pico 1 DUT fixture is implemented and cross-build verified, but Phase 1A has no
+recorded real-hardware acceptance result. Phase 1B is partial: its host path
+still uses an interim synchronous compatibility adapter, the target wire
+migration is not complete, RP2040 firmware is absent, and
+prototype/ring-buffer/HIL validation has not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -43,7 +44,8 @@ has not run.
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
-| RP2040 Debug Helper firmware | Not started | `hardware/firmware/` contains no firmware implementation. |
+| Zephyr DUT fixture | Implemented, HIL use open | Deterministic `DMF/1` firmware and portable protocol tests exist for Raspberry Pi Pico 1; the `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1. |
+| RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Not run | No reproducible fixture report or accepted real-hardware run is committed. |
@@ -53,11 +55,13 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `93c606a`:
+Working tree based on `f6f9a3d`, reviewed 2026-08-25:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 855 passed
+- Pytest: 867 passed, including 12 portable Zephyr DUT protocol tests
+- Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
+  Zephyr SDK 1.0.1; UF2 generated
 - `git diff --check`: passed
 - Basic HIL: no committed run
 - Enhanced HIL: no committed run
@@ -122,7 +126,7 @@ validation order and response semantics for both backend modes.
 
 ### 2. Establish The Zephyr DUT Fixture And Accept Phase 1A
 
-- [ ] Add the small deterministic Zephyr DUT fixture firmware/configuration and
+- [x] Add the small deterministic Zephyr DUT fixture firmware/configuration and
   document its supported board, build, flash, and UART scenarios.
 - [ ] Add a reproducible Basic HIL procedure and report template without making
   host assertions depend on Zephyr log formatting.

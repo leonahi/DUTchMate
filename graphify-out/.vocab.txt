@@ -264,6 +264,7 @@ defining
 defs
 delete
 delimiter
+delivers
 delivery
 deltas
 dependencies
@@ -447,6 +448,7 @@ forwards
 found
 foundation
 frame
+frames
 frameworks
 from
 fsync
@@ -814,6 +816,7 @@ progress
 project
 projection
 projections
+projects
 prompt
 properties
 protected
@@ -913,6 +916,7 @@ reported
 reporting
 reports
 repository
+represented
 request
 requested
 requests

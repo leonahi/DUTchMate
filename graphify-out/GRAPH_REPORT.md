@@ -1,36 +1,36 @@
-# Graph Report - DUTchMate  (2026-08-23)
+# Graph Report - DUTchMate  (2026-08-25)
 
 ## Corpus Check
-- 185 files · ~134,080 words
+- 193 files · ~137,111 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2986 nodes · 8450 edges · 121 communities (110 shown, 11 thin omitted)
-- Extraction: 80% EXTRACTED · 20% INFERRED · 0% AMBIGUOUS · INFERRED: 1677 edges (avg confidence: 0.92)
+- 3044 nodes · 8541 edges · 132 communities (118 shown, 14 thin omitted)
+- Extraction: 80% EXTRACTED · 20% INFERRED · 0% AMBIGUOUS · INFERRED: 1683 edges (avg confidence: 0.92)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `93c606aa`
+- Built from commit: `f6f9a3d5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- persistence.py
+- SessionPersistenceError
 - CaptureRecorder
 - test_host_command_encoder.py
 - client.py
 - dutchmate_cli/main.py
 - DeviceCoreClient
-- UartLine
+- workflows/capture.py
 - main
 - settings.py
-- enhanced_snapshot
-- DeviceCoreRuntime
+- fixed_clock
+- FakeMonotonicClock
 - app.py
-- messages.py
+- UartMessage
 - metadata.py
 - create_app
-- log_replay.py
+- SessionPaths
 - test_validation.py
 - SerialCommandTransport
 - uart_send.py
@@ -42,8 +42,8 @@
 - SerialPortCandidate
 - models.py
 - SessionStore
-- DeviceActionResult
-- SegmentContext
+- RuntimeProvider
+- .run
 - session_store/baseline.py
 - test_contracts.py
 - test_enhanced.py
@@ -51,42 +51,42 @@
 - ReconnectedCaptureSource
 - evidence.py
 - test_basic.py
-- BackendSnapshot
-- GpioModeRegistry
-- DeviceActionError
-- UartLineBuffer
 - runtime.py
+- GpioModeRegistry
+- DeviceCoreRuntime
+- UartLineBuffer
+- GpioControlChannelState
 - parser.py
 - UartReceiveEvent
-- dutchmate_cli/__init__.py
-- enhanced.py
-- ValueError
+- dutchmate_cli/capture.py
+- BackendInputError
+- validation.py
 - BasicBackendEventSource
-- processor.py
-- test_capture_reconnect.py
-- FrameTooLargeError
+- test_device_core_uart_send.py
+- CaptureWorkflow
+- EnhancedDeviceControl
 - errors.schema.json
 - helpers.py
 - parse_hardware_gpio_config
 - logs.py
 - format_status
-- SessionListPage
+- store.py
 - DeviceCoreSessionStorage
 - SessionHandle
-- SessionSummary
+- .list_sessions
 - Incremental Re-Extraction
 - sessions.py
-- store.py
+- SessionRecoveryResult
 - test_startup_config.py
-- test_dut.py
+- ServiceApiError
 - Phase 1 Implementation Spec
 - enum
 - DeviceControl
-- CommandTransport
+- EnhancedUartSender
 - create_server
-- main
+- CommandSuccessMessage
 - uart_send_command
-- resolve_backend_settings
+- InputValidationError
 - test_baseline.py
 - test_recovery.py
 - test_retention.py
@@ -95,37 +95,42 @@
 - Ring Buffer Sizing Plan
 - DUTchMate Project Context
 - test_reconnect_evidence.py
-- format_baseline_mutation
+- dutchmate_cli/__init__.py
 - test_gpio.py
-- reset_command
+- fixture_protocol.c
 - SerialPort
-- GpioIdentifierValidationError
+- CaptureSessionStorage
 - Revision A Voltage-Domain GPIO and UART Interface
-- UartSender
+- test_fixture_protocol.py
 - format_wait_pattern
-- boot_mode_command
 - commands.py
+- gpio_config/config.py
 - GPIO Configuration Semantics
-- _encode_payload
+- validate_gpio_configuration
 - Reconnect and Session Semantics
 - test_dependencies.py
 - test_comparison.py
 - DUTchMate
 - Debug Agent Context Contract
 - MCP Integration Plan
-- normalize_enhanced_message
+- test_device_message_examples.py
 - test_log_replay.py
-- .__init__
-- project_diagnostic_detail
-- .read_event
-- default_cli_config
+- EvidenceQuotaExceeded
+- test_device_core_wait.py
+- enhanced.py
+- HardwareGpioConfig
 - Software Architecture
-- _replay_uart_prefix
+- log_replay.py
+- DeviceActionError
 - _validator
+- DUTchMate Zephyr DUT Fixture
+- device_actions.py
 - host_to_device.schema.json
-- .__exit__
+- FakeSerial
 - dutchmate-core
 - DeviceCoreStatus
+- ScriptedBasicSerial
+- _UnavailableDeviceControl
 - Graph Exports
 - dutchmate_mcp_server/__init__.py
 - device_connection/__init__.py
@@ -135,6 +140,12 @@
 - uart_capture/__init__.py
 - workflows/__init__.py
 - dutchmate-workspace
+- FakeSerial
+- .get_session
+- Q: commit and tell me what is next development step in phase-1
+- Q: Before that what does Zephyr DUT exactly do and what is its use?
+- .__init__
+- .read_event
 
 ## God Nodes (most connected - your core abstractions)
 1. `SessionStore` - 229 edges
@@ -170,83 +181,83 @@
 - **Backend-Independent Evidence Pipeline** — docs_project_context_normalized_evidence_boundary, docs_phase1_implementation_spec_backend_independent_pipeline, docs_software_architecture_normalized_event_boundary, docs_software_architecture_backends_contracts [INFERRED 0.95]
 - **Phase 1 Hardware Acceptance Gate** — docs_development_status_hardware_acceptance, docs_phase1_implementation_spec_phase1_done_criteria, docs_ring_buffer_sizing_plan_validation_gate, hardware_schematics_revision_a_prototype_validation, hardware_validation_phase1_ring_buffer_acceptance_checklist [INFERRED 0.95]
 
-## Communities (121 total, 11 thin omitted)
+## Communities (132 total, 14 thin omitted)
 
-### Community 0 - "persistence.py"
+### Community 0 - "SessionPersistenceError"
 Cohesion: 0.06
-Nodes (78): Filesystem paths for the required Phase 1 session files., SessionPaths, append_bytes(), append_serialized(), create_directory(), _error(), evidence_file_bytes(), _fsync_directory() (+70 more)
+Nodes (79): Path, Raised when durable session evidence cannot be read or written., SessionPersistenceError, append_bytes(), append_serialized(), create_directory(), _error(), evidence_file_bytes() (+71 more)
 
 ### Community 1 - "CaptureRecorder"
 Cohesion: 0.07
 Nodes (51): CaptureRecorder, CaptureRecordResult, Result of recording one normalized event into a capture session., Route normalized backend events into UART processing and session storage., Create a capture session and return a recorder for it., Handle for the session this recorder writes to., Session identifier this recorder writes to., Whether storage has already ended this recorder's native session. (+43 more)
 
 ### Community 2 - "test_host_command_encoder.py"
-Cohesion: 0.23
-Nodes (14): configure_gpio_mode_command(), Build a validated `configure_gpio_mode` command., parametrize, test_build_configure_gpio_mode_command(), test_build_configure_gpio_mode_command_with_custom_role(), test_build_configure_gpio_mode_command_with_idle_level(), test_configure_gpio_mode_matches_canonical_example(), test_encode_configure_gpio_mode_command_as_ndjson() (+6 more)
+Cohesion: 0.11
+Nodes (24): configure_gpio_mode_command(), ConfigureGpioModeCommand, Build a validated `configure_gpio_mode` command., Build a validated `reset` command., Configure a DUT control role on a physical control channel., reset_command(), parametrize, test_build_configure_gpio_mode_command() (+16 more)
 
 ### Community 3 - "client.py"
-Cohesion: 0.06
-Nodes (67): capture_uart(), clear_session_baseline(), configure_gpio_mode(), fetch_recent_logs(), fetch_status(), get_debug_session(), list_debug_sessions(), mark_session_baseline() (+59 more)
+Cohesion: 0.07
+Nodes (61): capture_uart(), clear_session_baseline(), configure_gpio_mode(), fetch_recent_logs(), fetch_status(), get_debug_session(), list_debug_sessions(), mark_session_baseline() (+53 more)
 
 ### Community 4 - "dutchmate_cli/main.py"
-Cohesion: 0.11
-Nodes (54): RuntimeError, Raised when the CLI cannot complete a Device Core Service request., Raised when the local Device Core Service cannot be reached., ServiceClientError, ServiceUnavailableError, boot_test(), capture(), clear_baseline_command() (+46 more)
+Cohesion: 0.12
+Nodes (52): RuntimeError, Raised when the CLI cannot complete a Device Core Service request., Raised when the local Device Core Service cannot be reached., ServiceClientError, ServiceUnavailableError, boot_test(), capture(), clear_baseline_command() (+44 more)
 
 ### Community 5 - "DeviceCoreClient"
-Cohesion: 0.05
-Nodes (37): DeviceCoreClient, DeviceCoreClientError, DeviceCoreProtocolError, DeviceCoreServiceError, DeviceCoreUnavailableError, _json_object(), BaseException, NoReturn (+29 more)
+Cohesion: 0.06
+Nodes (33): DeviceCoreClient, DeviceCoreClientError, DeviceCoreProtocolError, DeviceCoreServiceError, DeviceCoreUnavailableError, _json_object(), BaseException, NoReturn (+25 more)
 
-### Community 6 - "UartLine"
-Cohesion: 0.12
-Nodes (28): PatternDetector, PatternMatch, Pattern detection for completed UART log lines., A configured pattern found in one UART log line., Find configured text patterns in completed UART log lines., Configured patterns in scan order., Return all configured patterns present in one completed UART line., Return pattern matches for a sequence of completed UART lines. (+20 more)
+### Community 6 - "workflows/capture.py"
+Cohesion: 0.11
+Nodes (31): PatternDetector, PatternMatch, Pattern detection for completed UART log lines., A configured pattern found in one UART log line., Find configured text patterns in completed UART log lines., Configured patterns in scan order., Return all configured patterns present in one completed UART line., Return pattern matches for a sequence of completed UART lines. (+23 more)
 
 ### Community 7 - "main"
 Cohesion: 0.09
 Nodes (47): is_process_running(), LifecycleError, Path, Protocol, RuntimeError, Local Device Core Service process lifecycle helpers., Stop the background Device Core Service process recorded in the PID file., Return whether a process ID currently exists. (+39 more)
 
 ### Community 8 - "settings.py"
+Cohesion: 0.09
+Nodes (46): main(), Start the Device Core Service., Any, Path, test_service_main_passes_config_to_app_and_host_port_to_uvicorn(), BackendConfig, BackendConfigError, _baudrate() (+38 more)
+
+### Community 9 - "fixed_clock"
 Cohesion: 0.16
-Nodes (24): BackendConfigError, _baudrate(), _boolean(), _finite_number(), _fixed_integer(), _fixed_string(), _optional_baudrate(), _optional_table() (+16 more)
+Nodes (43): BufferOverflowEvent, BufferStatusEvent, Observed Enhanced-backend UART receive-buffer loss., Enhanced-backend UART receive-buffer telemetry., enhanced_snapshot(), fixed_clock(), fixed_id(), MonkeyPatch (+35 more)
 
-### Community 9 - "enhanced_snapshot"
+### Community 10 - "FakeMonotonicClock"
 Cohesion: 0.19
-Nodes (25): BufferOverflowEvent, BufferStatusEvent, Observed Enhanced-backend UART receive-buffer loss., Enhanced-backend UART receive-buffer telemetry., test_normalizes_buffer_telemetry(), enhanced_snapshot(), Path, read_jsonl() (+17 more)
-
-### Community 10 - "DeviceCoreRuntime"
-Cohesion: 0.06
-Nodes (91): EnhancedDeviceControl, Translate semantic control operations to Enhanced protocol commands., DeviceCoreRuntime, Compose Phase 1 core services behind one service-facing object., Return one bounded page without requiring a backend connection., Return recent UART evidence without requiring a backend connection., Compare stored evidence without requiring a backend connection., Mark the Debug Helper connection as disconnected. (+83 more)
+Nodes (31): AdvancingMonotonicClock, enhanced_info(), FakeCaptureSource, FakeMonotonicClock, FakeTransport, BackendCapability, _fixed_session_time(), datetime (+23 more)
 
 ### Community 11 - "app.py"
 Cohesion: 0.05
-Nodes (52): FastAPI, FastAPI application factory for the Device Core Service., DUTchMate Device Core Service package., baseline_mutation_payload(), BootModeRequest, BootTestRequest, capture_summary_payload(), CaptureRequest (+44 more)
+Nodes (51): FastAPI, FastAPI application factory for the Device Core Service., DUTchMate Device Core Service package., Service entrypoint for DUTchMate., baseline_mutation_payload(), BootModeRequest, BootTestRequest, capture_summary_payload() (+43 more)
 
-### Community 12 - "messages.py"
-Cohesion: 0.13
-Nodes (22): Read and validate one Debug Helper hello message., read_enhanced_hello(), HelloMessage, Typed protocol messages received from the Debug Helper., Debug Helper hello handshake., UART bytes captured by the Debug Helper., UartMessage, NdjsonStreamParser (+14 more)
+### Community 12 - "UartMessage"
+Cohesion: 0.17
+Nodes (17): UART bytes captured by the Debug Helper., UartMessage, NdjsonStreamParser, NDJSON stream parsing for serial byte chunks., Buffer serial chunks and parse complete newline-terminated messages., Bytes buffered because they do not yet end in a newline., test_feed_accepts_exact_maximum_complete_frame(), test_feed_complete_line_returns_message() (+9 more)
 
 ### Community 13 - "metadata.py"
-Cohesion: 0.09
-Nodes (40): _append_resumed_backend_segment(), _backend_segment_json(), _capability_policy_json(), _contiguous_native_segments(), _format_session_id_timestamp(), _format_utc_timestamp(), _initial_metadata(), _integrity_json() (+32 more)
+Cohesion: 0.08
+Nodes (45): Capture new UART evidence until one literal completes or time expires., _append_resumed_backend_segment(), _backend_segment_json(), _capability_policy_json(), _contiguous_native_segments(), _format_session_id_timestamp(), _format_utc_timestamp(), _initial_metadata() (+37 more)
 
 ### Community 14 - "create_app"
-Cohesion: 0.15
-Nodes (39): create_app(), Path, Create the Device Core Service application., connected_status(), FakeRuntime, parametrize, test_boot_test_active_uses_conflict_error_contract(), test_boot_test_disconnected_uses_service_unavailable_contract() (+31 more)
+Cohesion: 0.13
+Nodes (39): create_app(), Path, Create the Device Core Service application., connected_status(), FakeRuntime, SessionDetail, parametrize, test_boot_test_active_uses_conflict_error_contract() (+31 more)
 
-### Community 15 - "log_replay.py"
-Cohesion: 0.15
-Nodes (35): SessionDetail, _decode_uart_event(), _existing_paths(), _latest_terminal_native(), _non_negative_int(), Path, Bounded replay of persisted native UART evidence., Select one native session and replay its newest bounded UART lines. (+27 more)
+### Community 15 - "SessionPaths"
+Cohesion: 0.18
+Nodes (34): _existing_paths(), _latest_terminal_native(), Path, Select one native session and replay its newest bounded UART lines., replay_recent_logs(), _require_native_schema(), _select_session(), _stable_uart_snapshot() (+26 more)
 
 ### Community 16 - "test_validation.py"
 Cohesion: 0.12
-Nodes (27): prepare_uart_send_payload(), Return a valid Phase 1 wait-pattern timeout in seconds., Validate and preserve one case-sensitive literal wait pattern., Encode one public text command and enforce its final UART payload bound., Return a positive per-session evidence budget in MiB units., Convert a validated per-session MiB setting to exact evidence bytes., Raised when a public UART-send request has an invalid final payload., session_evidence_budget_bytes() (+19 more)
+Nodes (27): GpioIdentifierValidationError, prepare_uart_send_payload(), Return a valid Phase 1 capture duration in seconds., Encode one public text command and enforce its final UART payload bound., Validate and return an exact 1..64-byte GPIO role or signal identifier., Raised when a public UART-send request has an invalid final payload., Raised when a GPIO role or DUT signal violates the exact identifier contract., UartSendValidationError (+19 more)
 
 ### Community 17 - "SerialCommandTransport"
-Cohesion: 0.10
-Nodes (28): Return an opened Enhanced command transport., open_serial_command_transport(), _pyserial_factory(), Synchronous serial transport for Debug Helper command exchange., Close the underlying serial port., Open a pyserial-backed command transport., Send NDJSON commands and read command responses from a serial port., SerialCommandTransport (+20 more)
+Cohesion: 0.08
+Nodes (32): Return an opened Enhanced command transport., open_serial_command_transport(), DeviceMessage, _pyserial_factory(), Synchronous serial transport for Debug Helper command exchange., Close the underlying serial port., Open a pyserial-backed command transport., Send NDJSON commands and read command responses from a serial port. (+24 more)
 
 ### Community 18 - "uart_send.py"
-Cohesion: 0.08
-Nodes (22): Send one validated text command to the DUT UART., Close the live source represented by this session-local view., Validate and transmit one public UTF-8 UART command., EvidenceQuotaExceeded, Raised after an evidence unit is rejected and its session is terminalized., ActiveUartSendSession, _format_utc(), BackendMode (+14 more)
+Cohesion: 0.06
+Nodes (34): Keep the runtime UART-send port stable across backend replacement., Publish a newly connected UART-send adapter., ReplaceableUartSender, Write a complete UART payload, retrying ordered short writes., BackendUartSendResult, BackendWriteError, Raised when a backend cannot accept a complete UART payload., Complete backend acceptance of one UART payload. (+26 more)
 
 ### Community 19 - "parse_device_message"
 Cohesion: 0.09
@@ -258,155 +269,155 @@ Nodes (18): Convert captured UART byte messages into complete lines and pattern 
 
 ### Community 21 - "retrieval.py"
 Cohesion: 0.09
-Nodes (44): EvidenceTypeCount, FirstErrorReference, NativeSessionListItem, Raised when durable session evidence cannot be read or written., Compact first-error location used by bounded session list items., Bounded native lifecycle projection for one session list item., Logical size and optional record count for one session artifact., Bounded count for one detected-pattern or hardware-event type. (+36 more)
+Nodes (42): EvidenceTypeCount, FirstErrorReference, NativeSessionListItem, Compact summary of a debug session for workflow/API responses., Compact first-error location used by bounded session list items., Bounded native lifecycle projection for one session list item., Logical size and optional record count for one session artifact., Bounded count for one detected-pattern or hardware-event type. (+34 more)
 
 ### Community 22 - "dutchmate_cli/config.py"
-Cohesion: 0.11
-Nodes (35): CliConfig, CliConfigError, DaemonConfig, load_cli_config(), _optional_port(), _optional_positive_int(), _optional_str(), _optional_table() (+27 more)
+Cohesion: 0.10
+Nodes (38): CliConfig, CliConfigError, DaemonConfig, load_cli_config(), _optional_port(), _optional_positive_int(), _optional_str(), _optional_table() (+30 more)
 
 ### Community 23 - "service_error_from_exception"
-Cohesion: 0.11
-Nodes (35): _baseline_context(), _comparison_context(), _gpio_configuration_context(), _gpio_identifier_service_error(), _json_response(), Exception, FastAPI, HTTP error mapping for the Device Core Service. (+27 more)
+Cohesion: 0.09
+Nodes (40): _baseline_context(), _comparison_context(), _gpio_configuration_context(), _gpio_identifier_service_error(), _json_response(), Exception, FastAPI, HTTP error mapping for the Device Core Service. (+32 more)
 
 ### Community 24 - "SerialPortCandidate"
 Cohesion: 0.10
 Nodes (36): DeviceSelectionError, format_devices(), _format_metadata(), RuntimeError, Terminal formatting for serial device discovery., Raised when the CLI cannot choose one Debug Helper serial port., Format discovered serial ports for CLI output., Resolve the serial port used by `dutchmate start`. (+28 more)
 
 ### Community 25 - "models.py"
-Cohesion: 0.08
-Nodes (38): Return bounded recent UART replay for one selected session., Compare one terminal session with the designated baseline., _compare_lines(), _compare_pattern_counts(), compare_session(), _decode_line(), _evidence_summary(), _line_excerpt() (+30 more)
+Cohesion: 0.10
+Nodes (35): project_diagnostic_detail(), Bounded diagnostic projection shared by persistence and delivery adapters., Return a sanitized, non-empty diagnostic and whether it was truncated., _compare_lines(), _compare_pattern_counts(), compare_session(), _decode_line(), _evidence_summary() (+27 more)
 
 ### Community 26 - "SessionStore"
-Cohesion: 0.09
-Nodes (32): Sessions abandoned at startup plus non-fatal compatibility diagnostics., SessionRecoveryResult, SessionDetail, Create filesystem-backed debug sessions., Most recent startup-recovery result for this store instance., Abandon stale native active sessions without mutating other schemas., Perform startup recovery while the store-wide lock is held., Transition one stale active native session during startup recovery. (+24 more)
+Cohesion: 0.21
+Nodes (22): SessionDetail, Create filesystem-backed debug sessions., Return bounded schema-aware detail for one stored session., SessionStore, _create_native_session(), parametrize, Path, test_get_session_distinguishes_not_found_unsupported_and_corrupt() (+14 more)
 
-### Community 27 - "DeviceActionResult"
-Cohesion: 0.08
-Nodes (16): Protocol, SessionDetail, Return one bounded newest-first session page., Return bounded schema-aware detail for one session., Apply startup hardware control mappings., Runtime surface needed by the current service API., Configure a control channel GPIO mode., Pulse the configured DUT reset role. (+8 more)
+### Community 27 - "RuntimeProvider"
+Cohesion: 0.06
+Nodes (19): Protocol, SessionDetail, Return one bounded newest-first session page., Return bounded schema-aware detail for one session., Return bounded recent UART replay for one selected session., Designate one eligible session as the project baseline., Clear the baseline only when it names the requested session., Compare one terminal session with the designated baseline. (+11 more)
 
-### Community 28 - "SegmentContext"
-Cohesion: 0.05
-Nodes (39): Return timestamp provenance once the source origin is established., Session-local connection segment and its timestamp provenance., SegmentContext, BackendEvent, BackendMode, datetime, Map one live connection source onto a new session-local segment zero., Advance a wait cursor on the wrapped source when supported. (+31 more)
+### Community 28 - ".run"
+Cohesion: 0.06
+Nodes (26): Return timestamp provenance once the source origin is established., BackendMode, datetime, Map one live connection source onto a new session-local segment zero., Advance a wait cursor on the wrapped source when supported., Close the live source represented by this session-local view., _SessionCaptureSource, CaptureEventSource (+18 more)
 
 ### Community 29 - "session_store/baseline.py"
-Cohesion: 0.10
-Nodes (27): Designate one eligible session as the project baseline., Clear the baseline only when it names the requested session., BaselineOperation, Designate a stored session without requiring a backend connection., Clear a named designation without requiring a backend connection., clear_baseline(), _ineligibility_reason(), mark_baseline() (+19 more)
+Cohesion: 0.14
+Nodes (28): BaselineOperation, clear_baseline(), _ineligibility_reason(), mark_baseline(), _persistence_fault(), datetime, Path, SessionDetail (+20 more)
 
 ### Community 30 - "test_contracts.py"
 Cohesion: 0.10
 Nodes (22): BackendEventSource, BackendEvent, Protocol, Asynchronous FIFO source of normalized events from one backend connection., Return immutable identity and physical capability information., Return the session-local segment ID assigned to this source., Return the next FIFO event, or ``None`` for an ordinary read timeout., SourceFactory (+14 more)
 
 ### Community 31 - "test_enhanced.py"
-Cohesion: 0.08
-Nodes (28): EnhancedCaptureEventSource, EnhancedNdjsonEventStream, Interim synchronous adapter for the existing Enhanced serial transport., Return device-timer provenance for this compatibility source., Establish timestamp provenance while retaining the first evidence event., Close the owned message source when it exposes a close operation., Parse Enhanced NDJSON chunks and expose only normalized evidence events., Return an incomplete Enhanced NDJSON frame buffered by the parser. (+20 more)
+Cohesion: 0.07
+Nodes (31): EnhancedCaptureEventSource, EnhancedNdjsonEventStream, Interim synchronous adapter for the existing Enhanced serial transport., Return device-timer provenance for this compatibility source., Advance a workflow ingestion cursor past already-normalized events., Establish timestamp provenance while retaining the first evidence event., Close the owned message source when it exposes a close operation., Parse Enhanced NDJSON chunks and expose only normalized evidence events. (+23 more)
 
 ### Community 32 - "UartCaptureResult"
 Cohesion: 0.20
 Nodes (7): Finalize and discard trailing derived state for one connection segment., Completed UART lines and pattern matches produced from one processing step., Flush one segment/channel's trailing partial line, if any., Finalize trailing derived state for every segment/channel., UartCaptureResult, Persist one UART evidence unit., Persist derived UART records finalized at capture close.
 
 ### Community 33 - "ReconnectedCaptureSource"
-Cohesion: 0.08
-Nodes (18): build_basic_capture_reconnect(), OpenCaptureReplacement, Build the bounded reopen adapter for one selected Basic backend., Open one segment-bound replacement source., Return a fully prepared replacement or raise for a failed attempt., Retry backend opening within the workflow-supplied monotonic deadline., RetryingCaptureReconnect, ClosableSource (+10 more)
+Cohesion: 0.07
+Nodes (26): build_basic_capture_reconnect(), build_enhanced_capture_reconnect(), OpenBasicConnection, OpenCaptureReplacement, OpenEnhancedTransport, Protocol, Service-owned backend reopen and replaceable-control composition., Build the bounded reopen adapter for one selected Basic backend. (+18 more)
 
 ### Community 34 - "evidence.py"
-Cohesion: 0.13
-Nodes (22): buffer_overflow_event_json(), buffer_status_event_json(), _bytes_to_b64(), control_action_event_json(), detected_pattern_at(), detected_pattern_records(), first_error(), line_limit_exceeded_event_json() (+14 more)
+Cohesion: 0.11
+Nodes (25): buffer_overflow_event_json(), buffer_status_event_json(), _bytes_to_b64(), control_action_event_json(), detected_pattern_at(), detected_pattern_records(), first_error(), line_limit_exceeded_event_json() (+17 more)
 
 ### Community 35 - "test_basic.py"
 Cohesion: 0.14
 Nodes (22): BasicSerialFactory, open_basic_backend_connection(), _pyserial_factory(), Open a Basic backend as raw 8-N-1 serial without reading a hello., FakeRawSerial, Exception, parametrize, Path (+14 more)
 
-### Community 36 - "BackendSnapshot"
-Cohesion: 0.10
-Nodes (24): _backend_snapshot(), test_recent_logs_endpoint_replays_native_uart_and_validates_limit(), test_status_returns_connected_gpio_mapping_state(), BackendCapability, Return capabilities remaining after host policy is applied., Return the configured software capability policy., apply_capability_policy(), BackendCapabilityPolicy (+16 more)
+### Community 36 - "runtime.py"
+Cohesion: 0.08
+Nodes (42): _backend_snapshot(), _snapshot(), test_recent_logs_endpoint_replays_native_uart_and_validates_limit(), test_status_returns_connected_gpio_mapping_state(), BasicBackendConnection, BackendCapability, Basic generic USB-to-UART connection, receive, and send adapter., Return capabilities remaining after host policy is applied. (+34 more)
 
 ### Community 37 - "GpioModeRegistry"
-Cohesion: 0.07
-Nodes (63): CommandSuccessMessage, Successful command response from the Debug Helper., GpioConfigurator, Configure GPIO modes through firmware and update accepted host state., GpioModeRegistry, GpioModeRejection, GpioModeRequestSource, Record a firmware- or host-rejected GPIO control channel mode request. (+55 more)
+Cohesion: 0.19
+Nodes (26): GpioModeRegistry, Track accepted and rejected GPIO mode configuration per control channel., GPIO role configuration state used by this runtime., fixed_clock(), datetime, parametrize, test_accept_mode_can_record_custom_role_and_idle_level(), test_accept_mode_marks_channel_configured_with_role_metadata() (+18 more)
 
-### Community 38 - "DeviceActionError"
-Cohesion: 0.10
-Nodes (19): Register service exception handlers on an app., register_error_handlers(), test_exception_handlers_preserve_firmware_error_code(), Core DUTchMate library., DeviceCoreRuntimeError, BackendCapability, GpioModeRequestSource, GpioRoleName (+11 more)
+### Community 38 - "DeviceCoreRuntime"
+Cohesion: 0.08
+Nodes (20): Core DUTchMate library., DeviceCoreRuntime, DeviceCoreRuntimeError, BackendCapability, GpioModeRequestSource, GpioRoleName, RuntimeError, SessionWorkflow (+12 more)
 
 ### Community 39 - "UartLineBuffer"
-Cohesion: 0.18
-Nodes (16): Buffer raw UART bytes until complete newline-terminated lines are available., Raw UART bytes not yet terminated by a newline., UartLineBuffer, test_byte_after_limit_discards_only_derived_copy_and_counts_until_lf(), test_exact_limit_line_is_emitted_normally(), test_feed_complete_line(), test_feed_multiple_lines(), test_feed_requires_bytes() (+8 more)
+Cohesion: 0.10
+Nodes (24): OversizedUartLine, Return the trailing partial line, if any, and clear the buffer., Finalize trailing normal or oversized state at segment/session close., Bounded descriptor for one physical line that exceeded the derived limit., Normal lines and bounded oversized-line facts produced by one input., Buffer raw UART bytes until complete newline-terminated lines are available., Raw UART bytes not yet terminated by a newline., Consume UART bytes and return complete lines. Returned line `raw` values… (+16 more)
 
-### Community 40 - "runtime.py"
-Cohesion: 0.05
-Nodes (45): Service entrypoint for DUTchMate., load_startup_hardware_config(), Device Core Service startup configuration helpers., Load startup hardware configuration, treating a missing file as empty config., test_exception_handlers_return_json_error_response(), GpioModeRequestSource, GPIO mode configuration workflow., Send `configure_gpio_mode` and record the firmware result. (+37 more)
+### Community 40 - "GpioControlChannelState"
+Cohesion: 0.06
+Nodes (25): GpioRoleName, Protocol, Runtime surface needed to apply startup hardware configuration., Return current runtime status., Apply configured hardware control mappings., StartupConfigRuntime, GpioModeRequestSource, Send `configure_gpio_mode` and record the firmware result. (+17 more)
 
 ### Community 41 - "parser.py"
 Cohesion: 0.14
 Nodes (31): InvalidUtf8Error, MalformedMessageError, ProtocolError, ProtocolValidationError, ProtocolVersionError, ValueError, Typed failures at Enhanced wire-protocol input boundaries., Base class for host-device protocol errors. (+23 more)
 
 ### Community 42 - "UartReceiveEvent"
-Cohesion: 0.17
-Nodes (43): Raw UART bytes observed by a backend within one connection segment., UartReceiveEvent, evidence_bytes(), fixed_clock(), fixed_id(), datetime, MonkeyPatch, Path (+35 more)
+Cohesion: 0.21
+Nodes (24): Raw UART bytes observed by a backend within one connection segment., UartReceiveEvent, evidence_bytes(), datetime, Path, read_jsonl(), Path, test_append_uart_capture_appends_multiple_uart_events() (+16 more)
 
-### Community 43 - "dutchmate_cli/__init__.py"
-Cohesion: 0.11
-Nodes (26): _display(), _first_error(), _flag(), format_boot_test_result(), format_capture_result(), _format_capture_summary(), _line_processing(), _loss_status() (+18 more)
+### Community 43 - "dutchmate_cli/capture.py"
+Cohesion: 0.12
+Nodes (25): _display(), _first_error(), _flag(), format_boot_test_result(), format_capture_result(), _format_capture_summary(), _line_processing(), _loss_status() (+17 more)
 
-### Community 44 - "enhanced.py"
-Cohesion: 0.06
-Nodes (43): build_enhanced_capture_reconnect(), OpenBasicConnection, OpenEnhancedTransport, Protocol, Service-owned backend reopen and replaceable-control composition., Build bounded Enhanced reopen, hello, provenance, and control replacement., Open one raw Basic connection from resolved settings., Return an opened Basic connection. (+35 more)
+### Community 44 - "BackendInputError"
+Cohesion: 0.14
+Nodes (11): BackendInputKind, _ReaderFailure, BackendInputError, DeviceControlError, BackendMode, RuntimeError, Raised when a backend emits malformed or otherwise invalid input., Return the same classified failure with workflow-owned context. (+3 more)
 
-### Community 45 - "ValueError"
-Cohesion: 0.33
-Nodes (9): ValueError, Return a supported GPIO electrical mode., Return a supported GPIO logic level., Validate the complete Phase 1 GPIO electrical-mode matrix., validate_gpio_level(), validate_gpio_mode(), validate_gpio_mode_configuration(), GpioControlMode (+1 more)
+### Community 45 - "validation.py"
+Cohesion: 0.13
+Nodes (23): _is_unicode_whitespace(), GpioModeRequestSource, ValueError, Shared validation for public Device Core input contracts., Return a positive per-session evidence budget in MiB units., Convert a validated per-session MiB setting to exact evidence bytes., Return a valid DUT reset pulse duration in milliseconds., Validate and preserve an exact serial-port identifier. (+15 more)
 
 ### Community 46 - "BasicBackendEventSource"
-Cohesion: 0.10
-Nodes (16): BasicBackendEventSource, BackendEvent, Normalize raw Basic serial chunks through one FIFO reader thread., Return immutable Basic backend identity and capabilities., Return the session-local segment ID assigned to this source., Return host-monotonic provenance established at source creation., Return the complete Basic identity/policy/provenance snapshot., Return the next FIFO event, or ``None`` for an ordinary timeout. (+8 more)
+Cohesion: 0.12
+Nodes (11): BasicBackendEventSource, BackendEvent, Normalize raw Basic serial chunks through one FIFO reader thread., Return immutable Basic backend identity and capabilities., Return the session-local segment ID assigned to this source., Return host-monotonic provenance established at source creation., Return the next FIFO event, or ``None`` for an ordinary timeout., Blocking compatibility adapter used by the current capture runner. (+3 more)
 
-### Community 47 - "processor.py"
-Cohesion: 0.14
-Nodes (10): OversizedUartLine, Line buffering for decoded DUT UART bytes., Return the trailing partial line, if any, and clear the buffer., Finalize trailing normal or oversized state at segment/session close., Bounded descriptor for one physical line that exceeded the derived limit., Normal lines and bounded oversized-line facts produced by one input., Consume UART bytes and return complete lines. Returned line `raw` values…, Consume bytes and return normal lines plus bounded overflow facts. (+2 more)
+### Community 47 - "test_device_core_uart_send.py"
+Cohesion: 0.26
+Nodes (24): RuntimeError, Canonical UART-send failure with optional audit context., UartSendError, FakeSender, _fixed_time(), _hardware_events(), ProtocolFailingTransport, datetime (+16 more)
 
-### Community 48 - "test_capture_reconnect.py"
-Cohesion: 0.24
-Nodes (19): _evidence_bytes(), FakeMonotonicClock, BackendEvent, Exception, Path, _read_jsonl(), _required_segment(), _run_one_reconnect() (+11 more)
+### Community 48 - "CaptureWorkflow"
+Cohesion: 0.21
+Nodes (23): BackendDisconnectedError, Raised when the selected backend connection is lost., CaptureWorkflow, Own the complete lifecycle of one finite capture session., _evidence_bytes(), FakeMonotonicClock, BackendEvent, Exception (+15 more)
 
-### Community 49 - "FrameTooLargeError"
-Cohesion: 0.13
-Nodes (10): Advance a workflow ingestion cursor past already-normalized events., FrameTooLargeError, Raised before decoding when a device-to-host frame exceeds its bound., DeviceMessage, Send one encoded command and return the matching command response., Return the oldest queued or newly read Debug Helper message., Return and clear messages queued during command requests., DeviceMessage (+2 more)
+### Community 49 - "EnhancedDeviceControl"
+Cohesion: 0.17
+Nodes (20): FakeTransport, _hello(), DeviceMessage, test_create_app_applies_startup_hardware_config_when_runtime_is_connected(), test_rejected_startup_hardware_config_is_visible_in_status(), EnhancedDeviceControl, normalize_enhanced_hello(), Translate one Enhanced hello message into backend-neutral identity. (+12 more)
 
 ### Community 50 - "errors.schema.json"
 Cohesion: 0.08
 Nodes (24): additionalProperties, minLength, type, enum, type, $id, const, properties (+16 more)
 
 ### Community 51 - "helpers.py"
-Cohesion: 0.20
-Nodes (15): disconnected_status(), _enhanced_integrity(), _enhanced_segment(), _enhanced_timestamp(), _tx_policy(), _append_line(), BaselineRuntime, _capture() (+7 more)
+Cohesion: 0.13
+Nodes (19): apply_startup_hardware_config(), Apply startup GPIO mappings if a Debug Helper is already connected., disconnected_status(), _enhanced_integrity(), _enhanced_segment(), _enhanced_timestamp(), _tx_policy(), _append_line() (+11 more)
 
 ### Community 52 - "parse_hardware_gpio_config"
-Cohesion: 0.09
-Nodes (43): GpioConfigError, HardwareControlMapping, HardwareGpioConfig, load_hardware_gpio_config(), _optional_string(), _optional_voltage(), _parse_control_mapping(), parse_hardware_gpio_config() (+35 more)
+Cohesion: 0.18
+Nodes (21): parse_hardware_gpio_config(), Parse and validate `[hardware.control.*]` configuration., parametrize, test_parse_custom_role_mapping(), test_parse_empty_config_leaves_all_controls_unconfigured(), test_parse_valid_boot_mapping_with_idle_level(), test_parse_valid_hardware_control_mapping(), test_rejects_duplicate_channel_assignments() (+13 more)
 
 ### Community 53 - "logs.py"
 Cohesion: 0.24
 Nodes (11): _display(), _display_text(), format_recent_logs(), _merged_records(), CLI formatting for bounded recent UART replay., Format replayed lines with CLI-only segment/channel separators., _sort_int(), _warnings() (+3 more)
 
 ### Community 54 - "format_status"
-Cohesion: 0.16
-Nodes (25): _as_mapping(), _display(), _format_capabilities(), _format_connection(), _format_control_channel(), _format_control_channels(), _format_device(), _format_integrity() (+17 more)
+Cohesion: 0.20
+Nodes (21): _as_mapping(), _display(), _format_capabilities(), _format_connection(), _format_control_channel(), _format_control_channels(), _format_device(), _format_integrity() (+13 more)
 
-### Community 55 - "SessionListPage"
-Cohesion: 0.17
-Nodes (12): _native_detail(), _native_item(), Path, SessionDetail, SessionRuntime, test_default_service_composition_queries_sessions_while_disconnected(), test_get_session_endpoint_serializes_bounded_native_detail(), test_list_sessions_endpoint_serializes_discriminated_page() (+4 more)
+### Community 55 - "store.py"
+Cohesion: 0.09
+Nodes (24): _native_detail(), _native_item(), Path, SessionDetail, SessionRuntime, test_default_service_composition_queries_sessions_while_disconnected(), test_get_session_endpoint_serializes_bounded_native_detail(), test_list_sessions_endpoint_serializes_discriminated_page() (+16 more)
 
 ### Community 56 - "DeviceCoreSessionStorage"
-Cohesion: 0.07
-Nodes (19): test_capture_summary_serializes_bounded_first_error_evidence(), DeviceCoreSessionStorage, Protocol, SessionDetail, Return one bounded newest-first session page., Return bounded schema-aware detail for one session., Return bounded recent UART replay for one selected native session., Return one authoritative stored detected-pattern record. (+11 more)
+Cohesion: 0.12
+Nodes (10): DeviceCoreSessionStorage, Protocol, Return one bounded newest-first session page., Return bounded recent UART replay for one selected native session., Return one authoritative stored detected-pattern record., Designate one eligible session as the project baseline., Clear the project baseline only when it names the requested session., Compare one terminal session with the designated baseline. (+2 more)
 
 ### Community 57 - "SessionHandle"
-Cohesion: 0.07
-Nodes (24): Reference to a created debug session., SessionHandle, CommandedBootMode, SessionWorkflow, Durably append a forced-send attempt and reserve its result record., Durably resolve one admitted forced-send attempt., Append one buffer overflow event to a session., Append one buffer status telemetry event to a session. (+16 more)
+Cohesion: 0.06
+Nodes (28): Reference to a created debug session., SessionHandle, CommandedBootMode, SessionWorkflow, Durably append a forced-send attempt and reserve its result record., Durably resolve one admitted forced-send attempt., Append one buffer overflow event to a session., Append one buffer status telemetry event to a session. (+20 more)
 
-### Community 58 - "SessionSummary"
-Cohesion: 0.14
-Nodes (9): Capture UART and telemetry messages into a session., Reset the DUT and capture boot evidence into a session., Compact summary of a debug session for workflow/API responses., SessionSummary, Load a session's metadata JSON., Load and summarize one session's metadata., Return stored session summaries in newest-first order., Return the newest stored session summary, if one exists. (+1 more)
+### Community 58 - ".list_sessions"
+Cohesion: 0.25
+Nodes (4): Load a session's metadata JSON., Load and summarize one session's metadata., Return stored session summaries in newest-first order., Return the newest stored session summary, if one exists.
 
 ### Community 59 - "Incremental Re-Extraction"
 Cohesion: 0.10
@@ -416,17 +427,17 @@ Nodes (21): Folder Watcher, URL Ingestion, Extraction Confidence Rubric, Determi
 Cohesion: 0.21
 Nodes (18): _as_mapping(), _display(), _format_artifacts(), _format_first_error(), _format_list_item(), format_session_detail(), format_session_list(), _nested_display() (+10 more)
 
-### Community 61 - "store.py"
-Cohesion: 0.11
-Nodes (19): RuntimeError, Outcome of the most recent configured session-retention pass., Raised when stale native session metadata cannot be safely replaced., One non-fatal startup-recovery observation for a stored session., SessionRecoveryDiagnostic, SessionRecoveryError, SessionRetentionStatus, apply_session_retention() (+11 more)
+### Community 61 - "SessionRecoveryResult"
+Cohesion: 0.22
+Nodes (6): Sessions abandoned at startup plus non-fatal compatibility diagnostics., SessionRecoveryResult, datetime, Path, Directory containing all sessions., Most recent startup-recovery result for this store instance.
 
 ### Community 62 - "test_startup_config.py"
-Cohesion: 0.07
-Nodes (36): build_startup_runtime(), NoReturn, Path, Read and validate the initial Debug Helper hello message., Build the service runtime for one explicitly selected backend., read_startup_hello(), _UnavailableDeviceControl, AdvancingClock (+28 more)
+Cohesion: 0.26
+Nodes (18): build_startup_runtime(), Build the service runtime for one explicitly selected backend., AdvancingClock, backend_settings(), MonkeyPatch, Path, ScriptedEnhancedSerial, test_basic_startup_runtime_reopens_disconnected_capture_source() (+10 more)
 
-### Community 63 - "test_dut.py"
-Cohesion: 0.20
-Nodes (13): _display(), format_boot_mode_result(), format_reset_result(), Terminal formatting for DUT action commands., Format a successful DUT boot-mode response., Format a successful DUT reset response., MonkeyPatch, test_dut_boot_mode_command_reports_service_error() (+5 more)
+### Community 63 - "ServiceApiError"
+Cohesion: 0.18
+Nodes (15): Raised when the local Device Core Service returns an error response., ServiceApiError, _display(), format_boot_mode_result(), format_reset_result(), Terminal formatting for DUT action commands., Format a successful DUT boot-mode response., Format a successful DUT reset response. (+7 more)
 
 ### Community 64 - "Phase 1 Implementation Spec"
 Cohesion: 0.12
@@ -440,25 +451,25 @@ Nodes (17): enum, type, $defs, capability, timestamp_us, $id, oneOf, $schema (+9
 Cohesion: 0.13
 Nodes (8): Keep runtime control ports stable while Enhanced transports are replaced., Publish a newly connected backend control adapter., ReplaceableDeviceControl, DeviceControl, Backend-neutral semantic DUT and GPIO control operations., Configure one physical control channel and return device time., Pulse the DUT reset line and return device time., Set DUT boot mode and return device time.
 
-### Community 67 - "CommandTransport"
-Cohesion: 0.25
-Nodes (5): CommandTransport, DeviceMessage, Protocol, Transport capable of sending one host command and returning its response., Send one encoded command and return one parsed device response.
+### Community 67 - "EnhancedUartSender"
+Cohesion: 0.12
+Nodes (12): EnhancedUartSender, Translate complete UART payloads to Enhanced protocol commands., FrameTooLargeError, Raised before decoding when a device-to-host frame exceeds its bound., DeviceMessage, Consume a serial byte chunk and return parsed complete messages., CommandTransport, DeviceMessage (+4 more)
 
 ### Community 68 - "create_server"
 Cohesion: 0.19
 Nodes (12): main(), MCP server entrypoint for DUTchMate., Start the DUTchMate MCP server., create_server(), Stateless MCP server composition for the stdio delivery adapter., Create one stateless MCP server with fixed protocol-facing metadata., Run the server over stdio; no other MCP transport is exposed., run_stdio() (+4 more)
 
-### Community 69 - "main"
-Cohesion: 0.13
-Nodes (12): main(), Start the Device Core Service., Any, Path, test_service_main_passes_config_to_app_and_host_port_to_uvicorn(), load_backend_config(), Any, Path (+4 more)
+### Community 69 - "CommandSuccessMessage"
+Cohesion: 0.21
+Nodes (18): CommandSuccessMessage, Successful command response from the Debug Helper., DeviceActionRunner, Run reset/boot commands only when required GPIO roles are configured., FakeTransport, parametrize, test_action_result_rejects_mismatched_accepted_fields(), test_boot_mode_requires_configured_boot_role() (+10 more)
 
 ### Community 70 - "uart_send_command"
 Cohesion: 0.17
 Nodes (15): Send raw bytes to the DUT UART RX line., Build a validated `uart_send` command from raw bytes., Build a `uart_send` command from UTF-8 text., uart_send_command(), uart_send_text_command(), UartSendCommand, test_build_uart_send_command_from_bytes(), test_build_uart_send_text_command_appends_newline() (+7 more)
 
-### Community 71 - "resolve_backend_settings"
-Cohesion: 0.27
-Nodes (13): BackendConfig, Apply explicit overrides and backend-specific defaults., Optional project backend selection loaded from TOML., resolve_backend_settings(), parametrize, test_backend_mode_is_required_without_cli_or_config_value(), test_basic_backend_requires_explicit_or_configured_port(), test_enhanced_backend_rejects_non_protocol_baudrate() (+5 more)
+### Community 71 - "InputValidationError"
+Cohesion: 0.23
+Nodes (16): GpioConfigurator, GPIO mode configuration workflow., Configure GPIO modes through firmware and update accepted host state., InputValidationError, Raised when an application input violates a Device Core contract., FakeTransport, test_configure_mode_accepts_boot_role_with_idle_level(), test_configure_mode_records_firmware_rejection() (+8 more)
 
 ### Community 72 - "test_baseline.py"
 Cohesion: 0.49
@@ -473,8 +484,8 @@ Cohesion: 0.49
 Nodes (13): _create_capture(), _native_store(), datetime, MonkeyPatch, Path, test_corrupt_pointer_and_unknown_schema_suspend_retention(), test_corrupt_session_evidence_suspends_retention(), test_legacy_sessions_count_toward_limit_but_remain_protected() (+5 more)
 
 ### Community 75 - "WaitPatternResult"
-Cohesion: 0.18
-Nodes (11): Wait for one literal in new UART evidence., _match(), parametrize, test_wait_pattern_endpoint_preserves_capture_active_error(), test_wait_pattern_endpoint_rejects_invalid_input_before_runtime(), test_wait_pattern_endpoint_returns_structured_capability_error(), test_wait_pattern_endpoint_serializes_authoritative_match_reference(), test_wait_pattern_timeout_is_successful_with_null_match_fields() (+3 more)
+Cohesion: 0.24
+Nodes (10): _match(), parametrize, test_wait_pattern_endpoint_preserves_capture_active_error(), test_wait_pattern_endpoint_rejects_invalid_input_before_runtime(), test_wait_pattern_endpoint_returns_structured_capability_error(), test_wait_pattern_endpoint_serializes_authoritative_match_reference(), test_wait_pattern_timeout_is_successful_with_null_match_fields(), WaitRuntime (+2 more)
 
 ### Community 76 - "BasicSerialPort"
 Cohesion: 0.18
@@ -492,49 +503,53 @@ Nodes (13): Backend-Independent Host Pipeline, Phase 1A Basic Backend, Phase 1B 
 Cohesion: 0.44
 Nodes (12): _create_active_session(), parametrize, Path, _snapshot_for_segment(), test_disconnect_and_resume_append_segment_lifecycle_evidence(), test_disconnect_quota_rejection_keeps_summary_without_detailed_event(), test_reconnect_quota_rejection_does_not_publish_new_segment(), test_resume_rejects_incompatible_backend_without_writing() (+4 more)
 
-### Community 80 - "format_baseline_mutation"
-Cohesion: 0.23
-Nodes (10): _as_mapping(), _display(), format_baseline_mutation(), Terminal formatting for project baseline mutations., Format one mark or clear result without inferring evidence quality., MonkeyPatch, parametrize, test_baseline_commands_forward_named_session() (+2 more)
+### Community 80 - "dutchmate_cli/__init__.py"
+Cohesion: 0.10
+Nodes (21): _as_mapping(), _display(), format_baseline_mutation(), Terminal formatting for project baseline mutations., Format one mark or clear result without inferring evidence quality., DUTchMate CLI package., _display(), format_uart_send() (+13 more)
 
 ### Community 81 - "test_gpio.py"
 Cohesion: 0.23
 Nodes (10): _display(), format_gpio_mode_result(), Terminal formatting for GPIO control commands., Format a successful GPIO mode configuration response., MonkeyPatch, parametrize, test_format_gpio_mode_result_renders_accepted_mapping(), test_gpio_mode_command_configures_channel() (+2 more)
 
-### Community 82 - "reset_command"
-Cohesion: 0.20
-Nodes (10): Build a validated `reset` command., Pulse the configured DUT reset line., reset_command(), ResetCommand, test_build_reset_command(), test_encode_reset_command_as_ndjson(), test_rejects_boolean_reset_pulse(), test_rejects_reset_pulse_above_limit() (+2 more)
+### Community 82 - "fixture_protocol.c"
+Cohesion: 0.16
+Nodes (12): dmf_sleep_fn, dmf_write_fn, command_equals(), dmf_fixture_emit_boot(), dmf_fixture_handle_command(), dmf_fixture_init(), emit_sequence(), write_data() (+4 more)
 
 ### Community 83 - "SerialPort"
 Cohesion: 0.17
 Nodes (7): Protocol, Small pyserial-compatible surface used by the command transport., Write bytes to the serial port., Flush pending output bytes., Read bytes until a delimiter or timeout., Close the serial port., SerialPort
 
-### Community 84 - "GpioIdentifierValidationError"
-Cohesion: 0.25
-Nodes (8): GpioIdentifierValidationError, Validate and return an exact 1..64-byte GPIO role or signal identifier., Raised when a GPIO role or DUT signal violates the exact identifier contract., validate_gpio_identifier(), IdentifierValidationReason, test_gpio_identifier_counts_utf8_bytes_instead_of_characters(), test_gpio_identifier_rejects_unicode_control_characters(), test_gpio_identifier_rejects_unicode_edge_whitespace()
+### Community 84 - "CaptureSessionStorage"
+Cohesion: 0.11
+Nodes (10): CaptureSessionStorage, Persist one accepted normalized control action., Persist immutable timestamp provenance for a capture segment., Close the current segment and return the persisted segment count., Append a validated reconnect segment and return its segment ID., Complete an active native session., Complete an active wait-pattern session., Fail an active native session. (+2 more)
 
 ### Community 85 - "Revision A Voltage-Domain GPIO and UART Interface"
 Cohesion: 0.17
 Nodes (12): Event Channel Translation, Fixed-Direction Signal Paths, Revision A Raspberry Pi Pico Pin Mapping, Revision A Prototype Validation Checklist, Revision A Provisional BOM, Revision A Voltage-Domain GPIO and UART Interface, Selected Translator Architecture, SN74LV4T125 Datasheet (+4 more)
 
-### Community 86 - "UartSender"
-Cohesion: 0.24
-Nodes (6): Keep the runtime UART-send port stable across backend replacement., Publish a newly connected UART-send adapter., ReplaceableUartSender, Backend-neutral port for complete UART payload transmission., Submit every payload byte or raise a backend write error., UartSender
+### Community 86 - "test_fixture_protocol.py"
+Cohesion: 0.31
+Nodes (16): CompletedProcess, _build_harness(), Path, _run_command(), test_binary_emits_invalid_utf8_bytes_without_encoding(), test_burst_is_bounded_numbered_and_self_checking(), test_info_reports_fixture_identity_and_build(), test_init_failure_boot_emits_stable_first_error() (+8 more)
 
 ### Community 87 - "format_wait_pattern"
 Cohesion: 0.25
 Nodes (9): _display(), format_wait_pattern(), _mapping(), CLI formatting for finite literal wait-pattern outcomes., Format a matched or ordinary unmatched wait outcome., MonkeyPatch, test_format_wait_pattern_prints_match_excerpt_and_provenance(), test_format_wait_pattern_prints_no_match_as_successful_outcome() (+1 more)
 
-### Community 88 - "boot_mode_command"
-Cohesion: 0.25
-Nodes (8): boot_mode_command(), BootModeCommand, Build a validated `set_boot_mode` command., Set the configured DUT BOOT/control pin behavior., test_boot_mode_command_matches_canonical_example(), test_build_boot_mode_command(), test_encode_boot_mode_command_as_ndjson(), test_rejects_unknown_boot_mode()
+### Community 88 - "commands.py"
+Cohesion: 0.12
+Nodes (15): BootMode, boot_mode_command(), BootModeCommand, _encode_payload(), Host-to-device protocol command encoding., Build a validated `set_boot_mode` command., Pulse the configured DUT reset line., Set the configured DUT BOOT/control pin behavior. (+7 more)
 
-### Community 89 - "commands.py"
-Cohesion: 0.25
-Nodes (6): BootMode, ConfigureGpioModeCommand, Host-to-device protocol command encoding., Configure a DUT control role on a physical control channel., Return a supported DUT boot mode., validate_boot_mode()
+### Community 89 - "gpio_config/config.py"
+Cohesion: 0.22
+Nodes (15): GpioConfigError, HardwareControlMapping, _optional_string(), _optional_voltage(), _parse_control_mapping(), Any, GpioRoleName, ValueError (+7 more)
 
 ### Community 90 - "GPIO Configuration Semantics"
 Cohesion: 0.18
 Nodes (11): Control Channel State Model, Commanded Boot Mode State, GPIO Configuration Semantics, Role and DUT Signal Identifier Contract, Runtime GPIO Override Semantics, Safe High-Impedance Behavior, Semantic Control Workflows, GPIO Validation Order (+3 more)
+
+### Community 91 - "validate_gpio_configuration"
+Cohesion: 0.13
+Nodes (14): GpioControlChannel, GpioRoleName, Validate and preserve an exact GPIO role identifier., Validate and preserve an exact DUT schematic signal identifier., Return a known physical GPIO control channel., Validate a complete GPIO mapping in the canonical field order., A GPIO request after lexical and electrical validation., validate_gpio_channel() (+6 more)
 
 ### Community 92 - "Reconnect and Session Semantics"
 Cohesion: 0.22
@@ -560,53 +575,81 @@ Nodes (9): Bounded Hardware Evidence, Coding Agent Context Package, Debug Agent 
 Cohesion: 0.32
 Nodes (8): Device Core HTTP Adapter, MCP 2026-07-28 Specification, MCP Integration Plan, Official MCP Python SDK v2, Phase 2 MCP Tool Set, Stateless MCP Layer, MCP Stdio Transport, Deferred Streamable HTTP
 
-### Community 98 - "normalize_enhanced_message"
-Cohesion: 0.14
-Nodes (18): normalize_enhanced_message(), BackendEvent, Parse a chunk and normalize its UART and buffer-telemetry messages., Translate one parsed Enhanced message into the shared event model., BufferOverflowMessage, BufferStatusMessage, UART/event ring buffer overflow reported by the Debug Helper., Firmware-side UART ring buffer telemetry. (+10 more)
+### Community 98 - "test_device_message_examples.py"
+Cohesion: 0.46
+Nodes (7): parse_example(), test_parse_buffer_overflow_example(), test_parse_buffer_status_example(), test_parse_error_response_example(), test_parse_hello_example(), test_parse_success_response_example(), test_parse_uart_event_example()
 
 ### Community 99 - "test_log_replay.py"
 Cohesion: 0.50
 Nodes (7): _native_store(), parametrize, Path, test_recent_logs_prefers_active_then_latest_terminal_native(), test_recent_logs_rejects_invalid_line_limit(), test_recent_logs_rejects_legacy_and_malformed_complete_uart_evidence(), test_recent_logs_replays_complete_partial_and_oversized_records()
 
-### Community 101 - "project_diagnostic_detail"
-Cohesion: 0.40
-Nodes (4): project_diagnostic_detail(), Bounded diagnostic projection shared by persistence and delivery adapters., Return a sanitized, non-empty diagnostic and whether it was truncated., _bounded_error()
+### Community 100 - "EvidenceQuotaExceeded"
+Cohesion: 0.22
+Nodes (5): EvidenceQuotaExceeded, RuntimeError, Raised when stale native session metadata cannot be safely replaced., Raised after an evidence unit is rejected and its session is terminalized., SessionRecoveryError
 
-### Community 102 - ".read_event"
+### Community 101 - "test_device_core_wait.py"
+Cohesion: 0.46
+Nodes (12): FakeMonotonicClock, parametrize, Path, _runtime(), _store(), test_wait_pattern_discards_pre_cursor_events_and_uses_empty_local_buffer(), test_wait_pattern_excludes_oversized_lines_and_persists_default_matches(), test_wait_pattern_never_joins_requested_literal_across_reconnect() (+4 more)
+
+### Community 102 - "enhanced.py"
+Cohesion: 0.09
+Nodes (30): Read and validate one Debug Helper hello message., read_enhanced_hello(), Device Core Service startup configuration helpers., Read and validate the initial Debug Helper hello message., read_startup_hello(), backend_input_error_from_protocol(), EnhancedMessageSource, _message_timestamp_us() (+22 more)
+
+### Community 103 - "HardwareGpioConfig"
 Cohesion: 0.18
-Nodes (9): _enhanced_segment_context(), EnhancedMessageSource, _message_timestamp_us(), DeviceMessage, Protocol, Read and normalize one wire message, returning ``None`` for inactivity., Read and normalize one event without consulting the retained queue., Synchronous source of parsed Enhanced wire-protocol messages. (+1 more)
-
-### Community 103 - "default_cli_config"
-Cohesion: 0.50
-Nodes (3): default_cli_config(), MonkeyPatch, fixture
+Nodes (11): load_startup_hardware_config(), Path, Load startup hardware configuration, treating a missing file as empty config., test_load_startup_hardware_config_returns_empty_config_when_missing(), HardwareGpioConfig, load_hardware_gpio_config(), Path, Validated hardware GPIO mappings from project configuration. (+3 more)
 
 ### Community 104 - "Software Architecture"
 Cohesion: 0.43
 Nodes (7): Backend Contract Foundation, Device Connection Module, Log Processing Module, Software Architecture, Thin Delivery Adapters, UART Capture Module, Workflow Orchestration Modules
 
-### Community 105 - "_replay_uart_prefix"
-Cohesion: 0.17
-Nodes (14): test_recent_logs_payload_removes_oldest_whole_records_to_fit_body_cap(), _BoundedNewest, _normal_record(), _oversized_record(), Retain the newest coordinate-ordered records with bounded memory., _record_key(), _replay_uart_prefix(), _ReplayResult (+6 more)
+### Community 105 - "log_replay.py"
+Cohesion: 0.18
+Nodes (17): _BoundedNewest, _decode_uart_event(), _non_negative_int(), _normal_record(), _oversized_record(), Bounded replay of persisted native UART evidence., Retain the newest coordinate-ordered records with bounded memory., _record_key() (+9 more)
+
+### Community 106 - "DeviceActionError"
+Cohesion: 0.20
+Nodes (7): DeviceActionError, _format_utc(), datetime, RuntimeError, Raised when firmware rejects a hardware action command., Pulse the DUT reset role after confirming reset GPIO configuration., Set DUT boot mode after confirming boot GPIO configuration.
 
 ### Community 107 - "_validator"
 Cohesion: 0.53
 Nodes (5): Draft202012Validator, parametrize, test_gpio_schema_accepts_safe_electrical_combinations(), test_gpio_schema_rejects_unsafe_electrical_combinations(), _validator()
 
+### Community 108 - "DUTchMate Zephyr DUT Fixture"
+Cohesion: 0.18
+Nodes (10): Boot modes, Build, Create a Zephyr 4.4 workspace, DUTchMate Zephyr DUT Fixture, Flash, HIL provenance, Local protocol verification, Supported baseline (+2 more)
+
+### Community 109 - "device_actions.py"
+Cohesion: 0.22
+Nodes (5): device_action_payload(), Serialize a successful hardware action response., DeviceActionResult, Hardware action workflows guarded by GPIO configuration state., Successful hardware action result.
+
 ### Community 110 - "host_to_device.schema.json"
 Cohesion: 0.40
 Nodes (4): $id, oneOf, $schema, title
 
-### Community 111 - ".__exit__"
-Cohesion: 0.50
-Nodes (3): BaseException, TracebackType, Release the mutation guard.
+### Community 111 - "FakeSerial"
+Cohesion: 0.22
+Nodes (3): FakeSerial, test_read_startup_hello_rejects_non_hello_message(), test_read_startup_hello_returns_initial_hello()
 
 ### Community 112 - "dutchmate-core"
 Cohesion: 0.50
 Nodes (4): dutchmate-cli, dutchmate-core, dutchmate-mcp-server, dutchmate-service
 
 ### Community 113 - "DeviceCoreStatus"
-Cohesion: 0.12
-Nodes (12): Return the current Device Core status., apply_startup_hardware_config(), GpioRoleName, Protocol, Runtime surface needed to apply startup hardware configuration., Return current runtime status., Apply configured hardware control mappings., Apply startup GPIO mappings if a Debug Helper is already connected. (+4 more)
+Cohesion: 0.09
+Nodes (16): DeviceCoreStatus, Current service-facing Device Core state., Designate a stored session without requiring a backend connection., Clear a named designation without requiring a backend connection., Record normalized identity for the selected connected backend., Mark the Debug Helper connection as disconnected., Return the current service-facing status snapshot., BaselineMutationResult (+8 more)
+
+### Community 127 - ".get_session"
+Cohesion: 0.40
+Nodes (3): SessionDetail, Return bounded schema-aware detail for one session., Return bounded session detail without expanding raw evidence arrays.
+
+### Community 128 - "Q: commit and tell me what is next development step in phase-1"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: commit and tell me what is next development step in phase-1, Source Nodes
+
+### Community 129 - "Q: Before that what does Zephyr DUT exactly do and what is its use?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Before that what does Zephyr DUT exactly do and what is its use?, Source Nodes
 
 ## Ambiguous Edges - Review These
 - `Phase 1A Basic Backend` → `Normalized Backend Contract`  [AMBIGUOUS]
@@ -615,9 +658,9 @@ Nodes (12): Return the current Device Core status., apply_startup_hardware_confi
   docs/phase1_implementation_spec.md · relation: implements
 
 ## Knowledge Gaps
-- **91 isolated node(s):** `dutchmate-cli`, `dutchmate-mcp-server`, `dutchmate-service`, `$schema`, `$id` (+86 more)
+- **106 isolated node(s):** `dutchmate-cli`, `dutchmate-mcp-server`, `dutchmate-service`, `$schema`, `$id` (+101 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -626,12 +669,12 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: implements) - confidence is low._
 - **What is the exact relationship between `Phase 1B Enhanced Backend` and `Normalized Backend Contract`?**
   _Edge tagged AMBIGUOUS (relation: implements) - confidence is low._
-- **Why does `SessionStore` connect `SessionStore` to `persistence.py`, `CaptureRecorder`, `enhanced_snapshot`, `DeviceCoreRuntime`, `uart_send.py`, `retrieval.py`, `models.py`, `SegmentContext`, `session_store/baseline.py`, `UartCaptureResult`, `test_basic.py`, `BackendSnapshot`, `UartReceiveEvent`, `test_capture_reconnect.py`, `helpers.py`, `SessionListPage`, `DeviceCoreSessionStorage`, `SessionHandle`, `SessionSummary`, `store.py`, `test_startup_config.py`, `test_baseline.py`, `test_recovery.py`, `test_retention.py`, `test_reconnect_evidence.py`, `test_comparison.py`, `test_log_replay.py`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
-- **Why does `DeviceCoreRuntime` connect `DeviceCoreRuntime` to `DeviceCoreClient`, `UartLine`, `test_validation.py`, `uart_send.py`, `UartCaptureProcessor`, `models.py`, `DeviceActionResult`, `SegmentContext`, `session_store/baseline.py`, `ReconnectedCaptureSource`, `BackendSnapshot`, `GpioModeRegistry`, `DeviceActionError`, `runtime.py`, `enhanced.py`, `SessionListPage`, `DeviceCoreSessionStorage`, `SessionHandle`, `SessionSummary`, `store.py`, `test_startup_config.py`, `DeviceControl`, `WaitPatternResult`, `UartSender`?**
-  _High betweenness centrality (0.051) - this node is a cross-community bridge._
-- **Why does `SegmentContext` connect `SegmentContext` to `CaptureRecorder`, `enhanced_snapshot`, `DeviceCoreRuntime`, `metadata.py`, `uart_send.py`, `models.py`, `SessionStore`, `test_contracts.py`, `test_enhanced.py`, `ReconnectedCaptureSource`, `BackendSnapshot`, `runtime.py`, `UartReceiveEvent`, `enhanced.py`, `BasicBackendEventSource`, `test_capture_reconnect.py`, `helpers.py`, `SessionHandle`, `SessionSummary`, `store.py`, `test_reconnect_evidence.py`, `test_comparison.py`, `.read_event`, `DeviceCoreStatus`?**
-  _High betweenness centrality (0.042) - this node is a cross-community bridge._
+- **Why does `SessionStore` connect `SessionStore` to `SessionPersistenceError`, `CaptureRecorder`, `fixed_clock`, `FakeMonotonicClock`, `retrieval.py`, `models.py`, `session_store/baseline.py`, `UartCaptureResult`, `evidence.py`, `test_basic.py`, `runtime.py`, `UartReceiveEvent`, `test_device_core_uart_send.py`, `CaptureWorkflow`, `EnhancedDeviceControl`, `helpers.py`, `store.py`, `SessionHandle`, `.list_sessions`, `SessionRecoveryResult`, `test_startup_config.py`, `test_baseline.py`, `test_recovery.py`, `test_retention.py`, `test_reconnect_evidence.py`, `test_comparison.py`, `test_log_replay.py`, `EvidenceQuotaExceeded`, `test_device_core_wait.py`, `DeviceCoreStatus`?**
+  _High betweenness centrality (0.096) - this node is a cross-community bridge._
+- **Why does `SegmentContext` connect `runtime.py` to `CaptureRecorder`, `workflows/capture.py`, `fixed_clock`, `metadata.py`, `uart_send.py`, `retrieval.py`, `models.py`, `SessionStore`, `.run`, `test_contracts.py`, `test_enhanced.py`, `DeviceCoreRuntime`, `BackendInputError`, `BasicBackendEventSource`, `CaptureWorkflow`, `helpers.py`, `store.py`, `SessionHandle`, `test_reconnect_evidence.py`, `CaptureSessionStorage`, `test_comparison.py`, `test_device_core_wait.py`, `enhanced.py`, `DeviceCoreStatus`?**
+  _High betweenness centrality (0.040) - this node is a cross-community bridge._
+- **Why does `DeviceCoreRuntime` connect `DeviceCoreRuntime` to `workflows/capture.py`, `FakeMonotonicClock`, `metadata.py`, `test_validation.py`, `uart_send.py`, `UartCaptureProcessor`, `retrieval.py`, `service_error_from_exception`, `models.py`, `.run`, `ReconnectedCaptureSource`, `runtime.py`, `GpioModeRegistry`, `GpioControlChannelState`, `BackendInputError`, `test_device_core_uart_send.py`, `CaptureWorkflow`, `EnhancedDeviceControl`, `store.py`, `DeviceCoreSessionStorage`, `SessionHandle`, `test_startup_config.py`, `DeviceControl`, `CommandSuccessMessage`, `InputValidationError`, `WaitPatternResult`, `test_device_core_wait.py`, `DeviceActionError`, `device_actions.py`, `DeviceCoreStatus`, `.get_session`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
 - **Are the 158 inferred relationships involving `SessionStore` (e.g. with `build_startup_runtime()` and `_append_line()`) actually correct?**
   _`SessionStore` has 158 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 73 inferred relationships involving `DeviceCoreRuntime` (e.g. with `test_create_app_applies_startup_hardware_config_when_runtime_is_connected()` and `test_rejected_startup_hardware_config_is_visible_in_status()`) actually correct?**

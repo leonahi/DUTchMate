@@ -1,0 +1,24 @@
+mainmenu "DUTchMate Zephyr DUT fixture"
+
+source "Kconfig.zephyr"
+
+menu "DUTchMate fixture configuration"
+
+config DUTCHMATE_FIXTURE_BUILD_ID
+    string "Fixture build identifier"
+    default "development"
+    help
+      Short identifier recorded in boot and INFO responses. Set this to a
+      reproducible application revision or build identifier for HIL runs.
+
+config DUTCHMATE_FIXTURE_MODE0_PIN
+    int "Boot-mode bit 0 GPIO"
+    range 2 28
+    default 2
+
+config DUTCHMATE_FIXTURE_MODE1_PIN
+    int "Boot-mode bit 1 GPIO"
+    range 2 28
+    default 3
+
+endmenu

@@ -1050,9 +1050,9 @@
     "semantic_hash": "54c4f11265bd1e10a0ff56ac55805a7b"
   },
   "docs/development_status.md": {
-    "mtime": 1787609220.9707773,
-    "seen": 1787609234.6344361,
-    "ast_hash": "e7bb770c3cbce00243360d83868f0e25",
+    "mtime": 1787436973.4457078,
+    "seen": 1787437469.9051032,
+    "ast_hash": "1a6cc9c8d78c1ae0045218b87043018e",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1108,59 +1108,5 @@
     "seen": 1787433587.095059,
     "ast_hash": "d1df401f34e2a63f820f967fa5074ea3",
     "semantic_hash": "d1df401f34e2a63f820f967fa5074ea3"
-  },
-  "hardware/firmware/zephyr_dut/src/fixture_protocol.c": {
-    "mtime": 1787607196.422172,
-    "seen": 1787609234.634374,
-    "ast_hash": "814c76c176f49de0a33445b22d9b5c80",
-    "semantic_hash": ""
-  },
-  "hardware/firmware/zephyr_dut/src/fixture_protocol.h": {
-    "mtime": 1787607196.3721316,
-    "seen": 1787609234.6343749,
-    "ast_hash": "45bfd2ca2518a7aa9b9b46ca583075aa",
-    "semantic_hash": ""
-  },
-  "hardware/firmware/zephyr_dut/src/main.c": {
-    "mtime": 1787607354.2184534,
-    "seen": 1787609234.634376,
-    "ast_hash": "c89f766e62af736929b39745a2a474ad",
-    "semantic_hash": ""
-  },
-  "tests/hardware/zephyr_dut/fixture_protocol_harness.c": {
-    "mtime": 1787607139.323357,
-    "seen": 1787609234.634389,
-    "ast_hash": "36b3346687266803070c34de1cf7ce40",
-    "semantic_hash": ""
-  },
-  "tests/hardware/zephyr_dut/test_fixture_protocol.py": {
-    "mtime": 1787607139.3806303,
-    "seen": 1787609234.63439,
-    "ast_hash": "483538f9afa29206b9361390bf93313a",
-    "semantic_hash": ""
-  },
-  "graphify-out/memory/query_20260822_222823_commit_and_tell_me_what_is_next_development_step_i.md": {
-    "mtime": 1787437703.7961097,
-    "seen": 1787609234.634442,
-    "ast_hash": "4de30bc08805a09f9f7c2c140981f947",
-    "semantic_hash": ""
-  },
-  "graphify-out/memory/query_20260824_211807_before_that_what_does_zephyr_dut_exactly_do_and_wh.md": {
-    "mtime": 1787606287.9152472,
-    "seen": 1787609234.634443,
-    "ast_hash": "70785a335ab292fa8ce867a658b88425",
-    "semantic_hash": ""
-  },
-  "hardware/firmware/zephyr_dut/CMakeLists.txt": {
-    "mtime": 1787607266.613196,
-    "seen": 1787609234.634444,
-    "ast_hash": "a46a571696f6cbb272d7b6137168323d",
-    "semantic_hash": ""
-  },
-  "hardware/firmware/zephyr_dut/README.md": {
-    "mtime": 1787609220.905241,
-    "seen": 1787609234.634444,
-    "ast_hash": "b3c05710b4ef452ddfc196f2689b9f36",
-    "semantic_hash": ""
   }
 }
