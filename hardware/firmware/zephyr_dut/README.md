@@ -161,5 +161,6 @@ Record all of the following with every Basic or Enhanced acceptance run:
 - DUTchMate session IDs for every scenario;
 - expected and observed sequence counts, checksums, first error, timeout, and integrity result.
 
-The next Phase 1 slice supplies the reproducible Basic HIL procedure and report template that
-consumes this information.
+The reproducible Basic acceptance procedure and report template are maintained in
+[`hardware/validation/phase1_basic_hil.md`](../../validation/phase1_basic_hil.md). Use that
+procedure to record the real adapter/Pico session evidence required for Phase 1A acceptance.
