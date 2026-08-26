@@ -78,13 +78,17 @@
       ]
     },
     {
-      "title": "Reset Command",
+      "title": "Pulse Control Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "pulse_ms"],
+      "required": ["cmd", "channel", "pulse_ms"],
       "properties": {
         "cmd": {
-          "const": "reset"
+          "const": "pulse_control"
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
         },
         "pulse_ms": {
           "type": "integer",
@@ -94,17 +98,21 @@
       }
     },
     {
-      "title": "Set Boot Mode Command",
+      "title": "Set Control State Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "mode"],
+      "required": ["cmd", "channel", "state"],
       "properties": {
         "cmd": {
-          "const": "set_boot_mode"
+          "const": "set_control_state"
         },
-        "mode": {
+        "channel": {
           "type": "string",
-          "enum": ["normal", "bootloader"]
+          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+        },
+        "state": {
+          "type": "string",
+          "enum": ["active", "idle"]
         }
       }
     },

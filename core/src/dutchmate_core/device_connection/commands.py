@@ -6,7 +6,7 @@ import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from dutchmate_core.device_connection.errors import ProtocolValidationError
 from dutchmate_core.validation import (
@@ -22,12 +22,10 @@ from dutchmate_core.validation import (
     WELL_KNOWN_GPIO_ROLES as WELL_KNOWN_GPIO_ROLES,
 )
 from dutchmate_core.validation import (
-    BootMode,
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
     prepare_uart_send_payload,
-    validate_boot_mode,
     validate_gpio_channel,
     validate_gpio_mode_configuration,
     validate_gpio_role,
@@ -36,6 +34,7 @@ from dutchmate_core.validation import (
 
 GpioRole: TypeAlias = str
 GpioMode: TypeAlias = GpioControlMode
+ControlState: TypeAlias = Literal["active", "idle"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,14 +64,16 @@ class ConfigureGpioModeCommand:
 
 
 @dataclass(frozen=True, slots=True)
-class ResetCommand:
-    """Pulse the configured DUT reset line."""
+class PulseControlCommand:
+    """Pulse one configured physical control channel."""
 
+    channel: GpioControlChannel
     pulse_ms: int = 100
 
     def to_payload(self) -> dict[str, int | str]:
         return {
-            "cmd": "reset",
+            "cmd": "pulse_control",
+            "channel": self.channel,
             "pulse_ms": self.pulse_ms,
         }
 
@@ -81,15 +82,17 @@ class ResetCommand:
 
 
 @dataclass(frozen=True, slots=True)
-class BootModeCommand:
-    """Set the configured DUT BOOT/control pin behavior."""
+class SetControlStateCommand:
+    """Apply the active or idle behavior of one configured control channel."""
 
-    mode: BootMode
+    channel: GpioControlChannel
+    state: ControlState
 
     def to_payload(self) -> dict[str, str]:
         return {
-            "cmd": "set_boot_mode",
-            "mode": self.mode,
+            "cmd": "set_control_state",
+            "channel": self.channel,
+            "state": self.state,
         }
 
     def to_ndjson(self) -> bytes:
@@ -142,24 +145,42 @@ def configure_gpio_mode_command(
     )
 
 
-def boot_mode_command(mode: str) -> BootModeCommand:
-    """Build a validated `set_boot_mode` command."""
+def pulse_control_command(
+    *,
+    channel: str,
+    pulse_ms: int = 100,
+) -> PulseControlCommand:
+    """Build a validated `pulse_control` command."""
 
     try:
-        mode_name = validate_boot_mode(mode)
-    except ValueError as exc:
-        raise ProtocolValidationError(str(exc)) from exc
-    return BootModeCommand(mode=mode_name)
-
-
-def reset_command(pulse_ms: int = 100) -> ResetCommand:
-    """Build a validated `reset` command."""
-
-    try:
+        channel_name = validate_gpio_channel(channel)
         pulse_ms_value = validate_reset_pulse(pulse_ms)
     except ValueError as exc:
         raise ProtocolValidationError(str(exc)) from exc
-    return ResetCommand(pulse_ms=pulse_ms_value)
+    return PulseControlCommand(channel=channel_name, pulse_ms=pulse_ms_value)
+
+
+def set_control_state_command(
+    *,
+    channel: str,
+    state: str,
+) -> SetControlStateCommand:
+    """Build a validated `set_control_state` command."""
+
+    try:
+        channel_name = validate_gpio_channel(channel)
+    except ValueError as exc:
+        raise ProtocolValidationError(str(exc)) from exc
+    if state == "active":
+        state_name: ControlState = "active"
+    elif state == "idle":
+        state_name = "idle"
+    else:
+        raise ProtocolValidationError("Control state must be 'active' or 'idle'")
+    return SetControlStateCommand(
+        channel=channel_name,
+        state=state_name,
+    )
 
 
 def uart_send_command(data: bytes) -> UartSendCommand:

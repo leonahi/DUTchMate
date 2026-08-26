@@ -73,7 +73,9 @@ def test_reset_sends_command_after_reset_role_is_configured() -> None:
         performed_at="2026-08-21T10:00:00Z",
         device_timestamp_us=182334400,
     )
-    assert transport.requests == [b'{"cmd":"reset","pulse_ms":250}\n']
+    assert transport.requests == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":250}\n'
+    ]
 
 
 def test_reset_rejected_state_uses_rejection_detail() -> None:
@@ -155,7 +157,35 @@ def test_boot_mode_sends_command_after_boot_role_is_configured() -> None:
         performed_at="2026-08-21T10:00:00Z",
         device_timestamp_us=99,
     )
-    assert transport.requests == [b'{"cmd":"set_boot_mode","mode":"bootloader"}\n']
+    assert transport.requests == [
+        b'{"cmd":"set_control_state","channel":"CTRL1","state":"active"}\n'
+    ]
+
+
+def test_normal_boot_mode_restores_configured_boot_channel_idle_state() -> None:
+    registry = GpioModeRegistry()
+    registry.accept_mode(
+        role="boot",
+        channel="CTRL3",
+        dut_signal="BOOT0",
+        mode="push_pull",
+        active_level="high",
+        idle_level="low",
+        source="runtime",
+    )
+    transport = FakeTransport(CommandSuccessMessage(timestamp_us=100))
+    runner = DeviceActionRunner(
+        registry=registry,
+        control=EnhancedDeviceControl(transport),
+        wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
+    )
+
+    result = runner.set_boot_mode(mode="normal")
+
+    assert result.mode == "normal"
+    assert transport.requests == [
+        b'{"cmd":"set_control_state","channel":"CTRL3","state":"idle"}\n'
+    ]
 
 
 def test_boot_mode_validates_mode_before_configuration_check() -> None:
@@ -212,7 +242,9 @@ def test_command_error_response_raises_device_action_error() -> None:
 
     assert exc_info.value.error == "hardware_fault"
     assert exc_info.value.detail == "reset driver failed"
-    assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
+    assert transport.requests == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    ]
 
 
 def test_unexpected_response_raises_device_action_error() -> None:
@@ -237,7 +269,9 @@ def test_unexpected_response_raises_device_action_error() -> None:
     with pytest.raises(DeviceActionError, match="Expected command response"):
         runner.reset_dut()
 
-    assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
+    assert transport.requests == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    ]
 
 
 def test_transport_timeout_raises_typed_device_action_error() -> None:

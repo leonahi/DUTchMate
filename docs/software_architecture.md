@@ -137,7 +137,7 @@ and workflows are imported from their defining modules. Their package
 Owns the current Enhanced v1 wire protocol and serial primitives:
 
 - typed `hello`, UART, buffer telemetry, and command-response messages
-- host command encoders for GPIO mode, reset, boot mode, and UART send
+- host command encoders for GPIO mode, generic channel actions, and UART send
 - base64 decoding and lossy UART display projection
 - NDJSON chunk buffering and message validation
 - serial-port discovery and the synchronous command transport
@@ -146,8 +146,6 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 
 The committed v1 wire still contains these compatibility details:
 
-- wire actions are role-specific `reset`/`set_boot_mode` rather than generic
-  configured-channel actions
 - `configure_gpio_mode` still sends host role metadata
 - receive framing is unbounded and uses generic surrounding-whitespace removal
 - framing uses generic surrounding-whitespace removal and is not bounded at the

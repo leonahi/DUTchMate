@@ -44,24 +44,30 @@ def test_request_writes_command_and_returns_success_response() -> None:
     serial = FakeSerial([b'{"ok":true,"timestamp_us":123}\n'])
     transport = SerialCommandTransport(serial)
 
-    response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+    response = transport.request(
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    )
 
     assert response == CommandSuccessMessage(timestamp_us=123)
-    assert serial.writes == [b'{"cmd":"reset","pulse_ms":100}\n']
+    assert serial.writes == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    ]
     assert serial.flush_count == 1
 
 
 def test_request_returns_command_error_response() -> None:
     serial = FakeSerial(
-        [b'{"ok":false,"error":"not_configured","detail":"reset is not configured"}\n']
+        [b'{"ok":false,"error":"not_configured","detail":"CTRL0 is not configured"}\n']
     )
     transport = SerialCommandTransport(serial)
 
-    response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+    response = transport.request(
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    )
 
     assert response == CommandErrorMessage(
         error="not_configured",
-        detail="reset is not configured",
+        detail="CTRL0 is not configured",
     )
 
 
@@ -75,7 +81,9 @@ def test_request_queues_non_command_messages_before_response() -> None:
     )
     transport = SerialCommandTransport(serial)
 
-    response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+    response = transport.request(
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    )
 
     assert response == CommandSuccessMessage()
     assert transport.read_message() == HelloMessage(
@@ -97,7 +105,9 @@ def test_drain_pending_messages_preserves_event_order() -> None:
     )
     transport = SerialCommandTransport(serial)
 
-    response = transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+    response = transport.request(
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    )
 
     assert response == CommandSuccessMessage(timestamp_us=12)
     assert transport.drain_pending_messages() == (
@@ -128,7 +138,7 @@ def test_read_message_returns_queued_message_before_reading_serial_port() -> Non
         ]
     )
     transport = SerialCommandTransport(serial)
-    transport.request(b'{"cmd":"reset","pulse_ms":100}\n')
+    transport.request(b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n')
 
     first = transport.read_message()
     second = transport.read_message()
@@ -185,7 +195,7 @@ def test_request_rejects_non_newline_terminated_command() -> None:
     transport = SerialCommandTransport(FakeSerial())
 
     with pytest.raises(ValueError, match="newline-terminated"):
-        transport.request(b'{"cmd":"reset"}')
+        transport.request(b'{"cmd":"pulse_control","channel":"CTRL0"}')
 
 
 def test_close_closes_underlying_serial_port() -> None:

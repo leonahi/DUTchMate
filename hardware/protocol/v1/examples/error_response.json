@@ -1,5 +1,5 @@
 {
   "ok": false,
   "error": "not_configured",
-  "detail": "reset role is not configured"
+  "detail": "CTRL0 is not configured"
 }

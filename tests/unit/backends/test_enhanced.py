@@ -345,7 +345,10 @@ def test_device_control_classifies_invalid_enhanced_response() -> None:
     failure = ProtocolValidationError("invalid command response")
 
     with pytest.raises(BackendInputError) as raised:
-        EnhancedDeviceControl(FakeCommandTransport(failure)).reset_dut(pulse_ms=100)
+        EnhancedDeviceControl(FakeCommandTransport(failure)).pulse_control(
+            channel="CTRL0",
+            pulse_ms=100,
+        )
 
     assert raised.value.operation == "reset"
     assert raised.value.backend_mode == "enhanced"

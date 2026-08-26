@@ -1,21 +1,20 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `4025e74` on 2026-08-26
+> Code baseline reviewed: `4fb2e53` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; the first atomic Phase 1B wire
-  migration now uses `uart_receive` throughout the Enhanced capability contract.
-- **Next step:** replace role-specific `reset` and `set_boot_mode` wire actions
-  with generic `pulse_control` and `set_control_state` channel actions in
-  checklist step 3 below.
-- **First implementation slice:** update the host-to-device schema, canonical
-  command examples, command models/encoders, fixtures, and tests together so no
-  mixed action vocabulary can be committed.
+- **Current milestone:** Phase 1A is accepted; Phase 1B now uses `uart_receive`
+  and generic `pulse_control`/`set_control_state` Enhanced wire actions.
+- **Next step:** remove host role and DUT signal metadata from firmware-facing
+  `configure_gpio_mode` commands in checklist step 3 below.
+- **First implementation slice:** remove `role` from the host-to-device schema,
+  canonical example, command model/encoder, Enhanced adapter, fixtures, and
+  tests while retaining role and DUT signal policy in host configuration state.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -54,11 +53,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `4025e74`, reviewed 2026-08-26:
+Working tree based on `4fb2e53`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 870 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 878 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -69,6 +68,8 @@ Working tree based on `4025e74`, reviewed 2026-08-26:
 - `git diff --check`: passed
 - Enhanced capability migration: focused schema, example, parser, adapter,
   workflow, and service tests passed (111 tests)
+- Enhanced generic control-action migration: focused schema, example, encoder,
+  adapter, workflow, runtime, and reconnect tests passed (209 tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -147,7 +148,7 @@ marked accepted independently of Phase 1B.
 
 - [x] Rename `uart_capture` to `uart_receive` across schemas, examples, host
   models, parser, fixtures, tests, and future firmware handling.
-- [ ] Replace role-specific `reset` and `set_boot_mode` wire actions with
+- [x] Replace role-specific `reset` and `set_boot_mode` wire actions with
   generic `pulse_control` and `set_control_state` channel actions.
 - [ ] Remove host role and DUT signal metadata from firmware commands; those
   remain host-side policy/configuration data.

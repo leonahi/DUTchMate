@@ -1,0 +1,5 @@
+{
+  "cmd": "pulse_control",
+  "channel": "CTRL0",
+  "pulse_ms": 100
+}

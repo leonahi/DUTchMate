@@ -1,0 +1,5 @@
+{
+  "cmd": "set_control_state",
+  "channel": "CTRL1",
+  "state": "active"
+}

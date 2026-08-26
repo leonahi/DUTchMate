@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 
 from dutchmate_core.device_connection.commands import (
-    BootModeCommand,
     ConfigureGpioModeCommand,
-    ResetCommand,
+    PulseControlCommand,
+    SetControlStateCommand,
     UartSendCommand,
-    boot_mode_command,
     configure_gpio_mode_command,
-    reset_command,
+    pulse_control_command,
+    set_control_state_command,
     uart_send_command,
     uart_send_text_command,
 )
@@ -181,70 +181,86 @@ def test_rejects_unsafe_gpio_electrical_combinations(
         )
 
 
-def test_build_reset_command() -> None:
-    command = reset_command()
+def test_build_pulse_control_command() -> None:
+    command = pulse_control_command(channel="CTRL0")
 
-    assert command == ResetCommand(pulse_ms=100)
+    assert command == PulseControlCommand(channel="CTRL0", pulse_ms=100)
     assert command.to_payload() == {
-        "cmd": "reset",
+        "cmd": "pulse_control",
+        "channel": "CTRL0",
         "pulse_ms": 100,
     }
 
 
-def test_encode_reset_command_as_ndjson() -> None:
-    command = reset_command(250)
+def test_encode_pulse_control_command_as_ndjson() -> None:
+    command = pulse_control_command(channel="CTRL2", pulse_ms=250)
 
-    assert command.to_ndjson() == b'{"cmd":"reset","pulse_ms":250}\n'
+    assert command.to_ndjson() == (
+        b'{"cmd":"pulse_control","channel":"CTRL2","pulse_ms":250}\n'
+    )
 
 
-def test_reset_command_matches_canonical_example() -> None:
-    command = reset_command()
-    example_payload = json.loads((EXAMPLES_DIR / "reset.json").read_text())
+def test_pulse_control_command_matches_canonical_example() -> None:
+    command = pulse_control_command(channel="CTRL0")
+    example_payload = json.loads((EXAMPLES_DIR / "pulse_control.json").read_text())
 
     assert command.to_payload() == example_payload
 
 
-def test_rejects_zero_reset_pulse() -> None:
+def test_pulse_control_rejects_unknown_channel() -> None:
     with pytest.raises(ProtocolValidationError):
-        reset_command(0)
+        pulse_control_command(channel="GPIO0")
 
 
-def test_rejects_reset_pulse_above_limit() -> None:
+def test_pulse_control_rejects_zero_pulse() -> None:
     with pytest.raises(ProtocolValidationError):
-        reset_command(10001)
+        pulse_control_command(channel="CTRL0", pulse_ms=0)
 
 
-def test_rejects_boolean_reset_pulse() -> None:
+def test_pulse_control_rejects_pulse_above_limit() -> None:
     with pytest.raises(ProtocolValidationError):
-        reset_command(True)
+        pulse_control_command(channel="CTRL0", pulse_ms=10001)
 
 
-def test_build_boot_mode_command() -> None:
-    command = boot_mode_command("bootloader")
+def test_pulse_control_rejects_boolean_pulse() -> None:
+    with pytest.raises(ProtocolValidationError):
+        pulse_control_command(channel="CTRL0", pulse_ms=True)
 
-    assert command == BootModeCommand(mode="bootloader")
+
+def test_build_set_control_state_command() -> None:
+    command = set_control_state_command(channel="CTRL1", state="active")
+
+    assert command == SetControlStateCommand(channel="CTRL1", state="active")
     assert command.to_payload() == {
-        "cmd": "set_boot_mode",
-        "mode": "bootloader",
+        "cmd": "set_control_state",
+        "channel": "CTRL1",
+        "state": "active",
     }
 
 
-def test_encode_boot_mode_command_as_ndjson() -> None:
-    command = boot_mode_command("normal")
+def test_encode_set_control_state_command_as_ndjson() -> None:
+    command = set_control_state_command(channel="CTRL3", state="idle")
 
-    assert command.to_ndjson() == b'{"cmd":"set_boot_mode","mode":"normal"}\n'
+    assert command.to_ndjson() == (
+        b'{"cmd":"set_control_state","channel":"CTRL3","state":"idle"}\n'
+    )
 
 
-def test_boot_mode_command_matches_canonical_example() -> None:
-    command = boot_mode_command("bootloader")
-    example_payload = json.loads((EXAMPLES_DIR / "set_boot_mode.json").read_text())
+def test_set_control_state_command_matches_canonical_example() -> None:
+    command = set_control_state_command(channel="CTRL1", state="active")
+    example_payload = json.loads((EXAMPLES_DIR / "set_control_state.json").read_text())
 
     assert command.to_payload() == example_payload
 
 
-def test_rejects_unknown_boot_mode() -> None:
+def test_set_control_state_rejects_unknown_channel() -> None:
     with pytest.raises(ProtocolValidationError):
-        boot_mode_command("dfu")
+        set_control_state_command(channel="GPIO0", state="active")
+
+
+def test_set_control_state_rejects_unknown_state() -> None:
+    with pytest.raises(ProtocolValidationError):
+        set_control_state_command(channel="CTRL1", state="bootloader")
 
 
 def test_build_uart_send_command_from_bytes() -> None:

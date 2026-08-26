@@ -280,7 +280,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
     assert transport.requests == [
         b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
         b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"reset","pulse_ms":250}\n',
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":250}\n',
     ]
 
 

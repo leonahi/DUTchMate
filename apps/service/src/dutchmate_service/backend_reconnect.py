@@ -18,6 +18,7 @@ from dutchmate_core.backends.contracts import (
     BackendInputError,
     BackendSnapshot,
     BackendUartSendResult,
+    ControlState,
     DeviceControl,
     SegmentContext,
     UartSendCapabilityPolicy,
@@ -167,13 +168,13 @@ class ReplaceableDeviceControl:
                 idle_level=idle_level,
             )
 
-    def reset_dut(self, *, pulse_ms: int) -> int | None:
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
         with self._lock:
-            return self._control.reset_dut(pulse_ms=pulse_ms)
+            return self._control.pulse_control(channel=channel, pulse_ms=pulse_ms)
 
-    def set_boot_mode(self, *, mode: str) -> int | None:
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
         with self._lock:
-            return self._control.set_boot_mode(mode=mode)
+            return self._control.set_control_state(channel=channel, state=state)
 
 
 class ReplaceableUartSender:

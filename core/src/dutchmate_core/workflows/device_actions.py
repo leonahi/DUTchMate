@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, TypeAlias
 
-from dutchmate_core.backends.contracts import DeviceControl, DeviceControlError
+from dutchmate_core.backends.contracts import ControlState, DeviceControl, DeviceControlError
 from dutchmate_core.gpio_config.modes import GpioModeRegistry
 from dutchmate_core.validation import (
     InputValidationError,
@@ -74,9 +74,12 @@ class DeviceActionRunner:
             pulse_ms_value = validate_reset_pulse(pulse_ms)
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
-        self._registry.require_role_configured("reset", operation="reset")
+        control = self._registry.require_role_configured("reset", operation="reset")
         device_timestamp_us = self._run_action(
-            operation=lambda: self._control.reset_dut(pulse_ms=pulse_ms_value),
+            operation=lambda: self._control.pulse_control(
+                channel=control.channel,
+                pulse_ms=pulse_ms_value,
+            ),
         )
         return DeviceActionResult(
             action="reset",
@@ -92,9 +95,13 @@ class DeviceActionRunner:
             mode_name = validate_boot_mode(mode)
         except ValueError as exc:
             raise InputValidationError(str(exc)) from exc
-        self._registry.require_role_configured("boot", operation="set_boot_mode")
+        control = self._registry.require_role_configured("boot", operation="set_boot_mode")
+        state: ControlState = "active" if mode_name == "bootloader" else "idle"
         device_timestamp_us = self._run_action(
-            operation=lambda: self._control.set_boot_mode(mode=mode_name),
+            operation=lambda: self._control.set_control_state(
+                channel=control.channel,
+                state=state,
+            ),
         )
         return DeviceActionResult(
             action="set_boot_mode",

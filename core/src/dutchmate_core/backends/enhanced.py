@@ -15,6 +15,7 @@ from dutchmate_core.backends.contracts import (
     BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
+    ControlState,
     DeviceControl,
     DeviceControlError,
     SegmentContext,
@@ -22,9 +23,9 @@ from dutchmate_core.backends.contracts import (
     UartReceiveEvent,
 )
 from dutchmate_core.device_connection.commands import (
-    boot_mode_command,
     configure_gpio_mode_command,
-    reset_command,
+    pulse_control_command,
+    set_control_state_command,
     uart_send_command,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
@@ -76,15 +77,15 @@ class EnhancedDeviceControl(DeviceControl):
             response_label="GPIO mode configuration",
         )
 
-    def reset_dut(self, *, pulse_ms: int) -> int | None:
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
         return self._request_success(
-            reset_command(pulse_ms).to_ndjson(),
+            pulse_control_command(channel=channel, pulse_ms=pulse_ms).to_ndjson(),
             operation="reset",
         )
 
-    def set_boot_mode(self, *, mode: str) -> int | None:
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
         return self._request_success(
-            boot_mode_command(mode).to_ndjson(),
+            set_control_state_command(channel=channel, state=state).to_ndjson(),
             operation="set_boot_mode",
         )
 

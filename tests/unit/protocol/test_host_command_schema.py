@@ -18,6 +18,29 @@ def _validator() -> Draft202012Validator:
 @pytest.mark.parametrize(
     "payload",
     [
+        {"cmd": "pulse_control", "channel": "CTRL0", "pulse_ms": 100},
+        {"cmd": "set_control_state", "channel": "CTRL1", "state": "active"},
+        {"cmd": "set_control_state", "channel": "CTRL1", "state": "idle"},
+    ],
+)
+def test_schema_accepts_generic_control_actions(payload: dict[str, object]) -> None:
+    assert _validator().is_valid(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"cmd": "reset", "pulse_ms": 100},
+        {"cmd": "set_boot_mode", "mode": "bootloader"},
+    ],
+)
+def test_schema_rejects_legacy_role_specific_actions(payload: dict[str, object]) -> None:
+    assert not _validator().is_valid(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL0",

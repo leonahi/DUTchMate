@@ -12,6 +12,7 @@ from dutchmate_core.backends.basic import (
     BasicBackendEventSource,
     open_basic_backend_connection,
 )
+from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.backends.enhanced import (
     EnhancedCaptureEventSource,
     EnhancedDeviceControl,
@@ -208,10 +209,10 @@ class _UnavailableDeviceControl:
     ) -> int | None:
         self._raise_unavailable()
 
-    def reset_dut(self, *, pulse_ms: int) -> int | None:
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
         self._raise_unavailable()
 
-    def set_boot_mode(self, *, mode: str) -> int | None:
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
         self._raise_unavailable()
 
     def _raise_unavailable(self) -> NoReturn:

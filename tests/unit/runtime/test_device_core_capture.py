@@ -676,7 +676,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     runtime: DeviceCoreRuntime
 
     def assert_session_reserved_before_reset(command: bytes) -> None:
-        if b'"cmd":"reset"' not in command:
+        if b'"cmd":"pulse_control"' not in command:
             return
         active_session_id = runtime.status().active_session_id
         assert active_session_id is not None
@@ -727,7 +727,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     assert serial.writes == [
         b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"reset",'
         b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"reset","pulse_ms":100}\n',
+        b'{"cmd":"pulse_control","channel":"CTRL2","pulse_ms":100}\n',
     ]
     session_root = tmp_path / summary.session_id
     assert session_root.joinpath("uart_raw.log").read_bytes() == b"BOOT_OK\n"
@@ -797,7 +797,9 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
     with pytest.raises(DeviceActionError, match="reset pulse failed"):
         runtime.run_boot_test(duration_s=0.2)
 
-    assert transport.requests == [b'{"cmd":"reset","pulse_ms":100}\n']
+    assert transport.requests == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    ]
     assert runtime.status().active_session_id is None
     assert len(list(tmp_path.iterdir())) == 1
     session_id = next(tmp_path.iterdir()).name

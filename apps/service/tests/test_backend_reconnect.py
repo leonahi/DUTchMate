@@ -8,6 +8,7 @@ from dutchmate_core.backends import (
     UartIntegrity,
     UartSendCapabilityPolicy,
 )
+from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.workflows.capture import ReconnectedCaptureSource
 from dutchmate_service.backend_reconnect import (
     ReplaceableDeviceControl,
@@ -40,6 +41,8 @@ class ClosableSource:
 class FakeControl:
     def __init__(self, marker: int) -> None:
         self.marker = marker
+        self.pulse_requests: list[tuple[str, int]] = []
+        self.state_requests: list[tuple[str, str]] = []
 
     def configure_gpio_mode(
         self,
@@ -53,11 +56,13 @@ class FakeControl:
         del channel, role, mode, active_level, idle_level
         return self.marker
 
-    def reset_dut(self, *, pulse_ms: int) -> int:
-        return self.marker + pulse_ms
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int:
+        self.pulse_requests.append((channel, pulse_ms))
+        return self.marker
 
-    def set_boot_mode(self, *, mode: str) -> int:
-        return self.marker + len(mode)
+    def set_control_state(self, *, channel: str, state: ControlState) -> int:
+        self.state_requests.append((channel, state))
+        return self.marker
 
 
 def test_reconnect_retries_open_and_closes_previous_source() -> None:
@@ -159,14 +164,19 @@ def test_reconnect_does_not_retry_fatal_backend_input() -> None:
 
 
 def test_replaceable_device_control_forwards_to_latest_adapter() -> None:
-    control = ReplaceableDeviceControl(FakeControl(10))
+    first = FakeControl(10)
+    control = ReplaceableDeviceControl(first)
 
-    assert control.reset_dut(pulse_ms=2) == 12
+    assert control.pulse_control(channel="CTRL0", pulse_ms=2) == 10
+    assert first.pulse_requests == [("CTRL0", 2)]
 
-    control.replace(FakeControl(20))
+    replacement = FakeControl(20)
+    control.replace(replacement)
 
-    assert control.reset_dut(pulse_ms=2) == 22
-    assert control.set_boot_mode(mode="normal") == 26
+    assert control.pulse_control(channel="CTRL1", pulse_ms=3) == 20
+    assert control.set_control_state(channel="CTRL2", state="idle") == 20
+    assert replacement.pulse_requests == [("CTRL1", 3)]
+    assert replacement.state_requests == [("CTRL2", "idle")]
 
 
 def _snapshot(segment_id: int) -> BackendSnapshot:

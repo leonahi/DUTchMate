@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 BackendMode: TypeAlias = Literal["basic", "enhanced"]
+ControlState: TypeAlias = Literal["active", "idle"]
 BackendInputKind: TypeAlias = Literal[
     "frame_too_large",
     "invalid_utf8",
@@ -330,11 +331,11 @@ class DeviceControl(Protocol):
     ) -> int | None:
         """Configure one physical control channel and return device time."""
 
-    def reset_dut(self, *, pulse_ms: int) -> int | None:
-        """Pulse the DUT reset line and return device time."""
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
+        """Pulse one configured physical channel and return device time."""
 
-    def set_boot_mode(self, *, mode: str) -> int | None:
-        """Set DUT boot mode and return device time."""
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
+        """Apply one configured channel's active or idle state and return device time."""
 
 
 class BackendEventSource(Protocol):
