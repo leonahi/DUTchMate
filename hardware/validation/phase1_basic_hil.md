@@ -226,56 +226,65 @@ uv run --package dutchmate-cli dutchmate stop
 Mark the run passed only when every required assertion is supported by the
 recorded session IDs.
 
-- [ ] Adapter identity, selected port, and 115200 8-N-1 settings recorded.
-- [ ] DUTchMate commit and dirty/clean state recorded.
-- [ ] Zephyr revision, SDK, board, fixture build ID, `.config` digest, UF2
+- [x] Adapter identity, selected port, and 115200 8-N-1 settings recorded.
+- [x] DUTchMate commit and dirty/clean state recorded.
+- [x] Zephyr revision, SDK, board, fixture build ID, `.config` digest, UF2
   digest, flash method, and strap state recorded.
-- [ ] Basic status reports the intended connection and capabilities.
-- [ ] Manual-reset capture contains the exact successful-boot protocol bytes.
-- [ ] Boot session is completed, untruncated, and has no first error.
-- [ ] Both UART sends have durable attempt/result evidence and accept 5 bytes.
-- [ ] Command capture contains the exact `PONG` and `INFO` responses.
-- [ ] Both sessions preserve non-empty raw bytes and normalized UART events.
-- [ ] Session detail and recent-log retrieval reproduce the stored evidence.
-- [ ] Both sessions report Basic integrity as `not_observable`.
-- [ ] No assertion depends on Zephyr console or log prefixes.
+- [x] Basic status reports the intended connection and capabilities.
+- [x] Manual-reset capture contains the exact successful-boot protocol bytes.
+- [x] Boot session is completed, untruncated, and has no first error.
+- [x] Both UART sends have durable attempt/result evidence and accept 5 bytes.
+- [x] Command capture contains the exact `PONG` and `INFO` responses.
+- [x] Both sessions preserve non-empty raw bytes and normalized UART events.
+- [x] Session detail and recent-log retrieval reproduce the stored evidence.
+- [x] Both sessions report Basic integrity as `not_observable`.
+- [x] No assertion depends on Zephyr console or log prefixes.
 
 Any failed or unverified item makes the run `failed` or `incomplete`, not
 accepted. Preserve the session directories and describe the failure without
 rewriting observed evidence.
 
-## Baseline acceptance report template
+## Baseline acceptance report — 2026-08-26
 
-Fill this section for the Phase 1A baseline run. For a later rerun, append a
-dated copy so the accepted baseline and its replacement remain auditable.
+For a later rerun, append a dated copy of this report structure so the accepted
+baseline and its replacement remain auditable.
 
 ### Run identity
 
-- Result: `pending | passed | failed | incomplete`
-- Run date/time and timezone: `<value>`
-- Operator: `<value>`
-- DUTchMate commit: `<40-character SHA>`
-- DUTchMate working tree: `clean | dirty (describe)`
+- Result: `passed`
+- Run date/time and timezone: `2026-08-26T23:13:24+02:00 CEST`
+- Operator: `Nahit Pawar`
+- DUTchMate commit: `483fcb39465fb159efe95640cb573c437eacd9ac`
+- DUTchMate working tree: dirty only under `graphify-out/` from prior Graphify
+  queries/reflections; tracked host and firmware source matched the commit
 
 ### DUT fixture provenance
 
-- Board: `Raspberry Pi Pico 1 | Pico H`
+- Board: `Raspberry Pi Pico 1`
 - Zephyr board target: `rpi_pico`
-- Zephyr version/tag: `<value>`
-- Zephyr source commit: `<40-character SHA>`
-- Zephyr SDK: `<value>`
-- Fixture build ID: `<value>`
-- Generated `.config` SHA-256: `<value>`
-- UF2 SHA-256: `<value>`
-- Flash method: `<value>`
+- Zephyr version/tag: `v4.4.0`
+- Zephyr source commit: `684c9e8f32e4373a21098559f748f06915f950c9`
+- Zephyr SDK: `1.0.1`
+- Fixture build ID: `phase1-pico-7e44ba9`
+- Generated `.config` SHA-256:
+  `91454b55fa0f40801705e6f5bdb20b8a7fe678197beee960603d342471a08dc9`
+- UF2 SHA-256:
+  `da637a59048eb88d085ea31a6d03554cb9317e07057e63d77326d37cef202a46`
+- Flash method: manual USB UF2 copy through the Pico BOOTSEL mass-storage
+  device
 - GP3/GP2 strap state: `00`
+
+The build was reproduced after the run with the recorded Zephyr source, SDK,
+board qualifier, DUTchMate fixture source, and build ID. Its UF2 digest matched
+the digest recorded before flashing exactly, establishing that the regenerated
+`.config` belongs to the flashed image inputs.
 
 ### Adapter and wiring
 
-- Adapter manufacturer/model: `<value>`
-- USB VID/PID: `<value>`
-- Adapter serial number: `<value or unavailable>`
-- DUTchMate serial port: `<value>`
+- Adapter manufacturer/model: `FTDI FT231X USB UART`
+- USB VID/PID: `0403:6015`
+- Adapter serial number: `D358SG6A`
+- DUTchMate serial port: `/dev/cu.usbserial-D358SG6A`
 - UART: `115200 8-N-1, no flow control`
 - Wiring checked: `GP0->RX, GP1->TX, GND->GND, adapter VCC disconnected`
 
@@ -283,23 +292,41 @@ dated copy so the accepted baseline and its replacement remain auditable.
 
 | Scenario | Session ID | Raw bytes | UART records | Hardware records | Result |
 |---|---|---:|---:|---:|---|
-| Manual-reset boot capture | `<BOOT_SESSION>` | `<count>` | `<count>` | `<count>` | `<result>` |
-| PING/INFO command capture | `<COMMAND_SESSION>` | `<count>` | `<count>` | `<count>` | `<result>` |
+| Manual-reset boot capture | `20260826T211103Z-2649d369` | 60 | 2 | 0 | passed |
+| PING/INFO command capture | `20260826T211203Z-f541c8fb` | 74 | 2 | 4 | passed |
 
 ### Observed results
 
-- Status connection/capabilities: `<observed result>`
-- Boot protocol bytes: `<observed result>`
-- PING response: `<observed result>`
-- INFO response/build provenance: `<observed result>`
-- UART send attempts/results: `<observed result>`
-- Storage and retrieval: `<observed result>`
-- Session state/truncation/first error: `<observed result>`
-- Integrity: `<observed result>`
-- Deviations or failures: `<none or description>`
+- Status connection/capabilities: connected in Basic mode on the recorded port;
+  backend and effective capabilities were `uart_receive, uart_send`, TX policy
+  was enabled, and provenance was host-monotonic at
+  `host_serial_read/serial_read_chunk`.
+- Boot protocol bytes: contained
+  `DMF/1 BOOT OK board=rpi_pico build=phase1-pico-7e44ba9\n`.
+- PING response: exactly `DMF/1 PONG\n`.
+- INFO response/build provenance: exactly
+  `DMF/1 INFO board=rpi_pico build=phase1-pico-7e44ba9 protocol=1\n`.
+- UART send attempts/results: attempts
+  `3d08712a747a4350af57194ed4f74574` and
+  `74905cb6f9a34321bb1093e6fd66a29c` were durably recorded; both results were
+  successful and accepted 5 bytes.
+- Storage and retrieval: concatenating decoded `data_b64` from each session's
+  UART events reproduced its `uart_raw.log` byte-for-byte; `dutchmate session`
+  and `dutchmate logs` retrieved both sessions and their expected evidence.
+- Session state/truncation/first error: both sessions completed by
+  `duration_elapsed`, were not truncated, interrupted, resumed, or overflowed,
+  and reported no first error.
+- Integrity: both sessions reported Basic loss status `not_observable`.
+- Deviations or failures: the manual-reset session preserved five electrical
+  transition bytes (`00 00 ff 00 00`) before the intact boot marker. These did
+  not alter or obscure the required marker and were retained in raw and
+  normalized evidence. No acceptance assertion failed.
 
 ### Decision
 
-- Checklist: `<all passed | list failed/unverified items>`
-- Phase 1A Basic HIL decision: `accepted | not accepted`
-- Decision rationale: `<evidence-based summary>`
+- Checklist: all required assertions passed.
+- Phase 1A Basic HIL decision: `accepted`.
+- Decision rationale: the real generic adapter/Pico path demonstrated manual
+  reset receive, policy-enabled transmit, deterministic fixture responses,
+  native evidence storage, and CLI retrieval with complete provenance. The
+  Basic backend correctly made no loss-observability claim.

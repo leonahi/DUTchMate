@@ -1,20 +1,20 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `7e44ba9` on 2026-08-26
+> Code baseline reviewed: `483fcb3` on 2026-08-26
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** establish the deterministic DUT fixture and accept
-  Phase 1A on the real Basic hardware path.
-- **Next step:** execute and record the complete Basic HIL acceptance run using
-  `hardware/validation/phase1_basic_hil.md` in checklist step 2 below.
-- **First implementation slice:** capture the successful manual-reset boot and
-  the PING/INFO command responses, verify native storage/retrieval evidence, and
-  fill the baseline report with adapter, build, and session provenance.
+- **Current milestone:** Phase 1A is accepted; begin the Phase 1B Enhanced path
+  with the atomic protocol migration.
+- **Next step:** rename Enhanced capability `uart_capture` to `uart_receive`
+  across the complete wire contract in checklist step 3 below.
+- **First implementation slice:** update schemas, canonical examples, host wire
+  models, parser fixtures, and tests together so no mixed capability vocabulary
+  can be committed.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -29,33 +29,31 @@ must not duplicate this progress checklist.
 
 ## Phase 1 Assessment
 
-Phase 1 is not complete. The shared host pipeline and most Phase 1A software are
-implemented and covered by fake-backend tests. Its deterministic Raspberry Pi
-Pico 1 DUT fixture is implemented and cross-build verified, but Phase 1A has no
-recorded real-hardware acceptance result. Phase 1B is partial: its host path
-still uses an interim synchronous compatibility adapter, the target wire
-migration is not complete, RP2040 firmware is absent, and
-prototype/ring-buffer/HIL validation has not run.
+Phase 1 is not complete. Phase 1A is accepted on the real Basic hardware path
+using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
+adapter. Phase 1B is partial: its host path still uses an interim synchronous
+compatibility adapter, the target wire migration is not complete, RP2040
+firmware is absent, and prototype/ring-buffer/HIL validation has not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
 | Shared normalized host pipeline | Implemented | Basic and Enhanced fake sources use shared processing, workflow, and session boundaries. |
-| Phase 1A Basic host adapter | Implemented, acceptance open | Raw receive/send, provenance, reconnect, sessions, service, and CLI are tested; the reproducible HIL procedure exists, but its accepted real-hardware report is not recorded. |
+| Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
-| Zephyr DUT fixture | Implemented, HIL ready | Deterministic `DMF/1` firmware, portable protocol tests, and the consolidated Basic HIL procedure/report template exist for Raspberry Pi Pico 1; the `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1. |
+| Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
-| Basic and Enhanced HIL acceptance | Not run | No reproducible fixture report or accepted real-hardware run is committed. |
+| Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `7e44ba9`, reviewed 2026-08-26:
+Working tree based on `483fcb3`, reviewed 2026-08-26:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
@@ -63,9 +61,11 @@ Working tree based on `7e44ba9`, reviewed 2026-08-26:
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
-  `hardware/validation/phase1_basic_hil.md`; acceptance run still open
+  `hardware/validation/phase1_basic_hil.md`
+- Basic HIL: passed with boot session `20260826T211103Z-2649d369` and command
+  session `20260826T211203Z-f541c8fb`; provenance, artifacts, and results are
+  recorded in the validation report
 - `git diff --check`: passed
-- Basic HIL: no committed run
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -132,9 +132,9 @@ validation order and response semantics for both backend modes.
   document its supported board, build, flash, and UART scenarios.
 - [x] Add a reproducible Basic HIL procedure and report template without making
   host assertions depend on Zephyr log formatting.
-- [ ] Run the real generic USB-to-UART receive/send, capture, storage, and
+- [x] Run the real generic USB-to-UART receive/send, capture, storage, and
   retrieval smoke test.
-- [ ] Record adapter identity, DUT build provenance, DUTchMate session IDs, and
+- [x] Record adapter identity, DUT build provenance, DUTchMate session IDs, and
   results.
 
 Exit gate: every Phase 1A done criterion has committed evidence; Phase 1A can be
