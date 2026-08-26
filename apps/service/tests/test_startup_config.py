@@ -364,7 +364,7 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     serial = ScriptedEnhancedSerial(
         [
             b'{"type":"hello","v":1,"firmware":"0.1.0",'
-            b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n',
+            b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n',
             f'{{"type":"{secret}"}}\n'.encode(),
         ]
     )
@@ -512,7 +512,7 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     )
     hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n'
+        b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
     )
     serials = [
         ScriptedEnhancedSerial([hello, OSError("device removed")]),
@@ -568,11 +568,11 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     )
     initial_hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"dutchmate-rp2040","capabilities":["uart_capture"]}\n'
+        b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
     )
     changed_hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"another-helper","capabilities":["uart_capture"]}\n'
+        b'"device":"another-helper","capabilities":["uart_receive"]}\n'
     )
     serials = [
         ScriptedEnhancedSerial([initial_hello, OSError("device removed")]),

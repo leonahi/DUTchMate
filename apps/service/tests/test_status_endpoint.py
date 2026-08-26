@@ -126,7 +126,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     hello = HelloMessage(
         firmware="0.1.0",
         device="dutchmate-rp2040",
-        capabilities=("uart_capture", "gpio_control"),
+        capabilities=("uart_receive", "gpio_control"),
     )
     app = create_app(
         FakeRuntime(
@@ -174,7 +174,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["connected"] is True
     assert payload["firmware"] == "0.1.0"
     assert payload["device"] == "dutchmate-rp2040"
-    assert payload["capabilities"] == ["uart_capture", "gpio_control"]
+    assert payload["capabilities"] == ["uart_receive", "gpio_control"]
     assert payload["backend_mode"] == "enhanced"
     assert payload["backend_capabilities"] == ["gpio_control", "uart_receive"]
     assert payload["capability_policy"]["uart_send"]["tx_policy_enabled"] is False

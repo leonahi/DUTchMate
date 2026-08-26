@@ -229,7 +229,7 @@ def test_unexpected_response_raises_device_action_error() -> None:
         HelloMessage(
             firmware="0.1.0",
             device="debug-helper",
-            capabilities=("uart_capture", "gpio_control"),
+            capabilities=("uart_receive", "gpio_control"),
         )
     )
     runner = DeviceActionRunner(registry=registry, control=EnhancedDeviceControl(transport))

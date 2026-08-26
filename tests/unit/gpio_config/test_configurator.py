@@ -257,7 +257,7 @@ def test_unexpected_response_does_not_update_registry() -> None:
         HelloMessage(
             firmware="0.1.0",
             device="debug-helper",
-            capabilities=("uart_capture", "gpio_control"),
+            capabilities=("uart_receive", "gpio_control"),
         )
     )
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))

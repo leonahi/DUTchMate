@@ -256,8 +256,7 @@ def normalize_enhanced_hello(hello: HelloMessage, *, port: str) -> BackendInfo:
     """Translate one Enhanced hello message into backend-neutral identity."""
 
     capabilities = frozenset(
-        cast(BackendCapability, "uart_receive" if value == "uart_capture" else value)
-        for value in hello.capabilities
+        cast(BackendCapability, value) for value in hello.capabilities
     )
     return BackendInfo(
         mode="enhanced",

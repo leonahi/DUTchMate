@@ -21,7 +21,7 @@ def test_parse_hello_example() -> None:
     assert parse_example("hello.json") == HelloMessage(
         firmware="0.1.0",
         device="dutchmate-rp2040",
-        capabilities=("uart_capture", "gpio_control", "uart_send"),
+        capabilities=("uart_receive", "gpio_control", "uart_send"),
     )
 
 

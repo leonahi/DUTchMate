@@ -28,7 +28,7 @@ def test_parse_valid_hello_message() -> None:
                 "v": 1,
                 "firmware": "0.1.0",
                 "device": "dutchmate-rp2040",
-                "capabilities": ["uart_capture", "gpio_control", "uart_send"],
+                "capabilities": ["uart_receive", "gpio_control", "uart_send"],
             }
         )
     )
@@ -36,7 +36,7 @@ def test_parse_valid_hello_message() -> None:
     assert message == HelloMessage(
         firmware="0.1.0",
         device="dutchmate-rp2040",
-        capabilities=("uart_capture", "gpio_control", "uart_send"),
+        capabilities=("uart_receive", "gpio_control", "uart_send"),
     )
 
 
@@ -94,10 +94,17 @@ def test_rejects_unknown_capability() -> None:
         )
 
 
+def test_rejects_legacy_uart_capture_capability() -> None:
+    with pytest.raises(ProtocolValidationError):
+        parse_device_message(
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["uart_capture"]}'
+        )
+
+
 def test_rejects_duplicate_capability() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["uart_capture","uart_capture"]}'
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["uart_receive","uart_receive"]}'
         )
 
 

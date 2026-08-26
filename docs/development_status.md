@@ -1,20 +1,21 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `483fcb3` on 2026-08-26
+> Code baseline reviewed: `4025e74` on 2026-08-26
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; begin the Phase 1B Enhanced path
-  with the atomic protocol migration.
-- **Next step:** rename Enhanced capability `uart_capture` to `uart_receive`
-  across the complete wire contract in checklist step 3 below.
-- **First implementation slice:** update schemas, canonical examples, host wire
-  models, parser fixtures, and tests together so no mixed capability vocabulary
-  can be committed.
+- **Current milestone:** Phase 1A is accepted; the first atomic Phase 1B wire
+  migration now uses `uart_receive` throughout the Enhanced capability contract.
+- **Next step:** replace role-specific `reset` and `set_boot_mode` wire actions
+  with generic `pulse_control` and `set_control_state` channel actions in
+  checklist step 3 below.
+- **First implementation slice:** update the host-to-device schema, canonical
+  command examples, command models/encoders, fixtures, and tests together so no
+  mixed action vocabulary can be committed.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -53,11 +54,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `483fcb3`, reviewed 2026-08-26:
+Working tree based on `4025e74`, reviewed 2026-08-26:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 867 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 870 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -66,6 +67,8 @@ Working tree based on `483fcb3`, reviewed 2026-08-26:
   session `20260826T211203Z-f541c8fb`; provenance, artifacts, and results are
   recorded in the validation report
 - `git diff --check`: passed
+- Enhanced capability migration: focused schema, example, parser, adapter,
+  workflow, and service tests passed (111 tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -142,7 +145,7 @@ marked accepted independently of Phase 1B.
 
 ### 3. Perform The Atomic Enhanced Protocol Migration
 
-- [ ] Rename `uart_capture` to `uart_receive` across schemas, examples, host
+- [x] Rename `uart_capture` to `uart_receive` across schemas, examples, host
   models, parser, fixtures, tests, and future firmware handling.
 - [ ] Replace role-specific `reset` and `set_boot_mode` wire actions with
   generic `pulse_control` and `set_control_state` channel actions.

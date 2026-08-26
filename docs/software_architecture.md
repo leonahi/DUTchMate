@@ -146,7 +146,6 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 
 The committed v1 wire still contains these compatibility details:
 
-- the capability is still named `uart_capture` rather than `uart_receive`
 - wire actions are role-specific `reset`/`set_boot_mode` rather than generic
   configured-channel actions
 - `configure_gpio_mode` still sends host role metadata

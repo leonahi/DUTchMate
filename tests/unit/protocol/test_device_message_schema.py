@@ -1,0 +1,42 @@
+import json
+from pathlib import Path
+
+import pytest
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
+from referencing import Registry, Resource
+
+SCHEMA_PATH = (
+    Path(__file__).parents[3] / "hardware" / "protocol" / "v1" / "device_to_host.schema.json"
+)
+ERRORS_SCHEMA_PATH = SCHEMA_PATH.with_name("errors.schema.json")
+
+
+def _validator() -> Draft202012Validator:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    errors_schema = json.loads(ERRORS_SCHEMA_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    registry = Registry().with_resource(
+        errors_schema["$id"],
+        Resource.from_contents(errors_schema),
+    )
+    return Draft202012Validator(schema, registry=registry)
+
+
+def _hello(capability: str) -> dict[str, object]:
+    return {
+        "type": "hello",
+        "v": 1,
+        "firmware": "0.1.0",
+        "device": "dutchmate-rp2040",
+        "capabilities": [capability],
+    }
+
+
+def test_schema_accepts_uart_receive_capability() -> None:
+    _validator().validate(_hello("uart_receive"))
+
+
+def test_schema_rejects_legacy_uart_capture_capability() -> None:
+    with pytest.raises(ValidationError):
+        _validator().validate(_hello("uart_capture"))

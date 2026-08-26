@@ -10,7 +10,7 @@
     "capability": {
       "type": "string",
       "enum": [
-        "uart_capture",
+        "uart_receive",
         "gpio_control",
         "uart_send",
         "gpio_events",

@@ -136,8 +136,9 @@ Update these as one coherent change:
 - firmware handling, once firmware exists
 
 Do not accept fields in code that are absent from schemas and examples. The
-Phase 1B rename to `uart_receive` and migration to generic channel actions must
-be atomic across this set.
+canonical Enhanced receive capability is `uart_receive`; do not reintroduce a
+legacy wire alias. Migrations to generic channel actions must be atomic across
+this set.
 
 ## Testing
 

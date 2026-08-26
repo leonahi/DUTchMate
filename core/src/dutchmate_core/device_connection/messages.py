@@ -6,7 +6,7 @@ PROTOCOL_VERSION = 1
 
 KNOWN_CAPABILITIES = frozenset(
     {
-        "uart_capture",
+        "uart_receive",
         "gpio_control",
         "uart_send",
         "gpio_events",
