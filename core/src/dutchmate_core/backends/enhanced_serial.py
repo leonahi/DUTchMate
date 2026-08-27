@@ -117,6 +117,7 @@ class AsyncEnhancedSerialAdapter:
                 return self._info
             if self._reader_task is None:
                 self._hello_waiter = asyncio.get_running_loop().create_future()
+                self._hello_waiter.add_done_callback(_consume_hello_waiter_exception)
                 self._reader_task = asyncio.create_task(
                     self._read_loop(),
                     name="dutchmate-enhanced-serial-reader",
@@ -124,14 +125,41 @@ class AsyncEnhancedSerialAdapter:
             waiter = self._hello_waiter
             assert waiter is not None
         try:
-            return await asyncio.wait_for(asyncio.shield(waiter), timeout_s)
+            return await self._wait_for_hello(waiter, timeout_s)
         except TimeoutError as exc:
             await self._terminate(
                 BackendDisconnectedError("Timed out waiting for Enhanced hello")
             )
-            if waiter.done() and not waiter.cancelled():
-                waiter.exception()
             raise TransportTimeoutError("Timed out waiting for Enhanced hello") from exc
+
+    async def _wait_for_hello(
+        self,
+        waiter: asyncio.Future[BackendInfo],
+        timeout_s: float,
+    ) -> BackendInfo:
+        """Wait without allowing one caller's cancellation to cancel shared hello state."""
+
+        result = asyncio.get_running_loop().create_future()
+
+        def complete(source: asyncio.Future[BackendInfo]) -> None:
+            if result.done():
+                return
+            if source.cancelled():
+                result.cancel()
+                return
+            error = source.exception()
+            if error is not None:
+                result.set_exception(error)
+                return
+            result.set_result(source.result())
+
+        waiter.add_done_callback(complete)
+        try:
+            return await asyncio.wait_for(result, timeout_s)
+        finally:
+            waiter.remove_done_callback(complete)
+            if not result.done():
+                result.cancel()
 
     async def _read_loop(self) -> None:
         try:
@@ -144,12 +172,12 @@ class AsyncEnhancedSerialAdapter:
                 except ProtocolError as exc:
                     self._set_terminal(backend_input_error_from_protocol(exc))
                     return
-                await self._dispatch_batch(messages)
                 if self._parser.terminal_error is not None:
                     self._set_terminal(
                         backend_input_error_from_protocol(self._parser.terminal_error)
                     )
                     return
+                await self._dispatch_batch(messages)
         except asyncio.CancelledError:
             raise
         except (BackendDisconnectedError, BackendInputError) as exc:
@@ -162,7 +190,7 @@ class AsyncEnhancedSerialAdapter:
             await self._close_resource()
 
     async def _dispatch_batch(self, messages: list[DeviceMessage]) -> None:
-        terminal_error = self._parser.terminal_error
+        received_hello = False
         for message in messages:
             if self._info is None:
                 if not isinstance(message, HelloMessage):
@@ -174,10 +202,7 @@ class AsyncEnhancedSerialAdapter:
                     )
                     return
                 self._info = normalize_enhanced_hello(message, port=self._port)
-                if terminal_error is None:
-                    waiter = self._hello_waiter
-                    if waiter is not None and not waiter.done():
-                        waiter.set_result(self._info)
+                received_hello = True
                 continue
             self._set_terminal(
                 BackendInputError(
@@ -186,6 +211,12 @@ class AsyncEnhancedSerialAdapter:
                 )
             )
             return
+        if received_hello:
+            info = self._info
+            assert info is not None
+            waiter = self._hello_waiter
+            if waiter is not None and not waiter.done():
+                waiter.set_result(info)
 
     def _set_terminal(
         self,
@@ -244,3 +275,8 @@ def _validate_timeout(
     if not math.isfinite(value) or value < 0 or (value == 0 and not allow_zero):
         qualifier = "non-negative" if allow_zero else "positive"
         raise ValueError(f"{field} must be finite and {qualifier}")
+
+
+def _consume_hello_waiter_exception(waiter: asyncio.Future[BackendInfo]) -> None:
+    if not waiter.cancelled():
+        waiter.exception()

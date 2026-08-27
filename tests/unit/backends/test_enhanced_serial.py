@@ -1,16 +1,23 @@
 """Async Enhanced serial reader lifecycle tests."""
 
 import asyncio
+import gc
 
 import pytest
 
-from dutchmate_core.backends import BackendInfo, BackendInputError
+from dutchmate_core.backends import (
+    BackendDisconnectedError,
+    BackendInfo,
+    BackendInputError,
+)
 from dutchmate_core.backends.enhanced_serial import AsyncEnhancedSerialAdapter
+from dutchmate_core.device_connection.transport import TransportTimeoutError
 
 HELLO_FRAME = (
     b'{"type":"hello","v":1,"firmware":"0.1.0",'
     b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
 )
+UART_FRAME = b'{"type":"uart","channel":0,"timestamp_us":1,"data_b64":"WA=="}\n'
 
 
 class FakeAsyncSerialReader:
@@ -116,6 +123,105 @@ async def test_start_rejects_non_hello_first_message() -> None:
         await adapter.start(0.1)
 
     await adapter.close()
+
+
+async def test_start_preserves_parser_error_after_valid_hello_and_post_hello_message() -> None:
+    """Fails if post-hello input masks a retained parser terminal error."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME + UART_FRAME + b'{"type":}\n')
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendInputError, match="not valid JSON") as raised:
+        await adapter.start(0.1)
+
+    assert raised.value.input_error == "invalid_json"
+    await adapter.close()
+    assert reader.close_count == 1
+
+
+async def test_start_rejects_post_hello_message_in_the_same_batch() -> None:
+    """Fails if hello resolves before the whole parsed batch is accepted."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME + UART_FRAME)
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendInputError, match="after hello"):
+        await adapter.start(0.1)
+
+    await adapter.close()
+    assert reader.close_count == 1
+
+
+async def test_start_timeout_closes_the_reader_and_normalizes_the_failure() -> None:
+    """Fails if a missing hello leaks the reader or exposes asyncio timeout errors."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+
+    with pytest.raises(TransportTimeoutError, match="Timed out waiting for Enhanced hello"):
+        await adapter.start(0.01)
+
+    assert reader.active_reads == 0
+    assert reader.close_count == 1
+
+
+async def test_start_normalizes_eof_as_a_disconnected_backend() -> None:
+    """Fails if EOF is not projected through the backend disconnect contract."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(b"")
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendDisconnectedError, match="connection closed"):
+        await adapter.start(0.1)
+
+    await adapter.close()
+    assert reader.close_count == 1
+
+
+async def test_start_normalizes_reader_failure_as_a_disconnected_backend() -> None:
+    """Fails if raw reader exceptions escape instead of becoming disconnects."""
+
+    reader = FakeAsyncSerialReader()
+    reader.fail(OSError("device removed"))
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendDisconnectedError, match="read failed") as raised:
+        await adapter.start(0.1)
+
+    assert isinstance(raised.value.__cause__, OSError)
+    await adapter.close()
+    assert reader.close_count == 1
+
+
+async def test_cancelled_start_does_not_leave_an_unretrieved_hello_exception() -> None:
+    """Fails if cancelling the sole starter leaves close to log a future exception."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+    loop = asyncio.get_running_loop()
+    contexts: list[dict[str, object]] = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: contexts.append(context))
+    try:
+        start_task = asyncio.create_task(adapter.start(1.0))
+        await reader.reading.wait()
+        start_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await start_task
+        await adapter.close()
+        del start_task
+        del adapter
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+    assert contexts == []
+    assert reader.active_reads == 0
+    assert reader.close_count == 1
 
 
 @pytest.mark.parametrize(
