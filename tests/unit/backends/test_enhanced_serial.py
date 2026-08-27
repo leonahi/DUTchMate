@@ -31,9 +31,11 @@ class FakeAsyncSerialReader:
         self.maximum_concurrent_reads = 0
         self.reading = asyncio.Event()
         self.second_read_started = asyncio.Event()
+        self.next_chunk_requested = asyncio.Event()
         self.closed_event = asyncio.Event()
         self.closed = False
         self.close_count = 0
+        self._has_returned_data = False
 
     async def read(self, size: int) -> bytes:
         self.read_calls += 1
@@ -43,6 +45,8 @@ class FakeAsyncSerialReader:
             self.active_reads,
         )
         self.reading.set()
+        if self._has_returned_data:
+            self.next_chunk_requested.set()
         if self.read_calls == 2:
             self.second_read_started.set()
         try:
@@ -51,6 +55,8 @@ class FakeAsyncSerialReader:
             self.active_reads -= 1
         if isinstance(outcome, Exception):
             raise outcome
+        if outcome:
+            self._has_returned_data = True
         return outcome
 
     async def close(self) -> None:
@@ -162,6 +168,20 @@ async def test_start_accepts_evidence_after_hello_in_the_same_batch() -> None:
 
     await adapter.close()
     assert reader.close_count == 1
+
+
+async def test_start_rejects_unexpected_message_after_hello_in_the_same_batch() -> None:
+    """Fails if hello resolves before later same-batch input is validated."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME + b'{"ok":true}\n')
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendInputError, match="after hello"):
+        await adapter.start(0.1)
+
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+    await adapter.close()
 
 
 async def test_receive_event_normalizes_fifo_and_establishes_origin() -> None:
@@ -280,7 +300,7 @@ async def test_cancelling_receive_event_cleans_up_its_waiters() -> None:
 
 
 async def test_event_queue_applies_backpressure_without_dropping_wire_order() -> None:
-    """Fails if a full bounded queue drops or reorders later evidence messages."""
+    """Fails if a full bounded queue lets the sole reader advance before a drain."""
 
     reader = FakeAsyncSerialReader()
     reader.feed(
@@ -292,7 +312,9 @@ async def test_event_queue_applies_backpressure_without_dropping_wire_order() ->
 
     await adapter.start(0.1)
 
+    assert not reader.next_chunk_requested.is_set()
     assert await adapter.receive_event(0.1) == UartReceiveEvent(3, 0, 0, b"X")
+    await asyncio.wait_for(reader.next_chunk_requested.wait(), timeout=0.1)
     assert await adapter.receive_event(0.1) == BufferOverflowEvent(3, 10, 0, 4)
     await adapter.close()
 

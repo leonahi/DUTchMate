@@ -195,8 +195,12 @@ class AsyncEnhancedSerialAdapter:
             await self._close_resource()
 
     async def _dispatch_batch(self, messages: list[DeviceMessage]) -> None:
+        info = self._info
+        segment = self._segment
+        events: list[BackendEvent] = []
+        received_hello = False
         for message in messages:
-            if self._info is None:
+            if info is None:
                 if not isinstance(message, HelloMessage):
                     self._set_terminal(
                         BackendInputError(
@@ -205,23 +209,23 @@ class AsyncEnhancedSerialAdapter:
                         )
                     )
                     return
-                self._info = normalize_enhanced_hello(message, port=self._port)
-                self._complete_hello_waiter()
+                info = normalize_enhanced_hello(message, port=self._port)
+                received_hello = True
                 continue
             timestamp_us = enhanced_message_timestamp_us(message)
             if timestamp_us is not None:
-                if self._segment is None:
-                    self._segment = enhanced_segment_context(
+                if segment is None:
+                    segment = enhanced_segment_context(
                         self._segment_id,
                         timestamp_us,
                     )
                 event = normalize_enhanced_message(
                     message,
                     segment_id=self._segment_id,
-                    source_origin_us=self._segment.timestamp.source_origin_us,
+                    source_origin_us=segment.timestamp.source_origin_us,
                 )
                 assert event is not None
-                await self._events.put(event)
+                events.append(event)
                 continue
             self._set_terminal(
                 BackendInputError(
@@ -230,6 +234,12 @@ class AsyncEnhancedSerialAdapter:
                 )
             )
             return
+        self._info = info
+        self._segment = segment
+        if received_hello:
+            self._complete_hello_waiter()
+        for event in events:
+            await self._events.put(event)
 
     def _complete_hello_waiter(self) -> None:
         info = self._info
