@@ -42,7 +42,11 @@ from dutchmate_core.device_connection.messages import (
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
-from dutchmate_core.device_connection.transport import CommandTransport, TransportTimeoutError
+from dutchmate_core.device_connection.transport import (
+    CommandTransport,
+    TransportTimeoutError,
+    TransportWriteError,
+)
 
 
 class EnhancedMessageSource(Protocol):
@@ -100,6 +104,8 @@ class EnhancedDeviceControl(DeviceControl):
         label = response_label or operation
         try:
             response = self._transport.request(command)
+        except TransportWriteError as exc:
+            raise DeviceControlError(error=exc.error, detail=str(exc)) from exc
         except TransportTimeoutError as exc:
             raise DeviceControlError(
                 error="timeout",
@@ -129,6 +135,12 @@ class EnhancedUartSender:
         command = uart_send_command(data)
         try:
             response = self._transport.request(command.to_ndjson())
+        except TransportWriteError as exc:
+            raise BackendWriteError(
+                str(exc),
+                bytes_accepted=None,
+                error=exc.error,
+            ) from exc
         except TransportTimeoutError as exc:
             raise BackendWriteError(
                 "Enhanced UART send timed out",

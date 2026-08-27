@@ -356,6 +356,14 @@ below 2048 bytes. Exact 2048/2049 acceptance tests therefore exercise the shared
 encoder and final serial framing boundary with a compact, syntactically valid
 JSON object; they do not relax command-schema validation.
 
+The Enhanced host command transport retries positive short serial writes with
+the remaining ordered frame suffix and waits for a response only after the
+complete frame is accepted and flushed. Invalid/no progress or write/flush
+failure returns `timeout` or `hardware_fault` with the exact internal
+`frame_bytes_accepted`. That frame count is never projected as DUT UART payload
+`bytes_accepted`, which remains unknown until firmware acknowledges a complete
+`uart_send` command.
+
 Decoded `hello.firmware` and `hello.device` are each 1..64 UTF-8 bytes; decoded
 command-error `detail` is 1..256 UTF-8 bytes. None contains a Unicode `Cc`
 control character; identity strings also have no leading/trailing Unicode

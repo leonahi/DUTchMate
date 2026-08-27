@@ -16,12 +16,23 @@ from dutchmate_core.device_connection.serial_transport import (
     SerialCommandTransport,
     open_serial_command_transport,
 )
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+)
 
 
 class FakeSerial:
-    def __init__(self, reads: list[bytes] | None = None) -> None:
+    def __init__(
+        self,
+        reads: list[bytes] | None = None,
+        *,
+        write_outcomes: list[int | Exception] | None = None,
+        flush_failure: Exception | None = None,
+    ) -> None:
         self.reads = reads or []
+        self.write_outcomes = write_outcomes or []
+        self.flush_failure = flush_failure
         self.writes: list[bytes] = []
         self.flush_count = 0
         self.closed = False
@@ -29,10 +40,17 @@ class FakeSerial:
 
     def write(self, data: bytes) -> int:
         self.writes.append(data)
+        if self.write_outcomes:
+            outcome = self.write_outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
         return len(data)
 
     def flush(self) -> None:
         self.flush_count += 1
+        if self.flush_failure is not None:
+            raise self.flush_failure
 
     def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
         self.read_sizes.append(size)
@@ -42,6 +60,10 @@ class FakeSerial:
 
     def close(self) -> None:
         self.closed = True
+
+
+class SerialTimeoutException(Exception):
+    """Pyserial-shaped timeout used without importing the serial framework."""
 
 
 def _compact_json_frame_of_size(size: int) -> bytes:
@@ -62,6 +84,105 @@ def test_request_writes_command_and_returns_success_response() -> None:
         b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
     ]
     assert serial.flush_count == 1
+
+
+def test_request_retries_ordered_short_writes_before_reading_response() -> None:
+    command = b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    serial = FakeSerial(
+        [b'{"ok":true}\n'],
+        write_outcomes=[2, 3, len(command) - 5],
+    )
+    transport = SerialCommandTransport(serial)
+
+    response = transport.request(command)
+
+    assert response == CommandSuccessMessage()
+    assert serial.writes == [command, command[2:], command[5:]]
+    assert serial.flush_count == 1
+    assert serial.read_sizes == [65536]
+
+
+def test_request_reports_partial_frame_acceptance_when_write_fails() -> None:
+    command = b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    serial = FakeSerial(write_outcomes=[2, OSError("adapter removed")])
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(TransportWriteError, match="write failed") as raised:
+        transport.request(command)
+
+    assert raised.value.error == "hardware_fault"
+    assert raised.value.frame_bytes_accepted == 2
+    assert serial.writes == [command, command[2:]]
+    assert serial.flush_count == 0
+    assert serial.read_sizes == []
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [TimeoutError("write timeout"), SerialTimeoutException("write timeout")],
+)
+def test_request_classifies_write_timeout_with_partial_frame_acceptance(
+    failure: Exception,
+) -> None:
+    command = b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    serial = FakeSerial(write_outcomes=[2, failure])
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(TransportWriteError) as raised:
+        transport.request(command)
+
+    assert raised.value.error == "timeout"
+    assert raised.value.frame_bytes_accepted == 2
+    assert serial.flush_count == 0
+    assert serial.read_sizes == []
+
+
+def test_request_reports_complete_frame_acceptance_when_flush_fails() -> None:
+    command = b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    serial = FakeSerial(
+        [b'{"ok":true}\n'],
+        flush_failure=OSError("adapter removed"),
+    )
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(TransportWriteError, match="flush failed") as raised:
+        transport.request(command)
+
+    assert raised.value.error == "hardware_fault"
+    assert raised.value.frame_bytes_accepted == len(command)
+    assert serial.writes == [command]
+    assert serial.flush_count == 1
+    assert serial.read_sizes == []
+
+
+@pytest.mark.parametrize(
+    ("invalid_progress", "expected_error"),
+    [
+        (0, "timeout"),
+        (-1, "hardware_fault"),
+        (4096, "hardware_fault"),
+        (True, "hardware_fault"),
+    ],
+)
+def test_request_rejects_invalid_serial_write_progress(
+    invalid_progress: int,
+    expected_error: str,
+) -> None:
+    command = b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    serial = FakeSerial(
+        [b'{"ok":true}\n'],
+        write_outcomes=[invalid_progress],
+    )
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(TransportWriteError, match="invalid progress") as raised:
+        transport.request(command)
+
+    assert raised.value.error == expected_error
+    assert raised.value.frame_bytes_accepted == 0
+    assert serial.writes == [command]
+    assert serial.flush_count == 0
+    assert serial.read_sizes == []
 
 
 def test_request_accepts_exact_host_frame_limit() -> None:

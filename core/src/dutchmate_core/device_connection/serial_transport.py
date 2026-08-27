@@ -16,7 +16,11 @@ from dutchmate_core.device_connection.errors import (
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
 from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+    TransportWriteErrorCode,
+)
 
 DEFAULT_BAUDRATE = 115200
 DEFAULT_TIMEOUT_SECONDS = 1.0
@@ -63,8 +67,41 @@ class SerialCommandTransport:
             raise ValueError("serial commands must be newline-terminated NDJSON")
 
         with self._io_lock:
-            self._serial_port.write(command)
-            self._serial_port.flush()
+            accepted = 0
+            while accepted < len(command):
+                remaining = len(command) - accepted
+                try:
+                    written = self._serial_port.write(command[accepted:])
+                except Exception as exc:
+                    raise TransportWriteError(
+                        "Enhanced serial command write failed",
+                        frame_bytes_accepted=accepted,
+                        error=_classify_serial_write_error(exc),
+                    ) from exc
+                if (
+                    isinstance(written, bool)
+                    or not isinstance(written, int)
+                    or written <= 0
+                    or written > remaining
+                ):
+                    raise TransportWriteError(
+                        "Enhanced serial command write made invalid progress",
+                        frame_bytes_accepted=accepted,
+                        error=(
+                            "timeout"
+                            if written == 0 and not isinstance(written, bool)
+                            else "hardware_fault"
+                        ),
+                    )
+                accepted += written
+            try:
+                self._serial_port.flush()
+            except Exception as exc:
+                raise TransportWriteError(
+                    "Enhanced serial command flush failed",
+                    frame_bytes_accepted=accepted,
+                    error=_classify_serial_write_error(exc),
+                ) from exc
 
             while True:
                 message = self._read_serial_message()
@@ -129,3 +166,9 @@ def open_serial_command_transport(
 def _pyserial_factory() -> SerialFactory:
     serial_module = importlib.import_module("serial")
     return cast(SerialFactory, serial_module.Serial)
+
+
+def _classify_serial_write_error(exc: Exception) -> TransportWriteErrorCode:
+    if isinstance(exc, TimeoutError) or type(exc).__name__ == "SerialTimeoutException":
+        return "timeout"
+    return "hardware_fault"

@@ -1,22 +1,21 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `f23fa7c` on 2026-08-27
+> Code baseline reviewed: `4505a0d` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B has completed the wire
-  vocabulary/metadata migration, enforces exact device-frame boundaries, and
-  validates all bounded decoded Enhanced device-message fields and compact
-  host-command frames.
-- **Next step:** prove complete host-command writes under short serial writes in
-  checklist step 3 below.
-- **First implementation slice:** make the Enhanced serial command transport
-  complete ordered short writes or report the known accepted byte count before
-  it waits for a device response.
+- **Current milestone:** Phase 1A is accepted; Phase 1B has completed the atomic
+  Enhanced protocol migration, including bounded device/host frames, decoded
+  fields, and complete host-command writes.
+- **Next step:** begin the continuous asynchronous Enhanced adapter in checklist
+  step 4 below.
+- **First implementation slice:** introduce one owned asynchronous Enhanced
+  serial reader/dispatcher under fake-transport tests, preserving bounded
+  framing and the existing normalized adapter contracts.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -33,8 +32,8 @@ must not duplicate this progress checklist.
 
 Phase 1 is not complete. Phase 1A is accepted on the real Basic hardware path
 using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
-adapter. Phase 1B is partial: its host path still uses an interim synchronous
-compatibility adapter, the target wire migration is not complete, RP2040
+adapter. Phase 1B is partial: its atomic host wire migration is complete, but
+the host path still uses an interim synchronous compatibility adapter, RP2040
 firmware is absent, and prototype/ring-buffer/HIL validation has not run.
 
 | Delivery area | Status | Evidence or remaining gate |
@@ -43,7 +42,7 @@ firmware is absent, and prototype/ring-buffer/HIL validation has not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Parser and finite synchronous adapter exist; target protocol and continuous asynchronous reader remain. |
+| Phase 1B Enhanced host adapter | Partial | Target protocol migration and finite synchronous adapter are complete; the continuous asynchronous reader remains. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -55,11 +54,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `f23fa7c`, reviewed 2026-08-27:
+Working tree based on `4505a0d`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 952 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 963 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -85,6 +84,9 @@ Working tree based on `f23fa7c`, reviewed 2026-08-27:
 - Enhanced host-command frame enforcement: exact 2048/2049-byte encoder and
   pre-dispatch boundaries, compact unescaped UTF-8 output, outbound adapter
   classification, and bounded service error context passed (89 focused tests)
+- Enhanced host-command write completion: ordered short writes, invalid
+  progress, write/flush failure acceptance counts, timeout classification, and
+  control/UART adapter projection passed (48 focused tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -169,7 +171,7 @@ marked accepted independently of Phase 1B.
   remain host-side policy/configuration data.
 - [x] Enforce target NDJSON frame, decoded payload, whitespace, and validation
   limits consistently.
-- [ ] Prove that the host transport retries short writes to complete acceptance
+- [x] Prove that the host transport retries short writes to complete acceptance
   or reports known partial acceptance.
 
 Exit gate: schemas, canonical examples, encoders, parser, protocol tests, and

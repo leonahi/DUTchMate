@@ -8,6 +8,7 @@ from dutchmate_core.backends import (
     BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DeviceControlError,
     UartReceiveEvent,
 )
 from dutchmate_core.backends.enhanced import (
@@ -31,7 +32,10 @@ from dutchmate_core.device_connection.messages import (
     UartMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+)
 
 
 class FakeEnhancedMessageSource:
@@ -96,6 +100,21 @@ def test_enhanced_uart_sender_preserves_firmware_error() -> None:
         EnhancedUartSender(FakeCommandTransport(response)).send_uart(b"go\n")
 
     assert raised.value.error == "capture_active"
+    assert raised.value.bytes_accepted is None
+
+
+def test_enhanced_uart_sender_maps_command_frame_write_timeout() -> None:
+    failure = TransportWriteError(
+        "Enhanced serial command write failed",
+        frame_bytes_accepted=2,
+        error="timeout",
+    )
+
+    with pytest.raises(BackendWriteError) as raised:
+        EnhancedUartSender(FakeCommandTransport(failure)).send_uart(b"go\n")
+
+    assert str(raised.value) == "Enhanced serial command write failed"
+    assert raised.value.error == "timeout"
     assert raised.value.bytes_accepted is None
 
 
@@ -354,6 +373,23 @@ def test_device_control_classifies_invalid_enhanced_response() -> None:
     assert raised.value.operation == "reset"
     assert raised.value.backend_mode == "enhanced"
     assert raised.value.input_error == "invalid_message"
+
+
+def test_device_control_maps_command_frame_write_failure() -> None:
+    failure = TransportWriteError(
+        "Enhanced serial command write failed",
+        frame_bytes_accepted=2,
+        error="hardware_fault",
+    )
+
+    with pytest.raises(DeviceControlError) as raised:
+        EnhancedDeviceControl(FakeCommandTransport(failure)).pulse_control(
+            channel="CTRL0",
+            pulse_ms=100,
+        )
+
+    assert raised.value.error == "hardware_fault"
+    assert raised.value.detail == "Enhanced serial command write failed"
 
 
 def test_device_control_preserves_outbound_host_frame_validation() -> None:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol, TypeAlias
 
 from dutchmate_core.device_connection.parser import DeviceMessage
+
+TransportWriteErrorCode: TypeAlias = Literal["hardware_fault", "timeout"]
 
 
 class CommandTransport(Protocol):
@@ -16,6 +18,21 @@ class CommandTransport(Protocol):
 
 class TransportError(RuntimeError):
     """Raised when host-to-device transport cannot complete an operation."""
+
+
+class TransportWriteError(TransportError):
+    """Raised when a host command frame cannot be written completely."""
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        frame_bytes_accepted: int,
+        error: TransportWriteErrorCode,
+    ) -> None:
+        super().__init__(detail)
+        self.frame_bytes_accepted = frame_bytes_accepted
+        self.error = error
 
 
 class TransportTimeoutError(TransportError):
