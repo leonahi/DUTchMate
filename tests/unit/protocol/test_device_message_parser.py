@@ -20,6 +20,18 @@ from dutchmate_core.device_connection.messages import (
 from dutchmate_core.device_connection.parser import parse_device_message
 
 
+def _hello_line(**overrides: object) -> str:
+    payload: dict[str, object] = {
+        "type": "hello",
+        "v": 1,
+        "firmware": "0.1.0",
+        "device": "dutchmate-rp2040",
+        "capabilities": [],
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
 def test_parse_valid_hello_message() -> None:
     message = parse_device_message(
         json.dumps(
@@ -50,6 +62,69 @@ def test_parse_hello_from_bytes() -> None:
         device="dutchmate-rp2040",
         capabilities=(),
     )
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+@pytest.mark.parametrize("value", ["x", "a" * 64, "é" * 32, "e\u0301"])
+def test_hello_identity_accepts_and_preserves_exact_utf8_value(
+    field: str,
+    value: str,
+) -> None:
+    message = parse_device_message(_hello_line(**{field: value}))
+
+    assert getattr(message, field) == value
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+def test_hello_identity_rejects_empty_value(field: str) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: ""}))
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+@pytest.mark.parametrize("value", [None, 7, [], {}])
+def test_hello_identity_rejects_non_string_value(
+    field: str,
+    value: object,
+) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: value}))
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+def test_hello_identity_rejects_unpaired_surrogate(field: str) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: "\ud800"}))
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+@pytest.mark.parametrize("value", ["a" * 65, "é" * 33])
+def test_hello_identity_rejects_values_above_64_utf8_bytes(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: value}))
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+@pytest.mark.parametrize("value", [" value", "value\u00a0", "\u2003value"])
+def test_hello_identity_rejects_unicode_edge_whitespace(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: value}))
+
+
+@pytest.mark.parametrize("field", ["firmware", "device"])
+@pytest.mark.parametrize("value", ["val\x00ue", "value\x7f", "val\u0080ue"])
+def test_hello_identity_rejects_unicode_control_characters(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ProtocolValidationError, match=field):
+        parse_device_message(_hello_line(**{field: value}))
 
 
 def test_rejects_malformed_json() -> None:

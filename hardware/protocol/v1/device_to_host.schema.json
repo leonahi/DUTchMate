@@ -34,11 +34,13 @@
         },
         "firmware": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "$comment": "Runtime validation requires 1..64 UTF-8 bytes, no Unicode Cc characters, and no leading or trailing Unicode White_Space; accepted values are preserved exactly."
         },
         "device": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "$comment": "Runtime validation requires 1..64 UTF-8 bytes, no Unicode Cc characters, and no leading or trailing Unicode White_Space; accepted values are preserved exactly."
         },
         "capabilities": {
           "type": "array",

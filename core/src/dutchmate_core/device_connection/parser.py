@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import unicodedata
 from typing import Any
 
 from dutchmate_core.device_connection.errors import (
@@ -49,6 +50,7 @@ _BUFFER_STATUS_KEYS = {
 }
 _COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us", "bytes_accepted"}
 _COMMAND_ERROR_KEYS = {"ok", "error", "detail"}
+_MAX_HELLO_IDENTITY_BYTES = 64
 
 
 def parse_device_message(line: str | bytes) -> DeviceMessage:
@@ -115,13 +117,8 @@ def _parse_hello(payload: dict[str, Any]) -> HelloMessage:
     if version != PROTOCOL_VERSION:
         raise ProtocolVersionError(f"Unsupported protocol version: {version}")
 
-    firmware = payload["firmware"]
-    if not isinstance(firmware, str) or not firmware:
-        raise ProtocolValidationError("Hello 'firmware' must be a non-empty string")
-
-    device = payload["device"]
-    if not isinstance(device, str) or not device:
-        raise ProtocolValidationError("Hello 'device' must be a non-empty string")
+    firmware = _validated_hello_identity(payload["firmware"], field="firmware")
+    device = _validated_hello_identity(payload["device"], field="device")
 
     capabilities = payload["capabilities"]
     if not isinstance(capabilities, list):
@@ -145,6 +142,30 @@ def _parse_hello(payload: dict[str, Any]) -> HelloMessage:
         capabilities=tuple(parsed_capabilities),
         protocol_version=version,
     )
+
+
+def _validated_hello_identity(value: Any, *, field: str) -> str:
+    if not isinstance(value, str):
+        raise ProtocolValidationError(f"Hello '{field}' must be a string")
+
+    try:
+        actual_bytes = len(value.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ProtocolValidationError(f"Hello '{field}' must be valid Unicode") from exc
+
+    if not 1 <= actual_bytes <= _MAX_HELLO_IDENTITY_BYTES:
+        raise ProtocolValidationError(
+            f"Hello '{field}' must encode to 1..{_MAX_HELLO_IDENTITY_BYTES} UTF-8 bytes"
+        )
+    if value[0].isspace() or value[-1].isspace():
+        raise ProtocolValidationError(
+            f"Hello '{field}' must not have leading or trailing Unicode whitespace"
+        )
+    if any(unicodedata.category(character) == "Cc" for character in value):
+        raise ProtocolValidationError(
+            f"Hello '{field}' must not contain Unicode control characters"
+        )
+    return value
 
 
 def _parse_uart(payload: dict[str, Any]) -> UartMessage:

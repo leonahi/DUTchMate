@@ -146,7 +146,7 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 
 The committed v1 wire still contains these compatibility details:
 
-- decoded identity, error-detail, and UART-payload limits are not fully enforced
+- decoded error-detail and UART-payload limits are not fully enforced
 - host command frames are not bounded at the final protocol limit
 - transport writes do not expose a complete-acceptance contract
 
