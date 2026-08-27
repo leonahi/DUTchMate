@@ -24,6 +24,12 @@ class NdjsonStreamParser:
 
         return self._buffer
 
+    @property
+    def terminal_error(self) -> ProtocolError | None:
+        """Return the first terminal parsing failure, if parsing has stopped."""
+
+        return self._terminal_error
+
     def feed(self, chunk: bytes) -> list[DeviceMessage]:
         """Consume a serial byte chunk and return parsed complete messages."""
 

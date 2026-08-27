@@ -145,6 +145,21 @@ def test_feed_delivers_valid_frames_before_terminal_invalid_frame() -> None:
         parser.feed(b"")
 
 
+def test_terminal_error_is_none_before_failure() -> None:
+    parser = NdjsonStreamParser()
+
+    assert parser.terminal_error is None
+
+
+def test_terminal_error_exposes_failure_after_valid_prefix() -> None:
+    parser = NdjsonStreamParser()
+
+    messages = parser.feed(_UART_FRAME_BODY + b"\n{\"type\":}\n")
+
+    assert messages == [UartMessage(channel=0, timestamp_us=1, data=b"X", text="X")]
+    assert isinstance(parser.terminal_error, MalformedMessageError)
+
+
 def test_feed_requires_bytes() -> None:
     parser = NdjsonStreamParser()
 
