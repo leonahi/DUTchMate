@@ -52,6 +52,7 @@ _COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us", "bytes_accepted"}
 _COMMAND_ERROR_KEYS = {"ok", "error", "detail"}
 _MAX_HELLO_IDENTITY_BYTES = 64
 _MAX_COMMAND_ERROR_DETAIL_BYTES = 256
+_MAX_UART_PAYLOAD_BYTES = 32768
 
 
 def parse_device_message(line: str | bytes) -> DeviceMessage:
@@ -209,6 +210,10 @@ def _parse_uart(payload: dict[str, Any]) -> UartMessage:
         data = base64.b64decode(data_b64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ProtocolValidationError("UART 'data_b64' is not valid base64") from exc
+    if not 1 <= len(data) <= _MAX_UART_PAYLOAD_BYTES:
+        raise ProtocolValidationError(
+            f"UART 'data_b64' must decode to 1..{_MAX_UART_PAYLOAD_BYTES} bytes"
+        )
 
     return UartMessage(
         channel=channel,

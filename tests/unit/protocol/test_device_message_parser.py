@@ -1,3 +1,4 @@
+import base64
 import json
 
 import pytest
@@ -34,6 +35,17 @@ def _hello_line(**overrides: object) -> str:
 
 def _command_error_line(detail: object) -> str:
     return json.dumps({"ok": False, "error": "timeout", "detail": detail})
+
+
+def _uart_line(data: bytes) -> str:
+    return json.dumps(
+        {
+            "type": "uart",
+            "channel": 0,
+            "timestamp_us": 1,
+            "data_b64": base64.b64encode(data).decode("ascii"),
+        }
+    )
 
 
 def test_parse_valid_hello_message() -> None:
@@ -218,6 +230,25 @@ def test_parse_uart_message_with_lossy_utf8_text() -> None:
         data=b"\xff\xfeOK\n",
         text="\ufffd\ufffdOK\n",
     )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [pytest.param(b"x", id="one-byte"), pytest.param(b"x" * 32768, id="max-bytes")],
+)
+def test_uart_payload_accepts_and_preserves_exact_decoded_bytes(data: bytes) -> None:
+    message = parse_device_message(_uart_line(data))
+
+    assert message.data == data
+
+
+@pytest.mark.parametrize(
+    "data",
+    [pytest.param(b"", id="empty"), pytest.param(b"x" * 32769, id="over-max")],
+)
+def test_uart_payload_rejects_decoded_size_outside_1_to_32768_bytes(data: bytes) -> None:
+    with pytest.raises(ProtocolValidationError, match="1..32768"):
+        parse_device_message(_uart_line(data))
 
 
 def test_rejects_invalid_uart_base64() -> None:

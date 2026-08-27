@@ -69,7 +69,8 @@
         },
         "data_b64": {
           "type": "string",
-          "contentEncoding": "base64"
+          "contentEncoding": "base64",
+          "$comment": "Runtime validation requires base64 that decodes to 1..32768 bytes; accepted payloads are preserved exactly."
         }
       }
     },

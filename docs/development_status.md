@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `10cef01` on 2026-08-27
+> Code baseline reviewed: `8b08e17` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -10,12 +10,12 @@ Read this document first whenever development resumes.
 
 - **Current milestone:** Phase 1A is accepted; Phase 1B has completed the wire
   vocabulary/metadata migration, enforces exact device-frame boundaries, and
-  validates exact Enhanced hello identities and bounded command-error detail.
-- **Next step:** enforce decoded Enhanced message field limits consistently in
+  validates all bounded decoded Enhanced device-message fields.
+- **Next step:** enforce the remaining Enhanced host-to-device frame contract in
   checklist step 3 below.
-- **First implementation slice:** validate decoded Enhanced `uart.data_b64`
-  payloads as exact 1..32768 bytes, rejecting empty or 32769-byte payloads
-  without truncation.
+- **First implementation slice:** bound every compact UTF-8 host-command frame,
+  including LF, to 2048 total bytes and reject larger frames before serial
+  dispatch with `actual_frame_bytes` and `max_frame_bytes` context.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -54,11 +54,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `10cef01`, reviewed 2026-08-27:
+Working tree based on `8b08e17`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 940 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 944 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -79,6 +79,8 @@ Working tree based on `10cef01`, reviewed 2026-08-27:
   example tests passed (85 tests)
 - Enhanced command-error detail enforcement: focused parser, schema, and
   canonical example tests passed (101 tests)
+- Enhanced decoded-UART payload enforcement: focused parser, schema, and
+  canonical example tests passed (105 tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
