@@ -28,6 +28,7 @@ class FakeAsyncSerialReader:
         self.maximum_concurrent_reads = 0
         self.reading = asyncio.Event()
         self.second_read_started = asyncio.Event()
+        self.closed_event = asyncio.Event()
         self.closed = False
         self.close_count = 0
 
@@ -52,6 +53,7 @@ class FakeAsyncSerialReader:
     async def close(self) -> None:
         self.closed = True
         self.close_count += 1
+        self.closed_event.set()
 
     def feed(self, data: bytes) -> None:
         self.outcomes.put_nowait(data)
@@ -152,6 +154,34 @@ async def test_start_rejects_post_hello_message_in_the_same_batch() -> None:
 
     await adapter.close()
     assert reader.close_count == 1
+
+
+@pytest.mark.parametrize(
+    ("frame", "error_match"),
+    [
+        (b'{"ok":true}\n', "hello"),
+        (HELLO_FRAME + UART_FRAME, "after hello"),
+    ],
+)
+async def test_protocol_input_terminalization_stops_the_reader_without_explicit_close(
+    frame: bytes,
+    error_match: str,
+) -> None:
+    """Fails if input terminalization leaves the only reader blocked for close()."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(frame)
+    adapter = make_adapter(reader)
+
+    try:
+        with pytest.raises(BackendInputError, match=error_match):
+            await adapter.start(0.1)
+
+        await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+        assert reader.active_reads == 0
+        assert reader.close_count == 1
+    finally:
+        await adapter.close()
 
 
 async def test_start_timeout_closes_the_reader_and_normalizes_the_failure() -> None:

@@ -178,6 +178,8 @@ class AsyncEnhancedSerialAdapter:
                     )
                     return
                 await self._dispatch_batch(messages)
+                if self._terminal_error is not None:
+                    return
         except asyncio.CancelledError:
             raise
         except (BackendDisconnectedError, BackendInputError) as exc:
