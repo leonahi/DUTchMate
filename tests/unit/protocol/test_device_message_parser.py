@@ -32,6 +32,10 @@ def _hello_line(**overrides: object) -> str:
     return json.dumps(payload)
 
 
+def _command_error_line(detail: object) -> str:
+    return json.dumps({"ok": False, "error": "timeout", "detail": detail})
+
+
 def test_parse_valid_hello_message() -> None:
     message = parse_device_message(
         json.dumps(
@@ -388,6 +392,39 @@ def test_parse_command_error_message() -> None:
         error="not_configured",
         detail="reset role is not configured",
     )
+
+
+@pytest.mark.parametrize(
+    "detail",
+    ["x", "a" * 256, "é" * 128, " ", "\u00a0detail\u00a0", "e\u0301"],
+)
+def test_command_error_detail_accepts_and_preserves_exact_utf8_value(detail: str) -> None:
+    message = parse_device_message(_command_error_line(detail))
+
+    assert message == CommandErrorMessage(error="timeout", detail=detail)
+
+
+@pytest.mark.parametrize("detail", ["a" * 257, "é" * 128 + "a"])
+def test_command_error_detail_rejects_values_above_256_utf8_bytes(detail: str) -> None:
+    with pytest.raises(ProtocolValidationError, match="detail"):
+        parse_device_message(_command_error_line(detail))
+
+
+@pytest.mark.parametrize("detail", ["det\x00ail", "detail\x7f", "det\u0080ail"])
+def test_command_error_detail_rejects_unicode_control_characters(detail: str) -> None:
+    with pytest.raises(ProtocolValidationError, match="detail"):
+        parse_device_message(_command_error_line(detail))
+
+
+@pytest.mark.parametrize("detail", [None, 7, [], {}])
+def test_command_error_detail_rejects_non_string_value(detail: object) -> None:
+    with pytest.raises(ProtocolValidationError, match="detail"):
+        parse_device_message(_command_error_line(detail))
+
+
+def test_command_error_detail_rejects_unpaired_surrogate() -> None:
+    with pytest.raises(ProtocolValidationError, match="detail"):
+        parse_device_message(_command_error_line("\ud800"))
 
 
 def test_rejects_unknown_command_error_code() -> None:

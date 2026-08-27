@@ -22,7 +22,8 @@
     },
     "detail": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "$comment": "Runtime validation requires 1..256 UTF-8 bytes and no Unicode Cc characters; accepted values are preserved exactly."
     }
   }
 }

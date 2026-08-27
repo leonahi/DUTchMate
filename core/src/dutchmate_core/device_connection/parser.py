@@ -51,6 +51,7 @@ _BUFFER_STATUS_KEYS = {
 _COMMAND_SUCCESS_KEYS = {"ok", "timestamp_us", "bytes_accepted"}
 _COMMAND_ERROR_KEYS = {"ok", "error", "detail"}
 _MAX_HELLO_IDENTITY_BYTES = 64
+_MAX_COMMAND_ERROR_DETAIL_BYTES = 256
 
 
 def parse_device_message(line: str | bytes) -> DeviceMessage:
@@ -145,26 +146,39 @@ def _parse_hello(payload: dict[str, Any]) -> HelloMessage:
 
 
 def _validated_hello_identity(value: Any, *, field: str) -> str:
+    return _validated_protocol_text(
+        value,
+        label=f"Hello '{field}'",
+        max_bytes=_MAX_HELLO_IDENTITY_BYTES,
+        reject_edge_whitespace=True,
+    )
+
+
+def _validated_protocol_text(
+    value: Any,
+    *,
+    label: str,
+    max_bytes: int,
+    reject_edge_whitespace: bool = False,
+) -> str:
     if not isinstance(value, str):
-        raise ProtocolValidationError(f"Hello '{field}' must be a string")
+        raise ProtocolValidationError(f"{label} must be a string")
 
     try:
         actual_bytes = len(value.encode("utf-8"))
     except UnicodeEncodeError as exc:
-        raise ProtocolValidationError(f"Hello '{field}' must be valid Unicode") from exc
+        raise ProtocolValidationError(f"{label} must be valid Unicode") from exc
 
-    if not 1 <= actual_bytes <= _MAX_HELLO_IDENTITY_BYTES:
+    if not 1 <= actual_bytes <= max_bytes:
         raise ProtocolValidationError(
-            f"Hello '{field}' must encode to 1..{_MAX_HELLO_IDENTITY_BYTES} UTF-8 bytes"
+            f"{label} must encode to 1..{max_bytes} UTF-8 bytes"
         )
-    if value[0].isspace() or value[-1].isspace():
+    if reject_edge_whitespace and (value[0].isspace() or value[-1].isspace()):
         raise ProtocolValidationError(
-            f"Hello '{field}' must not have leading or trailing Unicode whitespace"
+            f"{label} must not have leading or trailing Unicode whitespace"
         )
     if any(unicodedata.category(character) == "Cc" for character in value):
-        raise ProtocolValidationError(
-            f"Hello '{field}' must not contain Unicode control characters"
-        )
+        raise ProtocolValidationError(f"{label} must not contain Unicode control characters")
     return value
 
 
@@ -329,9 +343,11 @@ def _parse_command_error(payload: dict[str, Any]) -> CommandErrorMessage:
     if not isinstance(error, str) or error not in KNOWN_ERROR_CODES:
         raise ProtocolValidationError("Command error 'error' must be a known error code")
 
-    detail = payload["detail"]
-    if not isinstance(detail, str) or not detail:
-        raise ProtocolValidationError("Command error 'detail' must be a non-empty string")
+    detail = _validated_protocol_text(
+        payload["detail"],
+        label="Command error 'detail'",
+        max_bytes=_MAX_COMMAND_ERROR_DETAIL_BYTES,
+    )
 
     return CommandErrorMessage(error=error, detail=detail)
 
