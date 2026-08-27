@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: pending current Task 4 commit on 2026-08-28
+> Code baseline reviewed: pending current Task 4 review correction commit on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -52,11 +52,13 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on the pending current Task 4 commit, reviewed 2026-08-28:
+Working tree based on the pending current Task 4 review correction commit,
+reviewed 2026-08-28:
 
-- Ruff: passed on the three modified core modules and two modified test modules
+- Ruff: passed on all Task 4 modified Python modules/tests, including the review
+  corrections
 - Mypy: passed on the three modified core modules
-- Pytest: 1005 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 1007 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -87,9 +89,9 @@ Working tree based on the pending current Task 4 commit, reviewed 2026-08-28:
   control/UART adapter projection passed (48 focused tests)
 - Enhanced async command routing: shared 2,048-byte validation, unchanged
   synchronous transport behavior, serialized request/response dispatch,
-  interleaved FIFO evidence, retained parser-error precedence, write
-  accounting, timeout/cancellation terminalization, and reader cleanup passed
-  (63 focused tests)
+  interleaved and orphan-prefix FIFO evidence, retained parser-error
+  precedence, atomic first-wins cancellation terminalization, exact write
+  accounting, and cleanup-failure isolation passed (65 focused tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 

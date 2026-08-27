@@ -44,6 +44,7 @@ class FakeAsyncSerialReader:
         self.closed_event = asyncio.Event()
         self.closed = False
         self.close_count = 0
+        self.close_failure: Exception | None = None
         self._has_returned_data = False
 
     async def read(self, size: int) -> bytes:
@@ -72,6 +73,8 @@ class FakeAsyncSerialReader:
         self.closed = True
         self.close_count += 1
         self.closed_event.set()
+        if self.close_failure is not None:
+            raise self.close_failure
 
     def feed(self, data: bytes) -> None:
         self.outcomes.put_nowait(data)
@@ -91,6 +94,23 @@ class FakeAsyncFrameWriter:
         self.written.put_nowait(frame)
         if self.failure is not None:
             raise self.failure
+
+
+class TerminationBarrierAdapter(AsyncEnhancedSerialAdapter):
+    """Pause cleanup after request code has selected its terminal outcome."""
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.termination_started = asyncio.Event()
+        self.allow_termination = asyncio.Event()
+
+    async def _terminate(
+        self,
+        error: BackendDisconnectedError | BackendInputError,
+    ) -> None:
+        self.termination_started.set()
+        await self.allow_termination.wait()
+        await super()._terminate(error)
 
 
 def make_adapter(
@@ -205,17 +225,20 @@ async def test_write_failure_preserves_frame_count_then_disconnects() -> None:
 
     reader = FakeAsyncSerialReader()
     writer = FakeAsyncFrameWriter()
-    writer.failure = TransportWriteError(
+    failure = TransportWriteError(
         "write failed",
         frame_bytes_accepted=7,
         error="hardware_fault",
     )
+    writer.failure = failure
+    reader.close_failure = OSError("close failed")
     reader.feed(HELLO_FRAME)
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
 
     with pytest.raises(TransportWriteError) as raised:
         await adapter.request(b'{"cmd":"test"}\n', 0.1)
+    assert raised.value is failure
     assert raised.value.frame_bytes_accepted == 7
 
     with pytest.raises(BackendDisconnectedError):
@@ -230,6 +253,7 @@ async def test_request_timeout_closes_and_terminalizes_adapter() -> None:
 
     reader = FakeAsyncSerialReader()
     writer = FakeAsyncFrameWriter()
+    reader.close_failure = OSError("close failed")
     reader.feed(HELLO_FRAME)
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
@@ -250,6 +274,7 @@ async def test_cancelling_transmitted_request_closes_and_terminalizes_adapter() 
 
     reader = FakeAsyncSerialReader()
     writer = FakeAsyncFrameWriter()
+    reader.close_failure = OSError("close failed")
     reader.feed(HELLO_FRAME)
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
@@ -264,6 +289,37 @@ async def test_cancelling_transmitted_request_closes_and_terminalizes_adapter() 
     with pytest.raises(BackendDisconnectedError, match="cancelled"):
         await adapter.receive_event(0.1)
     assert reader.active_reads == 0
+    assert reader.close_count == 1
+
+
+async def test_cancellation_selects_terminal_before_response_can_be_orphaned() -> None:
+    """Fails if cancelling the response future races terminal cause selection."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = TerminationBarrierAdapter(
+        reader=reader,
+        writer=writer,
+        port="/dev/ttyACM0",
+        segment_id=3,
+    )
+    await adapter.start(0.1)
+
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 1.0))
+    assert await writer.written.get() == b'{"cmd":"test"}\n'
+    request.cancel()
+    await adapter.termination_started.wait()
+
+    reader.feed(b'{"ok":true}\n')
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+    adapter.allow_termination.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    for _ in range(2):
+        with pytest.raises(BackendDisconnectedError, match="cancelled"):
+            await adapter.receive_event(0.1)
     assert reader.close_count == 1
 
 
@@ -282,6 +338,31 @@ async def test_response_without_pending_request_terminalizes_reader() -> None:
         await adapter.receive_event(0.1)
     assert reader.active_reads == 0
     assert reader.close_count == 1
+
+
+async def test_orphan_response_retains_same_batch_prefix_evidence() -> None:
+    """Fails if an orphan response discards valid evidence preceding it."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
+        b'{"ok":true}\n'
+    )
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3,
+        timestamp_us=0,
+        channel=0,
+        data=b"X",
+    )
+    for _ in range(2):
+        with pytest.raises(BackendInputError, match="no pending request"):
+            await adapter.receive_event(0.1)
 
 
 async def test_same_batch_parser_error_precedes_response_and_retains_event() -> None:

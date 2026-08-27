@@ -98,6 +98,7 @@ class AsyncEnhancedSerialAdapter:
         self._terminal_error: BackendDisconnectedError | BackendInputError | None = None
         self._terminal = asyncio.Event()
         self._closed = False
+        self._resource_close_started = False
         self._resource_closed = False
 
     @property
@@ -251,7 +252,7 @@ class AsyncEnhancedSerialAdapter:
                             backend_mode="enhanced",
                         )
                     )
-                    return
+                    break
                 pending.set_result(message)
                 continue
             self._set_terminal(
@@ -260,13 +261,13 @@ class AsyncEnhancedSerialAdapter:
                     backend_mode="enhanced",
                 )
             )
-            return
+            break
         self._info = info
         self._segment = segment
         parser_error = self._parser.terminal_error
         if parser_error is not None:
             self._set_terminal(backend_input_error_from_protocol(parser_error))
-        elif received_hello:
+        elif received_hello and self._terminal_error is None:
             self._complete_hello_waiter()
         for event in events:
             await self._events.put(event)
@@ -281,6 +282,7 @@ class AsyncEnhancedSerialAdapter:
             response: asyncio.Future[DeviceMessage] = (
                 asyncio.get_running_loop().create_future()
             )
+            response.add_done_callback(_consume_response_waiter_exception)
             self._pending_response = response
             try:
                 await self._writer.write_frame(command)
@@ -290,30 +292,25 @@ class AsyncEnhancedSerialAdapter:
                     timeout = TransportTimeoutError(
                         "Timed out waiting for Enhanced command response"
                     )
-                    response.cancel()
-                    await self._terminate(
-                        BackendDisconnectedError(
-                            "Enhanced command response timed out; connection closed"
-                        )
+                    disconnected = BackendDisconnectedError(
+                        "Enhanced command response timed out; connection closed"
                     )
+                    self._set_terminal(disconnected, cancel_pending_response=True)
+                    await self._terminate(disconnected)
                     raise timeout from exc
             except TransportWriteError:
-                response.cancel()
-                await self._terminate(
-                    BackendDisconnectedError(
-                        "Enhanced command write failed; connection closed"
-                    )
+                disconnected = BackendDisconnectedError(
+                    "Enhanced command write failed; connection closed"
                 )
+                self._set_terminal(disconnected, cancel_pending_response=True)
+                await self._terminate(disconnected)
                 raise
             except asyncio.CancelledError:
-                response.cancel()
-                await asyncio.shield(
-                    self._terminate(
-                        BackendDisconnectedError(
-                            "Enhanced command cancelled after transmission began"
-                        )
-                    )
+                disconnected = BackendDisconnectedError(
+                    "Enhanced command cancelled after transmission began"
                 )
+                self._set_terminal(disconnected, cancel_pending_response=True)
+                await asyncio.shield(self._terminate(disconnected))
                 raise
             finally:
                 if self._pending_response is response:
@@ -365,6 +362,8 @@ class AsyncEnhancedSerialAdapter:
     def _set_terminal(
         self,
         error: BackendDisconnectedError | BackendInputError,
+        *,
+        cancel_pending_response: bool = False,
     ) -> None:
         if self._terminal_error is not None:
             return
@@ -375,17 +374,24 @@ class AsyncEnhancedSerialAdapter:
             waiter.set_exception(error)
         response = self._pending_response
         if response is not None and not response.done():
-            response.set_exception(error)
+            if cancel_pending_response:
+                response.cancel()
+            else:
+                response.set_exception(error)
 
     def _raise_if_terminal(self) -> None:
         if self._terminal_error is not None:
             raise self._terminal_error
 
     async def _close_resource(self) -> None:
-        if self._resource_closed:
+        if self._resource_close_started:
+            return
+        self._resource_close_started = True
+        try:
+            await self._reader.close()
+        except Exception:
             return
         self._resource_closed = True
-        await self._reader.close()
 
     async def _terminate(
         self,
@@ -425,5 +431,10 @@ def _validate_timeout(
 
 
 def _consume_hello_waiter_exception(waiter: asyncio.Future[BackendInfo]) -> None:
+    if not waiter.cancelled():
+        waiter.exception()
+
+
+def _consume_response_waiter_exception(waiter: asyncio.Future[DeviceMessage]) -> None:
     if not waiter.cancelled():
         waiter.exception()
