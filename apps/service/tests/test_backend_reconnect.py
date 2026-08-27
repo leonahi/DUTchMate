@@ -41,6 +41,7 @@ class ClosableSource:
 class FakeControl:
     def __init__(self, marker: int) -> None:
         self.marker = marker
+        self.configuration_requests: list[tuple[str, str, str, str | None]] = []
         self.pulse_requests: list[tuple[str, int]] = []
         self.state_requests: list[tuple[str, str]] = []
 
@@ -48,12 +49,11 @@ class FakeControl:
         self,
         *,
         channel: str,
-        role: str,
         mode: str,
         active_level: str,
         idle_level: str | None,
     ) -> int:
-        del channel, role, mode, active_level, idle_level
+        self.configuration_requests.append((channel, mode, active_level, idle_level))
         return self.marker
 
     def pulse_control(self, *, channel: str, pulse_ms: int) -> int:
@@ -173,8 +173,20 @@ def test_replaceable_device_control_forwards_to_latest_adapter() -> None:
     replacement = FakeControl(20)
     control.replace(replacement)
 
+    assert (
+        control.configure_gpio_mode(
+            channel="CTRL3",
+            mode="push_pull",
+            active_level="low",
+            idle_level="high",
+        )
+        == 20
+    )
     assert control.pulse_control(channel="CTRL1", pulse_ms=3) == 20
     assert control.set_control_state(channel="CTRL2", state="idle") == 20
+    assert replacement.configuration_requests == [
+        ("CTRL3", "push_pull", "low", "high")
+    ]
     assert replacement.pulse_requests == [("CTRL1", 3)]
     assert replacement.state_requests == [("CTRL2", "idle")]
 

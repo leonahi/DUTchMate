@@ -19,30 +19,24 @@ from dutchmate_core.validation import (
     VALID_GPIO_MODES as VALID_GPIO_MODES,
 )
 from dutchmate_core.validation import (
-    WELL_KNOWN_GPIO_ROLES as WELL_KNOWN_GPIO_ROLES,
-)
-from dutchmate_core.validation import (
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
     prepare_uart_send_payload,
     validate_gpio_channel,
     validate_gpio_mode_configuration,
-    validate_gpio_role,
     validate_reset_pulse,
 )
 
-GpioRole: TypeAlias = str
 GpioMode: TypeAlias = GpioControlMode
 ControlState: TypeAlias = Literal["active", "idle"]
 
 
 @dataclass(frozen=True, slots=True)
 class ConfigureGpioModeCommand:
-    """Configure a DUT control role on a physical control channel."""
+    """Configure the electrical behavior of a physical control channel."""
 
     channel: GpioControlChannel
-    role: GpioRole
     mode: GpioMode
     active_level: GpioLevel
     idle_level: GpioLevel | None = None
@@ -51,7 +45,6 @@ class ConfigureGpioModeCommand:
         payload = {
             "cmd": "configure_gpio_mode",
             "channel": self.channel,
-            "role": self.role,
             "mode": self.mode,
             "active_level": self.active_level,
         }
@@ -118,7 +111,6 @@ class UartSendCommand:
 def configure_gpio_mode_command(
     *,
     channel: str,
-    role: str,
     mode: str,
     active_level: str,
     idle_level: str | None = None,
@@ -127,7 +119,6 @@ def configure_gpio_mode_command(
 
     try:
         channel_name = validate_gpio_channel(channel)
-        role_name = validate_gpio_role(role)
         mode_name, active_level_name, idle_level_name = validate_gpio_mode_configuration(
             mode=mode,
             active_level=active_level,
@@ -138,7 +129,6 @@ def configure_gpio_mode_command(
 
     return ConfigureGpioModeCommand(
         channel=channel_name,
-        role=role_name,
         mode=mode_name,
         active_level=active_level_name,
         idle_level=idle_level_name,

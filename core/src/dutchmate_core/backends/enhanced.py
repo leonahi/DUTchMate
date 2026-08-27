@@ -59,14 +59,12 @@ class EnhancedDeviceControl(DeviceControl):
         self,
         *,
         channel: str,
-        role: str,
         mode: str,
         active_level: str,
         idle_level: str | None,
     ) -> int | None:
         command = configure_gpio_mode_command(
             channel=channel,
-            role=role,
             mode=mode,
             active_level=active_level,
             idle_level=idle_level,

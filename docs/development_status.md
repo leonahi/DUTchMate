@@ -1,20 +1,21 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `4fb2e53` on 2026-08-27
+> Code baseline reviewed: `eba15cd` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B now uses `uart_receive`
-  and generic `pulse_control`/`set_control_state` Enhanced wire actions.
-- **Next step:** remove host role and DUT signal metadata from firmware-facing
-  `configure_gpio_mode` commands in checklist step 3 below.
-- **First implementation slice:** remove `role` from the host-to-device schema,
-  canonical example, command model/encoder, Enhanced adapter, fixtures, and
-  tests while retaining role and DUT signal policy in host configuration state.
+- **Current milestone:** Phase 1A is accepted; Phase 1B wire commands now use
+  `uart_receive`, generic channel actions, and role-neutral GPIO configuration.
+- **Next step:** enforce target NDJSON frame, decoded payload, whitespace, and
+  validation limits consistently in checklist step 3 below.
+- **First implementation slice:** bound device-to-host NDJSON framing before
+  decode at 65536 total bytes, accept only one optional CR before LF, and reject
+  empty, BOM-prefixed, outer-whitespace, and oversized frames while preserving
+  valid earlier frames from the same read.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -53,7 +54,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `4fb2e53`, reviewed 2026-08-27:
+Working tree based on `eba15cd`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
@@ -70,6 +71,8 @@ Working tree based on `4fb2e53`, reviewed 2026-08-27:
   workflow, and service tests passed (111 tests)
 - Enhanced generic control-action migration: focused schema, example, encoder,
   adapter, workflow, runtime, and reconnect tests passed (209 tests)
+- Enhanced host-metadata removal: focused schema, encoder, configurator,
+  runtime, adapter, startup, and reconnect tests passed (158 tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -150,7 +153,7 @@ marked accepted independently of Phase 1B.
   models, parser, fixtures, tests, and future firmware handling.
 - [x] Replace role-specific `reset` and `set_boot_mode` wire actions with
   generic `pulse_control` and `set_control_state` channel actions.
-- [ ] Remove host role and DUT signal metadata from firmware commands; those
+- [x] Remove host role and DUT signal metadata from firmware commands; those
   remain host-side policy/configuration data.
 - [ ] Enforce target NDJSON frame, decoded payload, whitespace, and validation
   limits consistently.

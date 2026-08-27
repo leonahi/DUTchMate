@@ -123,9 +123,9 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
     states = runtime.apply_hardware_config(config)
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL1","role":"boot",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL1",'
         b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n',
     ]
     assert states["reset"].state == "configured"
@@ -278,7 +278,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
         device_timestamp_us=300,
     )
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"open_drain","active_level":"low"}\n',
         b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":250}\n',
     ]

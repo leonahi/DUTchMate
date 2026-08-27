@@ -1,7 +1,6 @@
 {
   "cmd": "configure_gpio_mode",
   "channel": "CTRL0",
-  "role": "reset",
   "mode": "open_drain",
   "active_level": "low"
 }

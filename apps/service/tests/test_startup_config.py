@@ -672,7 +672,7 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     response = TestClient(app).get("/status")
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"open_drain","active_level":"low"}\n'
     ]
     assert response.status_code == 200

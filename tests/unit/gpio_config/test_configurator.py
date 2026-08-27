@@ -36,7 +36,7 @@ def test_configure_mode_sends_command_and_accepts_success() -> None:
     )
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"open_drain","active_level":"low"}\n'
     ]
     assert state.state == "configured"
@@ -66,7 +66,7 @@ def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
     )
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL1","role":"boot",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL1",'
         b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n'
     ]
     assert state.state == "configured"
@@ -101,7 +101,7 @@ def test_configure_mode_records_firmware_rejection() -> None:
     )
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"push_pull","active_level":"low","idle_level":"high"}\n'
     ]
     assert state.state == "rejected"
@@ -170,7 +170,7 @@ def test_invalid_channel_is_rejected_before_transport_request() -> None:
     assert registry.get("CTRL1").state == "unconfigured"
 
 
-def test_custom_role_is_sent_and_recorded() -> None:
+def test_custom_role_is_recorded_but_not_sent() -> None:
     registry = GpioModeRegistry()
     transport = FakeTransport(CommandSuccessMessage())
     configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
@@ -186,7 +186,7 @@ def test_custom_role_is_sent_and_recorded() -> None:
     )
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"power_en",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL2",'
         b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n'
     ]
     assert state.state == "configured"
@@ -273,7 +273,7 @@ def test_unexpected_response_does_not_update_registry() -> None:
         )
 
     assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
         b'"mode":"open_drain","active_level":"low"}\n'
     ]
     assert registry.get("CTRL0").state == "unconfigured"

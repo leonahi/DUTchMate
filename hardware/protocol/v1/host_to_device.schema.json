@@ -7,7 +7,7 @@
       "title": "Configure GPIO Mode Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "channel", "role", "mode", "active_level"],
+      "required": ["cmd", "channel", "mode", "active_level"],
       "properties": {
         "cmd": {
           "const": "configure_gpio_mode"
@@ -15,10 +15,6 @@
         "channel": {
           "type": "string",
           "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
-        },
-        "role": {
-          "type": "string",
-          "minLength": 1
         },
         "mode": {
           "type": "string",

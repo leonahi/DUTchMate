@@ -154,7 +154,6 @@ class ReplaceableDeviceControl:
         self,
         *,
         channel: str,
-        role: str,
         mode: str,
         active_level: str,
         idle_level: str | None,
@@ -162,7 +161,6 @@ class ReplaceableDeviceControl:
         with self._lock:
             return self._control.configure_gpio_mode(
                 channel=channel,
-                role=role,
                 mode=mode,
                 active_level=active_level,
                 idle_level=idle_level,

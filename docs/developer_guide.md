@@ -138,9 +138,9 @@ Update these as one coherent change:
 Do not accept fields in code that are absent from schemas and examples. The
 canonical Enhanced receive capability is `uart_receive`; do not reintroduce a
 legacy wire alias. The canonical Enhanced control actions are `pulse_control`
-and `set_control_state`; do not reintroduce role-specific wire actions. Remove
-host-only control metadata atomically across this set when configuration
-commands change.
+and `set_control_state`; do not reintroduce role-specific wire actions.
+`configure_gpio_mode` carries only channel and electrical behavior; keep host
+role and DUT-signal metadata out of firmware commands.
 
 ## Testing
 

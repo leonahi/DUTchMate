@@ -44,14 +44,12 @@ def test_schema_rejects_legacy_role_specific_actions(payload: dict[str, object])
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL0",
-            "role": "reset",
             "mode": "open_drain",
             "active_level": "low",
         },
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL1",
-            "role": "boot",
             "mode": "push_pull",
             "active_level": "high",
             "idle_level": "low",
@@ -62,20 +60,31 @@ def test_gpio_schema_accepts_safe_electrical_combinations(payload: dict[str, obj
     assert _validator().is_valid(payload)
 
 
+@pytest.mark.parametrize("field", ["role", "dut_signal"])
+def test_gpio_schema_rejects_host_only_metadata(field: str) -> None:
+    payload = {
+        "cmd": "configure_gpio_mode",
+        "channel": "CTRL0",
+        "mode": "open_drain",
+        "active_level": "low",
+        field: "reset" if field == "role" else "RESET_N",
+    }
+
+    assert not _validator().is_valid(payload)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL0",
-            "role": "reset",
             "mode": "open_drain",
             "active_level": "high",
         },
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL0",
-            "role": "reset",
             "mode": "open_drain",
             "active_level": "low",
             "idle_level": "high",
@@ -83,14 +92,12 @@ def test_gpio_schema_accepts_safe_electrical_combinations(payload: dict[str, obj
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL1",
-            "role": "boot",
             "mode": "push_pull",
             "active_level": "high",
         },
         {
             "cmd": "configure_gpio_mode",
             "channel": "CTRL1",
-            "role": "boot",
             "mode": "push_pull",
             "active_level": "high",
             "idle_level": "high",

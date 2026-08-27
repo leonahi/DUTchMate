@@ -725,7 +725,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     assert summary.state == "completed"
     assert summary.workflow == "boot_test"
     assert serial.writes == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL2","role":"reset",'
+        b'{"cmd":"configure_gpio_mode","channel":"CTRL2",'
         b'"mode":"open_drain","active_level":"low"}\n',
         b'{"cmd":"pulse_control","channel":"CTRL2","pulse_ms":100}\n',
     ]

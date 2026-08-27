@@ -146,10 +146,8 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 
 The committed v1 wire still contains these compatibility details:
 
-- `configure_gpio_mode` still sends host role metadata
 - receive framing is unbounded and uses generic surrounding-whitespace removal
-- framing uses generic surrounding-whitespace removal and is not bounded at the
-  final protocol limit
+- host command frames are not bounded at the final protocol limit
 - transport writes do not expose a complete-acceptance contract
 
 `hardware/protocol/v1/` is the wire authority. Its schemas, examples,

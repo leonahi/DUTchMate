@@ -324,7 +324,6 @@ class DeviceControl(Protocol):
         self,
         *,
         channel: str,
-        role: str,
         mode: str,
         active_level: str,
         idle_level: str | None,

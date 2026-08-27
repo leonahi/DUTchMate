@@ -51,7 +51,6 @@ class GpioConfigurator:
         try:
             timestamp_us = self._control.configure_gpio_mode(
                 channel=request.channel,
-                role=request.role,
                 mode=request.mode,
                 active_level=request.active_level,
                 idle_level=request.idle_level,
