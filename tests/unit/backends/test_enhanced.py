@@ -289,7 +289,7 @@ def test_ndjson_stream_maps_invalid_input_to_backend_input_error() -> None:
     stream = EnhancedNdjsonEventStream()
 
     with pytest.raises(BackendInputError) as raised:
-        stream.feed(b"not-json\n")
+        stream.feed(b"{not-json}\n")
 
     assert raised.value.input_error == "invalid_json"
     assert raised.value.backend_mode == "enhanced"

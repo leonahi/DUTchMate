@@ -1,21 +1,20 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `eba15cd` on 2026-08-27
+> Code baseline reviewed: `acb5c6b` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B wire commands now use
-  `uart_receive`, generic channel actions, and role-neutral GPIO configuration.
-- **Next step:** enforce target NDJSON frame, decoded payload, whitespace, and
-  validation limits consistently in checklist step 3 below.
-- **First implementation slice:** bound device-to-host NDJSON framing before
-  decode at 65536 total bytes, accept only one optional CR before LF, and reject
-  empty, BOM-prefixed, outer-whitespace, and oversized frames while preserving
-  valid earlier frames from the same read.
+- **Current milestone:** Phase 1A is accepted; Phase 1B has completed the wire
+  vocabulary/metadata migration and now enforces exact device-frame boundaries.
+- **Next step:** enforce decoded Enhanced message field limits consistently in
+  checklist step 3 below.
+- **First implementation slice:** validate `hello.firmware` and `hello.device`
+  as exact 1..64 UTF-8-byte identities with no Unicode `Cc` characters or edge
+  Unicode whitespace, preserving accepted values without trimming.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -54,11 +53,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `eba15cd`, reviewed 2026-08-27:
+Working tree based on `acb5c6b`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 878 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 888 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -73,6 +72,8 @@ Working tree based on `eba15cd`, reviewed 2026-08-27:
   adapter, workflow, runtime, and reconnect tests passed (209 tests)
 - Enhanced host-metadata removal: focused schema, encoder, configurator,
   runtime, adapter, startup, and reconnect tests passed (158 tests)
+- Enhanced device-frame enforcement: focused parser and backend-projection
+  tests passed (152 tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 

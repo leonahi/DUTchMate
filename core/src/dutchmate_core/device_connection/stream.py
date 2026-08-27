@@ -1,6 +1,10 @@
 """NDJSON stream parsing for serial byte chunks."""
 
-from dutchmate_core.device_connection.errors import FrameTooLargeError, ProtocolError
+from dutchmate_core.device_connection.errors import (
+    FrameTooLargeError,
+    ProtocolError,
+    ProtocolValidationError,
+)
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
 
 MAX_DEVICE_FRAME_BYTES = 65536
@@ -43,10 +47,7 @@ class NdjsonStreamParser:
                         observed_frame_bytes=observed_frame_bytes,
                         max_frame_bytes=MAX_DEVICE_FRAME_BYTES,
                     )
-                line = line.strip()
-                if not line:
-                    continue
-                messages.append(parse_device_message(line))
+                messages.append(parse_device_message(_frame_body(line)))
             except ProtocolError as exc:
                 self._buffer = b""
                 self._terminal_error = exc
@@ -67,3 +68,20 @@ class NdjsonStreamParser:
             raise error
 
         return messages
+
+
+def _frame_body(line: bytes) -> bytes:
+    """Return one exact JSON object body after removing one optional CR."""
+
+    if line.endswith(b"\r"):
+        line = line[:-1]
+    if (
+        not line
+        or b"\r" in line
+        or not line.startswith(b"{")
+        or not line.endswith(b"}")
+    ):
+        raise ProtocolValidationError(
+            "Enhanced protocol frame must contain exactly one JSON object"
+        )
+    return line
