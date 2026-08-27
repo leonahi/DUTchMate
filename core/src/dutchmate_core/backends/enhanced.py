@@ -197,7 +197,7 @@ class EnhancedCaptureEventSource:
         self._segment_id = segment_id
         self._source_origin_us = source_origin_us
         self._segment = (
-            _enhanced_segment_context(segment_id, source_origin_us)
+            enhanced_segment_context(segment_id, source_origin_us)
             if source_origin_us is not None
             else None
         )
@@ -254,11 +254,11 @@ class EnhancedCaptureEventSource:
             raise BackendDisconnectedError("Enhanced serial read failed") from exc
 
         if self._source_origin_us is None:
-            timestamp_us = _message_timestamp_us(message)
+            timestamp_us = enhanced_message_timestamp_us(message)
             if timestamp_us is None:
                 return None
             self._source_origin_us = timestamp_us
-            self._segment = _enhanced_segment_context(
+            self._segment = enhanced_segment_context(
                 self._segment_id,
                 timestamp_us,
             )
@@ -396,7 +396,7 @@ def backend_input_error_from_protocol(
     )
 
 
-def _enhanced_segment_context(
+def enhanced_segment_context(
     segment_id: int,
     source_origin_us: int,
 ) -> SegmentContext:
@@ -414,7 +414,7 @@ def _enhanced_segment_context(
     )
 
 
-def _message_timestamp_us(message: DeviceMessage) -> int | None:
+def enhanced_message_timestamp_us(message: DeviceMessage) -> int | None:
     if isinstance(message, (UartMessage, BufferOverflowMessage, BufferStatusMessage)):
         return message.timestamp_us
     return None

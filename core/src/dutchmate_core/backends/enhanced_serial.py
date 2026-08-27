@@ -16,7 +16,10 @@ from dutchmate_core.backends.contracts import (
 )
 from dutchmate_core.backends.enhanced import (
     backend_input_error_from_protocol,
+    enhanced_message_timestamp_us,
+    enhanced_segment_context,
     normalize_enhanced_hello,
+    normalize_enhanced_message,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
 from dutchmate_core.device_connection.messages import HelloMessage
@@ -192,7 +195,6 @@ class AsyncEnhancedSerialAdapter:
             await self._close_resource()
 
     async def _dispatch_batch(self, messages: list[DeviceMessage]) -> None:
-        received_hello = False
         for message in messages:
             if self._info is None:
                 if not isinstance(message, HelloMessage):
@@ -204,7 +206,22 @@ class AsyncEnhancedSerialAdapter:
                     )
                     return
                 self._info = normalize_enhanced_hello(message, port=self._port)
-                received_hello = True
+                self._complete_hello_waiter()
+                continue
+            timestamp_us = enhanced_message_timestamp_us(message)
+            if timestamp_us is not None:
+                if self._segment is None:
+                    self._segment = enhanced_segment_context(
+                        self._segment_id,
+                        timestamp_us,
+                    )
+                event = normalize_enhanced_message(
+                    message,
+                    segment_id=self._segment_id,
+                    source_origin_us=self._segment.timestamp.source_origin_us,
+                )
+                assert event is not None
+                await self._events.put(event)
                 continue
             self._set_terminal(
                 BackendInputError(
@@ -213,12 +230,49 @@ class AsyncEnhancedSerialAdapter:
                 )
             )
             return
-        if received_hello:
-            info = self._info
-            assert info is not None
-            waiter = self._hello_waiter
-            if waiter is not None and not waiter.done():
-                waiter.set_result(info)
+
+    def _complete_hello_waiter(self) -> None:
+        info = self._info
+        assert info is not None
+        waiter = self._hello_waiter
+        if waiter is not None and not waiter.done():
+            waiter.set_result(info)
+
+    async def receive_event(self, timeout_s: float | None = None) -> BackendEvent | None:
+        """Return one queued evidence event, timeout, or the terminal read failure."""
+
+        if timeout_s is not None:
+            _validate_timeout(
+                timeout_s,
+                field="Enhanced receive timeout",
+                allow_zero=True,
+            )
+        if not self._events.empty():
+            return self._events.get_nowait()
+        self._raise_if_terminal()
+
+        event_task = asyncio.create_task(self._events.get())
+        terminal_task = asyncio.create_task(self._terminal.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {event_task, terminal_task},
+                timeout=timeout_s,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                return None
+            if event_task in done:
+                return event_task.result()
+            if not self._events.empty():
+                return self._events.get_nowait()
+            self._raise_if_terminal()
+            raise AssertionError("terminal event set without terminal error")
+        finally:
+            for task in (event_task, terminal_task):
+                if not task.done():
+                    task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
     def _set_terminal(
         self,

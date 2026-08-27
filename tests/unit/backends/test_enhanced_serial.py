@@ -9,6 +9,9 @@ from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendInfo,
     BackendInputError,
+    BufferOverflowEvent,
+    BufferStatusEvent,
+    UartReceiveEvent,
 )
 from dutchmate_core.backends.enhanced_serial import AsyncEnhancedSerialAdapter
 from dutchmate_core.device_connection.transport import TransportTimeoutError
@@ -142,39 +145,168 @@ async def test_start_preserves_parser_error_after_valid_hello_and_post_hello_mes
     assert reader.close_count == 1
 
 
-async def test_start_rejects_post_hello_message_in_the_same_batch() -> None:
-    """Fails if hello resolves before the whole parsed batch is accepted."""
+async def test_start_accepts_evidence_after_hello_in_the_same_batch() -> None:
+    """Fails if same-batch evidence still terminalizes a valid hello handshake."""
 
     reader = FakeAsyncSerialReader()
     reader.feed(HELLO_FRAME + UART_FRAME)
     adapter = make_adapter(reader)
 
-    with pytest.raises(BackendInputError, match="after hello"):
-        await adapter.start(0.1)
+    assert await adapter.start(0.1) == BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        device="dutchmate-rp2040",
+        firmware="0.1.0",
+        capabilities=frozenset({"uart_receive"}),
+    )
 
     await adapter.close()
     assert reader.close_count == 1
 
 
-@pytest.mark.parametrize(
-    ("frame", "error_match"),
-    [
-        (b'{"ok":true}\n', "hello"),
-        (HELLO_FRAME + UART_FRAME, "after hello"),
-    ],
-)
+async def test_receive_event_normalizes_fifo_and_establishes_origin() -> None:
+    """Fails if evidence is not normalized in wire order from its first timestamp."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(
+        HELLO_FRAME
+        + b'{"type":"uart","channel":0,"timestamp_us":500,"data_b64":"WA=="}\n'
+        + b'{"type":"buffer_overflow","channel":0,"timestamp_us":510,"dropped_bytes":4}\n'
+        + b'{"type":"buffer_status","timestamp_us":520,"uart_rx_size_bytes":32768,'
+        b'"uart_rx_used_bytes":8,"uart_rx_high_water_bytes":16,'
+        b'"dropped_bytes_total":4,"overflow_events":1}\n'
+    )
+    adapter = make_adapter(reader)
+
+    await adapter.start(0.1)
+
+    assert adapter.segment is not None
+    assert adapter.segment.timestamp.source_origin_us == 500
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3,
+        timestamp_us=0,
+        channel=0,
+        data=b"X",
+    )
+    assert await adapter.receive_event(0.1) == BufferOverflowEvent(
+        segment_id=3,
+        timestamp_us=10,
+        channel=0,
+        dropped_bytes=4,
+    )
+    assert await adapter.receive_event(0.1) == BufferStatusEvent(
+        segment_id=3,
+        timestamp_us=20,
+        size_bytes=32768,
+        used_bytes=8,
+        high_water_bytes=16,
+        dropped_bytes_total=4,
+        overflow_events=1,
+    )
+    assert await adapter.receive_event(0.001) is None
+    await adapter.close()
+
+
+@pytest.mark.parametrize("timeout_s", [-0.001, float("inf"), float("nan"), True])
+async def test_receive_event_rejects_invalid_timeouts(timeout_s: float) -> None:
+    """Fails if invalid waits are passed to asyncio instead of rejected at the boundary."""
+
+    adapter = make_adapter(FakeAsyncSerialReader())
+
+    with pytest.raises(ValueError, match="Enhanced receive timeout"):
+        await adapter.receive_event(timeout_s)
+
+
+async def test_receive_event_accepts_zero_timeout() -> None:
+    """Fails if a non-blocking evidence poll is rejected as an invalid timeout."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+
+    await adapter.start(0.1)
+
+    assert await adapter.receive_event(0) is None
+    await adapter.close()
+
+
+async def test_receive_event_drains_queued_evidence_before_terminal_error() -> None:
+    """Fails if terminalization overtakes evidence that was already accepted into FIFO."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME + UART_FRAME)
+    adapter = make_adapter(reader)
+
+    await adapter.start(0.1)
+    await reader.second_read_started.wait()
+    reader.fail(OSError("device removed"))
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3,
+        timestamp_us=0,
+        channel=0,
+        data=b"X",
+    )
+    with pytest.raises(BackendDisconnectedError, match="read failed"):
+        await adapter.receive_event(0.1)
+
+    await adapter.close()
+
+
+async def test_cancelling_receive_event_cleans_up_its_waiters() -> None:
+    """Fails if cancelling an event wait leaves queue or terminal waiter tasks pending."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+
+    receive_task = asyncio.create_task(adapter.receive_event())
+    await asyncio.sleep(0)
+    receive_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await receive_task
+    await asyncio.sleep(0)
+
+    current_task = asyncio.current_task()
+    pending_tasks = {
+        task
+        for task in asyncio.all_tasks()
+        if task is not current_task and not task.done()
+    }
+    assert pending_tasks == {adapter._reader_task}
+    await adapter.close()
+
+
+async def test_event_queue_applies_backpressure_without_dropping_wire_order() -> None:
+    """Fails if a full bounded queue drops or reorders later evidence messages."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(
+        HELLO_FRAME
+        + b'{"type":"uart","channel":0,"timestamp_us":500,"data_b64":"WA=="}\n'
+        + b'{"type":"buffer_overflow","channel":0,"timestamp_us":510,"dropped_bytes":4}\n'
+    )
+    adapter = make_adapter(reader, event_queue_capacity=1)
+
+    await adapter.start(0.1)
+
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(3, 0, 0, b"X")
+    assert await adapter.receive_event(0.1) == BufferOverflowEvent(3, 10, 0, 4)
+    await adapter.close()
+
+
 async def test_protocol_input_terminalization_stops_the_reader_without_explicit_close(
-    frame: bytes,
-    error_match: str,
 ) -> None:
     """Fails if input terminalization leaves the only reader blocked for close()."""
 
     reader = FakeAsyncSerialReader()
-    reader.feed(frame)
+    reader.feed(b'{"ok":true}\n')
     adapter = make_adapter(reader)
 
     try:
-        with pytest.raises(BackendInputError, match=error_match):
+        with pytest.raises(BackendInputError, match="hello"):
             await adapter.start(0.1)
 
         await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
