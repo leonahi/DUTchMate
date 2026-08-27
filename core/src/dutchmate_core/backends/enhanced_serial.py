@@ -22,10 +22,18 @@ from dutchmate_core.backends.enhanced import (
     normalize_enhanced_message,
 )
 from dutchmate_core.device_connection.errors import ProtocolError
-from dutchmate_core.device_connection.messages import HelloMessage
+from dutchmate_core.device_connection.messages import (
+    CommandErrorMessage,
+    CommandSuccessMessage,
+    HelloMessage,
+)
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+    validate_host_command_frame,
+)
 
 DEFAULT_ASYNC_READ_SIZE = 4096
 DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY = 256
@@ -80,9 +88,11 @@ class AsyncEnhancedSerialAdapter:
         self._read_size = read_size
         self._events: asyncio.Queue[BackendEvent] = asyncio.Queue(event_queue_capacity)
         self._start_lock = asyncio.Lock()
+        self._command_lock = asyncio.Lock()
         self._close_lock = asyncio.Lock()
         self._reader_task: asyncio.Task[None] | None = None
         self._hello_waiter: asyncio.Future[BackendInfo] | None = None
+        self._pending_response: asyncio.Future[DeviceMessage] | None = None
         self._info: BackendInfo | None = None
         self._segment: SegmentContext | None = None
         self._terminal_error: BackendDisconnectedError | BackendInputError | None = None
@@ -175,13 +185,13 @@ class AsyncEnhancedSerialAdapter:
                 except ProtocolError as exc:
                     self._set_terminal(backend_input_error_from_protocol(exc))
                     return
+                await self._dispatch_batch(messages)
+                if self._terminal_error is not None:
+                    return
                 if self._parser.terminal_error is not None:
                     self._set_terminal(
                         backend_input_error_from_protocol(self._parser.terminal_error)
                     )
-                    return
-                await self._dispatch_batch(messages)
-                if self._terminal_error is not None:
                     return
         except asyncio.CancelledError:
             raise
@@ -227,6 +237,23 @@ class AsyncEnhancedSerialAdapter:
                 assert event is not None
                 events.append(event)
                 continue
+            if self._info is not None and isinstance(
+                message,
+                (CommandSuccessMessage, CommandErrorMessage),
+            ):
+                if self._parser.terminal_error is not None:
+                    continue
+                pending = self._pending_response
+                if pending is None or pending.done():
+                    self._set_terminal(
+                        BackendInputError(
+                            "Enhanced command response has no pending request",
+                            backend_mode="enhanced",
+                        )
+                    )
+                    return
+                pending.set_result(message)
+                continue
             self._set_terminal(
                 BackendInputError(
                     "Unexpected Enhanced message after hello",
@@ -236,10 +263,61 @@ class AsyncEnhancedSerialAdapter:
             return
         self._info = info
         self._segment = segment
-        if received_hello:
+        parser_error = self._parser.terminal_error
+        if parser_error is not None:
+            self._set_terminal(backend_input_error_from_protocol(parser_error))
+        elif received_hello:
             self._complete_hello_waiter()
         for event in events:
             await self._events.put(event)
+
+    async def request(self, command: bytes, timeout_s: float) -> DeviceMessage:
+        """Write one command and wait for the sole reader to route its response."""
+
+        validate_host_command_frame(command)
+        _validate_timeout(timeout_s, field="Enhanced command timeout")
+        async with self._command_lock:
+            self._raise_if_terminal()
+            response: asyncio.Future[DeviceMessage] = (
+                asyncio.get_running_loop().create_future()
+            )
+            self._pending_response = response
+            try:
+                await self._writer.write_frame(command)
+                try:
+                    return await asyncio.wait_for(asyncio.shield(response), timeout_s)
+                except TimeoutError as exc:
+                    timeout = TransportTimeoutError(
+                        "Timed out waiting for Enhanced command response"
+                    )
+                    response.cancel()
+                    await self._terminate(
+                        BackendDisconnectedError(
+                            "Enhanced command response timed out; connection closed"
+                        )
+                    )
+                    raise timeout from exc
+            except TransportWriteError:
+                response.cancel()
+                await self._terminate(
+                    BackendDisconnectedError(
+                        "Enhanced command write failed; connection closed"
+                    )
+                )
+                raise
+            except asyncio.CancelledError:
+                response.cancel()
+                await asyncio.shield(
+                    self._terminate(
+                        BackendDisconnectedError(
+                            "Enhanced command cancelled after transmission began"
+                        )
+                    )
+                )
+                raise
+            finally:
+                if self._pending_response is response:
+                    self._pending_response = None
 
     def _complete_hello_waiter(self) -> None:
         info = self._info
@@ -295,6 +373,9 @@ class AsyncEnhancedSerialAdapter:
         waiter = self._hello_waiter
         if waiter is not None and not waiter.done():
             waiter.set_exception(error)
+        response = self._pending_response
+        if response is not None and not response.done():
+            response.set_exception(error)
 
     def _raise_if_terminal(self) -> None:
         if self._terminal_error is not None:

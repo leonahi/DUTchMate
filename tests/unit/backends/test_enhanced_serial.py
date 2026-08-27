@@ -14,7 +14,16 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
 )
 from dutchmate_core.backends.enhanced_serial import AsyncEnhancedSerialAdapter
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
+from dutchmate_core.device_connection.errors import HostCommandFrameTooLargeError
+from dutchmate_core.device_connection.messages import (
+    CommandErrorMessage,
+    CommandSuccessMessage,
+)
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+)
 
 HELLO_FRAME = (
     b'{"type":"hello","v":1,"firmware":"0.1.0",'
@@ -75,9 +84,11 @@ class FakeAsyncFrameWriter:
     def __init__(self) -> None:
         self.frames: list[bytes] = []
         self.failure: Exception | None = None
+        self.written: asyncio.Queue[bytes] = asyncio.Queue()
 
     async def write_frame(self, frame: bytes) -> None:
         self.frames.append(frame)
+        self.written.put_nowait(frame)
         if self.failure is not None:
             raise self.failure
 
@@ -95,6 +106,214 @@ def make_adapter(
     }
     arguments.update(overrides)
     return AsyncEnhancedSerialAdapter(**arguments)  # type: ignore[arg-type]
+
+
+def _compact_json_frame_of_size(size: int) -> bytes:
+    baseline = b'{"cmd":"test","data":""}\n'
+    return b'{"cmd":"test","data":"' + b"x" * (size - len(baseline)) + b'"}\n'
+
+
+async def test_request_routes_response_and_retains_interleaved_event() -> None:
+    """Fails if command routing consumes or reorders interleaved UART evidence."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 0.1))
+    assert await writer.written.get() == b'{"cmd":"test"}\n'
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
+        b'{"ok":true,"timestamp_us":701}\n'
+    )
+
+    assert await request == CommandSuccessMessage(timestamp_us=701)
+    assert writer.frames == [b'{"cmd":"test"}\n']
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=0, channel=0, data=b"X"
+    )
+    await adapter.close()
+
+
+async def test_concurrent_requests_write_only_one_frame_at_a_time() -> None:
+    """Fails if a second uncorrelated command is written before the first resolves."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 0.1))
+    second = asyncio.create_task(adapter.request(b'{"cmd":"two"}\n', 0.1))
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    assert writer.frames == [b'{"cmd":"one"}\n']
+
+    reader.feed(b'{"ok":true,"timestamp_us":1}\n')
+    assert await first == CommandSuccessMessage(timestamp_us=1)
+    assert await writer.written.get() == b'{"cmd":"two"}\n'
+    assert writer.frames == [b'{"cmd":"one"}\n', b'{"cmd":"two"}\n']
+    reader.feed(b'{"ok":false,"error":"timeout","detail":"busy"}\n')
+    assert await second == CommandErrorMessage(error="timeout", detail="busy")
+    await adapter.close()
+
+
+async def test_request_rejects_invalid_frames_before_writer() -> None:
+    """Fails if an invalid host frame reaches the serial writer."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    with pytest.raises(TypeError):
+        await adapter.request("not bytes", 0.1)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="newline-terminated"):
+        await adapter.request(b'{"cmd":"test"}', 0.1)
+    with pytest.raises(HostCommandFrameTooLargeError):
+        await adapter.request(
+            _compact_json_frame_of_size(MAX_HOST_FRAME_BYTES + 1),
+            0.1,
+        )
+
+    assert writer.frames == []
+    await adapter.close()
+
+
+@pytest.mark.parametrize("timeout_s", [0, -0.1, float("inf"), float("nan"), True])
+async def test_request_rejects_invalid_timeout_before_writer(timeout_s: float) -> None:
+    """Fails if a non-positive or non-finite command timeout reaches the writer."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    with pytest.raises(ValueError, match="Enhanced command timeout"):
+        await adapter.request(b'{"cmd":"test"}\n', timeout_s)
+
+    assert writer.frames == []
+    await adapter.close()
+
+
+async def test_write_failure_preserves_frame_count_then_disconnects() -> None:
+    """Fails if async routing replaces write accounting or its repeatable terminal."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    writer.failure = TransportWriteError(
+        "write failed",
+        frame_bytes_accepted=7,
+        error="hardware_fault",
+    )
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    with pytest.raises(TransportWriteError) as raised:
+        await adapter.request(b'{"cmd":"test"}\n', 0.1)
+    assert raised.value.frame_bytes_accepted == 7
+
+    with pytest.raises(BackendDisconnectedError):
+        await adapter.receive_event(0.1)
+    with pytest.raises(BackendDisconnectedError):
+        await adapter.receive_event(0.1)
+    assert reader.close_count == 1
+
+
+async def test_request_timeout_closes_and_terminalizes_adapter() -> None:
+    """Fails if a timed-out response leaves the reader or connection reusable."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 0.001))
+    assert await writer.written.get() == b'{"cmd":"test"}\n'
+
+    with pytest.raises(TransportTimeoutError, match="command response"):
+        await request
+    with pytest.raises(BackendDisconnectedError, match="timed out"):
+        await adapter.receive_event(0.1)
+    assert reader.active_reads == 0
+    assert reader.close_count == 1
+
+
+async def test_cancelling_transmitted_request_closes_and_terminalizes_adapter() -> None:
+    """Fails if caller cancellation leaves an uncorrelated response path alive."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 1.0))
+    assert await writer.written.get() == b'{"cmd":"test"}\n'
+    request.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+    with pytest.raises(BackendDisconnectedError, match="cancelled"):
+        await adapter.receive_event(0.1)
+    assert reader.active_reads == 0
+    assert reader.close_count == 1
+
+
+async def test_response_without_pending_request_terminalizes_reader() -> None:
+    """Fails if an uncorrelated response is dropped or exposed as evidence."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+
+    reader.feed(b'{"ok":true}\n')
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+
+    with pytest.raises(BackendInputError, match="no pending request"):
+        await adapter.receive_event(0.1)
+    assert reader.active_reads == 0
+    assert reader.close_count == 1
+
+
+async def test_same_batch_parser_error_precedes_response_and_retains_event() -> None:
+    """Fails if response success masks later malformed input in its parser batch."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer, event_queue_capacity=1)
+    await adapter.start(0.1)
+
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 0.1))
+    assert await writer.written.get() == b'{"cmd":"test"}\n'
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":710,"data_b64":"WQ=="}\n'
+        b'{"ok":true,"timestamp_us":711}\n'
+        b'{"type":}\n'
+    )
+
+    with pytest.raises(BackendInputError, match="not valid JSON") as request_error:
+        await request
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=0, channel=0, data=b"X"
+    )
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=10, channel=0, data=b"Y"
+    )
+    with pytest.raises(BackendInputError, match="not valid JSON") as event_error:
+        await adapter.receive_event(0.1)
+    assert event_error.value is request_error.value
 
 
 async def test_start_uses_one_reader_and_returns_normalized_hello() -> None:

@@ -19,6 +19,7 @@ from dutchmate_core.device_connection.serial_transport import (
 from dutchmate_core.device_connection.transport import (
     TransportTimeoutError,
     TransportWriteError,
+    validate_host_command_frame,
 )
 
 
@@ -69,6 +70,18 @@ class SerialTimeoutException(Exception):
 def _compact_json_frame_of_size(size: int) -> bytes:
     baseline = b'{"cmd":"test","data":""}\n'
     return b'{"cmd":"test","data":"' + b"x" * (size - len(baseline)) + b'"}\n'
+
+
+def test_shared_host_frame_validator_preserves_exact_limit() -> None:
+    validate_host_command_frame(_compact_json_frame_of_size(MAX_HOST_FRAME_BYTES))
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        validate_host_command_frame(
+            _compact_json_frame_of_size(MAX_HOST_FRAME_BYTES + 1)
+        )
+
+    assert raised.value.actual_frame_bytes == MAX_HOST_FRAME_BYTES + 1
+    assert raised.value.max_frame_bytes == MAX_HOST_FRAME_BYTES
 
 
 def test_request_writes_command_and_returns_success_response() -> None:

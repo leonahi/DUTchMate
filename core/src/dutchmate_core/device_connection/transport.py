@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal, Protocol, TypeAlias
 
+from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
+from dutchmate_core.device_connection.errors import HostCommandFrameTooLargeError
 from dutchmate_core.device_connection.parser import DeviceMessage
 
 TransportWriteErrorCode: TypeAlias = Literal["hardware_fault", "timeout"]
@@ -14,6 +16,27 @@ class CommandTransport(Protocol):
 
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return one parsed device response."""
+
+
+class AsyncCommandTransport(Protocol):
+    """Asynchronous one-at-a-time host command exchange."""
+
+    async def request(self, command: bytes, timeout_s: float) -> DeviceMessage:
+        """Send one complete command and return its parsed response."""
+
+
+def validate_host_command_frame(command: bytes) -> None:
+    """Validate the complete encoded host frame before serial dispatch."""
+
+    if not isinstance(command, bytes):
+        raise TypeError("serial commands must be bytes")
+    if len(command) > MAX_HOST_FRAME_BYTES:
+        raise HostCommandFrameTooLargeError(
+            actual_frame_bytes=len(command),
+            max_frame_bytes=MAX_HOST_FRAME_BYTES,
+        )
+    if not command.endswith(b"\n"):
+        raise ValueError("serial commands must be newline-terminated NDJSON")
 
 
 class TransportError(RuntimeError):

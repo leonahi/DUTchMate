@@ -8,11 +8,7 @@ from collections.abc import Callable
 from threading import RLock
 from typing import Protocol, cast
 
-from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
-from dutchmate_core.device_connection.errors import (
-    FrameTooLargeError,
-    HostCommandFrameTooLargeError,
-)
+from dutchmate_core.device_connection.errors import FrameTooLargeError
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
 from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
@@ -20,6 +16,7 @@ from dutchmate_core.device_connection.transport import (
     TransportTimeoutError,
     TransportWriteError,
     TransportWriteErrorCode,
+    validate_host_command_frame,
 )
 
 DEFAULT_BAUDRATE = 115200
@@ -56,15 +53,7 @@ class SerialCommandTransport:
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return the matching command response."""
 
-        if not isinstance(command, bytes):
-            raise TypeError("serial commands must be bytes")
-        if len(command) > MAX_HOST_FRAME_BYTES:
-            raise HostCommandFrameTooLargeError(
-                actual_frame_bytes=len(command),
-                max_frame_bytes=MAX_HOST_FRAME_BYTES,
-            )
-        if not command.endswith(b"\n"):
-            raise ValueError("serial commands must be newline-terminated NDJSON")
+        validate_host_command_frame(command)
 
         with self._io_lock:
             accepted = 0

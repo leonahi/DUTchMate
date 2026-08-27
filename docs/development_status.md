@@ -1,21 +1,19 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `4505a0d` on 2026-08-27
+> Code baseline reviewed: pending current Task 4 commit on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B has completed the atomic
-  Enhanced protocol migration, including bounded device/host frames, decoded
-  fields, and complete host-command writes.
-- **Next step:** begin the continuous asynchronous Enhanced adapter in checklist
-  step 4 below.
-- **First implementation slice:** introduce one owned asynchronous Enhanced
-  serial reader/dispatcher under fake-transport tests, preserving bounded
-  framing and the existing normalized adapter contracts.
+- **Current milestone:** Phase 1A is accepted; Phase 1B's reviewed asynchronous
+  Enhanced adapter now owns one bounded reader, publishes normalized evidence,
+  and serializes command requests while its sole reader routes responses.
+- **Next step:** Task 5, prove command-path backpressure, terminal-error,
+  cancellation, and shutdown behavior under deterministic async tests; do not
+  begin service/runtime integration yet.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -42,7 +40,7 @@ firmware is absent, and prototype/ring-buffer/HIL validation has not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Target protocol migration and finite synchronous adapter are complete; the continuous asynchronous reader remains. |
+| Phase 1B Enhanced host adapter | Partial | Target protocol migration and the reviewed async reader/event/command-routing slices are complete; Task 5 lifecycle proof, production serial integration, service ingestion, and reconnect remain. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -54,11 +52,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `4505a0d`, reviewed 2026-08-27:
+Working tree based on the pending current Task 4 commit, reviewed 2026-08-28:
 
-- Ruff: passed
-- Mypy: passed across 69 source files
-- Pytest: 963 passed, including 12 portable Zephyr DUT protocol tests
+- Ruff: passed on the three modified core modules and two modified test modules
+- Mypy: passed on the three modified core modules
+- Pytest: 1005 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -87,6 +85,11 @@ Working tree based on `4505a0d`, reviewed 2026-08-27:
 - Enhanced host-command write completion: ordered short writes, invalid
   progress, write/flush failure acceptance counts, timeout classification, and
   control/UART adapter projection passed (48 focused tests)
+- Enhanced async command routing: shared 2,048-byte validation, unchanged
+  synchronous transport behavior, serialized request/response dispatch,
+  interleaved FIFO evidence, retained parser-error precedence, write
+  accounting, timeout/cancellation terminalization, and reader cleanup passed
+  (63 focused tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -182,8 +185,10 @@ remaining.
 
 - [ ] Replace the interim synchronous message source with one owned
   `pyserial-asyncio` reader and bounded framing.
-- [ ] Route command responses to pending requests while publishing UART and
+- [x] Route command responses to pending requests while publishing UART and
   telemetry events in FIFO order.
+- [ ] Prove command-path backpressure, terminal errors, cancellation, and
+  shutdown under deterministic tests before production integration (Task 5).
 - [ ] Add one service-owned continuous ingestion coordinator for the selected
   backend. It may consume the Basic adapter's existing async FIFO boundary but
   must not create a second Basic serial reader.
