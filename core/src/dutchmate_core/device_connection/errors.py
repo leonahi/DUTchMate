@@ -1,4 +1,4 @@
-"""Typed failures at Enhanced wire-protocol input boundaries."""
+"""Typed failures at Enhanced wire-protocol boundaries."""
 
 from typing import Literal, TypeAlias
 
@@ -47,6 +47,17 @@ class ProtocolValidationError(ProtocolError):
     """Raised when a JSON object does not match the v1 protocol contract."""
 
     input_error: ProtocolInputError = "invalid_message"
+
+
+class HostCommandFrameTooLargeError(ProtocolValidationError):
+    """Raised when an encoded host command exceeds its total wire-frame bound."""
+
+    def __init__(self, *, actual_frame_bytes: int, max_frame_bytes: int) -> None:
+        super().__init__(
+            "Enhanced host command frame exceeds the host-to-device size limit"
+        )
+        self.actual_frame_bytes = actual_frame_bytes
+        self.max_frame_bytes = max_frame_bytes
 
 
 class ProtocolVersionError(ProtocolValidationError):

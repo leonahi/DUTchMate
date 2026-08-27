@@ -6,9 +6,12 @@ import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Final, Literal, TypeAlias
 
-from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.errors import (
+    HostCommandFrameTooLargeError,
+    ProtocolValidationError,
+)
 from dutchmate_core.validation import (
     VALID_GPIO_CONTROL_CHANNELS as VALID_GPIO_CONTROL_CHANNELS,
 )
@@ -30,6 +33,7 @@ from dutchmate_core.validation import (
 
 GpioMode: TypeAlias = GpioControlMode
 ControlState: TypeAlias = Literal["active", "idle"]
+MAX_HOST_FRAME_BYTES: Final = 2048
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,4 +201,18 @@ def uart_send_text_command(text: str, *, append_newline: bool = True) -> UartSen
 
 
 def _encode_payload(payload: Mapping[str, object]) -> bytes:
-    return (json.dumps(payload, separators=(",", ":"), sort_keys=False) + "\n").encode("utf-8")
+    frame = (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    if len(frame) > MAX_HOST_FRAME_BYTES:
+        raise HostCommandFrameTooLargeError(
+            actual_frame_bytes=len(frame),
+            max_frame_bytes=MAX_HOST_FRAME_BYTES,
+        )
+    return frame

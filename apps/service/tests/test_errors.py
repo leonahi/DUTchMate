@@ -3,7 +3,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from dutchmate_core.backends import BackendInputError
-from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.errors import (
+    HostCommandFrameTooLargeError,
+    ProtocolValidationError,
+)
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
@@ -216,6 +219,25 @@ def test_maps_validation_errors_to_invalid_argument() -> None:
         error="invalid_argument",
         detail="bad config",
         status_code=400,
+    )
+
+
+def test_maps_oversized_host_command_to_bounded_invalid_argument_context() -> None:
+    error = service_error_from_exception(
+        HostCommandFrameTooLargeError(
+            actual_frame_bytes=2049,
+            max_frame_bytes=2048,
+        )
+    )
+
+    assert error == ServiceError(
+        error="invalid_argument",
+        detail="Enhanced host command frame exceeds the host-to-device size limit",
+        status_code=400,
+        context={
+            "actual_frame_bytes": 2049,
+            "max_frame_bytes": 2048,
+        },
     )
 
 

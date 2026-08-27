@@ -8,7 +8,11 @@ from collections.abc import Callable
 from threading import RLock
 from typing import Protocol, cast
 
-from dutchmate_core.device_connection.errors import FrameTooLargeError
+from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
+from dutchmate_core.device_connection.errors import (
+    FrameTooLargeError,
+    HostCommandFrameTooLargeError,
+)
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.device_connection.parser import DeviceMessage, parse_device_message
 from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
@@ -50,6 +54,11 @@ class SerialCommandTransport:
 
         if not isinstance(command, bytes):
             raise TypeError("serial commands must be bytes")
+        if len(command) > MAX_HOST_FRAME_BYTES:
+            raise HostCommandFrameTooLargeError(
+                actual_frame_bytes=len(command),
+                max_frame_bytes=MAX_HOST_FRAME_BYTES,
+            )
         if not command.endswith(b"\n"):
             raise ValueError("serial commands must be newline-terminated NDJSON")
 

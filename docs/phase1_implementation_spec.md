@@ -351,6 +351,11 @@ return `invalid_argument` with `actual_frame_bytes` and
 executes no partial/oversized command, discards through LF to resynchronize, and
 returns bounded `invalid_argument` when possible.
 
+The current command-specific field limits keep every schema-valid typed command
+below 2048 bytes. Exact 2048/2049 acceptance tests therefore exercise the shared
+encoder and final serial framing boundary with a compact, syntactically valid
+JSON object; they do not relax command-schema validation.
+
 Decoded `hello.firmware` and `hello.device` are each 1..64 UTF-8 bytes; decoded
 command-error `detail` is 1..256 UTF-8 bytes. None contains a Unicode `Cc`
 control character; identity strings also have no leading/trailing Unicode
@@ -1739,9 +1744,9 @@ Enhanced-backend coverage:
 - Device-to-host frames of exactly 65536 total bytes are accepted when otherwise
   valid; 65537-byte frames and a pending 65536th non-LF byte fail before decode
   without unbounded buffering.
-- Host-to-device encoders accept an otherwise valid 2048-byte total frame and
-  reject 2049 bytes before serial dispatch; firmware also executes no oversized
-  command.
+- Host-to-device framing accepts a compact, syntactically valid 2048-byte total
+  frame and rejects 2049 bytes before serial dispatch; firmware also executes no
+  oversized command.
 - Writers emit compact LF-only frames. Receivers accept one optional CR before
   LF but reject empty frames, BOM, outer whitespace, invalid UTF-8, and trailing
   bytes outside the JSON object.

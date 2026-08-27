@@ -28,7 +28,10 @@ from dutchmate_core.device_connection.commands import (
     set_control_state_command,
     uart_send_command,
 )
-from dutchmate_core.device_connection.errors import ProtocolError
+from dutchmate_core.device_connection.errors import (
+    HostCommandFrameTooLargeError,
+    ProtocolError,
+)
 from dutchmate_core.device_connection.messages import (
     BufferOverflowMessage,
     BufferStatusMessage,
@@ -102,6 +105,8 @@ class EnhancedDeviceControl(DeviceControl):
                 error="timeout",
                 detail=f"Timed out waiting for {label} response",
             ) from exc
+        except HostCommandFrameTooLargeError:
+            raise
         except ProtocolError as exc:
             raise backend_input_error_from_protocol(exc, operation=operation) from exc
         if isinstance(response, CommandSuccessMessage):
@@ -130,6 +135,8 @@ class EnhancedUartSender:
                 bytes_accepted=None,
                 error="timeout",
             ) from exc
+        except HostCommandFrameTooLargeError:
+            raise
         except ProtocolError as exc:
             raise backend_input_error_from_protocol(exc, operation="uart_send") from exc
         except Exception as exc:

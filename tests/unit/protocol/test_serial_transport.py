@@ -1,6 +1,10 @@
 import pytest
 
-from dutchmate_core.device_connection.errors import FrameTooLargeError
+from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
+from dutchmate_core.device_connection.errors import (
+    FrameTooLargeError,
+    HostCommandFrameTooLargeError,
+)
 from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
     CommandErrorMessage,
@@ -40,6 +44,11 @@ class FakeSerial:
         self.closed = True
 
 
+def _compact_json_frame_of_size(size: int) -> bytes:
+    baseline = b'{"cmd":"test","data":""}\n'
+    return b'{"cmd":"test","data":"' + b"x" * (size - len(baseline)) + b'"}\n'
+
+
 def test_request_writes_command_and_returns_success_response() -> None:
     serial = FakeSerial([b'{"ok":true,"timestamp_us":123}\n'])
     transport = SerialCommandTransport(serial)
@@ -53,6 +62,32 @@ def test_request_writes_command_and_returns_success_response() -> None:
         b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
     ]
     assert serial.flush_count == 1
+
+
+def test_request_accepts_exact_host_frame_limit() -> None:
+    serial = FakeSerial([b'{"ok":true}\n'])
+    transport = SerialCommandTransport(serial)
+    command = _compact_json_frame_of_size(MAX_HOST_FRAME_BYTES)
+
+    response = transport.request(command)
+
+    assert response == CommandSuccessMessage()
+    assert serial.writes == [command]
+    assert serial.flush_count == 1
+
+
+def test_request_rejects_oversized_host_frame_before_serial_dispatch() -> None:
+    serial = FakeSerial()
+    transport = SerialCommandTransport(serial)
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        transport.request(_compact_json_frame_of_size(MAX_HOST_FRAME_BYTES + 1))
+
+    assert raised.value.actual_frame_bytes == MAX_HOST_FRAME_BYTES + 1
+    assert raised.value.max_frame_bytes == MAX_HOST_FRAME_BYTES
+    assert serial.writes == []
+    assert serial.flush_count == 0
+    assert serial.read_sizes == []
 
 
 def test_request_returns_command_error_response() -> None:

@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `8b08e17` on 2026-08-27
+> Code baseline reviewed: `f23fa7c` on 2026-08-27
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -10,12 +10,13 @@ Read this document first whenever development resumes.
 
 - **Current milestone:** Phase 1A is accepted; Phase 1B has completed the wire
   vocabulary/metadata migration, enforces exact device-frame boundaries, and
-  validates all bounded decoded Enhanced device-message fields.
-- **Next step:** enforce the remaining Enhanced host-to-device frame contract in
+  validates all bounded decoded Enhanced device-message fields and compact
+  host-command frames.
+- **Next step:** prove complete host-command writes under short serial writes in
   checklist step 3 below.
-- **First implementation slice:** bound every compact UTF-8 host-command frame,
-  including LF, to 2048 total bytes and reject larger frames before serial
-  dispatch with `actual_frame_bytes` and `max_frame_bytes` context.
+- **First implementation slice:** make the Enhanced serial command transport
+  complete ordered short writes or report the known accepted byte count before
+  it waits for a device response.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -54,11 +55,11 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `8b08e17`, reviewed 2026-08-27:
+Working tree based on `f23fa7c`, reviewed 2026-08-27:
 
 - Ruff: passed
 - Mypy: passed across 69 source files
-- Pytest: 944 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 952 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -81,6 +82,9 @@ Working tree based on `8b08e17`, reviewed 2026-08-27:
   canonical example tests passed (101 tests)
 - Enhanced decoded-UART payload enforcement: focused parser, schema, and
   canonical example tests passed (105 tests)
+- Enhanced host-command frame enforcement: exact 2048/2049-byte encoder and
+  pre-dispatch boundaries, compact unescaped UTF-8 output, outbound adapter
+  classification, and bounded service error context passed (89 focused tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
@@ -163,7 +167,7 @@ marked accepted independently of Phase 1B.
   generic `pulse_control` and `set_control_state` channel actions.
 - [x] Remove host role and DUT signal metadata from firmware commands; those
   remain host-side policy/configuration data.
-- [ ] Enforce target NDJSON frame, decoded payload, whitespace, and validation
+- [x] Enforce target NDJSON frame, decoded payload, whitespace, and validation
   limits consistently.
 - [ ] Prove that the host transport retries short writes to complete acceptance
   or reports known partial acceptance.

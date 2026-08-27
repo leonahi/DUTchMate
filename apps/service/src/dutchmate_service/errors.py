@@ -9,7 +9,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from dutchmate_core.backends.contracts import BackendInputError
-from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.errors import (
+    HostCommandFrameTooLargeError,
+    ProtocolValidationError,
+)
 from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
@@ -85,6 +88,17 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             detail=str(exc),
             status_code=400,
             context=context,
+        )
+
+    if isinstance(exc, HostCommandFrameTooLargeError):
+        return _service_error(
+            error="invalid_argument",
+            detail=str(exc),
+            status_code=400,
+            context={
+                "actual_frame_bytes": exc.actual_frame_bytes,
+                "max_frame_bytes": exc.max_frame_bytes,
+            },
         )
 
     if isinstance(exc, GpioIdentifierValidationError):

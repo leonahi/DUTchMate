@@ -19,6 +19,7 @@ from dutchmate_core.backends.enhanced import (
 )
 from dutchmate_core.device_connection.errors import (
     FrameTooLargeError,
+    HostCommandFrameTooLargeError,
     ProtocolValidationError,
 )
 from dutchmate_core.device_connection.messages import (
@@ -353,3 +354,30 @@ def test_device_control_classifies_invalid_enhanced_response() -> None:
     assert raised.value.operation == "reset"
     assert raised.value.backend_mode == "enhanced"
     assert raised.value.input_error == "invalid_message"
+
+
+def test_device_control_preserves_outbound_host_frame_validation() -> None:
+    failure = HostCommandFrameTooLargeError(
+        actual_frame_bytes=2049,
+        max_frame_bytes=2048,
+    )
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        EnhancedDeviceControl(FakeCommandTransport(failure)).pulse_control(
+            channel="CTRL0",
+            pulse_ms=100,
+        )
+
+    assert raised.value is failure
+
+
+def test_uart_sender_preserves_outbound_host_frame_validation() -> None:
+    failure = HostCommandFrameTooLargeError(
+        actual_frame_bytes=2049,
+        max_frame_bytes=2048,
+    )
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        EnhancedUartSender(FakeCommandTransport(failure)).send_uart(b"go\n")
+
+    assert raised.value is failure

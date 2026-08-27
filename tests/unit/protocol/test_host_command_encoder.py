@@ -4,19 +4,57 @@ from pathlib import Path
 import pytest
 
 from dutchmate_core.device_connection.commands import (
+    MAX_HOST_FRAME_BYTES,
     ConfigureGpioModeCommand,
     PulseControlCommand,
     SetControlStateCommand,
     UartSendCommand,
+    _encode_payload,
     configure_gpio_mode_command,
     pulse_control_command,
     set_control_state_command,
     uart_send_command,
     uart_send_text_command,
 )
-from dutchmate_core.device_connection.errors import ProtocolValidationError
+from dutchmate_core.device_connection.errors import (
+    HostCommandFrameTooLargeError,
+    ProtocolValidationError,
+)
 
 EXAMPLES_DIR = Path(__file__).parents[3] / "hardware" / "protocol" / "v1" / "examples"
+
+
+def test_host_command_encoder_accepts_exact_total_frame_limit() -> None:
+    baseline = _encode_payload({"cmd": "test", "data": ""})
+    payload = {
+        "cmd": "test",
+        "data": "x" * (MAX_HOST_FRAME_BYTES - len(baseline)),
+    }
+
+    frame = _encode_payload(payload)
+
+    assert len(frame) == MAX_HOST_FRAME_BYTES
+    assert frame.endswith(b"\n")
+
+
+def test_host_command_encoder_rejects_frame_above_total_limit() -> None:
+    baseline = _encode_payload({"cmd": "test", "data": ""})
+    payload = {
+        "cmd": "test",
+        "data": "x" * (MAX_HOST_FRAME_BYTES + 1 - len(baseline)),
+    }
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        _encode_payload(payload)
+
+    assert raised.value.actual_frame_bytes == MAX_HOST_FRAME_BYTES + 1
+    assert raised.value.max_frame_bytes == MAX_HOST_FRAME_BYTES
+
+
+def test_host_command_encoder_emits_unescaped_utf8() -> None:
+    assert _encode_payload({"cmd": "test", "data": "café"}) == (
+        b'{"cmd":"test","data":"caf\xc3\xa9"}\n'
+    )
 
 
 def test_build_configure_gpio_mode_command() -> None:
