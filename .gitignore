@@ -32,6 +32,9 @@ dist/
 *.swp
 *.swo
 
+# Local Git worktrees
+.worktrees/
+
 # Zephyr / embedded build outputs
 build/
 twister-out/

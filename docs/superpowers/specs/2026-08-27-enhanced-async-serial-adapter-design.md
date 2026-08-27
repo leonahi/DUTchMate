@@ -4,7 +4,7 @@
 
 **Phase:** Phase 1, development checklist step 4
 
-**Status:** Approved direction; written specification awaiting review
+**Status:** Approved on 2026-08-27
 
 ## Purpose
 
@@ -71,10 +71,10 @@ pyserial, or Enhanced wire DTOs.
 
 `AsyncEnhancedSerialAdapter` exposes these operations:
 
-- `start(timeout_s)` starts exactly one reader task and waits for a valid
-  initial hello within the supplied positive timeout.
+- `start(timeout_s)` starts exactly one reader task, waits for a valid initial
+  hello within the supplied positive timeout, and returns `BackendInfo`.
 - `request(command, timeout_s)` sends one complete bounded NDJSON command and
-  awaits its `success` or `error` response.
+  returns its `CommandSuccessMessage` or `CommandErrorMessage` response.
 - `receive_event(timeout_s)` returns the next normalized FIFO event, returns
   `None` only for ordinary inactivity, and otherwise raises the normalized
   disconnect or input error.
@@ -161,7 +161,9 @@ the existing `buffer_overflow` and `buffer_status` events.
 `start()` does not report a ready Enhanced connection until the first parsed
 message is a valid hello. The hello establishes immutable `BackendInfo` using
 the existing exact identity validation. A missing, malformed, or unexpected
-first message fails startup.
+first message fails startup. A hello timeout raises `TransportTimeoutError` to
+the `start()` caller and leaves `BackendDisconnectedError` as the terminal
+backend outcome for later calls.
 
 The hello and command-response timestamps do not establish a capture segment's
 origin. As today, the first timestamped UART or telemetry event establishes
@@ -176,19 +178,22 @@ boundary.
 
 ## Failure And Cancellation Semantics
 
-The connection has one terminal outcome. The first terminal cause is retained
-and is reported consistently to all later operations.
+The connection has one terminal backend outcome. The first terminal backend
+cause is retained and is reported consistently to all later operations.
 
 - EOF, serial read failure, or unexpected transport closure becomes
   `BackendDisconnectedError`.
 - Malformed, oversized, schema-invalid, or protocol-state input becomes
   `BackendInputError` with the existing bounded classification.
-- Write failures retain `TransportWriteError` classification and exact
-  `frame_bytes_accepted` internally for the semantic adapter to project.
+- The request that experiences a write failure raises `TransportWriteError`
+  with exact `frame_bytes_accepted`. Because the command stream is no longer
+  safely reusable, the adapter then retains `BackendDisconnectedError` as the
+  terminal backend outcome for later request and event-source calls.
 - An event receive timeout returns `None` and does not alter connection state.
-- A command timeout after any command byte may have been accepted closes the
-  connection. A late uncorrelated response must never be reused by another
-  request.
+- A command timeout after any command byte may have been accepted raises
+  `TransportTimeoutError` to that requester and closes the connection. Later
+  calls receive the retained `BackendDisconnectedError`; a late uncorrelated
+  response must never be reused by another request.
 - Cancellation before a request begins writing leaves the connection usable.
   Cancellation after transmission begins closes the connection for the same
   correlation-safety reason as timeout.
