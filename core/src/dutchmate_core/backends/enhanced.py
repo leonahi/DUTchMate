@@ -43,6 +43,7 @@ from dutchmate_core.device_connection.messages import (
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.device_connection.stream import NdjsonStreamParser
 from dutchmate_core.device_connection.transport import (
+    AsyncCommandTransport,
     CommandTransport,
     TransportTimeoutError,
     TransportWriteError,
@@ -115,14 +116,7 @@ class EnhancedDeviceControl(DeviceControl):
             raise
         except ProtocolError as exc:
             raise backend_input_error_from_protocol(exc, operation=operation) from exc
-        if isinstance(response, CommandSuccessMessage):
-            return response.timestamp_us
-        if isinstance(response, CommandErrorMessage):
-            raise DeviceControlError(error=response.error, detail=response.detail)
-        raise DeviceControlError(
-            error="unexpected_response",
-            detail=f"Expected command response for {label}, got {type(response).__name__}",
-        )
+        return _control_success_timestamp(response, label=label)
 
 
 class EnhancedUartSender:
@@ -156,31 +150,174 @@ class EnhancedUartSender:
                 "Enhanced UART send transport failed",
                 bytes_accepted=None,
             ) from exc
-        if isinstance(response, CommandErrorMessage):
-            raise BackendWriteError(
-                response.detail,
-                bytes_accepted=None,
-                error=response.error,
-            )
-        if not isinstance(response, CommandSuccessMessage):
-            raise BackendWriteError(
-                "Enhanced UART send received an unexpected response",
-                bytes_accepted=None,
-            )
-        if response.bytes_accepted != len(data):
-            raise BackendWriteError(
-                "Enhanced UART send acknowledgement did not accept the complete payload",
-                bytes_accepted=response.bytes_accepted,
-            )
-        if response.timestamp_us is None:
-            raise BackendWriteError(
-                "Enhanced UART send acknowledgement omitted timestamp_us",
-                bytes_accepted=response.bytes_accepted,
-            )
-        return BackendUartSendResult(
-            bytes_accepted=response.bytes_accepted,
-            device_timestamp_us=response.timestamp_us,
+        return _uart_send_result(response, expected_bytes=len(data))
+
+
+DEFAULT_ENHANCED_COMMAND_TIMEOUT_S = 1.0
+
+
+class AsyncEnhancedDeviceControl:
+    """Translate semantic control operations through an async Enhanced transport."""
+
+    def __init__(
+        self,
+        transport: AsyncCommandTransport,
+        *,
+        timeout_s: float = DEFAULT_ENHANCED_COMMAND_TIMEOUT_S,
+    ) -> None:
+        self._transport = transport
+        self._timeout_s = timeout_s
+
+    async def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        command = configure_gpio_mode_command(
+            channel=channel,
+            mode=mode,
+            active_level=active_level,
+            idle_level=idle_level,
         )
+        return await self._request_success(
+            command.to_ndjson(),
+            operation="configure_gpio_mode",
+            response_label="GPIO mode configuration",
+        )
+
+    async def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
+        command = pulse_control_command(channel=channel, pulse_ms=pulse_ms)
+        return await self._request_success(command.to_ndjson(), operation="reset")
+
+    async def set_control_state(
+        self,
+        *,
+        channel: str,
+        state: ControlState,
+    ) -> int | None:
+        command = set_control_state_command(channel=channel, state=state)
+        return await self._request_success(
+            command.to_ndjson(),
+            operation="set_boot_mode",
+        )
+
+    async def _request_success(
+        self,
+        command: bytes,
+        *,
+        operation: str,
+        response_label: str | None = None,
+    ) -> int | None:
+        label = response_label or operation
+        try:
+            response = await self._transport.request(command, self._timeout_s)
+        except TransportWriteError as exc:
+            raise DeviceControlError(error=exc.error, detail=str(exc)) from exc
+        except TransportTimeoutError as exc:
+            raise DeviceControlError(
+                error="timeout",
+                detail=f"Timed out waiting for {label} response",
+            ) from exc
+        except HostCommandFrameTooLargeError:
+            raise
+        except ProtocolError as exc:
+            raise backend_input_error_from_protocol(exc, operation=operation) from exc
+        return _control_success_timestamp(response, label=label)
+
+
+class AsyncEnhancedUartSender:
+    """Translate complete UART payloads through an async Enhanced transport."""
+
+    def __init__(
+        self,
+        transport: AsyncCommandTransport,
+        *,
+        timeout_s: float = DEFAULT_ENHANCED_COMMAND_TIMEOUT_S,
+    ) -> None:
+        self._transport = transport
+        self._timeout_s = timeout_s
+
+    async def send_uart(self, data: bytes) -> BackendUartSendResult:
+        command = uart_send_command(data)
+        try:
+            response = await self._transport.request(
+                command.to_ndjson(),
+                self._timeout_s,
+            )
+        except TransportWriteError as exc:
+            raise BackendWriteError(
+                str(exc),
+                bytes_accepted=None,
+                error=exc.error,
+            ) from exc
+        except TransportTimeoutError as exc:
+            raise BackendWriteError(
+                "Enhanced UART send timed out",
+                bytes_accepted=None,
+                error="timeout",
+            ) from exc
+        except HostCommandFrameTooLargeError:
+            raise
+        except ProtocolError as exc:
+            raise backend_input_error_from_protocol(exc, operation="uart_send") from exc
+        except BackendInputError:
+            raise
+        except Exception as exc:
+            raise BackendWriteError(
+                "Enhanced UART send transport failed",
+                bytes_accepted=None,
+            ) from exc
+        return _uart_send_result(response, expected_bytes=len(data))
+
+
+def _control_success_timestamp(
+    response: DeviceMessage,
+    *,
+    label: str,
+) -> int | None:
+    if isinstance(response, CommandSuccessMessage):
+        return response.timestamp_us
+    if isinstance(response, CommandErrorMessage):
+        raise DeviceControlError(error=response.error, detail=response.detail)
+    raise DeviceControlError(
+        error="unexpected_response",
+        detail=f"Expected command response for {label}, got {type(response).__name__}",
+    )
+
+
+def _uart_send_result(
+    response: DeviceMessage,
+    *,
+    expected_bytes: int,
+) -> BackendUartSendResult:
+    if isinstance(response, CommandErrorMessage):
+        raise BackendWriteError(
+            response.detail,
+            bytes_accepted=None,
+            error=response.error,
+        )
+    if not isinstance(response, CommandSuccessMessage):
+        raise BackendWriteError(
+            "Enhanced UART send received an unexpected response",
+            bytes_accepted=None,
+        )
+    if response.bytes_accepted != expected_bytes:
+        raise BackendWriteError(
+            "Enhanced UART send acknowledgement did not accept the complete payload",
+            bytes_accepted=response.bytes_accepted,
+        )
+    if response.timestamp_us is None:
+        raise BackendWriteError(
+            "Enhanced UART send acknowledgement omitted timestamp_us",
+            bytes_accepted=response.bytes_accepted,
+        )
+    return BackendUartSendResult(
+        bytes_accepted=response.bytes_accepted,
+        device_timestamp_us=response.timestamp_us,
+    )
 
 
 class EnhancedCaptureEventSource:

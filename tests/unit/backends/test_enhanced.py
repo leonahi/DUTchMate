@@ -5,6 +5,7 @@ import pytest
 from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendInputError,
+    BackendUartSendResult,
     BackendWriteError,
     BufferOverflowEvent,
     BufferStatusEvent,
@@ -12,6 +13,8 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
 )
 from dutchmate_core.backends.enhanced import (
+    AsyncEnhancedDeviceControl,
+    AsyncEnhancedUartSender,
     EnhancedCaptureEventSource,
     EnhancedDeviceControl,
     EnhancedNdjsonEventStream,
@@ -64,6 +67,181 @@ class FakeCommandTransport:
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
+
+
+class FakeAsyncCommandTransport:
+    def __init__(self, response: DeviceMessage | Exception) -> None:
+        self.response = response
+        self.requests: list[tuple[bytes, float]] = []
+
+    async def request(self, command: bytes, timeout_s: float) -> DeviceMessage:
+        self.requests.append((command, timeout_s))
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+async def test_async_enhanced_control_uses_same_command_and_timestamp() -> None:
+    transport = FakeAsyncCommandTransport(CommandSuccessMessage(timestamp_us=123))
+
+    timestamp = await AsyncEnhancedDeviceControl(transport).pulse_control(
+        channel="CTRL0",
+        pulse_ms=100,
+    )
+
+    assert timestamp == 123
+    assert transport.requests == [
+        (b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n', 1.0)
+    ]
+
+
+async def test_async_enhanced_uart_sender_uses_same_acknowledgement_rules() -> None:
+    transport = FakeAsyncCommandTransport(
+        CommandSuccessMessage(timestamp_us=500, bytes_accepted=3)
+    )
+
+    result = await AsyncEnhancedUartSender(transport).send_uart(b"go\n")
+
+    assert result == BackendUartSendResult(
+        bytes_accepted=3,
+        device_timestamp_us=500,
+    )
+    assert transport.requests == [(b'{"cmd":"uart_send","data_b64":"Z28K"}\n', 1.0)]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        CommandErrorMessage(error="hardware_fault", detail="firmware busy"),
+        CommandSuccessMessage(timestamp_us=None, bytes_accepted=3),
+        CommandSuccessMessage(timestamp_us=500, bytes_accepted=2),
+        HelloMessage(
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("uart_send",),
+        ),
+    ],
+)
+async def test_async_uart_sender_matches_sync_rejections(
+    response: DeviceMessage,
+) -> None:
+    async_transport = FakeAsyncCommandTransport(response)
+    sync_transport = FakeCommandTransport(response)
+    with pytest.raises(BackendWriteError) as async_error:
+        await AsyncEnhancedUartSender(async_transport).send_uart(b"go\n")
+    with pytest.raises(BackendWriteError) as sync_error:
+        EnhancedUartSender(sync_transport).send_uart(b"go\n")
+
+    assert (async_error.value.error, str(async_error.value)) == (
+        sync_error.value.error,
+        str(sync_error.value),
+    )
+    assert async_error.value.bytes_accepted == sync_error.value.bytes_accepted
+    assert async_transport.requests == [
+        (b'{"cmd":"uart_send","data_b64":"Z28K"}\n', 1.0)
+    ]
+    assert sync_transport.requests == [b'{"cmd":"uart_send","data_b64":"Z28K"}\n']
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        CommandErrorMessage(error="hardware_fault", detail="firmware busy"),
+        HelloMessage(
+            firmware="0.1.0",
+            device="dutchmate-rp2040",
+            capabilities=("uart_send",),
+        ),
+        TransportTimeoutError("quiet"),
+        TransportWriteError(
+            "Enhanced serial command write failed",
+            frame_bytes_accepted=2,
+            error="hardware_fault",
+        ),
+        ProtocolValidationError("invalid command response"),
+    ],
+)
+async def test_async_device_control_matches_sync_rejections(
+    outcome: DeviceMessage | Exception,
+) -> None:
+    async_transport = FakeAsyncCommandTransport(outcome)
+    sync_transport = FakeCommandTransport(outcome)
+    with pytest.raises((DeviceControlError, BackendInputError)) as async_error:
+        await AsyncEnhancedDeviceControl(async_transport).pulse_control(
+            channel="CTRL0", pulse_ms=100
+        )
+    with pytest.raises((DeviceControlError, BackendInputError)) as sync_error:
+        EnhancedDeviceControl(sync_transport).pulse_control(
+            channel="CTRL0", pulse_ms=100
+        )
+
+    assert type(async_error.value) is type(sync_error.value)
+    assert str(async_error.value) == str(sync_error.value)
+    if isinstance(async_error.value, DeviceControlError):
+        assert async_error.value.error == sync_error.value.error
+        assert async_error.value.detail == sync_error.value.detail
+    else:
+        assert isinstance(sync_error.value, BackendInputError)
+        assert async_error.value.context == sync_error.value.context
+    assert async_transport.requests == [
+        (b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n', 1.0)
+    ]
+    assert sync_transport.requests == [
+        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    ]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        TransportTimeoutError("quiet"),
+        TransportWriteError(
+            "Enhanced serial command write failed",
+            frame_bytes_accepted=2,
+            error="timeout",
+        ),
+        ProtocolValidationError("invalid command response"),
+    ],
+)
+async def test_async_uart_sender_matches_sync_transport_failures(
+    outcome: Exception,
+) -> None:
+    async_transport = FakeAsyncCommandTransport(outcome)
+    sync_transport = FakeCommandTransport(outcome)
+    with pytest.raises((BackendWriteError, BackendInputError)) as async_error:
+        await AsyncEnhancedUartSender(async_transport).send_uart(b"go\n")
+    with pytest.raises((BackendWriteError, BackendInputError)) as sync_error:
+        EnhancedUartSender(sync_transport).send_uart(b"go\n")
+
+    assert type(async_error.value) is type(sync_error.value)
+    assert str(async_error.value) == str(sync_error.value)
+    if isinstance(async_error.value, BackendWriteError):
+        assert isinstance(sync_error.value, BackendWriteError)
+        assert async_error.value.error == sync_error.value.error
+        assert async_error.value.bytes_accepted == sync_error.value.bytes_accepted
+    else:
+        assert isinstance(sync_error.value, BackendInputError)
+        assert async_error.value.context == sync_error.value.context
+    assert async_transport.requests == [
+        (b'{"cmd":"uart_send","data_b64":"Z28K"}\n', 1.0)
+    ]
+    assert sync_transport.requests == [b'{"cmd":"uart_send","data_b64":"Z28K"}\n']
+
+
+async def test_async_uart_sender_preserves_backend_input_error_before_transport_mapping() -> None:
+    failure = BackendInputError(
+        "already classified",
+        input_error="invalid_message",
+        operation="uart_send",
+        backend_mode="enhanced",
+    )
+
+    with pytest.raises(BackendInputError) as raised:
+        await AsyncEnhancedUartSender(FakeAsyncCommandTransport(failure)).send_uart(
+            b"go\n"
+        )
+
+    assert raised.value is failure
 
 
 def test_enhanced_uart_sender_requires_complete_timestamped_acknowledgement() -> None:
