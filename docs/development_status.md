@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `df75715` on 2026-08-28
+> Code baseline reviewed: `b7e0076` on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -9,12 +9,12 @@
 Read this document first whenever development resumes.
 
 - **Current milestone:** Phase 1A is accepted; Phase 1B's fake-backed
-  asynchronous Enhanced adapter slice now proves one-reader ownership, bounded
-  FIFO backpressure, repeatable terminal failures, cancellation boundaries,
-  waiter wake-up, and exactly-once shutdown.
-- **Next step:** Task 6 only: reconcile this status against the Task 5 commit,
-  update Graphify, and run full validation for the completed fake-backed slice;
-  do not begin service/runtime integration yet.
+  `AsyncEnhancedSerialAdapter` foundation is complete and proves one-reader
+  ownership, bounded FIFO backpressure, repeatable terminal failures,
+  cancellation boundaries, waiter wake-up, and exactly-once shutdown. Production
+  still selects the synchronous compatibility path.
+- **Next step:** Implement the real `pyserial-asyncio` read factory plus an
+  exact-accounting asynchronous frame writer and service composition integration.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -53,11 +53,14 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on `df75715`, reviewed 2026-08-28:
+Working tree based on `b7e0076`, reviewed 2026-08-28:
 
-- Ruff: passed on the Task 5 focused lifecycle and supporting protocol modules
-- Mypy: passed on the Enhanced adapter and device-connection modules
-- Pytest: 1021 passed, including 12 portable Zephyr DUT protocol tests
+- Ruff: `.venv/bin/ruff check .` passed
+- Mypy: `.venv/bin/mypy` passed with no issues in 70 source files
+- Pytest: `.venv/bin/pytest` passed: 1021 passed, including 12 portable Zephyr
+  DUT protocol tests
+- Focused fake-backed async adapter evidence: command routing passed 65 tests;
+  lifecycle passed 135 tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -192,6 +195,9 @@ remaining.
 
 - [ ] Replace the interim synchronous message source with one owned
   `pyserial-asyncio` reader and bounded framing.
+- [x] Complete the fake-backed single-reader/dispatcher foundation with bounded
+  FIFO event backpressure, serialized command routing, terminal-error and
+  cancellation boundaries, waiter wake-up, and exactly-once shutdown.
 - [x] Route command responses to pending requests while publishing UART and
   telemetry events in FIFO order.
 - [x] Prove command-path backpressure, terminal errors, cancellation, and
