@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: pending current async serial I/O commit on 2026-08-28
+> Code baseline reviewed: cb45577 on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
