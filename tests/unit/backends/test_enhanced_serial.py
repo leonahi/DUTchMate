@@ -20,6 +20,7 @@ from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
 )
+from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
 from dutchmate_core.device_connection.transport import (
     TransportTimeoutError,
     TransportWriteError,
@@ -40,6 +41,7 @@ class FakeAsyncSerialReader:
         self.maximum_concurrent_reads = 0
         self.reading = asyncio.Event()
         self.second_read_started = asyncio.Event()
+        self.third_read_started = asyncio.Event()
         self.next_chunk_requested = asyncio.Event()
         self.closed_event = asyncio.Event()
         self.closed = False
@@ -59,6 +61,8 @@ class FakeAsyncSerialReader:
             self.next_chunk_requested.set()
         if self.read_calls == 2:
             self.second_read_started.set()
+        if self.read_calls == 3:
+            self.third_read_started.set()
         try:
             outcome = await self.outcomes.get()
         finally:
@@ -741,3 +745,242 @@ async def test_close_cancels_blocked_reader_and_closes_resource_once() -> None:
     assert reader.active_reads == 0
     assert reader.closed is True
     assert reader.close_count == 1
+
+
+async def test_event_queue_backpressures_without_losing_fifo() -> None:
+    """Fails if a full FIFO drops/reorders evidence or lets its sole reader advance."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, event_queue_capacity=1)
+    await adapter.start(0.1)
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"WQ=="}\n'
+    )
+
+    await asyncio.sleep(0)
+    assert not reader.third_read_started.is_set()
+    assert reader.maximum_concurrent_reads == 1
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=0, channel=0, data=b"X"
+    )
+    await asyncio.wait_for(reader.third_read_started.wait(), timeout=0.1)
+    assert reader.maximum_concurrent_reads == 1
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=1, channel=0, data=b"Y"
+    )
+    await adapter.close()
+
+
+async def test_valid_prefix_precedes_repeatable_terminal_input_error() -> None:
+    """Fails if terminal input overtakes accepted evidence or changes on replay."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+        b'{"type":}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"WQ=="}\n'
+    )
+
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=0, channel=0, data=b"X"
+    )
+    with pytest.raises(BackendInputError) as first:
+        await adapter.receive_event(0.1)
+    with pytest.raises(BackendInputError) as second:
+        await adapter.receive_event(0.1)
+    assert first.value is second.value
+    assert first.value.input_error == second.value.input_error == "invalid_json"
+
+
+async def test_oversized_pending_frame_preserves_size_context() -> None:
+    """Fails if pending-frame overflow loses its exact bounded size context."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    reader.feed(b"x" * MAX_DEVICE_FRAME_BYTES)
+
+    with pytest.raises(BackendInputError) as raised:
+        await adapter.receive_event(0.1)
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == MAX_DEVICE_FRAME_BYTES
+    assert raised.value.max_frame_bytes == MAX_DEVICE_FRAME_BYTES
+
+
+async def test_invalid_frame_fails_response_but_keeps_prior_event() -> None:
+    """Fails if same-batch response success masks invalid input or drops its prefix."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+    request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 0.1))
+    await asyncio.sleep(0)
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+        b'{"ok":true}\n'
+        b'{"type":}\n'
+    )
+
+    assert await adapter.receive_event(0.1) == UartReceiveEvent(
+        segment_id=3, timestamp_us=0, channel=0, data=b"X"
+    )
+    with pytest.raises(BackendInputError):
+        await request
+
+
+async def test_repeated_hello_is_terminal_input_error() -> None:
+    """Fails if a second hello is accepted as evidence or connection state."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    reader.feed(HELLO_FRAME)
+
+    with pytest.raises(BackendInputError, match="hello"):
+        await adapter.receive_event(0.1)
+
+
+@pytest.mark.parametrize("outcome", [b"", OSError("removed")])
+async def test_reader_failure_is_repeatable_disconnect(
+    outcome: bytes | Exception,
+) -> None:
+    """Fails if EOF/read failure is raw, transient, or loses its original cause."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    if isinstance(outcome, Exception):
+        reader.fail(outcome)
+    else:
+        reader.feed(outcome)
+
+    with pytest.raises(BackendDisconnectedError) as first:
+        await adapter.receive_event(0.1)
+    with pytest.raises(BackendDisconnectedError) as second:
+        await adapter.receive_event(0.1)
+    assert first.value is second.value
+    if isinstance(outcome, Exception):
+        assert first.value.__cause__ is outcome
+
+
+async def test_cancel_while_waiting_for_command_lock_keeps_connection() -> None:
+    """Fails if pre-transmission cancellation poisons the shared connection."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+    first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 0.1))
+    blocked = asyncio.create_task(adapter.request(b'{"cmd":"two"}\n', 0.1))
+    await asyncio.sleep(0)
+    blocked.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await blocked
+
+    reader.feed(b'{"ok":true}\n')
+    assert await first == CommandSuccessMessage()
+    third = asyncio.create_task(adapter.request(b'{"cmd":"three"}\n', 0.1))
+    await asyncio.sleep(0)
+    reader.feed(b'{"ok":true,"timestamp_us":3}\n')
+    assert await third == CommandSuccessMessage(timestamp_us=3)
+    assert reader.maximum_concurrent_reads == 1
+    await adapter.close()
+
+
+async def test_cancel_after_transmission_closes_connection() -> None:
+    """Fails if post-transmission cancellation leaves an orphan response path."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+    request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
+    await asyncio.sleep(0)
+    assert writer.frames == [b'{"cmd":"one"}\n']
+
+    request.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    assert reader.closed is True
+    with pytest.raises(BackendDisconnectedError):
+        await adapter.receive_event(0.1)
+
+
+async def test_command_timeout_closes_connection() -> None:
+    """Fails if response timeout permits reuse of an uncorrelated command stream."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+
+    with pytest.raises(TransportTimeoutError):
+        await adapter.request(b'{"cmd":"one"}\n', 0.001)
+    assert reader.closed is True
+    with pytest.raises(BackendDisconnectedError):
+        await adapter.receive_event(0.1)
+
+
+async def test_hello_timeout_is_transport_timeout_then_disconnect() -> None:
+    """Fails if hello timeout leaks the reader or permits a later restart."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+
+    with pytest.raises(TransportTimeoutError):
+        await adapter.start(0.001)
+    assert reader.closed is True
+    with pytest.raises(BackendDisconnectedError):
+        await adapter.start(0.1)
+
+
+async def test_close_is_idempotent_and_wakes_event_consumer() -> None:
+    """Fails if close strands a consumer or closes its owned reader twice."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    receive = asyncio.create_task(adapter.receive_event())
+    await asyncio.sleep(0)
+
+    await adapter.close()
+    await adapter.close()
+
+    with pytest.raises(BackendDisconnectedError):
+        await receive
+    assert reader.close_count == 1
+
+
+async def test_close_fails_pending_and_queued_commands() -> None:
+    """Fails if close strands a sent command or lets a queued command transmit."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+    first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
+    second = asyncio.create_task(adapter.request(b'{"cmd":"two"}\n', 1.0))
+    await asyncio.sleep(0)
+
+    await adapter.close()
+
+    with pytest.raises(BackendDisconnectedError):
+        await first
+    with pytest.raises(BackendDisconnectedError):
+        await second
+    assert writer.frames == [b'{"cmd":"one"}\n']
