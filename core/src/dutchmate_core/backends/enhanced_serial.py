@@ -405,6 +405,12 @@ class AsyncEnhancedSerialAdapter:
                 with suppress(asyncio.CancelledError):
                     await task
 
+    async def discard_pending_events(self) -> None:
+        """Discard events already admitted before a new workflow cursor begins."""
+
+        while not self._events.empty():
+            self._events.get_nowait()
+
     def _set_terminal(
         self,
         error: BackendDisconnectedError | BackendInputError,

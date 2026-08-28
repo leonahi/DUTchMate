@@ -705,6 +705,48 @@ async def test_receive_event_accepts_zero_timeout() -> None:
     await adapter.close()
 
 
+async def test_discard_pending_events_advances_only_the_adapter_fifo() -> None:
+    """Fails if discarding a workflow cursor affects the sole reader or parser."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+    reader.feed(
+        HELLO_FRAME
+        + UART_FRAME
+        + UART_FRAME.replace(b'"timestamp_us":1', b'"timestamp_us":2')
+    )
+
+    await adapter.start(0.5)
+    await reader.next_chunk_requested.wait()
+    await adapter.discard_pending_events()
+
+    assert await adapter.receive_event(timeout_s=0) is None
+    assert reader.maximum_concurrent_reads == 1
+    await adapter.close()
+
+
+async def test_discard_pending_events_preserves_terminal_read_failure() -> None:
+    """Fails if discarding queued evidence masks a retained terminal error."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+    reader.feed(HELLO_FRAME + UART_FRAME)
+
+    await adapter.start(0.5)
+    await reader.next_chunk_requested.wait()
+    reader.fail(OSError("device removed"))
+    await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
+
+    await adapter.discard_pending_events()
+    with pytest.raises(BackendDisconnectedError, match="read failed") as raised:
+        await adapter.receive_event(timeout_s=0)
+    with pytest.raises(BackendDisconnectedError, match="read failed") as repeated:
+        await adapter.receive_event(timeout_s=0)
+    assert repeated.value is raised.value
+
+    await adapter.close()
+
+
 async def test_receive_event_drains_queued_evidence_before_terminal_error() -> None:
     """Fails if terminalization overtakes evidence that was already accepted into FIFO."""
 
