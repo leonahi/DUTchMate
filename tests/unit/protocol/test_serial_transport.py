@@ -15,6 +15,7 @@ from dutchmate_core.device_connection.messages import (
 from dutchmate_core.device_connection.serial_transport import (
     SerialCommandTransport,
     open_serial_command_transport,
+    write_serial_frame,
 )
 from dutchmate_core.device_connection.transport import (
     TransportTimeoutError,
@@ -70,6 +71,17 @@ class SerialTimeoutException(Exception):
 def _compact_json_frame_of_size(size: int) -> bytes:
     baseline = b'{"cmd":"test","data":""}\n'
     return b'{"cmd":"test","data":"' + b"x" * (size - len(baseline)) + b'"}\n'
+
+
+def test_shared_serial_frame_writer_retries_ordered_short_writes_and_flushes() -> None:
+    frame = b'{"cmd":"test"}\n'
+    serial = FakeSerial(write_outcomes=[2, 3, len(frame) - 5])
+
+    write_serial_frame(serial, frame)
+
+    assert serial.writes == [frame, frame[2:], frame[5:]]
+    assert serial.flush_count == 1
+    assert serial.read_sizes == []
 
 
 def test_shared_host_frame_validator_preserves_exact_limit() -> None:

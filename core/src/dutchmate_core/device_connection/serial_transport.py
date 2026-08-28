@@ -23,14 +23,18 @@ DEFAULT_BAUDRATE = 115200
 DEFAULT_TIMEOUT_SECONDS = 1.0
 
 
-class SerialPort(Protocol):
-    """Small pyserial-compatible surface used by the command transport."""
+class SerialFrameSink(Protocol):
+    """Pyserial-compatible surface for exact host frame writes."""
 
     def write(self, data: bytes) -> int:
-        """Write bytes to the serial port."""
+        """Return the number of bytes accepted from data."""
 
     def flush(self) -> None:
-        """Flush pending output bytes."""
+        """Wait until accepted output is flushed."""
+
+
+class SerialPort(SerialFrameSink, Protocol):
+    """Small pyserial-compatible surface used by the command transport."""
 
     def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
         """Read bytes until a delimiter or timeout."""
@@ -40,6 +44,47 @@ class SerialPort(Protocol):
 
 
 SerialFactory = Callable[..., SerialPort]
+
+
+def write_serial_frame(serial_port: SerialFrameSink, frame: bytes) -> None:
+    """Write and flush one complete frame with exact accepted-byte errors."""
+
+    validate_host_command_frame(frame)
+    accepted = 0
+    while accepted < len(frame):
+        remaining = len(frame) - accepted
+        try:
+            written = serial_port.write(frame[accepted:])
+        except Exception as exc:
+            raise TransportWriteError(
+                "Enhanced serial command write failed",
+                frame_bytes_accepted=accepted,
+                error=_classify_serial_write_error(exc),
+            ) from exc
+        if (
+            isinstance(written, bool)
+            or not isinstance(written, int)
+            or written <= 0
+            or written > remaining
+        ):
+            raise TransportWriteError(
+                "Enhanced serial command write made invalid progress",
+                frame_bytes_accepted=accepted,
+                error=(
+                    "timeout"
+                    if written == 0 and not isinstance(written, bool)
+                    else "hardware_fault"
+                ),
+            )
+        accepted += written
+    try:
+        serial_port.flush()
+    except Exception as exc:
+        raise TransportWriteError(
+            "Enhanced serial command flush failed",
+            frame_bytes_accepted=accepted,
+            error=_classify_serial_write_error(exc),
+        ) from exc
 
 
 class SerialCommandTransport:
@@ -53,44 +98,8 @@ class SerialCommandTransport:
     def request(self, command: bytes) -> DeviceMessage:
         """Send one encoded command and return the matching command response."""
 
-        validate_host_command_frame(command)
-
         with self._io_lock:
-            accepted = 0
-            while accepted < len(command):
-                remaining = len(command) - accepted
-                try:
-                    written = self._serial_port.write(command[accepted:])
-                except Exception as exc:
-                    raise TransportWriteError(
-                        "Enhanced serial command write failed",
-                        frame_bytes_accepted=accepted,
-                        error=_classify_serial_write_error(exc),
-                    ) from exc
-                if (
-                    isinstance(written, bool)
-                    or not isinstance(written, int)
-                    or written <= 0
-                    or written > remaining
-                ):
-                    raise TransportWriteError(
-                        "Enhanced serial command write made invalid progress",
-                        frame_bytes_accepted=accepted,
-                        error=(
-                            "timeout"
-                            if written == 0 and not isinstance(written, bool)
-                            else "hardware_fault"
-                        ),
-                    )
-                accepted += written
-            try:
-                self._serial_port.flush()
-            except Exception as exc:
-                raise TransportWriteError(
-                    "Enhanced serial command flush failed",
-                    frame_bytes_accepted=accepted,
-                    error=_classify_serial_write_error(exc),
-                ) from exc
+            write_serial_frame(self._serial_port, command)
 
             while True:
                 message = self._read_serial_message()
