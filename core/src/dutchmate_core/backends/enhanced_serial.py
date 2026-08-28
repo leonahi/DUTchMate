@@ -93,13 +93,13 @@ class AsyncEnhancedSerialAdapter:
         self._reader_task: asyncio.Task[None] | None = None
         self._hello_waiter: asyncio.Future[BackendInfo] | None = None
         self._pending_response: asyncio.Future[DeviceMessage] | None = None
+        self._active_write_task: asyncio.Task[None] | None = None
         self._info: BackendInfo | None = None
         self._segment: SegmentContext | None = None
         self._terminal_error: BackendDisconnectedError | BackendInputError | None = None
         self._terminal = asyncio.Event()
         self._closed = False
-        self._resource_close_started = False
-        self._resource_closed = False
+        self._resource_close_task: asyncio.Task[None] | None = None
 
     @property
     def info(self) -> BackendInfo:
@@ -208,8 +208,12 @@ class AsyncEnhancedSerialAdapter:
     async def _dispatch_batch(self, messages: list[DeviceMessage]) -> None:
         info = self._info
         segment = self._segment
-        events: list[BackendEvent] = []
         received_hello = False
+        if info is None:
+            validated_info = self._validated_initial_info(messages)
+            if validated_info is not None:
+                self._info = validated_info
+                self._complete_hello_waiter()
         for message in messages:
             if info is None:
                 if not isinstance(message, HelloMessage):
@@ -236,7 +240,8 @@ class AsyncEnhancedSerialAdapter:
                     source_origin_us=segment.timestamp.source_origin_us,
                 )
                 assert event is not None
-                events.append(event)
+                self._segment = segment
+                await self._events.put(event)
                 continue
             if self._info is not None and isinstance(
                 message,
@@ -255,6 +260,8 @@ class AsyncEnhancedSerialAdapter:
                     break
                 pending.set_result(message)
                 continue
+            if self._parser.terminal_error is not None:
+                break
             self._set_terminal(
                 BackendInputError(
                     "Unexpected Enhanced message after hello",
@@ -269,8 +276,35 @@ class AsyncEnhancedSerialAdapter:
             self._set_terminal(backend_input_error_from_protocol(parser_error))
         elif received_hello and self._terminal_error is None:
             self._complete_hello_waiter()
-        for event in events:
-            await self._events.put(event)
+
+    def _validated_initial_info(
+        self,
+        messages: list[DeviceMessage],
+    ) -> BackendInfo | None:
+        """Return hello info only when its complete parser batch is valid."""
+
+        if self._parser.terminal_error is not None:
+            return None
+        info: BackendInfo | None = None
+        segment: SegmentContext | None = None
+        for message in messages:
+            if info is None:
+                if not isinstance(message, HelloMessage):
+                    return None
+                info = normalize_enhanced_hello(message, port=self._port)
+                continue
+            timestamp_us = enhanced_message_timestamp_us(message)
+            if timestamp_us is None:
+                return None
+            if segment is None:
+                segment = enhanced_segment_context(self._segment_id, timestamp_us)
+            event = normalize_enhanced_message(
+                message,
+                segment_id=self._segment_id,
+                source_origin_us=segment.timestamp.source_origin_us,
+            )
+            assert event is not None
+        return info
 
     async def request(self, command: bytes, timeout_s: float) -> DeviceMessage:
         """Write one command and wait for the sole reader to route its response."""
@@ -285,7 +319,16 @@ class AsyncEnhancedSerialAdapter:
             response.add_done_callback(_consume_response_waiter_exception)
             self._pending_response = response
             try:
-                await self._writer.write_frame(command)
+                write_task = asyncio.create_task(
+                    self._writer.write_frame(command),
+                    name="dutchmate-enhanced-serial-writer",
+                )
+                self._active_write_task = write_task
+                try:
+                    await write_task
+                finally:
+                    if self._active_write_task is write_task:
+                        self._active_write_task = None
                 try:
                     return await asyncio.wait_for(asyncio.shield(response), timeout_s)
                 except TimeoutError as exc:
@@ -306,6 +349,9 @@ class AsyncEnhancedSerialAdapter:
                 await self._terminate(disconnected)
                 raise
             except asyncio.CancelledError:
+                terminal_error = self._terminal_error
+                if terminal_error is not None:
+                    raise terminal_error from None
                 disconnected = BackendDisconnectedError(
                     "Enhanced command cancelled after transmission began"
                 )
@@ -378,26 +424,48 @@ class AsyncEnhancedSerialAdapter:
                 response.cancel()
             else:
                 response.set_exception(error)
+        write_task = self._active_write_task
+        if (
+            write_task is not None
+            and write_task is not asyncio.current_task()
+            and not write_task.done()
+        ):
+            write_task.cancel()
 
     def _raise_if_terminal(self) -> None:
         if self._terminal_error is not None:
             raise self._terminal_error
 
     async def _close_resource(self) -> None:
-        if self._resource_close_started:
-            return
-        self._resource_close_started = True
+        task = self._resource_close_task
+        if task is None:
+            task = asyncio.create_task(
+                self._run_resource_close(),
+                name="dutchmate-enhanced-serial-resource-close",
+            )
+            self._resource_close_task = task
+        await asyncio.shield(task)
+
+    async def _run_resource_close(self) -> None:
         try:
             await self._reader.close()
         except Exception:
             return
-        self._resource_closed = True
 
     async def _terminate(
         self,
         error: BackendDisconnectedError | BackendInputError,
     ) -> None:
         self._set_terminal(error)
+        write_task = self._active_write_task
+        if (
+            write_task is not None
+            and write_task is not asyncio.current_task()
+            and not write_task.done()
+        ):
+            write_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await write_task
         task = self._reader_task
         if task is not None and task is not asyncio.current_task() and not task.done():
             task.cancel()
@@ -410,11 +478,12 @@ class AsyncEnhancedSerialAdapter:
 
         async with self._close_lock:
             if self._closed:
-                return
-            self._closed = True
-            await self._terminate(
-                BackendDisconnectedError("Enhanced serial adapter is closed")
-            )
+                await self._close_resource()
+            else:
+                self._closed = True
+                await self._terminate(
+                    BackendDisconnectedError("Enhanced serial adapter is closed")
+                )
 
 
 def _validate_timeout(

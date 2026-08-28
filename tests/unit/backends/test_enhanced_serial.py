@@ -103,6 +103,32 @@ class FakeAsyncFrameWriter:
             raise self.failure
 
 
+class BlockingAsyncFrameWriter(FakeAsyncFrameWriter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = asyncio.Event()
+
+    async def write_frame(self, frame: bytes) -> None:
+        await super().write_frame(frame)
+        await self.release.wait()
+
+
+class CloseBlockingAsyncSerialReader(FakeAsyncSerialReader):
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_started = asyncio.Event()
+        self.release_close = asyncio.Event()
+        self.close_completed = asyncio.Event()
+
+    async def close(self) -> None:
+        self.closed = True
+        self.close_count += 1
+        self.close_started.set()
+        await self.release_close.wait()
+        self.closed_event.set()
+        self.close_completed.set()
+
+
 class TerminationBarrierAdapter(AsyncEnhancedSerialAdapter):
     """Pause cleanup after request code has selected its terminal outcome."""
 
@@ -160,6 +186,14 @@ async def _receive_after_entering(
     return await adapter.receive_event()
 
 
+async def _close_after_entering(
+    adapter: AsyncEnhancedSerialAdapter,
+    entered: asyncio.Event,
+) -> None:
+    entered.set()
+    await adapter.close()
+
+
 async def test_request_routes_response_and_retains_interleaved_event() -> None:
     """Fails if command routing consumes or reorders interleaved UART evidence."""
 
@@ -182,6 +216,41 @@ async def test_request_routes_response_and_retains_interleaved_event() -> None:
         segment_id=3, timestamp_us=0, channel=0, data=b"X"
     )
     await adapter.close()
+
+
+async def test_same_batch_response_waits_for_capacity_one_evidence_admission() -> None:
+    """Fails if a response overtakes earlier evidence blocked outside the FIFO."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer, event_queue_capacity=1)
+    await adapter.start(0.1)
+    request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+
+    try:
+        reader.feed(
+            b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+            b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"WQ=="}\n'
+            b'{"ok":true,"timestamp_us":12}\n'
+        )
+        await asyncio.wait_for(reader.second_read_returned.wait(), timeout=0.1)
+
+        pending = adapter._pending_response
+        assert pending is not None
+        assert not pending.done()
+        assert not request.done()
+        assert await adapter.receive_event(0.1) == UartReceiveEvent(
+            segment_id=3, timestamp_us=0, channel=0, data=b"X"
+        )
+        assert await request == CommandSuccessMessage(timestamp_us=12)
+        assert await adapter.receive_event(0.1) == UartReceiveEvent(
+            segment_id=3, timestamp_us=1, channel=0, data=b"Y"
+        )
+    finally:
+        await adapter.close()
+        await asyncio.gather(request, return_exceptions=True)
 
 
 async def test_concurrent_requests_write_only_one_frame_at_a_time() -> None:
@@ -410,11 +479,11 @@ async def test_same_batch_parser_error_precedes_response_and_retains_event() -> 
         b'{"type":}\n'
     )
 
-    with pytest.raises(BackendInputError, match="not valid JSON") as request_error:
-        await request
     assert await adapter.receive_event(0.1) == UartReceiveEvent(
         segment_id=3, timestamp_us=0, channel=0, data=b"X"
     )
+    with pytest.raises(BackendInputError, match="not valid JSON") as request_error:
+        await request
     await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
     assert await adapter.receive_event(0.1) == UartReceiveEvent(
         segment_id=3, timestamp_us=10, channel=0, data=b"Y"
@@ -422,6 +491,47 @@ async def test_same_batch_parser_error_precedes_response_and_retains_event() -> 
     with pytest.raises(BackendInputError, match="not valid JSON") as event_error:
         await adapter.receive_event(0.1)
     assert event_error.value is request_error.value
+
+
+async def test_same_batch_parser_terminal_waits_for_capacity_one_prefix_admission(
+) -> None:
+    """Fails if malformed input becomes observable before valid-prefix admission."""
+
+    reader = FakeAsyncSerialReader()
+    writer = FakeAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer, event_queue_capacity=1)
+    await adapter.start(0.1)
+    request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+
+    try:
+        reader.feed(
+            b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+            b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"WQ=="}\n'
+            b'{"type":}\n'
+        )
+        await asyncio.wait_for(reader.second_read_returned.wait(), timeout=0.1)
+
+        pending = adapter._pending_response
+        assert pending is not None
+        assert not pending.done()
+        assert not request.done()
+        assert await adapter.receive_event(0.1) == UartReceiveEvent(
+            segment_id=3, timestamp_us=0, channel=0, data=b"X"
+        )
+        with pytest.raises(BackendInputError, match="not valid JSON") as request_error:
+            await request
+        assert await adapter.receive_event(0.1) == UartReceiveEvent(
+            segment_id=3, timestamp_us=1, channel=0, data=b"Y"
+        )
+        for _ in range(2):
+            with pytest.raises(BackendInputError, match="not valid JSON") as replayed:
+                await adapter.receive_event(0.1)
+            assert replayed.value is request_error.value
+    finally:
+        await adapter.close()
+        await asyncio.gather(request, return_exceptions=True)
 
 
 async def test_start_uses_one_reader_and_returns_normalized_hello() -> None:
@@ -474,6 +584,24 @@ async def test_start_preserves_parser_error_after_valid_hello_and_post_hello_mes
         await adapter.start(0.1)
 
     assert raised.value.input_error == "invalid_json"
+    await adapter.close()
+    assert reader.close_count == 1
+
+
+async def test_start_preserves_event_validation_after_hello_in_the_same_batch() -> None:
+    """Fails if hello resolves before all same-batch event semantics are valid."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(
+        HELLO_FRAME
+        + b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
+        + b'{"type":"uart","channel":0,"timestamp_us":9,"data_b64":"WQ=="}\n'
+    )
+    adapter = make_adapter(reader)
+
+    with pytest.raises(BackendInputError, match="precedes its segment origin"):
+        await adapter.start(0.1)
+
     await adapter.close()
     assert reader.close_count == 1
 
@@ -1065,3 +1193,92 @@ async def test_close_fails_pending_and_queued_commands() -> None:
         await receive
     assert first_error.value is second_error.value is event_error.value
     assert writer.frames == [b'{"cmd":"one"}\n']
+
+
+async def test_close_releases_request_blocked_in_write_frame() -> None:
+    """Fails if close cannot release a transmitted request blocked in the writer."""
+
+    reader = FakeAsyncSerialReader()
+    writer = BlockingAsyncFrameWriter()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, writer)
+    await adapter.start(0.1)
+    first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    second_entered = asyncio.Event()
+    second = asyncio.create_task(
+        _request_after_entering(
+            adapter,
+            second_entered,
+            b'{"cmd":"two"}\n',
+            1.0,
+        )
+    )
+    await asyncio.wait_for(second_entered.wait(), timeout=0.1)
+    assert adapter._command_lock.locked()
+    assert not second.done()
+    consumer_entered = asyncio.Event()
+    receive = asyncio.create_task(_receive_after_entering(adapter, consumer_entered))
+    await asyncio.wait_for(consumer_entered.wait(), timeout=0.1)
+    assert not receive.done()
+
+    await adapter.close()
+
+    pending_tasks: set[asyncio.Task[object]] = set()
+    try:
+        _, pending = await asyncio.wait(
+            {first, second, receive},
+            timeout=0.1,
+        )
+        pending_tasks = set(pending)
+        assert pending_tasks == set()
+    finally:
+        if pending_tasks:
+            writer.release.set()
+        await asyncio.gather(first, second, receive, return_exceptions=True)
+
+    with pytest.raises(BackendDisconnectedError) as first_error:
+        await first
+    with pytest.raises(BackendDisconnectedError) as second_error:
+        await second
+    with pytest.raises(BackendDisconnectedError) as event_error:
+        await receive
+    assert first_error.value is second_error.value is event_error.value
+    assert writer.frames == [b'{"cmd":"one"}\n']
+    assert not writer.release.is_set()
+
+
+async def test_resource_close_completion_is_shared_across_reader_cancellation_and_close(
+) -> None:
+    """Fails if cancellation turns resource-close start into false completion."""
+
+    reader = CloseBlockingAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    reader.feed(b"")
+    await asyncio.wait_for(reader.close_started.wait(), timeout=0.1)
+    reader_task = adapter._reader_task
+    assert reader_task is not None
+    reader_stopped = asyncio.Event()
+    reader_task.add_done_callback(lambda _task: reader_stopped.set())
+    first_entered = asyncio.Event()
+    second_entered = asyncio.Event()
+    first = asyncio.create_task(_close_after_entering(adapter, first_entered))
+    second = asyncio.create_task(_close_after_entering(adapter, second_entered))
+    await asyncio.wait_for(first_entered.wait(), timeout=0.1)
+    await asyncio.wait_for(second_entered.wait(), timeout=0.1)
+    await asyncio.wait_for(reader_stopped.wait(), timeout=0.1)
+
+    try:
+        assert not first.done()
+        assert not second.done()
+    finally:
+        reader.release_close.set()
+        await asyncio.gather(first, second, return_exceptions=True)
+
+    await adapter.close()
+    assert first.exception() is None
+    assert second.exception() is None
+    assert reader.close_completed.is_set()
+    assert reader.close_count == 1
