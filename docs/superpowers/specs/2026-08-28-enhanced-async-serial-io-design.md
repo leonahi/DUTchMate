@@ -4,8 +4,7 @@
 
 **Phase:** Phase 1, continuous ingestion and asynchronous Enhanced adapter
 
-**Status:** Proposed; design direction approved on 2026-08-28, written-spec
-review pending
+**Status:** Approved on 2026-08-28
 
 ## Purpose
 
