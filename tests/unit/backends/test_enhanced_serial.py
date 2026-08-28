@@ -41,6 +41,7 @@ class FakeAsyncSerialReader:
         self.maximum_concurrent_reads = 0
         self.reading = asyncio.Event()
         self.second_read_started = asyncio.Event()
+        self.second_read_returned = asyncio.Event()
         self.third_read_started = asyncio.Event()
         self.next_chunk_requested = asyncio.Event()
         self.closed_event = asyncio.Event()
@@ -67,6 +68,8 @@ class FakeAsyncSerialReader:
             outcome = await self.outcomes.get()
         finally:
             self.active_reads -= 1
+        if self.read_calls == 2:
+            self.second_read_returned.set()
         if isinstance(outcome, Exception):
             raise outcome
         if outcome:
@@ -135,6 +138,26 @@ def make_adapter(
 def _compact_json_frame_of_size(size: int) -> bytes:
     baseline = b'{"cmd":"test","data":""}\n'
     return b'{"cmd":"test","data":"' + b"x" * (size - len(baseline)) + b'"}\n'
+
+
+async def _request_after_entering(
+    adapter: AsyncEnhancedSerialAdapter,
+    entered: asyncio.Event,
+    command: bytes,
+    timeout_s: float,
+) -> CommandSuccessMessage | CommandErrorMessage:
+    entered.set()
+    response = await adapter.request(command, timeout_s)
+    assert isinstance(response, (CommandSuccessMessage, CommandErrorMessage))
+    return response
+
+
+async def _receive_after_entering(
+    adapter: AsyncEnhancedSerialAdapter,
+    entered: asyncio.Event,
+) -> object:
+    entered.set()
+    return await adapter.receive_event()
 
 
 async def test_request_routes_response_and_retains_interleaved_event() -> None:
@@ -759,8 +782,9 @@ async def test_event_queue_backpressures_without_losing_fifo() -> None:
         b'{"type":"uart","channel":0,"timestamp_us":11,"data_b64":"WQ=="}\n'
     )
 
-    await asyncio.sleep(0)
+    await asyncio.wait_for(reader.second_read_returned.wait(), timeout=0.1)
     assert not reader.third_read_started.is_set()
+    assert reader.active_reads == 0
     assert reader.maximum_concurrent_reads == 1
     assert await adapter.receive_event(0.1) == UartReceiveEvent(
         segment_id=3, timestamp_us=0, channel=0, data=b"X"
@@ -822,7 +846,8 @@ async def test_invalid_frame_fails_response_but_keeps_prior_event() -> None:
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
     request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 0.1))
-    await asyncio.sleep(0)
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    assert not request.done()
     reader.feed(
         b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
         b'{"ok":true}\n'
@@ -882,18 +907,31 @@ async def test_cancel_while_waiting_for_command_lock_keeps_connection() -> None:
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
     first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 0.1))
-    blocked = asyncio.create_task(adapter.request(b'{"cmd":"two"}\n', 0.1))
-    await asyncio.sleep(0)
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    blocked_entered = asyncio.Event()
+    blocked = asyncio.create_task(
+        _request_after_entering(
+            adapter,
+            blocked_entered,
+            b'{"cmd":"two"}\n',
+            0.1,
+        )
+    )
+    await asyncio.wait_for(blocked_entered.wait(), timeout=0.1)
+    assert adapter._command_lock.locked()
+    assert not blocked.done()
     blocked.cancel()
     with pytest.raises(asyncio.CancelledError):
         await blocked
+    assert writer.frames == [b'{"cmd":"one"}\n']
 
     reader.feed(b'{"ok":true}\n')
     assert await first == CommandSuccessMessage()
     third = asyncio.create_task(adapter.request(b'{"cmd":"three"}\n', 0.1))
-    await asyncio.sleep(0)
+    assert await writer.written.get() == b'{"cmd":"three"}\n'
     reader.feed(b'{"ok":true,"timestamp_us":3}\n')
     assert await third == CommandSuccessMessage(timestamp_us=3)
+    assert writer.frames == [b'{"cmd":"one"}\n', b'{"cmd":"three"}\n']
     assert reader.maximum_concurrent_reads == 1
     await adapter.close()
 
@@ -907,7 +945,8 @@ async def test_cancel_after_transmission_closes_connection() -> None:
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
     request = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
-    await asyncio.sleep(0)
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    assert not request.done()
     assert writer.frames == [b'{"cmd":"one"}\n']
 
     request.cancel()
@@ -954,19 +993,43 @@ async def test_close_is_idempotent_and_wakes_event_consumer() -> None:
     reader.feed(HELLO_FRAME)
     adapter = make_adapter(reader)
     await adapter.start(0.1)
-    receive = asyncio.create_task(adapter.receive_event())
-    await asyncio.sleep(0)
+    consumer_entered = asyncio.Event()
+    receive = asyncio.create_task(_receive_after_entering(adapter, consumer_entered))
+    await asyncio.wait_for(consumer_entered.wait(), timeout=0.1)
+    assert not receive.done()
 
     await adapter.close()
     await adapter.close()
 
-    with pytest.raises(BackendDisconnectedError):
+    with pytest.raises(BackendDisconnectedError) as consumer_error:
         await receive
+    with pytest.raises(BackendDisconnectedError) as replayed_error:
+        await adapter.receive_event(0.1)
+    assert consumer_error.value is replayed_error.value
+    assert reader.close_count == 1
+
+
+async def test_close_wakes_blocked_hello_with_retained_terminal() -> None:
+    """Fails if close strands hello or exposes a different terminal object."""
+
+    reader = FakeAsyncSerialReader()
+    adapter = make_adapter(reader)
+    start = asyncio.create_task(adapter.start(1.0))
+    await asyncio.wait_for(reader.reading.wait(), timeout=0.1)
+    assert not start.done()
+
+    await adapter.close()
+
+    with pytest.raises(BackendDisconnectedError) as hello_error:
+        await start
+    with pytest.raises(BackendDisconnectedError) as replayed_error:
+        await adapter.receive_event(0.1)
+    assert hello_error.value is replayed_error.value
     assert reader.close_count == 1
 
 
 async def test_close_fails_pending_and_queued_commands() -> None:
-    """Fails if close strands a sent command or lets a queued command transmit."""
+    """Fails if close strands waiters, changes errors, or transmits queued work."""
 
     reader = FakeAsyncSerialReader()
     writer = FakeAsyncFrameWriter()
@@ -974,13 +1037,31 @@ async def test_close_fails_pending_and_queued_commands() -> None:
     adapter = make_adapter(reader, writer)
     await adapter.start(0.1)
     first = asyncio.create_task(adapter.request(b'{"cmd":"one"}\n', 1.0))
-    second = asyncio.create_task(adapter.request(b'{"cmd":"two"}\n', 1.0))
-    await asyncio.sleep(0)
+    assert await writer.written.get() == b'{"cmd":"one"}\n'
+    second_entered = asyncio.Event()
+    second = asyncio.create_task(
+        _request_after_entering(
+            adapter,
+            second_entered,
+            b'{"cmd":"two"}\n',
+            1.0,
+        )
+    )
+    await asyncio.wait_for(second_entered.wait(), timeout=0.1)
+    assert adapter._command_lock.locked()
+    assert not second.done()
+    consumer_entered = asyncio.Event()
+    receive = asyncio.create_task(_receive_after_entering(adapter, consumer_entered))
+    await asyncio.wait_for(consumer_entered.wait(), timeout=0.1)
+    assert not receive.done()
 
     await adapter.close()
 
-    with pytest.raises(BackendDisconnectedError):
+    with pytest.raises(BackendDisconnectedError) as first_error:
         await first
-    with pytest.raises(BackendDisconnectedError):
+    with pytest.raises(BackendDisconnectedError) as second_error:
         await second
+    with pytest.raises(BackendDisconnectedError) as event_error:
+        await receive
+    assert first_error.value is second_error.value is event_error.value
     assert writer.frames == [b'{"cmd":"one"}\n']

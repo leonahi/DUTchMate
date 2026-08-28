@@ -57,7 +57,7 @@ Working tree based on the pending current Task 5 commit, reviewed 2026-08-28:
 
 - Ruff: passed on the Task 5 focused lifecycle and supporting protocol modules
 - Mypy: passed on the Enhanced adapter and device-connection modules
-- Pytest: 1020 passed, including 12 portable Zephyr DUT protocol tests
+- Pytest: 1021 passed, including 12 portable Zephyr DUT protocol tests
 - Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
   Zephyr SDK 1.0.1; UF2 generated
 - Basic HIL procedure/report template: added at
@@ -94,8 +94,9 @@ Working tree based on the pending current Task 5 commit, reviewed 2026-08-28:
 - Enhanced async lifecycle: bounded FIFO backpressure without drop or reorder,
   valid-prefix-before-terminal ordering, retained terminal identity and frame
   size context, disconnect cause retention, cancellation boundaries, timeout
-  terminalization, waiter wake-up, and exactly-once close passed (134 focused
-  tests)
+  terminalization, blocked-hello/command/event waiter wake-up with shared error
+  identity, and exactly-once close passed using explicit state barriers (135
+  focused tests)
 - Enhanced HIL: no committed run
 - Ring-buffer decision: `selected_unvalidated`
 
