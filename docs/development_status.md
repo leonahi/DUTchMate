@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: pending current final-review fix commit on 2026-08-28
+> Code baseline reviewed: `8057b7f` on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -54,8 +54,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on the pending current final-review fix commit, reviewed
-2026-08-28:
+Working tree based on `8057b7f`, reviewed 2026-08-28:
 
 - Ruff: `.venv/bin/ruff check .` passed
 - Mypy: `.venv/bin/mypy` passed with no issues in 70 source files
