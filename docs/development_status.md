@@ -55,8 +55,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on the pending current async serial I/O commit, reviewed
-2026-08-28:
+Working tree based on code baseline `cb45577`, reviewed 2026-08-28:
 
 - Ruff: `.venv/bin/ruff check .` passed
 - Mypy: `.venv/bin/mypy` passed with no issues in 71 source files
