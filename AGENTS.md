@@ -86,10 +86,17 @@ When the user types `/graphify`, use the installed graphify skill or instruction
 
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- Keep the shared canonical graph artifacts tracked: `graph.json`, `graph.html`,
+  `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json`,
+  `.graphify_labels.json.sig`, `.vocab.txt`, and `cost.json`.
+- Treat caches, dated snapshots, query memory, learning/reflection state,
+  interpreter/root paths, query stamps, and temporary extraction files as local
+  runtime state. They must remain ignored and must not be staged.
+- A Graphify query may update ignored local runtime state, but it should not leave
+  tracked canonical artifacts dirty. Unexpected canonical changes should be
+  investigated rather than carried as unrelated working-tree dirt.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
 ## DUTchMate Graphify Usage Policy
 
@@ -122,5 +129,9 @@ Update the Graphify graph after meaningful structural changes such as:
 - changing shared interfaces or ports;
 - changing dependencies between architectural layers;
 - significant multi-module refactoring.
+
+After such a change, run `graphify update .` and include changed canonical graph
+artifacts in the same commit as the structural change. Do not stage ignored local
+runtime state.
 
 Do not update the graph after every trivial localized edit.

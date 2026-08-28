@@ -10,6 +10,7 @@ accepted
 accepts
 accounting
 acknowledgement
+acknowledges
 aclose
 acquire
 across
@@ -39,6 +40,7 @@ allows
 already
 and
 another
+answer
 any
 api
 app
@@ -93,6 +95,7 @@ begin
 behavior
 behind
 between
+binary
 blocked
 blocking
 blocks
@@ -113,6 +116,7 @@ buffered
 buffering
 buffers
 build
+burst
 but
 byte
 bytes
@@ -142,6 +146,7 @@ channel
 channels
 characters
 check
+checking
 checklist
 choose
 chunk
@@ -150,6 +155,7 @@ class
 classification
 classified
 classifies
+classify
 claude
 cleanly
 cleanup
@@ -171,6 +177,7 @@ combinations
 command
 commanded
 commands
+comment
 commit
 committed
 compact
@@ -181,6 +188,7 @@ compatibility
 compatible
 complete
 completed
+completely
 completes
 completion
 comports
@@ -294,6 +302,7 @@ directly
 directories
 directory
 disabled
+disappears
 discard
 discards
 disconnect
@@ -308,6 +317,7 @@ display
 distinct
 distinctly
 distinguishes
+dmf
 document
 does
 domain
@@ -315,6 +325,7 @@ done
 draft
 drain
 drains
+drive
 drop
 dropped
 drops
@@ -333,6 +344,7 @@ electrical
 eligibility
 eligible
 embedded
+emit
 emits
 emitted
 empty
@@ -351,6 +363,8 @@ enter
 entry
 entrypoint
 enum
+equals
+equipment
 error
 errors
 establish
@@ -428,6 +442,7 @@ find
 finish
 finishes
 finite
+firm
 firmware
 first
 fit
@@ -435,6 +450,7 @@ fixed
 fixture
 flag
 flags
+flash
 flush
 folder
 follows
@@ -449,6 +465,7 @@ found
 foundation
 frame
 frames
+framework
 frameworks
 from
 fsync
@@ -473,6 +490,7 @@ handler
 handlers
 handshake
 hardware
+harness
 has
 health
 held
@@ -482,11 +500,13 @@ helper
 helpers
 hiding
 high
+hil
 hint
 hints
 holds
 honor
 host
+how
 http
 human
 idempotent
@@ -501,6 +521,7 @@ immutable
 impedance
 implementation
 import
+importing
 imports
 inactivity
 includes
@@ -522,6 +543,7 @@ initialize
 initializes
 input
 inputs
+inspect
 instance
 instead
 int
@@ -582,6 +604,7 @@ log
 logic
 logical
 logs
+loop
 losing
 loss
 lossy
@@ -590,6 +613,7 @@ lvc
 main
 malformed
 manifest
+manual
 manufacture
 map
 mapping
@@ -637,6 +661,7 @@ monkey
 monolith
 monotonic
 most
+move
 moves
 msgpack
 multi
@@ -646,6 +671,7 @@ mutate
 mutating
 mutation
 mutations
+mutes
 mvp
 name
 named
@@ -664,6 +690,7 @@ newline
 newly
 next
 node
+nodes
 non
 noncontiguous
 none
@@ -678,8 +705,10 @@ not
 now
 null
 number
+numbered
 numeric
 object
+objective
 objects
 observable
 observation
@@ -715,6 +744,7 @@ orphan
 other
 otherwise
 out
+outbound
 outcome
 outcomes
 output
@@ -728,6 +758,7 @@ own
 owned
 ownership
 owning
+paced
 package
 packages
 page
@@ -768,6 +799,7 @@ physical
 pico
 pid
 pin
+ping
 pipeline
 plan
 pluggable
@@ -795,6 +827,7 @@ prepared
 present
 preserve
 preserves
+preserving
 prevention
 prevents
 previous
@@ -825,6 +858,7 @@ protocol
 protocols
 prototype
 provenance
+proves
 provide
 provider
 provisional
@@ -859,6 +893,7 @@ read
 readable
 reader
 reading
+readme
 reads
 ready
 reason
@@ -899,6 +934,7 @@ remaps
 remote
 remove
 removes
+removing
 renders
 reopen
 reopens
@@ -936,6 +972,7 @@ response
 responses
 restart
 restore
+restores
 result
 results
 resume
@@ -974,6 +1011,7 @@ runs
 runtime
 safe
 safely
+safety
 same
 sanitized
 sanitizes
@@ -981,9 +1019,11 @@ satisfy
 saved
 scan
 scans
+scenario
 schema
 schemas
 schematic
+scope
 scripted
 sdk
 seconds
@@ -994,6 +1034,7 @@ select
 selected
 selection
 selects
+self
 semantic
 semantics
 send
@@ -1021,12 +1062,15 @@ sets
 setting
 settings
 shape
+shaped
 shared
 short
+should
 show
 side
 signal
 sigterm
+silent
 single
 size
 sizes
@@ -1047,9 +1091,11 @@ spec
 specific
 specification
 split
+splits
 stable
 stale
 standalone
+stands
 start
 started
 startup
@@ -1088,9 +1134,11 @@ supported
 supports
 surface
 surfaces
+surrogate
 surrounding
 suspend
 suspends
+sustained
 sync
 synchronous
 synchronously
@@ -1099,6 +1147,7 @@ table
 target
 tch
 telemetry
+tell
 terminal
 terminalization
 terminalize
@@ -1133,7 +1182,9 @@ title
 toml
 too
 tool
+total
 toward
+trace
 traceback
 track
 tracking
@@ -1164,10 +1215,12 @@ txu
 type
 typed
 uart
+unambiguous
 unavailable
 uncertain
 unconfigured
 underlying
+unescaped
 unexpected
 unicode
 unit
@@ -1175,6 +1228,7 @@ units
 unknown
 unlink
 unmatched
+unpaired
 unrelated
 unreported
 unsafe
@@ -1203,10 +1257,12 @@ valid
 validate
 validated
 validates
+validatio
 validation
 validator
 value
 values
+verification
 version
 video
 view
@@ -1223,6 +1279,7 @@ water
 way
 what
 when
+where
 whether
 while
 whisper
@@ -1235,6 +1292,7 @@ width
 window
 wins
 wire
+wiring
 with
 within
 without
