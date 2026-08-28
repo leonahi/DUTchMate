@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: pending current Task 5 commit on 2026-08-28
+> Code baseline reviewed: `df75715` on 2026-08-28
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -53,7 +53,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on the pending current Task 5 commit, reviewed 2026-08-28:
+Working tree based on `df75715`, reviewed 2026-08-28:
 
 - Ruff: passed on the Task 5 focused lifecycle and supporting protocol modules
 - Mypy: passed on the Enhanced adapter and device-connection modules
