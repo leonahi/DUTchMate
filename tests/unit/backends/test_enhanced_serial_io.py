@@ -5,11 +5,22 @@ import threading
 
 import pytest
 
+from dutchmate_core.backends import BackendInfo, BackendInputError
 from dutchmate_core.backends.enhanced_serial_io import (
     _OwnedStreamReader,
     _ThreadedSerialFrameWriter,
+    open_async_enhanced_serial_adapter,
 )
-from dutchmate_core.device_connection.transport import TransportWriteError
+from dutchmate_core.device_connection.messages import CommandSuccessMessage
+from dutchmate_core.device_connection.transport import (
+    TransportTimeoutError,
+    TransportWriteError,
+)
+
+HELLO_FRAME = (
+    b'{"type":"hello","v":1,"firmware":"0.1.0",'
+    b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
+)
 
 
 class FakeStreamReader:
@@ -44,6 +55,46 @@ class BlockingCloseStreamWriter:
         if self.wait_closed_failure is not None:
             raise self.wait_closed_failure
         self.close_completed.set()
+
+
+class FakeStreamTransport:
+    def __init__(self, serial_port: object | None) -> None:
+        self.serial_port = serial_port
+        self.extra_info_names: list[str] = []
+
+    def get_extra_info(self, name: str, default: object | None = None) -> object | None:
+        self.extra_info_names.append(name)
+        return self.serial_port if name == "serial" else default
+
+
+class FakeStreamWriter(BlockingCloseStreamWriter):
+    def __init__(self, serial_port: object | None) -> None:
+        super().__init__()
+        self.transport = FakeStreamTransport(serial_port)
+        self.stream_write_calls: list[bytes] = []
+        self.release_close.set()
+
+    def write(self, data: bytes) -> None:
+        self.stream_write_calls.append(data)
+        raise AssertionError("command frames must not use StreamWriter.write")
+
+
+class RecordingOpener:
+    def __init__(
+        self,
+        reader: FakeStreamReader,
+        writer: FakeStreamWriter,
+    ) -> None:
+        self.reader = reader
+        self.writer = writer
+        self.calls: list[dict[str, object]] = []
+        self.failure: Exception | None = None
+
+    async def __call__(self, **kwargs: object) -> tuple[FakeStreamReader, FakeStreamWriter]:
+        self.calls.append(kwargs)
+        if self.failure is not None:
+            raise self.failure
+        return self.reader, self.writer
 
 
 class ThreadTrackingSerial:
@@ -121,3 +172,167 @@ async def test_threaded_writer_preserves_partial_acceptance_error() -> None:
     assert raised.value.frame_bytes_accepted == 2
     assert raised.value.error == "hardware_fault"
     assert serial.flush_count == 0
+
+
+async def test_factory_returns_started_adapter_and_writes_on_stream_serial() -> None:
+    """Fails if startup, ownership, or exact command dispatch uses the wrong path."""
+
+    reader = FakeStreamReader()
+    reader.chunks.put_nowait(HELLO_FRAME)
+    serial = ThreadTrackingSerial([])
+    stream_writer = FakeStreamWriter(serial)
+    opener = RecordingOpener(reader, stream_writer)
+
+    adapter = await open_async_enhanced_serial_adapter(
+        port="/dev/ttyACM0",
+        segment_id=0,
+        open_connection=opener,
+    )
+    request = asyncio.create_task(adapter.request(b'{"cmd":"test"}\n', 0.1))
+    assert await asyncio.to_thread(serial.written.wait, 1.0)
+    reader.chunks.put_nowait(b'{"ok":true,"timestamp_us":8}\n')
+
+    assert await request == CommandSuccessMessage(timestamp_us=8)
+    assert opener.calls == [
+        {
+            "url": "/dev/ttyACM0",
+            "baudrate": 115200,
+            "limit": 65536,
+        }
+    ]
+    assert adapter.info == BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        device="dutchmate-rp2040",
+        firmware="0.1.0",
+        capabilities=frozenset({"uart_receive"}),
+    )
+    assert stream_writer.transport.extra_info_names == ["serial"]
+    assert stream_writer.stream_write_calls == []
+    assert serial.writes == [b'{"cmd":"test"}\n']
+
+    await adapter.close()
+    await adapter.close()
+    assert stream_writer.close_count == 1
+
+
+async def test_open_failure_is_preserved_before_any_stream_exists() -> None:
+    """Fails if opener errors are replaced or close an unreturned stream."""
+
+    reader = FakeStreamReader()
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+    opener.failure = OSError("open failed")
+
+    with pytest.raises(OSError, match="open failed"):
+        await open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=0,
+            open_connection=opener,
+        )
+
+    assert stream_writer.close_count == 0
+
+
+async def test_missing_serial_resource_closes_once_without_masking_primary() -> None:
+    """Fails if transport inspection leaks or cleanup replaces its primary error."""
+
+    reader = FakeStreamReader()
+    stream_writer = FakeStreamWriter(None)
+    stream_writer.wait_closed_failure = OSError("cleanup failed")
+    opener = RecordingOpener(reader, stream_writer)
+
+    with pytest.raises(
+        RuntimeError,
+        match="pyserial-asyncio transport omitted serial resource",
+    ):
+        await open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=0,
+            open_connection=opener,
+        )
+
+    assert stream_writer.close_count == 1
+
+
+async def test_constructor_failure_after_open_closes_once() -> None:
+    """Fails if adapter validation after open leaves the owned stream alive."""
+
+    reader = FakeStreamReader()
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+
+    with pytest.raises(ValueError, match="segment ID"):
+        await open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=-1,
+            open_connection=opener,
+        )
+
+    assert stream_writer.close_count == 1
+
+
+async def test_non_hello_start_failure_closes_once() -> None:
+    """Fails if hello classification or startup cleanup is bypassed."""
+
+    reader = FakeStreamReader()
+    reader.chunks.put_nowait(b'{"ok":true}\n')
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+
+    with pytest.raises(BackendInputError, match="Expected Enhanced hello"):
+        await open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=0,
+            open_connection=opener,
+        )
+
+    assert stream_writer.close_count == 1
+
+
+async def test_hello_timeout_closes_once_and_leaves_no_reader_task() -> None:
+    """Fails if timed-out startup leaves either transport or sole reader alive."""
+
+    reader = FakeStreamReader()
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+
+    with pytest.raises(TransportTimeoutError, match="Enhanced hello"):
+        await open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=0,
+            hello_timeout_s=0.01,
+            open_connection=opener,
+        )
+
+    assert stream_writer.close_count == 1
+    assert not any(
+        task.get_name() == "dutchmate-enhanced-serial-reader" and not task.done()
+        for task in asyncio.all_tasks()
+    )
+
+
+async def test_cancelled_factory_wait_closes_once_before_propagating() -> None:
+    """Fails if cancellation escapes before closing or leaves the reader running."""
+
+    reader = FakeStreamReader()
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+    opening = asyncio.create_task(
+        open_async_enhanced_serial_adapter(
+            port="/dev/ttyACM0",
+            segment_id=0,
+            open_connection=opener,
+        )
+    )
+    await reader.read_started.wait()
+
+    opening.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await opening
+
+    assert stream_writer.close_count == 1
+    assert not any(
+        task.get_name() == "dutchmate-enhanced-serial-reader" and not task.done()
+        for task in asyncio.all_tasks()
+    )

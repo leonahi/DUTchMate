@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Protocol
+import importlib
+from collections.abc import Awaitable, Callable
+from typing import Protocol, cast
 
+from dutchmate_core.backends.enhanced_serial import (
+    DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY,
+    AsyncEnhancedSerialAdapter,
+)
 from dutchmate_core.device_connection.serial_transport import (
+    DEFAULT_BAUDRATE,
     SerialFrameSink,
     write_serial_frame,
 )
+from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
+
+DEFAULT_ASYNC_HELLO_TIMEOUT_SECONDS = 1.0
 
 
 class _StreamReader(Protocol):
@@ -16,12 +26,30 @@ class _StreamReader(Protocol):
         """Return the next bytes or empty bytes for EOF."""
 
 
+class _StreamTransport(Protocol):
+    def get_extra_info(self, name: str, default: object | None = None) -> object | None:
+        """Return transport-owned connection information."""
+
+
 class _StreamWriter(Protocol):
+    transport: _StreamTransport
+
     def close(self) -> None:
         """Begin closing the stream transport."""
 
     async def wait_closed(self) -> None:
         """Wait until the stream transport is closed."""
+
+
+class OpenSerialConnection(Protocol):
+    def __call__(
+        self,
+        *,
+        url: str,
+        baudrate: int,
+        limit: int,
+    ) -> Awaitable[tuple[_StreamReader, _StreamWriter]]:
+        """Open one pyserial-asyncio stream pair."""
 
 
 class _OwnedStreamReader:
@@ -51,3 +79,66 @@ class _ThreadedSerialFrameWriter:
 
     async def write_frame(self, frame: bytes) -> None:
         await asyncio.to_thread(write_serial_frame, self._serial_port, frame)
+
+
+def _serial_asyncio_opener() -> OpenSerialConnection:
+    module = importlib.import_module("serial_asyncio")
+    return cast(OpenSerialConnection, module.open_serial_connection)
+
+
+async def _run_cleanup(close: Callable[[], Awaitable[None]]) -> None:
+    await close()
+
+
+async def _close_without_masking_primary(
+    close: Callable[[], Awaitable[None]],
+) -> None:
+    close_task = asyncio.create_task(_run_cleanup(close))
+    while True:
+        try:
+            await asyncio.shield(close_task)
+            return
+        except asyncio.CancelledError:
+            if close_task.done():
+                return
+        except BaseException:
+            return
+
+
+async def open_async_enhanced_serial_adapter(
+    *,
+    port: str,
+    segment_id: int,
+    baudrate: int = DEFAULT_BAUDRATE,
+    hello_timeout_s: float = DEFAULT_ASYNC_HELLO_TIMEOUT_SECONDS,
+    event_queue_capacity: int = DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY,
+    open_connection: OpenSerialConnection | None = None,
+) -> AsyncEnhancedSerialAdapter:
+    """Open, hello-validate, and return one production Enhanced adapter."""
+
+    opener = open_connection if open_connection is not None else _serial_asyncio_opener()
+    stream_reader, stream_writer = await opener(
+        url=port,
+        baudrate=baudrate,
+        limit=MAX_DEVICE_FRAME_BYTES,
+    )
+    owned_reader = _OwnedStreamReader(stream_reader, stream_writer)
+    adapter: AsyncEnhancedSerialAdapter | None = None
+    try:
+        serial_resource = stream_writer.transport.get_extra_info("serial")
+        if serial_resource is None:
+            raise RuntimeError("pyserial-asyncio transport omitted serial resource")
+        writer = _ThreadedSerialFrameWriter(cast(SerialFrameSink, serial_resource))
+        adapter = AsyncEnhancedSerialAdapter(
+            reader=owned_reader,
+            writer=writer,
+            port=port,
+            segment_id=segment_id,
+            event_queue_capacity=event_queue_capacity,
+        )
+        await adapter.start(hello_timeout_s)
+        return adapter
+    except BaseException:
+        close = adapter.close if adapter is not None else owned_reader.close
+        await _close_without_masking_primary(close)
+        raise
