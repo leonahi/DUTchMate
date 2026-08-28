@@ -244,6 +244,82 @@ async def test_async_uart_sender_preserves_backend_input_error_before_transport_
     assert raised.value is failure
 
 
+async def test_async_uart_sender_classifies_device_frame_too_large() -> None:
+    failure = FrameTooLargeError(
+        observed_frame_bytes=65537,
+        max_frame_bytes=65536,
+    )
+    transport = FakeAsyncCommandTransport(failure)
+
+    with pytest.raises(BackendInputError) as raised:
+        await AsyncEnhancedUartSender(transport).send_uart(b"go\n")
+
+    assert raised.value.operation == "uart_send"
+    assert raised.value.backend_mode == "enhanced"
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == 65537
+    assert raised.value.max_frame_bytes == 65536
+    assert transport.requests == [
+        (b'{"cmd":"uart_send","data_b64":"Z28K"}\n', 1.0)
+    ]
+
+
+async def test_async_device_control_classifies_device_frame_too_large() -> None:
+    failure = FrameTooLargeError(
+        observed_frame_bytes=65537,
+        max_frame_bytes=65536,
+    )
+    transport = FakeAsyncCommandTransport(failure)
+
+    with pytest.raises(BackendInputError) as raised:
+        await AsyncEnhancedDeviceControl(transport).pulse_control(
+            channel="CTRL0", pulse_ms=100
+        )
+
+    assert raised.value.operation == "reset"
+    assert raised.value.backend_mode == "enhanced"
+    assert raised.value.input_error == "frame_too_large"
+    assert raised.value.observed_frame_bytes == 65537
+    assert raised.value.max_frame_bytes == 65536
+    assert transport.requests == [
+        (b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n', 1.0)
+    ]
+
+
+async def test_async_device_control_preserves_host_frame_validation_identity() -> None:
+    failure = HostCommandFrameTooLargeError(
+        actual_frame_bytes=2049,
+        max_frame_bytes=2048,
+    )
+    transport = FakeAsyncCommandTransport(failure)
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        await AsyncEnhancedDeviceControl(transport).pulse_control(
+            channel="CTRL0", pulse_ms=100
+        )
+
+    assert raised.value is failure
+    assert transport.requests == [
+        (b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n', 1.0)
+    ]
+
+
+async def test_async_uart_sender_preserves_host_frame_validation_identity() -> None:
+    failure = HostCommandFrameTooLargeError(
+        actual_frame_bytes=2049,
+        max_frame_bytes=2048,
+    )
+    transport = FakeAsyncCommandTransport(failure)
+
+    with pytest.raises(HostCommandFrameTooLargeError) as raised:
+        await AsyncEnhancedUartSender(transport).send_uart(b"go\n")
+
+    assert raised.value is failure
+    assert transport.requests == [
+        (b'{"cmd":"uart_send","data_b64":"Z28K"}\n', 1.0)
+    ]
+
+
 def test_enhanced_uart_sender_requires_complete_timestamped_acknowledgement() -> None:
     transport = FakeCommandTransport(
         CommandSuccessMessage(timestamp_us=500, bytes_accepted=3)
