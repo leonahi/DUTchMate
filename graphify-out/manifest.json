@@ -510,9 +510,9 @@
     "semantic_hash": "b486ba3bc33caac065a74cbfd1d9fec8"
   },
   "core/src/dutchmate_core/runtime.py": {
-    "mtime": 1787995970.2484004,
-    "seen": 1787996111.0815492,
-    "ast_hash": "6b70cfdc4d51678e1053a3c931c98e16",
+    "mtime": 1788012656.741906,
+    "seen": 1788012699.650364,
+    "ast_hash": "ed897bf5e4a95080a6ee49723fa572db",
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/session_store/__init__.py": {
@@ -1242,9 +1242,9 @@
     "semantic_hash": ""
   },
   "tests/unit/runtime/test_device_core_lifecycle.py": {
-    "mtime": 1787995955.2878036,
-    "seen": 1787996111.0816011,
-    "ast_hash": "3f996d6b78518c1e08efd0a53819b93b",
+    "mtime": 1788012633.473897,
+    "seen": 1788012699.6504169,
+    "ast_hash": "70b8e179f9f77b16749246de6f145454",
     "semantic_hash": ""
   }
 }

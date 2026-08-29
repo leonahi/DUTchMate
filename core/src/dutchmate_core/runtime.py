@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import partial
-from threading import RLock
+from threading import Event, RLock
 from typing import Literal, Protocol
 
 from dutchmate_core.backends.contracts import (
@@ -269,7 +269,14 @@ class DeviceCoreRuntime:
         self._reconnect_timeout_s = reconnect_timeout_s
         self._reconnect_deadline: float | None = None
         self._operation_lock = RLock()
+        self._closing = False
         self._closed = False
+        self._close_complete = Event()
+        self._close_error: BaseException | None = None
+        self._reconnect_in_progress = False
+        self._reconnect_complete = Event()
+        self._reconnect_complete.set()
+        self._reconnect_cleanup_error: BaseException | None = None
 
     @property
     def session_store(self) -> DeviceCoreSessionStorage:
@@ -282,12 +289,47 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             if self._closed:
+                retained_error = self._close_error
+                if retained_error is not None:
+                    raise retained_error
                 return
-            self._closed = True
-            source = self._message_source
-            self._message_source = None
-        if source is not None:
-            self._close_event_source(source)
+            if self._closing:
+                first_closer = False
+                source = None
+                reconnect_in_progress = False
+            else:
+                self._closing = True
+                first_closer = True
+                source = self._message_source
+                self._message_source = None
+                reconnect_in_progress = self._reconnect_in_progress
+                self._mark_backend_disconnected()
+
+        if not first_closer:
+            self._close_complete.wait()
+            with self._operation_lock:
+                retained_error = self._close_error
+            if retained_error is not None:
+                raise retained_error
+            return
+
+        close_error: BaseException | None = None
+        try:
+            if source is not None:
+                self._close_event_source(source)
+        except BaseException as exc:
+            close_error = exc
+        finally:
+            if reconnect_in_progress:
+                self._reconnect_complete.wait()
+            with self._operation_lock:
+                if close_error is None:
+                    close_error = self._reconnect_cleanup_error
+                self._close_error = close_error
+                self._closed = True
+            self._close_complete.set()
+        if close_error is not None:
+            raise close_error
 
     def list_sessions(
         self,
@@ -810,7 +852,13 @@ class DeviceCoreRuntime:
         if reconnect is None:
             return None
         with self._operation_lock:
+            if self._closing or self._closed:
+                return None
+            self._reconnect_in_progress = True
+            self._reconnect_cleanup_error = None
+            self._reconnect_complete.clear()
             self._reconnect_deadline = deadline
+            self._message_source = None
         try:
             replacement = reconnect(segment_id=segment_id, deadline=deadline)
             if replacement is None:
@@ -818,23 +866,41 @@ class DeviceCoreRuntime:
             try:
                 self._validate_replacement(expected_snapshot, replacement.backend_snapshot)
             except Exception:
-                self._close_event_source(replacement.source)
+                try:
+                    self._close_event_source(replacement.source)
+                except BaseException as exc:
+                    with self._operation_lock:
+                        if self._closing:
+                            self._reconnect_cleanup_error = exc
+                    raise
                 raise
             with self._operation_lock:
-                snapshot = replacement.backend_snapshot
-                self._message_source = replacement.source
-                self._connected = True
-                self._backend_mode = snapshot.info.mode
-                self._backend_info = snapshot.info
-                self._backend_capabilities = snapshot.info.capabilities
-                self._segment_context = snapshot.segment
-                self._active_segment_context = snapshot.segment
-                self._integrity = snapshot.integrity
-                self._port = snapshot.info.port
+                reject_replacement = self._closing or self._closed
+                if not reject_replacement:
+                    snapshot = replacement.backend_snapshot
+                    self._message_source = replacement.source
+                    self._connected = True
+                    self._backend_mode = snapshot.info.mode
+                    self._backend_info = snapshot.info
+                    self._backend_capabilities = snapshot.info.capabilities
+                    self._segment_context = snapshot.segment
+                    self._active_segment_context = snapshot.segment
+                    self._integrity = snapshot.integrity
+                    self._port = snapshot.info.port
+            if reject_replacement:
+                try:
+                    self._close_event_source(replacement.source)
+                except BaseException as exc:
+                    with self._operation_lock:
+                        self._reconnect_cleanup_error = exc
+                    raise
+                return None
             return replacement
         finally:
             with self._operation_lock:
+                self._reconnect_in_progress = False
                 self._reconnect_deadline = None
+            self._reconnect_complete.set()
 
     def _validate_replacement(
         self,
