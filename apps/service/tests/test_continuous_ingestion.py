@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from contextlib import suppress
 from threading import Condition, Event, Thread
 from threading import enumerate as enumerate_threads
 
@@ -9,6 +10,7 @@ import pytest
 from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendEvent,
+    BackendInputError,
     BufferStatusEvent,
     SegmentContext,
     SegmentTimestamp,
@@ -25,6 +27,7 @@ class ControlledSource:
         self.read_count = 0
         self.close_count = 0
         self.read_started = Event()
+        self.terminal_raised = Event()
         self.closed = False
 
     def publish(self, outcome: BackendEvent | BaseException | None) -> None:
@@ -43,6 +46,7 @@ class ControlledSource:
                 raise BackendDisconnectedError("source closed")
             outcome = self._outcomes.popleft()
         if isinstance(outcome, BaseException):
+            self.terminal_raised.set()
             raise outcome
         return outcome
 
@@ -62,6 +66,38 @@ class ControlledSource:
             self.close_count += 1
             self.closed = True
             self._condition.notify_all()
+
+
+class FailingCloseSource(ControlledSource):
+    def __init__(self, close_error: BaseException) -> None:
+        super().__init__()
+        self.close_error = close_error
+
+    def close(self) -> None:
+        super().close()
+        raise self.close_error
+
+
+class BlockingCloseSource(ControlledSource):
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_started = Event()
+        self.allow_close = Event()
+
+    def close(self) -> None:
+        self.close_started.set()
+        assert self.allow_close.wait(timeout=1)
+        super().close()
+
+
+class BlockingFailingCloseSource(BlockingCloseSource):
+    def __init__(self, close_error: BaseException) -> None:
+        super().__init__()
+        self.close_error = close_error
+
+    def close(self) -> None:
+        super().close()
+        raise self.close_error
 
 
 def segment(segment_id: int) -> SegmentContext:
@@ -154,6 +190,204 @@ def test_active_workflow_continues_after_source_timeout() -> None:
         coordinator.end_workflow()
     finally:
         close_coordinator(coordinator)
+
+
+@pytest.mark.parametrize(
+    "terminal",
+    [BackendDisconnectedError("removed"), BackendInputError("malformed")],
+)
+def test_active_workflow_drains_valid_prefix_before_same_terminal(
+    terminal: BaseException,
+) -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        coordinator.begin_workflow()
+        first = uart_event(b"first")
+        second = uart_event(b"second")
+        source.publish(first)
+        source.publish(second)
+        source.publish(terminal)
+
+        assert coordinator.read_event() is first
+        assert coordinator.read_event() is second
+        with pytest.raises(type(terminal)) as raised:
+            coordinator.read_event()
+
+        assert raised.value is terminal
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_idle_disconnect_is_retained_for_next_workflow() -> None:
+    source = ControlledSource()
+    terminal = BackendDisconnectedError("removed while idle")
+    coordinator = ContinuousIngestionCoordinator(source, event_wait_timeout_s=0.01)
+    try:
+        source.publish(terminal)
+        assert source.terminal_raised.wait(timeout=1)
+
+        coordinator.begin_workflow()
+        with pytest.raises(BackendDisconnectedError) as raised:
+            coordinator.read_event()
+
+        assert raised.value is terminal
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_unexpected_terminal_is_retained_and_replacement_is_rejected() -> None:
+    source = ControlledSource()
+    terminal = RuntimeError("unexpected read failure")
+    coordinator = ContinuousIngestionCoordinator(source, event_wait_timeout_s=0.01)
+    replacement = ControlledSource(segment_id=1)
+    try:
+        coordinator.begin_workflow()
+        source.publish(terminal)
+
+        with pytest.raises(RuntimeError) as raised:
+            coordinator.read_event()
+
+        assert raised.value is terminal
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(replacement)
+        assert replacement.close_count == 1
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_replacement_requires_successful_disconnect_source_detachment() -> None:
+    source = ControlledSource()
+    terminal = BackendDisconnectedError("removed")
+    coordinator = ContinuousIngestionCoordinator(source)
+    rejected = ControlledSource(segment_id=1)
+    accepted = ControlledSource(segment_id=2)
+    try:
+        coordinator.begin_workflow()
+        source.publish(terminal)
+        with pytest.raises(BackendDisconnectedError):
+            coordinator.read_event()
+
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(rejected)
+        assert rejected.close_count == 1
+        assert source.close_count == 0
+
+        coordinator.close_current_source_for_reconnect()
+        assert source.close_count == 1
+        coordinator.replace_source(accepted)
+        assert accepted.close_count == 0
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_disconnect_replacement_resumes_same_ingestion_thread_and_workflow() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    ingestion_thread = coordinator._thread  # noqa: SLF001 - lifecycle assertion.
+    try:
+        coordinator.begin_workflow()
+        source.publish(BackendDisconnectedError("removed"))
+        with pytest.raises(BackendDisconnectedError):
+            coordinator.read_event()
+
+        coordinator.close_current_source_for_reconnect()
+        replacement = ControlledSource(segment_id=1)
+        coordinator.replace_source(replacement)
+        assert coordinator._thread is ingestion_thread  # noqa: SLF001
+        assert ingestion_thread.is_alive()
+        assert coordinator.segment == replacement.segment
+
+        resumed = uart_event(b"resumed", segment_id=1)
+        replacement.publish(resumed)
+        assert coordinator.read_event() == resumed
+        coordinator.end_workflow()
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_input_error_rejects_reconnect_detachment_and_replacement() -> None:
+    source = ControlledSource()
+    terminal = BackendInputError("malformed")
+    coordinator = ContinuousIngestionCoordinator(source)
+    replacement = ControlledSource(segment_id=1)
+    try:
+        coordinator.begin_workflow()
+        source.publish(terminal)
+        with pytest.raises(BackendInputError) as raised:
+            coordinator.read_event()
+        assert raised.value is terminal
+
+        with pytest.raises(RuntimeError):
+            coordinator.close_current_source_for_reconnect()
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(replacement)
+        assert replacement.close_count == 1
+        assert source.close_count == 0
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_replacement_racing_with_close_is_closed_once_and_never_published() -> None:
+    source = BlockingCloseSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    replacement = ControlledSource(segment_id=1)
+    close_errors: list[BaseException] = []
+
+    def close() -> None:
+        try:
+            coordinator.close()
+        except BaseException as exc:
+            close_errors.append(exc)
+
+    closer = Thread(target=close)
+    closer.start()
+    assert source.close_started.wait(timeout=1)
+    try:
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(replacement)
+        assert replacement.close_count == 1
+        assert replacement.read_count == 0
+        assert coordinator.segment != replacement.segment
+    finally:
+        source.allow_close.set()
+        closer.join(timeout=1)
+
+    assert not closer.is_alive()
+    assert close_errors == []
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_reconnect_source_close_failure_prevents_and_is_retained_by_close() -> None:
+    close_error = RuntimeError("old source close failed")
+    source = FailingCloseSource(close_error)
+    coordinator = ContinuousIngestionCoordinator(source)
+    replacement = ControlledSource(segment_id=1)
+    try:
+        coordinator.begin_workflow()
+        source.publish(BackendDisconnectedError("removed"))
+        with pytest.raises(BackendDisconnectedError):
+            coordinator.read_event()
+
+        with pytest.raises(RuntimeError) as detach_failure:
+            coordinator.close_current_source_for_reconnect()
+        assert detach_failure.value is close_error
+        assert source.close_count == 1
+
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(replacement)
+        assert replacement.close_count == 1
+
+        with pytest.raises(RuntimeError) as first_close:
+            coordinator.close()
+        with pytest.raises(RuntimeError) as repeated_close:
+            coordinator.close()
+        assert first_close.value is close_error
+        assert repeated_close.value is close_error
+        assert not coordinator._thread.is_alive()  # noqa: SLF001
+    finally:
+        with suppress(RuntimeError):
+            coordinator.close()
 
 
 def test_second_begin_workflow_is_rejected() -> None:
@@ -314,3 +548,144 @@ def test_ending_workflow_unblocks_producer_without_leaking_blocked_event() -> No
         coordinator.end_workflow()
     finally:
         close_coordinator(coordinator)
+
+
+def test_close_while_idle_after_timeout_draining_stops_thread() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    source.publish(None)
+    assert source.wait_for_reads(2)
+
+    coordinator.close()
+
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_close_while_workflow_active_is_safe_for_finally_cleanup() -> None:
+    source = BlockingCloseSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    coordinator.begin_workflow()
+
+    closer = Thread(target=coordinator.close)
+    closer.start()
+    assert source.close_started.wait(timeout=1)
+    try:
+        coordinator.end_workflow()
+        coordinator.end_workflow()
+        with pytest.raises(RuntimeError):
+            coordinator.begin_workflow()
+    finally:
+        source.allow_close.set()
+        closer.join(timeout=1)
+
+    assert not closer.is_alive()
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_close_while_source_read_is_blocked_stops_thread() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    assert source.read_started.wait(timeout=1)
+
+    coordinator.close()
+
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_close_while_fifo_producer_is_blocked_stops_thread() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source, queue_capacity=1)
+    coordinator.begin_workflow()
+    source.publish(uart_event(b"queued"))
+    source.publish(uart_event(b"blocked"))
+    assert source.wait_for_reads(2)
+
+    coordinator.close()
+
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_close_while_ingestion_waits_for_replacement_stops_thread() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    coordinator.begin_workflow()
+    source.publish(BackendDisconnectedError("removed"))
+    with pytest.raises(BackendDisconnectedError):
+        coordinator.read_event()
+    coordinator.close_current_source_for_reconnect()
+
+    coordinator.close()
+
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+
+
+def test_close_wakes_active_reader_with_coordinator_owned_disconnect() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source, event_wait_timeout_s=10)
+    coordinator.begin_workflow()
+    reader_waiting = Event()
+    original_wait = coordinator._condition.wait  # noqa: SLF001
+
+    def signaling_wait(timeout: float | None = None) -> bool:
+        reader_waiting.set()
+        return original_wait(timeout)
+
+    coordinator._condition.wait = signaling_wait  # type: ignore[method-assign]  # noqa: SLF001
+    outcomes: list[BackendEvent | None | BaseException] = []
+
+    def read() -> None:
+        try:
+            outcomes.append(coordinator.read_event())
+        except BaseException as exc:
+            outcomes.append(exc)
+
+    reader = Thread(target=read)
+    reader.start()
+    assert reader_waiting.wait(timeout=1)
+
+    coordinator.close()
+    reader.join(timeout=1)
+
+    assert not reader.is_alive()
+    assert len(outcomes) == 1
+    terminal = outcomes[0]
+    assert isinstance(terminal, BackendDisconnectedError)
+    assert str(terminal) == "continuous ingestion coordinator is closed"
+
+
+def test_concurrent_close_calls_share_exact_cleanup_error_and_close_once() -> None:
+    close_error = RuntimeError("source close failed")
+    source = BlockingFailingCloseSource(close_error)
+    coordinator = ContinuousIngestionCoordinator(source)
+    errors: list[BaseException] = []
+
+    def close() -> None:
+        try:
+            coordinator.close()
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = Thread(target=close)
+    second = Thread(target=close)
+    first.start()
+    assert source.close_started.wait(timeout=1)
+    second.start()
+    second.join(timeout=0.05)
+    assert second.is_alive()
+    source.allow_close.set()
+    first.join(timeout=1)
+    second.join(timeout=1)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert source.close_count == 1
+    assert not coordinator._thread.is_alive()  # noqa: SLF001 - lifecycle assertion.
+    assert errors == [close_error, close_error]
+    with pytest.raises(RuntimeError) as repeated:
+        coordinator.close()
+    assert repeated.value is close_error
