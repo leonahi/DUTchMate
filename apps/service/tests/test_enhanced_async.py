@@ -62,6 +62,7 @@ class FakeAsyncEnhancedAdapter:
         block_receive: bool = False,
         block_close: bool = False,
         close_error: BaseException | None = None,
+        release_receive_during_close: bool = True,
         before_close: Callable[[], None] | None = None,
     ) -> None:
         self.info = info
@@ -72,6 +73,7 @@ class FakeAsyncEnhancedAdapter:
         self.segment_after_receive = segment_after_receive
         self.block_receive = block_receive
         self.close_error = close_error
+        self.release_receive_during_close = release_receive_during_close
         self.before_close = before_close
         self.close_count = 0
         self.discard_count = 0
@@ -80,6 +82,7 @@ class FakeAsyncEnhancedAdapter:
         self.receive_started = threading.Event()
         self.release_receive = threading.Event()
         self.close_started = threading.Event()
+        self.close_failed = threading.Event()
         self.release_close = threading.Event()
         if not block_close:
             self.release_close.set()
@@ -118,11 +121,13 @@ class FakeAsyncEnhancedAdapter:
         self.operation_thread_ids.append(threading.get_ident())
         self.close_count += 1
         self.close_started.set()
-        self.release_receive.set()
+        if self.release_receive_during_close:
+            self.release_receive.set()
         if self.before_close is not None:
             self.before_close()
         await asyncio.to_thread(self.release_close.wait)
         if self.close_error is not None:
+            self.close_failed.set()
             raise self.close_error
 
 
@@ -450,6 +455,78 @@ def test_concurrent_closers_share_adapter_cleanup_and_wait_for_it() -> None:
     assert not second.is_alive()
     assert errors == []
     assert fake.close_count == 1
+    assert not host._thread.is_alive()
+
+
+def test_close_error_drains_blocked_receive_and_is_shared_by_concurrent_closers() -> None:
+    close_error = RuntimeError("adapter close failed")
+    fake = FakeAsyncEnhancedAdapter(
+        info=_info(),
+        segment_id=0,
+        block_receive=True,
+        block_close=True,
+        close_error=close_error,
+        release_receive_during_close=False,
+    )
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0",
+        baudrate=460800,
+        segment_id=0,
+        open_adapter=OpenAdapterFake(fake),
+    )
+    loop = host._loop
+    assert loop is not None
+    original_call_soon_threadsafe = loop.call_soon_threadsafe
+    stop_requested = threading.Event()
+    allow_stop = threading.Event()
+    stop_callback = loop.stop
+
+    def record_stop(callback: object, *args: object, **kwargs: object) -> object:
+        if callback == stop_callback:
+            stop_requested.set()
+            allow_stop.wait()
+        return original_call_soon_threadsafe(callback, *args, **kwargs)
+
+    loop.call_soon_threadsafe = record_stop  # type: ignore[method-assign]
+    received: list[BackendEvent | None] = []
+    reader = threading.Thread(
+        target=lambda: received.append(host.read_event()),
+        daemon=True,
+    )
+    completed = [threading.Event(), threading.Event()]
+    close_errors: list[BaseException] = []
+
+    def close_from(index: int) -> None:
+        try:
+            host.close()
+        except BaseException as exc:
+            close_errors.append(exc)
+        finally:
+            completed[index].set()
+
+    reader.start()
+    assert fake.receive_started.wait(timeout=1)
+    first = threading.Thread(target=close_from, args=(0,))
+    second = threading.Thread(target=close_from, args=(1,))
+    first.start()
+    assert fake.close_started.wait(timeout=1)
+    second.start()
+    fake.release_close.set()
+    assert fake.close_failed.wait(timeout=1)
+    try:
+        assert not stop_requested.wait(timeout=1)
+    finally:
+        fake.release_receive.set()
+        allow_stop.set()
+        reader.join(timeout=1)
+        first.join(timeout=1)
+        second.join(timeout=1)
+
+    assert not reader.is_alive()
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert received == [None]
+    assert close_errors == [close_error, close_error]
     assert not host._thread.is_alive()
 
 

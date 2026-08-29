@@ -213,12 +213,12 @@ class EnhancedAsyncHost:
             if loop is not None and adapter is not None:
                 future = asyncio.run_coroutine_threadsafe(adapter.close(), loop)
                 future.result()
-            for pending in inflight:
-                with suppress(BaseException):
-                    pending.result()
         except BaseException as exc:
             close_error = exc
         finally:
+            for pending in inflight:
+                with suppress(BaseException):
+                    pending.result()
             try:
                 if loop is not None:
                     loop.call_soon_threadsafe(loop.stop)
