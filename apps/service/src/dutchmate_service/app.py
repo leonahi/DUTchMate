@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Annotated, Protocol
 
@@ -137,16 +140,34 @@ def create_app(
 ) -> FastAPI:
     """Create the Device Core Service application."""
 
-    app = FastAPI(title="DUTchMate Device Core Service")
-    register_error_handlers(app)
-    runtime_provider = runtime or build_startup_runtime(
-        session_root=session_root,
-        session_evidence_budget_bytes=session_evidence_budget_bytes,
-        session_max_count=session_max_count,
-        backend_settings=backend_settings,
-    )
+    owns_runtime = runtime is None
+    runtime_provider = runtime
+    if runtime_provider is None:
+        runtime_provider = build_startup_runtime(
+            session_root=session_root,
+            session_evidence_budget_bytes=session_evidence_budget_bytes,
+            session_max_count=session_max_count,
+            backend_settings=backend_settings,
+        )
     if hardware_config is not None:
-        apply_startup_hardware_config(runtime_provider, hardware_config)
+        try:
+            apply_startup_hardware_config(runtime_provider, hardware_config)
+        except BaseException:
+            if owns_runtime:
+                with suppress(BaseException):
+                    _close_runtime(runtime_provider)
+            raise
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if owns_runtime:
+                await asyncio.to_thread(_close_runtime, runtime_provider)
+
+    app = FastAPI(title="DUTchMate Device Core Service", lifespan=lifespan)
+    register_error_handlers(app)
 
     @app.get("/status")
     def get_status() -> dict[str, object]:
@@ -237,3 +258,9 @@ def create_app(
         )
 
     return app
+
+
+def _close_runtime(runtime: object) -> None:
+    close = getattr(runtime, "close", None)
+    if callable(close):
+        close()

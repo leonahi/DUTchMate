@@ -252,10 +252,10 @@
     "semantic_hash": "f6489380e8982c09847d945d672843f1"
   },
   "apps/service/src/dutchmate_service/app.py": {
-    "mtime": 1787950015.5417242,
-    "seen": 1787994361.789182,
-    "ast_hash": "d210cf6f8c0853ff8c23b12a37734452",
-    "semantic_hash": "d210cf6f8c0853ff8c23b12a37734452"
+    "mtime": 1787996046.6885135,
+    "seen": 1787996111.081506,
+    "ast_hash": "903dddacc4eb2718eb5716cb4ba5ecf0",
+    "semantic_hash": ""
   },
   "apps/service/src/dutchmate_service/backend_reconnect.py": {
     "mtime": 1787994155.7348294,
@@ -282,9 +282,9 @@
     "semantic_hash": "81eb062734eba123b46df05a708beea4"
   },
   "apps/service/src/dutchmate_service/startup.py": {
-    "mtime": 1787994155.674871,
-    "seen": 1787994361.7891881,
-    "ast_hash": "50addcd3a4e4c9c86a60db2155ecf36e",
+    "mtime": 1787995612.7638242,
+    "seen": 1787996111.081512,
+    "ast_hash": "97d70e7f570da9e2d12176a41a1f163f",
     "semantic_hash": ""
   },
   "apps/service/tests/helpers.py": {
@@ -348,9 +348,9 @@
     "semantic_hash": "8b334e3cc2d92f2987516ff2c6dfdc21"
   },
   "apps/service/tests/test_startup_config.py": {
-    "mtime": 1787994346.1248121,
-    "seen": 1787994361.7891982,
-    "ast_hash": "62fce4e55c8946da2a185faceb7b5c6c",
+    "mtime": 1787994858.9656253,
+    "seen": 1787996111.081524,
+    "ast_hash": "48de51af5d238592714a1d75afbe7f74",
     "semantic_hash": ""
   },
   "apps/service/tests/test_status_endpoint.py": {
@@ -510,9 +510,9 @@
     "semantic_hash": "b486ba3bc33caac065a74cbfd1d9fec8"
   },
   "core/src/dutchmate_core/runtime.py": {
-    "mtime": 1787950015.5535736,
-    "seen": 1787994361.789226,
-    "ast_hash": "049be022527facb89abbc3c27c272fbd",
+    "mtime": 1787995970.2484004,
+    "seen": 1787996111.0815492,
+    "ast_hash": "6b70cfdc4d51678e1053a3c931c98e16",
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/session_store/__init__.py": {
@@ -1233,6 +1233,18 @@
     "mtime": 1787950015.5644748,
     "seen": 1787994361.789324,
     "ast_hash": "8ebb3ca15519a95b2e863250653d7f05",
+    "semantic_hash": ""
+  },
+  "apps/service/tests/test_app_lifecycle.py": {
+    "mtime": 1787996011.4031258,
+    "seen": 1787996111.081514,
+    "ast_hash": "2be82b09ea988aec6c34e36e2ad1037c",
+    "semantic_hash": ""
+  },
+  "tests/unit/runtime/test_device_core_lifecycle.py": {
+    "mtime": 1787995955.2878036,
+    "seen": 1787996111.0816011,
+    "ast_hash": "3f996d6b78518c1e08efd0a53819b93b",
     "semantic_hash": ""
   }
 }

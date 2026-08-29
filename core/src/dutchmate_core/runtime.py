@@ -269,12 +269,25 @@ class DeviceCoreRuntime:
         self._reconnect_timeout_s = reconnect_timeout_s
         self._reconnect_deadline: float | None = None
         self._operation_lock = RLock()
+        self._closed = False
 
     @property
     def session_store(self) -> DeviceCoreSessionStorage:
         """Capture-session storage used by this runtime."""
 
         return self._session_store
+
+    def close(self) -> None:
+        """Close the currently owned backend source exactly once."""
+
+        with self._operation_lock:
+            if self._closed:
+                return
+            self._closed = True
+            source = self._message_source
+            self._message_source = None
+        if source is not None:
+            self._close_event_source(source)
 
     def list_sessions(
         self,
