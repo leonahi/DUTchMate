@@ -143,6 +143,7 @@ class FakeEnhancedAsyncHost:
         read_outcomes: list[BackendEvent | BaseException | None] | None = None,
         send_outcomes: list[BackendUartSendResult | BaseException] | None = None,
         close_order: list[str] | None = None,
+        close_error: BaseException | None = None,
     ) -> None:
         self.info = info
         self.segment_id = segment_id
@@ -150,6 +151,7 @@ class FakeEnhancedAsyncHost:
         self._read_outcomes = list(read_outcomes or [])
         self._send_outcomes = list(send_outcomes or [])
         self._close_order = close_order
+        self._close_error = close_error
         self.closed = False
         self.close_count = 0
         self.discard_count = 0
@@ -202,6 +204,8 @@ class FakeEnhancedAsyncHost:
         self.close_count += 1
         if self._close_order is not None:
             self._close_order.append("async_closed")
+        if self._close_error is not None:
+            raise self._close_error
 
 
 def backend_settings(
@@ -371,6 +375,77 @@ def test_enhanced_startup_selects_one_async_host(
     assert opened == [("/dev/ttyACM0", 460800, 0)]
     assert runtime.status().connected is True
     assert runtime.status().device == "dutchmate-rp2040"
+
+
+def test_enhanced_startup_closes_host_when_connection_recording_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    primary_error = RuntimeError("connection recording failed")
+
+    def fail_connection_recording(
+        self: DeviceCoreRuntime,
+        info: BackendInfo,
+    ) -> None:
+        del self, info
+        raise primary_error
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        DeviceCoreRuntime,
+        "record_backend_connection",
+        fail_connection_recording,
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        build_startup_runtime(
+            session_root=tmp_path,
+            backend_settings=backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+        )
+
+    assert raised.value is primary_error
+    assert host.closed is True
+
+
+def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    primary_error = RuntimeError("runtime composition failed")
+    cleanup_error = RuntimeError("host cleanup failed")
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        close_error=cleanup_error,
+    )
+
+    def fail_reconnect_composition(**_kwargs: object) -> None:
+        raise primary_error
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "build_enhanced_capture_reconnect",
+        fail_reconnect_composition,
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        build_startup_runtime(
+            session_root=tmp_path,
+            backend_settings=backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+        )
+
+    assert raised.value is primary_error
+    assert host.closed is True
 
 
 def test_enhanced_startup_hardware_config_reaches_async_host(

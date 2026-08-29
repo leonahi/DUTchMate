@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Final, NoReturn, Protocol
 
@@ -175,10 +176,11 @@ def build_startup_runtime(
             reconnect_timeout_s=backend_settings.reconnect_timeout_s,
             backend_reconnect=reconnect,
         )
+        runtime.record_backend_connection(info)
     except BaseException:
-        enhanced_host.close()
+        with suppress(BaseException):
+            enhanced_host.close()
         raise
-    runtime.record_backend_connection(info)
     return runtime
 
 
