@@ -8,7 +8,16 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
-from dutchmate_core.backends import BackendInputError
+from dutchmate_core.backends import (
+    BackendDisconnectedError,
+    BackendEvent,
+    BackendInfo,
+    BackendInputError,
+    BackendUartSendResult,
+    SegmentContext,
+    SegmentTimestamp,
+    UartReceiveEvent,
+)
 from dutchmate_core.backends.basic import BasicBackendConnection
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl, normalize_enhanced_hello
 from dutchmate_core.backends.settings import BackendSettings
@@ -120,6 +129,79 @@ class AdvancingClock:
 
     def sleep(self, seconds: float) -> None:
         self.value += seconds
+
+
+class FakeEnhancedAsyncHost:
+    """Synchronous test double for the service-owned async Enhanced host."""
+
+    def __init__(
+        self,
+        *,
+        info: BackendInfo,
+        segment_id: int,
+        segment: SegmentContext | None = None,
+        read_outcomes: list[BackendEvent | BaseException | None] | None = None,
+        send_outcomes: list[BackendUartSendResult | BaseException] | None = None,
+        close_order: list[str] | None = None,
+    ) -> None:
+        self.info = info
+        self.segment_id = segment_id
+        self.segment = segment
+        self._read_outcomes = list(read_outcomes or [])
+        self._send_outcomes = list(send_outcomes or [])
+        self._close_order = close_order
+        self.closed = False
+        self.close_count = 0
+        self.discard_count = 0
+        self.configuration_requests: list[tuple[str, str, str, str | None]] = []
+        self.pulse_requests: list[tuple[str, int]] = []
+        self.state_requests: list[tuple[str, str]] = []
+        self.uart_requests: list[bytes] = []
+
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int:
+        self.configuration_requests.append((channel, mode, active_level, idle_level))
+        return 123
+
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int:
+        self.pulse_requests.append((channel, pulse_ms))
+        return 123
+
+    def set_control_state(self, *, channel: str, state: str) -> int:
+        self.state_requests.append((channel, state))
+        return 123
+
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        self.uart_requests.append(data)
+        if self._send_outcomes:
+            outcome = self._send_outcomes.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+        return BackendUartSendResult(bytes_accepted=len(data), device_timestamp_us=123)
+
+    def read_event(self) -> BackendEvent | None:
+        if not self._read_outcomes:
+            return None
+        outcome = self._read_outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    def discard_pending_events(self) -> None:
+        self.discard_count += 1
+
+    def close(self) -> None:
+        self.closed = True
+        self.close_count += 1
+        if self._close_order is not None:
+            self._close_order.append("async_closed")
 
 
 def backend_settings(
@@ -254,29 +336,27 @@ def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
     assert status.port is None
 
 
-def test_build_startup_runtime_with_serial_port_records_hello(
+def test_enhanced_startup_selects_one_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    def fake_open_serial_command_transport(
+    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    opened: list[tuple[str, int, int]] = []
+
+    def fake_open_host(
         *,
         port: str,
         baudrate: int,
-    ) -> SerialCommandTransport:
-        assert port == "/dev/ttyACM0"
-        assert baudrate == 460800
-        return SerialCommandTransport(
-            FakeSerial(
-                [
-                    b'{"type":"hello","v":1,"firmware":"0.1.0",'
-                    b'"device":"dutchmate-rp2040","capabilities":["gpio_control"]}\n'
-                ]
-            )
-        )
+        segment_id: int,
+    ) -> FakeEnhancedAsyncHost:
+        opened.append((port, baudrate, segment_id))
+        return host
 
+    monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
     monkeypatch.setattr(
-        "dutchmate_service.startup.open_serial_command_transport",
-        fake_open_serial_command_transport,
+        startup,
+        "open_serial_command_transport",
+        lambda **_kwargs: pytest.fail("initial Enhanced startup opened sync transport"),
     )
 
     runtime = build_startup_runtime(
@@ -288,12 +368,78 @@ def test_build_startup_runtime_with_serial_port_records_hello(
         ),
     )
 
-    status = runtime.status()
-    assert status.connected is True
-    assert status.port == "/dev/ttyACM0"
-    assert status.firmware == "0.1.0"
-    assert status.device == "dutchmate-rp2040"
-    assert status.backend_mode == "enhanced"
+    assert opened == [("/dev/ttyACM0", 460800, 0)]
+    assert runtime.status().connected is True
+    assert runtime.status().device == "dutchmate-rp2040"
+
+
+def test_enhanced_startup_hardware_config_reaches_async_host(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+        ),
+    )
+    config = parse_hardware_gpio_config(
+        {
+            "hardware": {
+                "control": {
+                    "reset": {
+                        "channel": "CTRL0",
+                        "dut_signal": "RESET_N",
+                        "mode": "open_drain",
+                        "active_level": "low",
+                    }
+                }
+            }
+        }
+    )
+
+    assert apply_startup_hardware_config(runtime, config) is True
+    assert host.configuration_requests == [("CTRL0", "open_drain", "low", None)]
+
+
+def test_enhanced_startup_captures_normalized_events_from_async_host(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+        read_outcomes=[
+            UartReceiveEvent(
+                segment_id=0,
+                timestamp_us=25,
+                channel=0,
+                data=b"READY\n",
+            )
+        ],
+    )
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    clock = AdvancingClock()
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+        ),
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    summary = runtime.capture_uart(duration_s=0.2)
+
+    assert summary.state == "completed"
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
 
 
 def test_enhanced_uart_send_projects_malformed_response_without_input(
@@ -301,28 +447,17 @@ def test_enhanced_uart_send_projects_malformed_response_without_input(
     tmp_path: Path,
 ) -> None:
     secret = "DUT-SECRET-MESSAGE-TYPE"
-    serial = ScriptedEnhancedSerial(
-        [
-            b'{"type":"hello","v":1,"firmware":"0.1.0",'
-            b'"device":"dutchmate-rp2040","capabilities":["uart_send"]}\n',
-            f'{{"type":"{secret}"}}\n'.encode(),
-        ]
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        send_outcomes=[
+            BackendInputError(
+                "Enhanced protocol message does not match the expected schema",
+                backend_mode="enhanced",
+            )
+        ],
     )
-
-    def fake_open_serial_command_transport(
-        *,
-        port: str,
-        baudrate: int,
-    ) -> SerialCommandTransport:
-        assert port == "/dev/ttyACM0"
-        assert baudrate == 460800
-        return SerialCommandTransport(serial)
-
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        fake_open_serial_command_transport,
-    )
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
         backend_settings=backend_settings(
@@ -352,7 +487,8 @@ def test_enhanced_uart_send_projects_malformed_response_without_input(
     }
     assert secret not in json.dumps(response.json())
     assert list(tmp_path.iterdir()) == []
-    assert serial.closed is True
+    assert host.uart_requests == [b"go\n"]
+    assert host.closed is True
     assert runtime.status().connection_state == "disconnected"
 
 
@@ -361,19 +497,17 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     tmp_path: Path,
 ) -> None:
     secret = "DUT-SECRET-MESSAGE-TYPE"
-    serial = ScriptedEnhancedSerial(
-        [
-            b'{"type":"hello","v":1,"firmware":"0.1.0",'
-            b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n',
-            f'{{"type":"{secret}"}}\n'.encode(),
-        ]
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        read_outcomes=[
+            BackendInputError(
+                "Enhanced protocol message does not match the expected schema",
+                backend_mode="enhanced",
+            )
+        ],
     )
-
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        lambda **_kwargs: SerialCommandTransport(serial),
-    )
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -397,7 +531,7 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     assert summary.state == "failed"
     assert summary.error is not None
     assert secret not in json.dumps(summary.error)
-    assert serial.closed is True
+    assert host.closed is True
     assert runtime.status().connection_state == "disconnected"
 
 
@@ -510,12 +644,19 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
         serial_port="/dev/ttyACM0",
         baudrate=460800,
     )
+    order: list[str] = []
+    initial_host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+        read_outcomes=[BackendDisconnectedError("device removed")],
+        close_order=order,
+    )
     hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
         b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
     )
     serials = [
-        ScriptedEnhancedSerial([hello, OSError("device removed")]),
         ScriptedEnhancedSerial(
             [
                 hello,
@@ -531,8 +672,15 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     ) -> SerialCommandTransport:
         assert port == "/dev/ttyACM0"
         assert baudrate == 460800
+        assert order == ["async_closed"]
+        order.append("sync_opened")
         return SerialCommandTransport(serials.pop(0))
 
+    monkeypatch.setattr(
+        startup,
+        "open_enhanced_async_host",
+        lambda **_kwargs: initial_host,
+    )
     monkeypatch.setattr(
         startup, "open_serial_command_transport", fake_open_serial_command_transport
     )
@@ -555,6 +703,8 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     assert status.connection_state == "connected"
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 1
+    assert initial_host.closed is True
+    assert order == ["async_closed", "sync_opened"]
 
 
 def test_enhanced_reconnect_rejects_changed_device_identity(
@@ -566,16 +716,17 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         serial_port="/dev/ttyACM0",
         baudrate=460800,
     )
-    initial_hello = (
-        b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
+    initial_host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+        read_outcomes=[BackendDisconnectedError("device removed")],
     )
     changed_hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
         b'"device":"another-helper","capabilities":["uart_receive"]}\n'
     )
     serials = [
-        ScriptedEnhancedSerial([initial_hello, OSError("device removed")]),
         ScriptedEnhancedSerial([changed_hello]),
     ]
 
@@ -587,6 +738,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         del port, baudrate
         return SerialCommandTransport(serials.pop(0))
 
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: initial_host)
     monkeypatch.setattr(
         startup,
         "open_serial_command_transport",
@@ -610,6 +762,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     assert summary.error["code"] == "backend_input_error"
     assert runtime.status().connection_state == "disconnected"
     assert serials == []
+    assert initial_host.closed is True
 
 
 def test_build_startup_runtime_recovers_sessions_before_opening_backend(
@@ -723,4 +876,29 @@ def _hello() -> HelloMessage:
         firmware="0.1.0",
         device="dutchmate-rp2040",
         capabilities=("gpio_control",),
+    )
+
+
+def _enhanced_info() -> BackendInfo:
+    return BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        device="dutchmate-rp2040",
+        firmware="0.1.0",
+        capabilities=frozenset({"gpio_control", "uart_receive", "uart_send"}),
+    )
+
+
+def _enhanced_segment(*, segment_id: int) -> SegmentContext:
+    return SegmentContext(
+        segment_id=segment_id,
+        timestamp=SegmentTimestamp(
+            source="device",
+            clock="rp2040_timer",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=0,
+            observation_point="debug_helper_uart_receive",
+            event_granularity="uart_event",
+        ),
     )

@@ -105,6 +105,44 @@ def test_reconnect_retries_open_and_closes_previous_source() -> None:
     assert published == [replacement]
 
 
+def test_reconnect_closes_async_host_before_opening_synchronous_replacement() -> None:
+    clock = FakeClock()
+    order: list[str] = []
+
+    class AsyncHostSource:
+        def read_event(self) -> None:
+            return None
+
+        def close(self) -> None:
+            order.append("async_closed")
+
+    replacement_source = ClosableSource()
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource:
+        assert segment_id == 1
+        assert deadline == 1.0
+        assert order == ["async_closed"]
+        order.append("sync_opened")
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(segment_id),
+        )
+
+    reconnect = RetryingCaptureReconnect(
+        current_source=AsyncHostSource(),
+        open_replacement=open_replacement,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    assert reconnect(segment_id=1, deadline=1.0) is not None
+    assert order == ["async_closed", "sync_opened"]
+
+
 def test_reconnect_rejects_source_opened_at_deadline() -> None:
     clock = FakeClock()
     previous = ClosableSource()

@@ -13,12 +13,6 @@ from dutchmate_core.backends.basic import (
     open_basic_backend_connection,
 )
 from dutchmate_core.backends.contracts import ControlState
-from dutchmate_core.backends.enhanced import (
-    EnhancedCaptureEventSource,
-    EnhancedDeviceControl,
-    EnhancedUartSender,
-    normalize_enhanced_hello,
-)
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import HelloMessage
 from dutchmate_core.device_connection.serial_transport import (
@@ -43,6 +37,7 @@ from dutchmate_service.backend_reconnect import (
     build_enhanced_capture_reconnect,
     read_enhanced_hello,
 )
+from dutchmate_service.enhanced_async import open_enhanced_async_host
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
 
@@ -149,41 +144,40 @@ def build_startup_runtime(
             capture_clock=monotonic_clock,
         )
 
-    transport = open_serial_command_transport(
+    enhanced_host = open_enhanced_async_host(
         port=serial_port,
         baudrate=backend_settings.baudrate,
-    )
-    enhanced_source = EnhancedCaptureEventSource(
-        transport,
         segment_id=0,
-        source_origin_us=None,
     )
-    control = ReplaceableDeviceControl(EnhancedDeviceControl(transport))
-    sender = ReplaceableUartSender(EnhancedUartSender(transport))
-    hello = read_startup_hello(transport)
-    info = normalize_enhanced_hello(hello, port=serial_port)
-    reconnect = build_enhanced_capture_reconnect(
-        settings=backend_settings,
-        current_source=enhanced_source,
-        expected_info=info,
-        control=control,
-        sender=sender,
-        open_transport=open_serial_command_transport,
-        monotonic_clock=reconnect_clock,
-        sleep=reconnect_sleep,
-    )
-    runtime = DeviceCoreRuntime(
-        device_control=control,
-        uart_sender=sender,
-        message_source=enhanced_source,
-        session_store=session_store,
-        capture_clock=monotonic_clock,
-        port=serial_port,
-        backend_mode="enhanced",
-        tx_policy_enabled=backend_settings.tx_enabled,
-        reconnect_timeout_s=backend_settings.reconnect_timeout_s,
-        backend_reconnect=reconnect,
-    )
+    try:
+        info = enhanced_host.info
+        control = ReplaceableDeviceControl(enhanced_host)
+        sender = ReplaceableUartSender(enhanced_host)
+        reconnect = build_enhanced_capture_reconnect(
+            settings=backend_settings,
+            current_source=enhanced_host,
+            expected_info=info,
+            control=control,
+            sender=sender,
+            open_transport=open_serial_command_transport,
+            monotonic_clock=reconnect_clock,
+            sleep=reconnect_sleep,
+        )
+        runtime = DeviceCoreRuntime(
+            device_control=control,
+            uart_sender=sender,
+            message_source=enhanced_host,
+            session_store=session_store,
+            capture_clock=monotonic_clock,
+            port=serial_port,
+            backend_mode="enhanced",
+            tx_policy_enabled=backend_settings.tx_enabled,
+            reconnect_timeout_s=backend_settings.reconnect_timeout_s,
+            backend_reconnect=reconnect,
+        )
+    except BaseException:
+        enhanced_host.close()
+        raise
     runtime.record_backend_connection(info)
     return runtime
 

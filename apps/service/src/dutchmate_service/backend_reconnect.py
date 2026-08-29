@@ -235,7 +235,7 @@ def build_basic_capture_reconnect(
 def build_enhanced_capture_reconnect(
     *,
     settings: BackendSettings,
-    current_source: EnhancedCaptureEventSource,
+    current_source: CaptureEventSource,
     expected_info: BackendInfo,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
