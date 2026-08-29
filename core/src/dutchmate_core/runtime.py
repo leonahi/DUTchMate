@@ -67,6 +67,7 @@ from dutchmate_core.workflows.capture import (
     CaptureReconnect,
     CaptureSessionStorage,
     CaptureWorkflow,
+    CaptureWorkflowLifecycle,
     ReconnectedCaptureSource,
 )
 from dutchmate_core.workflows.device_actions import (
@@ -175,6 +176,20 @@ class _SessionCaptureSource:
         discard = getattr(self._source, "discard_pending_events", None)
         if callable(discard):
             discard()
+
+    def begin_workflow(self) -> None:
+        lifecycle = (
+            self._source if isinstance(self._source, CaptureWorkflowLifecycle) else None
+        )
+        if lifecycle is not None:
+            lifecycle.begin_workflow()
+
+    def end_workflow(self) -> None:
+        lifecycle = (
+            self._source if isinstance(self._source, CaptureWorkflowLifecycle) else None
+        )
+        if lifecycle is not None:
+            lifecycle.end_workflow()
 
     def close(self) -> None:
         """Close the live source represented by this session-local view."""

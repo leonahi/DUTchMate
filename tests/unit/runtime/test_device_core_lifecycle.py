@@ -271,6 +271,28 @@ def test_runtime_close_publishes_disconnected_status(tmp_path: Path) -> None:
     assert status.integrity is None
 
 
+def test_session_capture_source_delegates_cursor_lifecycle_for_nonzero_segment(
+    tmp_path: Path,
+) -> None:
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = LifecycleCaptureSource([None], clock=clock, trace=trace)
+    source.segment = _replacement_snapshot(segment_id=3).segment
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
+
+    summary = runtime.capture_uart(duration_s=0.1)
+
+    assert trace.count("begin") == 1
+    assert trace.count("end") == 1
+    assert summary.segment_contexts[0].segment_id == 0
+
+
 class BlockingCloseCaptureSource(FakeCaptureSource):
     def __init__(
         self,
@@ -289,6 +311,18 @@ class BlockingCloseCaptureSource(FakeCaptureSource):
         assert self.release_close.wait(timeout=1)
         if self._close_error is not None:
             raise self._close_error
+
+
+class LifecycleCaptureSource(FakeCaptureSource):
+    def __init__(self, script: list[None], *, clock: FakeMonotonicClock, trace: list[str]) -> None:
+        super().__init__(script, clock=clock)
+        self._trace = trace
+
+    def begin_workflow(self) -> None:
+        self._trace.append("begin")
+
+    def end_workflow(self) -> None:
+        self._trace.append("end")
 
 
 def _replacement_snapshot(segment_id: int) -> BackendSnapshot:

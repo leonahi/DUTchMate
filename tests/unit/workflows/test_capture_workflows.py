@@ -6,6 +6,7 @@ from capture_test_support import (
     EnhancedCaptureFixtureRecorder,
     FakeCaptureEventSource,
     FakeMonotonicClock,
+    LifecycleCaptureEventSource,
     fixed_clock,
     fixed_id,
     read_jsonl,
@@ -13,13 +14,20 @@ from capture_test_support import (
 )
 
 from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendInfo,
+    BackendSnapshot,
     BufferStatusEvent,
     SegmentContext,
     SegmentTimestamp,
+    UartIntegrity,
     UartReceiveEvent,
+    UartSendCapabilityPolicy,
 )
+from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.capture import CaptureWorkflow
+from dutchmate_core.workflows.device_actions import DeviceActionResult
 
 
 def test_stream_recorder_records_complete_uart_ndjson(tmp_path: Path) -> None:
@@ -321,3 +329,162 @@ def test_capture_workflow_rejects_invalid_duration(
             command="capture",
             monotonic_clock=clock,
         )
+
+
+def test_capture_activates_cursor_after_session_creation_before_callbacks(
+    tmp_path: Path,
+) -> None:
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = LifecycleCaptureEventSource(
+        [None],
+        clock=clock,
+        trace=trace,
+        session_exists=lambda: any(tmp_path.iterdir()),
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    CaptureWorkflow(session_store=store).run(
+        source=source,
+        duration_s=0.1,
+        command="capture",
+        monotonic_clock=clock,
+        on_session_started=lambda _session_id: trace.append("callback"),
+    )
+
+    assert trace[0:2] == ["begin", "callback"]
+    assert trace[-1] == "end"
+    assert trace.index("begin") < trace.index("read")
+
+
+def test_capture_ends_cursor_when_session_started_callback_fails(tmp_path: Path) -> None:
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = LifecycleCaptureEventSource(
+        [],
+        clock=clock,
+        trace=trace,
+        session_exists=lambda: any(tmp_path.iterdir()),
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        CaptureWorkflow(session_store=store).run(
+            source=source,
+            duration_s=0.1,
+            command="capture",
+            monotonic_clock=clock,
+            backend_snapshot=_native_snapshot(),
+            on_session_started=lambda _session_id: _failing_session_callback(trace),
+        )
+
+    summary = store.summarize_session("20260714T123045Z-capture01")
+    assert summary.state == "failed"
+    assert trace == ["begin", "callback", "end"]
+
+
+def test_capture_activates_cursor_before_boot_action_and_first_read(tmp_path: Path) -> None:
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = LifecycleCaptureEventSource(
+        [None],
+        clock=clock,
+        trace=trace,
+        session_exists=lambda: any(tmp_path.iterdir()),
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    CaptureWorkflow(session_store=store).run(
+        source=source,
+        duration_s=0.1,
+        command="boot-test",
+        monotonic_clock=clock,
+        backend_snapshot=_native_snapshot(),
+        on_session_started=lambda _session_id: trace.append("callback"),
+        start_action=lambda: _start_action(trace),
+    )
+
+    assert trace.index("begin") < trace.index("callback")
+    assert trace.index("callback") < trace.index("start_action")
+    assert trace.index("start_action") < trace.index("read")
+    assert trace[-1] == "end"
+
+
+def test_capture_does_not_activate_cursor_when_session_creation_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = LifecycleCaptureEventSource(
+        [],
+        clock=clock,
+        trace=trace,
+        session_exists=lambda: any(tmp_path.iterdir()),
+    )
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+
+    def fail_create_session(**_kwargs: object) -> None:
+        raise SessionPersistenceError(
+            operation="create",
+            path=tmp_path / "metadata.json",
+            detail="simulated session creation failure",
+        )
+
+    monkeypatch.setattr(store, "create_session", fail_create_session)
+
+    with pytest.raises(SessionPersistenceError, match="simulated session creation failure"):
+        CaptureWorkflow(session_store=store).run(
+            source=source,
+            duration_s=0.1,
+            command="capture",
+            monotonic_clock=clock,
+        )
+
+    assert trace == []
+
+
+def _start_action(trace: list[str]) -> DeviceActionResult:
+    trace.append("start_action")
+    return DeviceActionResult(
+        action="reset",
+        pulse_ms=100,
+        performed_at="2026-07-14T12:30:45Z",
+    )
+
+
+def _failing_session_callback(trace: list[str]) -> None:
+    trace.append("callback")
+    raise RuntimeError("callback failed")
+
+
+def _native_snapshot() -> BackendSnapshot:
+    policy = BackendCapabilityPolicy(uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False))
+    return BackendSnapshot(
+        info=BackendInfo(
+            mode="enhanced",
+            port="/dev/ttyACM0",
+            device="dutchmate-rp2040",
+            firmware="0.1.0",
+            capabilities=frozenset({"uart_receive"}),
+        ),
+        capabilities=frozenset({"uart_receive"}),
+        capability_policy=policy,
+        segment=SegmentContext(
+            segment_id=0,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=0,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
+    )

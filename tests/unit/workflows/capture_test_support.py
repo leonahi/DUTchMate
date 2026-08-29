@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,6 +53,31 @@ class FakeCaptureEventSource:
         if not self._script:
             return None
         return self._script.pop(0)
+
+
+class LifecycleCaptureEventSource(FakeCaptureEventSource):
+    def __init__(
+        self,
+        script: list[BackendEvent | None],
+        *,
+        clock: FakeMonotonicClock,
+        trace: list[str],
+        session_exists: Callable[[], bool],
+    ) -> None:
+        super().__init__(script, clock=clock)
+        self._trace = trace
+        self._session_exists = session_exists
+
+    def begin_workflow(self) -> None:
+        assert self._session_exists()
+        self._trace.append("begin")
+
+    def end_workflow(self) -> None:
+        self._trace.append("end")
+
+    def read_event(self) -> BackendEvent | None:
+        self._trace.append("read")
+        return super().read_event()
 
 
 class EnhancedCaptureFixtureRecorder:

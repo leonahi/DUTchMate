@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from threading import RLock
 from types import TracebackType
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 from dutchmate_core.backends.contracts import (
     BackendDisconnectedError,
@@ -40,6 +40,17 @@ class CaptureEventSource(Protocol):
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
+
+
+@runtime_checkable
+class CaptureWorkflowLifecycle(Protocol):
+    """Optional fresh-cursor lifecycle implemented by continuous sources."""
+
+    def begin_workflow(self) -> None:
+        """Activate one new finite-workflow cursor."""
+
+    def end_workflow(self) -> None:
+        """Release the active cursor and discard its unread events."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -627,8 +638,13 @@ class CaptureWorkflow:
             ),
             mutation_lock=self.mutation_lock,
         )
+        lifecycle = source if isinstance(source, CaptureWorkflowLifecycle) else None
+        workflow_cursor_active = False
         matched_pattern_index: int | None = None
         try:
+            if lifecycle is not None:
+                lifecycle.begin_workflow()
+                workflow_cursor_active = True
             if on_session_started is not None:
                 on_session_started(recorder.session_id)
             if on_session_handle_started is not None:
@@ -769,6 +785,10 @@ class CaptureWorkflow:
             if failure is not exc:
                 raise failure from exc
             raise
+        finally:
+            if workflow_cursor_active:
+                assert lifecycle is not None
+                lifecycle.end_workflow()
         with self.mutation_lock:
             return self._session_store.summarize_session(recorder.session_id)
 
