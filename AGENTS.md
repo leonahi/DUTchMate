@@ -135,3 +135,41 @@ artifacts in the same commit as the structural change. Do not stage ignored loca
 runtime state.
 
 Do not update the graph after every trivial localized edit.
+
+## Token-Efficient Tool Usage
+
+### RTK
+
+When RTK (`rtk`) is available, prefer RTK-wrapped commands for supported development tools to reduce unnecessary terminal output sent to the model.
+
+Examples:
+
+```bash
+rtk git status
+rtk git diff
+rtk git log
+rtk pytest
+rtk cargo test
+rtk rg <pattern>
+```
+
+General rules:
+
+* Prefer `rtk <command>` over the equivalent raw command when RTK supports it.
+* Use RTK especially for commands that may produce large output, such as tests, Git diffs/logs, searches, linters, and build tools.
+* Do not use RTK when exact, unfiltered command output is required for debugging or verification.
+* If RTK output omits information needed to diagnose a problem, rerun the relevant command without RTK.
+* Do not change command semantics merely to use RTK.
+* Do not suppress errors or failures for the sake of reducing output.
+* Validation and correctness take priority over token reduction.
+
+### Communication
+
+Keep progress updates and final responses concise and information-dense.
+
+* Avoid repeating information already established in the conversation.
+* Avoid narrating trivial implementation steps.
+* Report important architectural decisions, assumptions, failures, and trade-offs.
+* Include enough explanation to make non-obvious changes understandable.
+* Preserve exact code, commands, identifiers, paths, error messages, and technical values when they matter.
+* Do not sacrifice technical completeness or correctness merely to shorten a response.
