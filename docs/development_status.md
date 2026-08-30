@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `df685ac2697e4cb69e1618a83a1ad30071f3f399` on 2026-08-30
+> Code baseline reviewed: `9bf0d423586b72d2d60aa7ea086d30e7dd723dc2` on 2026-08-30
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -55,27 +55,32 @@ for the real-hardware gates in the Phase 1 done criteria.
 ## Latest Validation
 
 Working tree based on code baseline
-`df685ac2697e4cb69e1618a83a1ad30071f3f399`, reviewed 2026-08-30:
+`9bf0d423586b72d2d60aa7ea086d30e7dd723dc2`, reviewed 2026-08-30:
 
+- Basic finite-workflow reconnect regression: 1 passed in 0.77s. Startup
+  configuration suite: 23 passed in 4.14s.
 - Focused continuous-ingestion/service/runtime gate (the 13 Task 5 files,
   including connection monitoring, status endpoint, and runtime monitoring):
-  181 passed in 5.91s; zero failures and no leaked
+  181 passed in 5.59s; zero failures and no leaked
   `dutchmate-continuous-ingestion` thread warning.
 - Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`.
 - Mypy: `MYPYPATH=core/src .venv/bin/mypy` passed with no issues in 73 source
   files.
-- Full Pytest: `.venv/bin/pytest` passed: 1158 passed in 11.87s.
+- Full Pytest: `.venv/bin/pytest` passed: 1158 passed in 11.53s.
 - `git diff --check`: passed with no whitespace errors.
 - Dependency-direction search found no `dutchmate_service`, FastAPI,
   `serial_asyncio`, `pyserial`, or `serial.` match in capture or runtime.
   `read_event()` remains at the service coordinator and established core
   workflow/runtime boundaries; `Thread(` appears only at
   `continuous_ingestion.py:L71`, with no `create_task(` match.
-- Graphify: `graphify update .` re-extracted 192/192 uncached code files and
-  refreshed canonical outputs to 3,912 nodes, 10,709 edges, and 164
-  communities. It retained the existing `fixture_protocol.h:L44` syntax-error
-  warning; 167 saved labels were reconciled to 164 communities and 98
-  communities were renamed by their hub.
+- Graphify: `graphify update .` re-extracted 12/12 uncached code files with
+  AST-only zero input/output LLM tokens and refreshed canonical outputs to
+  3,913 nodes, 10,711 edges, and 167 communities. It retained the existing
+  `fixture_protocol.h:L44` syntax-error warning; 164 saved labels were
+  reconciled to 167 communities and 97 communities were renamed by their hub.
+  The documented vocabulary algorithm produced 1,514 tokens (including
+  `monitor`, `monitoring`, and `reconcile`), and `cost.json` records the
+  actual 12-file, zero-token run (two recorded runs; all-time 0/0 tokens).
 
 ## Already Complete — Do Not Reimplement
 
