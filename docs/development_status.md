@@ -1,22 +1,20 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `5c8169d` on 2026-08-29
+> Code baseline reviewed: `2f03b022086d754e2086417253a1c854238c64fe` on 2026-08-30
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B's fake-backed
-  `AsyncEnhancedSerialAdapter` foundation and production-capable
-  `pyserial-asyncio` reader/exact-writer factory are complete. Initial Enhanced
-  control, UART send, and capture now select one service-owned
-  `EnhancedAsyncHost`/adapter, and runtime/FastAPI shutdown closes it
-  deterministically. Finite-workflow reconnect remains intentionally
+- **Current milestone:** Phase 1A is accepted; service-owned continuous
+  ingestion is complete for both selected backends. Each selected Basic or
+  Enhanced source is consumed through one coordinator and one normalized
+  processing pipeline; finite-workflow reconnect remains intentionally
   synchronous/transitional.
-- **Next step:** Add one service-owned continuous ingestion coordinator for the
-  selected backend without creating a second serial reader.
+- **Next step:** Continuously ingest and monitor connection state outside finite
+  workflows for either backend.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -33,10 +31,11 @@ must not duplicate this progress checklist.
 
 Phase 1 is not complete. Phase 1A is accepted on the real Basic hardware path
 using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
-adapter. Phase 1B is partial: its atomic host wire migration and initial async
-Enhanced semantic/lifecycle/startup-selection slice are complete, but
-continuous ingestion, reconnect migration, RP2040 firmware, and
-prototype/ring-buffer/HIL validation have not run.
+adapter. Phase 1B is partial: its atomic host wire migration, initial async
+semantic/lifecycle/startup-selection slice, and service-owned continuous
+ingestion coordinator are complete, but continuous connection-state monitoring,
+reconnect migration, RP2040 firmware, and prototype/ring-buffer/HIL validation
+have not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -44,7 +43,7 @@ prototype/ring-buffer/HIL validation have not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, initial async semantic consumers, and service lifecycle/startup selection are complete; continuous ingestion and reconnect remain, with finite-workflow reconnect intentionally synchronous/transitional. |
+| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, initial async semantic consumers, service lifecycle/startup selection, and service-owned continuous ingestion are complete; continuous connection-state monitoring and reconnect remain, with finite-workflow reconnect intentionally synchronous/transitional. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -56,92 +55,46 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on code baseline `5c8169d`, reviewed 2026-08-29:
+Working tree based on code baseline
+`2f03b022086d754e2086417253a1c854238c64fe`, reviewed 2026-08-30:
 
-- Focused Enhanced async/service lifecycle gate (`tests/unit/backends/test_enhanced.py`,
-  `tests/unit/backends/test_enhanced_serial.py`,
-  `apps/service/tests/test_enhanced_async.py`,
-  `apps/service/tests/test_startup_config.py`,
+- Focused continuous-ingestion/service/runtime gate (`apps/service/tests/test_continuous_ingestion.py`,
   `apps/service/tests/test_backend_reconnect.py`,
-  `tests/unit/runtime/test_device_core_lifecycle.py`, and
-  `apps/service/tests/test_app_lifecycle.py`): passed 156 tests in 2.56s; no
-  thread, task, or resource-leak warnings were emitted.
-- Final Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`
-- Final Mypy: `MYPYPATH=core/src .venv/bin/mypy` passed with no issues in 72
-  source files.
-- Final Pytest: `.venv/bin/pytest` passed: 1087 passed in 7.99s.
-- Final `git diff --check`: passed.
-- Graphify: `graphify update .` re-extracted 11/11 uncached code files; no code-
-  graph topology changes were detected and canonical outputs were left
-  untouched. It retained the existing warning that
+  `apps/service/tests/test_startup_config.py`,
+  `apps/service/tests/test_app_lifecycle.py`,
+  `tests/unit/workflows/test_capture_workflows.py`,
+  `tests/unit/workflows/test_capture_reconnect.py`,
+  `tests/unit/runtime/test_device_core_capture.py`,
+  `tests/unit/runtime/test_device_core_wait.py`, and
+  `tests/unit/runtime/test_device_core_lifecycle.py`): 144 passed in 5.83s;
+  zero failures and no leaked-thread warnings.
+- Ruff: `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/ruff check .`
+  passed with `All checks passed!`.
+- Mypy: `MYPYPATH=core/src /Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/mypy`
+  passed with no issues in 73 source files.
+- Full Pytest: `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/pytest`
+  passed: 1138 passed in 12.33s.
+- `git diff --check`: passed with no whitespace errors.
+- Dependency-direction searches found no `dutchmate_service`, FastAPI, or
+  serial match in `core/src/dutchmate_core/workflows/capture.py` or
+  `core/src/dutchmate_core/runtime.py`; `threading.RLock` remains at
+  `capture.py:L8` and `runtime.py:L11`. `read_event(` consumption is the
+  service coordinator plus the existing Enhanced compatibility adapter and
+  core protocols, workflow/runtime facades, and backend-local implementations;
+  no additional physical reader was found.
+- Graphify: `graphify update .` re-extracted 188/188 uncached code files and
+  refreshed canonical outputs to 3,819 nodes, 10,457 edges, and 167
+  communities. It retained the pre-existing warning that
   `hardware/firmware/zephyr_dut/src/fixture_protocol.h` has a syntax error at
-  line 44 and no symbols were extracted.
-- Graphify required directed paths `build_startup_runtime` →
-  `AsyncEnhancedSerialAdapter` and `EnhancedAsyncHost` →
-  `open_async_enhanced_serial_adapter` did not resolve under those literal
-  names. Graphify `explain` confirms `build_startup_runtime()` calls
-  `open_enhanced_async_host()` at `apps/service/src/dutchmate_service/startup.py:L148`,
-  while `open_async_enhanced_serial_adapter()` calls
-  `AsyncEnhancedSerialAdapter` at
-  `core/src/dutchmate_core/backends/enhanced_serial_io.py:L132`; undirected
-  fallback paths were recorded in `task-6-report.md`.
-
-- Ruff: `.venv/bin/ruff check .` passed
-- Mypy: `.venv/bin/mypy` passed with no issues in 71 source files
-- Pytest: `.venv/bin/pytest` passed: 1037 passed, including 12 portable Zephyr
-  DUT protocol tests
-- Enhanced production async serial factory:
-  `tests/unit/backends/test_enhanced_serial_io.py` passed 10 tests; the focused
-  async adapter, exact-write, and architecture regression suite passed 89 tests
-- Graphify: incremental refresh produced 3,446 nodes, 9,433 edges, and 149
-  communities; both required factory-to-adapter and factory-to-exact-writer
-  paths are present. Graphify retained its existing Zephyr C-header parse
-  warning and reported that community labels need refresh.
-- Focused fake-backed async adapter evidence:
-  `tests/unit/backends/test_enhanced_serial.py` passed 60 tests; the Task 5
-  async backend/protocol suite passed 140 tests
-- Zephyr DUT cross-build: passed for `rpi_pico/rp2040` with Zephyr 4.4.0 and
-  Zephyr SDK 1.0.1; UF2 generated
-- Basic HIL procedure/report template: added at
-  `hardware/validation/phase1_basic_hil.md`
-- Basic HIL: passed with boot session `20260826T211103Z-2649d369` and command
-  session `20260826T211203Z-f541c8fb`; provenance, artifacts, and results are
-  recorded in the validation report
-- `git diff --check`: passed
-- Enhanced capability migration: focused schema, example, parser, adapter,
-  workflow, and service tests passed (111 tests)
-- Enhanced generic control-action migration: focused schema, example, encoder,
-  adapter, workflow, runtime, and reconnect tests passed (209 tests)
-- Enhanced host-metadata removal: focused schema, encoder, configurator,
-  runtime, adapter, startup, and reconnect tests passed (158 tests)
-- Enhanced device-frame enforcement: focused parser and backend-projection
-  tests passed (152 tests)
-- Enhanced hello-identity enforcement: focused parser, schema, and canonical
-  example tests passed (85 tests)
-- Enhanced command-error detail enforcement: focused parser, schema, and
-  canonical example tests passed (101 tests)
-- Enhanced decoded-UART payload enforcement: focused parser, schema, and
-  canonical example tests passed (105 tests)
-- Enhanced host-command frame enforcement: exact 2048/2049-byte encoder and
-  pre-dispatch boundaries, compact unescaped UTF-8 output, outbound adapter
-  classification, and bounded service error context passed (89 focused tests)
-- Enhanced host-command write completion: ordered short writes, invalid
-  progress, write/flush failure acceptance counts, timeout classification, and
-  control/UART adapter projection passed (48 focused tests)
-- Enhanced async command routing: shared 2,048-byte validation, unchanged
-  synchronous transport behavior, serialized request/response dispatch,
-  interleaved and orphan-prefix FIFO evidence, retained parser-error
-  precedence, atomic first-wins cancellation terminalization, exact write
-  accounting, and cleanup-failure isolation passed (65 focused tests)
-- Enhanced async lifecycle: bounded FIFO backpressure without drop or reorder,
-  valid-prefix-before-terminal ordering, retained terminal identity and frame
-  size context, disconnect cause retention, cancellation boundaries, timeout
-  terminalization, blocked-hello/command/event/write waiter wake-up with shared
-  error identity, capacity-one same-batch admission ordering, and shared
-  exactly-once resource close passed using explicit state barriers (140 focused
-  tests)
-- Enhanced HIL: no committed run
-- Ring-buffer decision: `selected_unvalidated`
+  line 44 and no symbols were extracted; it also reported 153 saved labels for
+  167 communities and refreshed 85 hub-based names.
+- Graphify query for continuous ingestion returned 1,234 nodes (91 shown under
+  the 3,500-token budget). Neither directed path
+  `ContinuousIngestionCoordinator` → `CaptureWorkflow` nor
+  `ContinuousIngestionCoordinator` → `RetryingCaptureReconnect` resolves;
+  source review confirms the coordinator is injected as the runtime message
+  source, while `RetryingCaptureReconnect` calls its detach/replace operations,
+  so neither relationship is a direct call edge.
 
 ## Already Complete — Do Not Reimplement
 
@@ -249,7 +202,7 @@ remaining.
   reader. Initial Enhanced startup now uses one async host/adapter; finite-
   workflow reconnect remains on the transitional synchronous
   `SerialCommandTransport` path.
-- [ ] Add one service-owned continuous ingestion coordinator for the selected
+- [x] Add one service-owned continuous ingestion coordinator for the selected
   backend. It may consume the Basic adapter's existing async FIFO boundary but
   must not create a second Basic serial reader.
 - [ ] Continuously ingest and monitor connection state outside finite workflows
