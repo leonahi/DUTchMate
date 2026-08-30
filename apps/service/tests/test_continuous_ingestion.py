@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 from contextlib import suppress
 from threading import Condition, Event, Thread
 from threading import enumerate as enumerate_threads
@@ -16,6 +17,7 @@ from dutchmate_core.backends import (
     SegmentTimestamp,
     UartReceiveEvent,
 )
+from dutchmate_core.workflows.capture import CaptureSourceHealth
 from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 
 
@@ -142,6 +144,84 @@ def close_coordinator(coordinator: ContinuousIngestionCoordinator) -> None:
         thread.name == "dutchmate-continuous-ingestion" and thread.is_alive()
         for thread in enumerate_threads()
     )
+
+
+def wait_for_health(
+    coordinator: ContinuousIngestionCoordinator,
+    predicate: Callable[[CaptureSourceHealth], bool],
+) -> CaptureSourceHealth:
+    condition = coordinator._condition  # noqa: SLF001 - deterministic barrier.
+    with condition:
+        assert condition.wait_for(
+            lambda: predicate(coordinator.capture_source_health()),
+            timeout=1,
+        )
+        return coordinator.capture_source_health()
+
+
+def test_initial_timeout_and_uart_preserve_connected_health() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        expected = CaptureSourceHealth(connected=True, integrity=None)
+        assert coordinator.capture_source_health() == expected
+        source.publish(None)
+        assert source.wait_for_reads(2)
+        source.publish(uart_event(b"idle"))
+        assert source.wait_for_reads(3)
+        assert coordinator.capture_source_health() == expected
+    finally:
+        close_coordinator(coordinator)
+
+
+@pytest.mark.parametrize(
+    "terminal",
+    [
+        BackendDisconnectedError("removed"),
+        BackendInputError("malformed"),
+        RuntimeError("reader failed"),
+    ],
+    ids=["disconnect", "input", "unexpected"],
+)
+def test_idle_terminal_publishes_disconnected_health(
+    terminal: BaseException,
+) -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(terminal)
+        health = wait_for_health(coordinator, lambda candidate: not candidate.connected)
+        assert health.connected is False
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_valid_replacement_restores_monitor_health_without_restarting_thread() -> None:
+    source = ControlledSource()
+    replacement = ControlledSource(segment_id=1)
+    coordinator = ContinuousIngestionCoordinator(source)
+    ingestion_thread = coordinator._thread  # noqa: SLF001 - lifecycle assertion.
+    try:
+        coordinator.begin_workflow()
+        source.publish(BackendDisconnectedError("removed"))
+        with pytest.raises(BackendDisconnectedError):
+            coordinator.read_event()
+        assert coordinator.capture_source_health().connected is False
+        coordinator.close_current_source_for_reconnect()
+        coordinator.replace_source(replacement)
+        assert coordinator.capture_source_health() == CaptureSourceHealth(True, None)
+        assert coordinator._thread is ingestion_thread  # noqa: SLF001
+        assert ingestion_thread.is_alive()
+        coordinator.end_workflow()
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_close_publishes_disconnected_health() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    close_coordinator(coordinator)
+    assert coordinator.capture_source_health().connected is False
 
 
 @pytest.mark.parametrize(

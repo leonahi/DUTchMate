@@ -14,7 +14,7 @@ from dutchmate_core.backends import (
     BackendInputError,
     SegmentContext,
 )
-from dutchmate_core.workflows.capture import CaptureEventSource
+from dutchmate_core.workflows.capture import CaptureEventSource, CaptureSourceHealth
 
 DEFAULT_INGESTION_QUEUE_CAPACITY: Final = 256
 DEFAULT_INGESTION_EVENT_WAIT_TIMEOUT_S: Final = 0.1
@@ -49,6 +49,7 @@ class ContinuousIngestionCoordinator:
         self._condition = Condition(RLock())
         self._source: CaptureEventSource | None = source
         self._segment = _source_segment(source)
+        self._health = CaptureSourceHealth(connected=True, integrity=None)
         self._events: deque[BackendEvent] = deque()
         self._queue_capacity = queue_capacity
         self._event_wait_timeout_s = float(event_wait_timeout_s)
@@ -82,6 +83,12 @@ class ContinuousIngestionCoordinator:
 
         with self._condition:
             return self._segment
+
+    def capture_source_health(self) -> CaptureSourceHealth:
+        """Return one immutable health snapshot for the installed source."""
+
+        with self._condition:
+            return self._health
 
     def begin_workflow(self) -> None:
         """Establish a fresh cursor for one finite workflow."""
@@ -189,6 +196,7 @@ class ContinuousIngestionCoordinator:
             if can_accept:
                 self._source = replacement
                 self._segment = _source_segment(replacement)
+                self._health = CaptureSourceHealth(connected=True, integrity=None)
                 self._terminal_error = None
                 self._terminal_consumed = False
                 self._replacement_allowed = False
@@ -215,6 +223,10 @@ class ContinuousIngestionCoordinator:
             else:
                 first_closer = True
                 self._closing = True
+                self._health = CaptureSourceHealth(
+                    connected=False,
+                    integrity=self._health.integrity,
+                )
                 self._workflow_active = False
                 self._events.clear()
                 if self._terminal_error is None:
@@ -281,6 +293,10 @@ class ContinuousIngestionCoordinator:
             except (BackendDisconnectedError, BackendInputError) as exc:
                 with self._condition:
                     if source is self._source and not self._closing:
+                        self._health = CaptureSourceHealth(
+                            connected=False,
+                            integrity=self._health.integrity,
+                        )
                         self._terminal_error = exc
                         self._terminal_consumed = False
                         self._replacement_allowed = isinstance(
@@ -327,6 +343,10 @@ class ContinuousIngestionCoordinator:
         with self._condition:
             if self._closing or source is not self._source:
                 return
+            self._health = CaptureSourceHealth(
+                connected=False,
+                integrity=self._health.integrity,
+            )
             self._source = None
             self._terminal_error = error
             self._terminal_consumed = False

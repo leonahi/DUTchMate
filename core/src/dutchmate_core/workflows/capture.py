@@ -17,6 +17,7 @@ from dutchmate_core.backends.contracts import (
     BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
+    UartIntegrity,
     UartReceiveEvent,
 )
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
@@ -40,6 +41,22 @@ class CaptureEventSource(Protocol):
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureSourceHealth:
+    """Immutable current-source connection and integrity projection."""
+
+    connected: bool
+    integrity: UartIntegrity | None
+
+
+@runtime_checkable
+class CaptureSourceMonitor(Protocol):
+    """Optional current-source health observation boundary."""
+
+    def capture_source_health(self) -> CaptureSourceHealth:
+        """Return one immutable current-source health snapshot."""
 
 
 @runtime_checkable
