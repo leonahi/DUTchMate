@@ -745,14 +745,14 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
         segment_id=0,
-        read_outcomes=[
-            BackendInputError(
-                "Enhanced protocol message does not match the expected schema",
-                backend_mode="enhanced",
-            )
-        ],
     )
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        WorkflowBarrierCoordinator,
+        raising=False,
+    )
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -765,12 +765,31 @@ def test_enhanced_capture_closes_source_on_malformed_input(
         sleep=clock.sleep,
     )
 
-    with pytest.raises(
-        BackendInputError,
-        match="Enhanced protocol message does not match the expected schema",
-    ) as raised:
-        runtime.capture_uart(duration_s=0.2)
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, WorkflowBarrierCoordinator)
 
+    def publish_malformed_input() -> None:
+        assert coordinator.workflow_started.wait(timeout=1)
+        host.publish(
+            BackendInputError(
+                "Enhanced protocol message does not match the expected schema",
+                backend_mode="enhanced",
+            )
+        )
+
+    publisher = Thread(target=publish_malformed_input)
+    publisher.start()
+    try:
+        with pytest.raises(
+            BackendInputError,
+            match="Enhanced protocol message does not match the expected schema",
+        ) as raised:
+            runtime.capture_uart(duration_s=0.2)
+    finally:
+        publisher.join(timeout=1)
+        runtime.close()
+
+    assert not publisher.is_alive()
     summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
     assert secret not in str(raised.value)
     assert summary.state == "failed"
@@ -968,7 +987,6 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
         info=_enhanced_info(),
         segment_id=0,
         segment=_enhanced_segment(segment_id=0),
-        read_outcomes=[BackendDisconnectedError("device removed")],
         close_order=order,
     )
     hello = (
@@ -1003,6 +1021,12 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     monkeypatch.setattr(
         startup, "open_serial_command_transport", fake_open_serial_command_transport
     )
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        WorkflowBarrierCoordinator,
+        raising=False,
+    )
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -1011,20 +1035,33 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
         sleep=clock.sleep,
     )
 
-    summary = runtime.capture_uart(duration_s=0.2)
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, WorkflowBarrierCoordinator)
 
+    def publish_disconnect() -> None:
+        assert coordinator.workflow_started.wait(timeout=1)
+        initial_host.publish(BackendDisconnectedError("device removed"))
+
+    publisher = Thread(target=publish_disconnect)
+    publisher.start()
+    try:
+        summary = runtime.capture_uart(duration_s=0.2)
+        status = runtime.status()
+    finally:
+        publisher.join(timeout=1)
+        runtime.close()
+
+    assert not publisher.is_alive()
     assert summary.state == "completed"
     assert summary.interrupted is True
     assert summary.resumed is True
     assert summary.segment_count == 2
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
-    status = runtime.status()
     assert status.connection_state == "connected"
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 1
     assert initial_host.closed is True
     assert order == ["async_closed", "sync_opened"]
-    runtime.close()
 
 
 def test_enhanced_reconnect_rejects_changed_device_identity(
@@ -1040,7 +1077,6 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         info=_enhanced_info(),
         segment_id=0,
         segment=_enhanced_segment(segment_id=0),
-        read_outcomes=[BackendDisconnectedError("device removed")],
     )
     changed_hello = (
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
@@ -1064,6 +1100,12 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         "open_serial_command_transport",
         fake_open_serial_command_transport,
     )
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        WorkflowBarrierCoordinator,
+        raising=False,
+    )
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -1072,11 +1114,23 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         sleep=clock.sleep,
     )
     coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, ContinuousIngestionCoordinator)
+    assert isinstance(coordinator, WorkflowBarrierCoordinator)
 
-    with pytest.raises(BackendInputError, match="identity changed"):
-        runtime.capture_uart(duration_s=0.2)
+    def publish_disconnect() -> None:
+        assert coordinator.workflow_started.wait(timeout=1)
+        initial_host.publish(BackendDisconnectedError("device removed"))
 
+    publisher = Thread(target=publish_disconnect)
+    publisher.start()
+
+    try:
+        with pytest.raises(BackendInputError, match="identity changed"):
+            runtime.capture_uart(duration_s=0.2)
+    finally:
+        publisher.join(timeout=1)
+        runtime.close()
+
+    assert not publisher.is_alive()
     summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
     assert summary.state == "failed"
     assert summary.end_reason == "backend_input_error"
@@ -1086,7 +1140,6 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     assert serials == []
     assert initial_host.closed is True
     coordinator_stopped = not coordinator._thread.is_alive()  # noqa: SLF001
-    runtime.close()
     assert coordinator_stopped
 
 
