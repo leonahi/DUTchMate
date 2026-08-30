@@ -1,20 +1,19 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `2f03b022086d754e2086417253a1c854238c64fe` on 2026-08-30
+> Code baseline reviewed: `df685ac2697e4cb69e1618a83a1ad30071f3f399` on 2026-08-30
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; service-owned continuous
-  ingestion is complete for both selected backends. Each selected Basic or
-  Enhanced source is consumed through one coordinator and one normalized
-  processing pipeline; finite-workflow reconnect remains intentionally
-  synchronous/transitional.
-- **Next step:** Continuously ingest and monitor connection state outside finite
-  workflows for either backend.
+- **Current milestone:** Phase 1A is accepted; continuous connection/integrity
+  monitoring is complete for both selected backends through the single
+  coordinator; finite-workflow reconnect remains synchronous/transitional.
+- **Next step:** Coordinate reconnect, hello/identity validation, source
+  replacement, and segment origins without creating a second processing
+  pipeline.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -32,10 +31,10 @@ must not duplicate this progress checklist.
 Phase 1 is not complete. Phase 1A is accepted on the real Basic hardware path
 using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
 adapter. Phase 1B is partial: its atomic host wire migration, initial async
-semantic/lifecycle/startup-selection slice, and service-owned continuous
-ingestion coordinator are complete, but continuous connection-state monitoring,
-reconnect migration, RP2040 firmware, and prototype/ring-buffer/HIL validation
-have not run.
+  semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
+  coordinator, and continuous connection/integrity monitoring are complete, but
+  reconnect migration, RP2040 firmware, and prototype/ring-buffer/HIL validation
+  have not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -43,7 +42,7 @@ have not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, initial async semantic consumers, service lifecycle/startup selection, and service-owned continuous ingestion are complete; continuous connection-state monitoring and reconnect remain, with finite-workflow reconnect intentionally synchronous/transitional. |
+| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, initial async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, and continuous connection/integrity monitoring are complete; reconnect migration remains, with finite-workflow reconnect intentionally synchronous/transitional. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -56,45 +55,27 @@ for the real-hardware gates in the Phase 1 done criteria.
 ## Latest Validation
 
 Working tree based on code baseline
-`2f03b022086d754e2086417253a1c854238c64fe`, reviewed 2026-08-30:
+`df685ac2697e4cb69e1618a83a1ad30071f3f399`, reviewed 2026-08-30:
 
-- Focused continuous-ingestion/service/runtime gate (`apps/service/tests/test_continuous_ingestion.py`,
-  `apps/service/tests/test_backend_reconnect.py`,
-  `apps/service/tests/test_startup_config.py`,
-  `apps/service/tests/test_app_lifecycle.py`,
-  `tests/unit/workflows/test_capture_workflows.py`,
-  `tests/unit/workflows/test_capture_reconnect.py`,
-  `tests/unit/runtime/test_device_core_capture.py`,
-  `tests/unit/runtime/test_device_core_wait.py`, and
-  `tests/unit/runtime/test_device_core_lifecycle.py`): 144 passed in 5.83s;
-  zero failures and no leaked-thread warnings.
-- Ruff: `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/ruff check .`
-  passed with `All checks passed!`.
-- Mypy: `MYPYPATH=core/src /Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/mypy`
-  passed with no issues in 73 source files.
-- Full Pytest: `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/pytest`
-  passed: 1138 passed in 12.33s.
+- Focused continuous-ingestion/service/runtime gate (the 13 Task 5 files,
+  including connection monitoring, status endpoint, and runtime monitoring):
+  181 passed in 5.91s; zero failures and no leaked
+  `dutchmate-continuous-ingestion` thread warning.
+- Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`.
+- Mypy: `MYPYPATH=core/src .venv/bin/mypy` passed with no issues in 73 source
+  files.
+- Full Pytest: `.venv/bin/pytest` passed: 1158 passed in 11.87s.
 - `git diff --check`: passed with no whitespace errors.
-- Dependency-direction searches found no `dutchmate_service`, FastAPI, or
-  serial match in `core/src/dutchmate_core/workflows/capture.py` or
-  `core/src/dutchmate_core/runtime.py`; `threading.RLock` remains at
-  `capture.py:L8` and `runtime.py:L11`. `read_event(` consumption is the
-  service coordinator plus the existing Enhanced compatibility adapter and
-  core protocols, workflow/runtime facades, and backend-local implementations;
-  no additional physical reader was found.
-- Graphify: `graphify update .` re-extracted 188/188 uncached code files and
-  refreshed canonical outputs to 3,819 nodes, 10,457 edges, and 167
-  communities. It retained the pre-existing warning that
-  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` has a syntax error at
-  line 44 and no symbols were extracted; it also reported 153 saved labels for
-  167 communities and refreshed 85 hub-based names.
-- Graphify query for continuous ingestion returned 1,234 nodes (91 shown under
-  the 3,500-token budget). Neither directed path
-  `ContinuousIngestionCoordinator` → `CaptureWorkflow` nor
-  `ContinuousIngestionCoordinator` → `RetryingCaptureReconnect` resolves;
-  source review confirms the coordinator is injected as the runtime message
-  source, while `RetryingCaptureReconnect` calls its detach/replace operations,
-  so neither relationship is a direct call edge.
+- Dependency-direction search found no `dutchmate_service`, FastAPI,
+  `serial_asyncio`, `pyserial`, or `serial.` match in capture or runtime.
+  `read_event()` remains at the service coordinator and established core
+  workflow/runtime boundaries; `Thread(` appears only at
+  `continuous_ingestion.py:L71`, with no `create_task(` match.
+- Graphify: `graphify update .` re-extracted 192/192 uncached code files and
+  refreshed canonical outputs to 3,912 nodes, 10,709 edges, and 164
+  communities. It retained the existing `fixture_protocol.h:L44` syntax-error
+  warning; 167 saved labels were reconciled to 164 communities and 98
+  communities were renamed by their hub.
 
 ## Already Complete — Do Not Reimplement
 
@@ -123,6 +104,8 @@ The following items are no longer backlog work:
   and exact unconfigured or rejected role state.
 - typed Enhanced backend-input classification with operation/backend context
   and bounded frame sizes kept out of session metadata.
+- continuous idle connection-state and Enhanced integrity projection through the
+  existing status contract.
 
 ## Active Queue — Phase 1
 
@@ -205,7 +188,7 @@ remaining.
 - [x] Add one service-owned continuous ingestion coordinator for the selected
   backend. It may consume the Basic adapter's existing async FIFO boundary but
   must not create a second Basic serial reader.
-- [ ] Continuously ingest and monitor connection state outside finite workflows
+- [x] Continuously ingest and monitor connection state outside finite workflows
   for either backend.
 - [ ] Coordinate reconnect, hello/identity validation, source replacement, and
   segment origins without creating a second processing pipeline.
