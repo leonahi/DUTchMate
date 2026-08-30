@@ -67,6 +67,7 @@ from dutchmate_core.workflows.capture import (
     CaptureEventSource,
     CaptureReconnect,
     CaptureSessionStorage,
+    CaptureSourceMonitor,
     CaptureWorkflow,
     CaptureWorkflowLifecycle,
     ReconnectedCaptureSource,
@@ -447,6 +448,7 @@ class DeviceCoreRuntime:
         """Return the current service-facing status snapshot."""
 
         with self._operation_lock:
+            self._reconcile_capture_source_health()
             source_segment = getattr(self._message_source, "segment", None)
             if self._connected and isinstance(source_segment, SegmentContext):
                 self._segment_context = source_segment
@@ -880,6 +882,17 @@ class DeviceCoreRuntime:
             self._segment_context = None
             self._integrity = None
 
+    def _reconcile_capture_source_health(self) -> None:
+        source = self._message_source
+        if not isinstance(source, CaptureSourceMonitor):
+            return
+        health = source.capture_source_health()
+        if not health.connected:
+            self._mark_backend_disconnected()
+            return
+        if self._connected and health.integrity is not None:
+            self._integrity = health.integrity
+
     def _reconnect_capture_source(
         self,
         *,
@@ -985,6 +998,7 @@ class DeviceCoreRuntime:
             close()
 
     def _require_connected(self) -> None:
+        self._reconcile_capture_source_health()
         if not self._connected:
             raise DeviceCoreRuntimeError("Debug Helper is not connected")
 

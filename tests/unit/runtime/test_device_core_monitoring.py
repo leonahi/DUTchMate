@@ -1,0 +1,164 @@
+from pathlib import Path
+
+import pytest
+from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
+
+from dutchmate_core.backends import BackendInfo, SegmentContext, SegmentTimestamp, UartIntegrity
+from dutchmate_core.backends.enhanced import EnhancedDeviceControl
+from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
+from dutchmate_core.session_store.store import SessionStore
+from dutchmate_core.workflows.capture import CaptureSourceHealth
+
+
+class MutableHealthSource:
+    def __init__(self, health: CaptureSourceHealth) -> None:
+        self.health = health
+        self.close_count = 0
+        self.segment = SegmentContext(
+            segment_id=0,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=0,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        )
+
+    def read_event(self) -> None:
+        return None
+
+    def capture_source_health(self) -> CaptureSourceHealth:
+        return self.health
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
+def monitored_runtime(
+    tmp_path: Path,
+    source: MutableHealthSource,
+    *,
+    clock: FakeMonotonicClock | None = None,
+) -> DeviceCoreRuntime:
+    return DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=SessionStore(root=tmp_path),
+    )
+
+
+def test_status_reconciles_idle_terminal_and_clears_connection_state(
+    tmp_path: Path,
+) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(True, None))
+    runtime = monitored_runtime(tmp_path, source)
+    runtime.record_backend_connection(enhanced_info())
+    runtime._commanded_boot_mode = "bootloader"  # noqa: SLF001 - invalidation proof.
+    source.health = CaptureSourceHealth(False, None)
+
+    status = runtime.status()
+
+    assert status.connected is False
+    assert status.connection_state == "disconnected"
+    assert status.commanded_boot_mode is None
+    assert status.firmware is None
+    assert status.device is None
+    assert status.backend_capabilities == ()
+    assert status.capabilities == ()
+    assert status.timestamp_provenance is None
+    assert status.integrity is None
+    runtime.close()
+
+
+def test_connection_required_operation_reconciles_before_admission(
+    tmp_path: Path,
+) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(True, None))
+    runtime = monitored_runtime(tmp_path, source)
+    runtime.record_backend_connection(enhanced_info())
+    source.health = CaptureSourceHealth(False, None)
+
+    with pytest.raises(DeviceCoreRuntimeError, match="not connected"):
+        runtime.capture_uart(duration_s=0.1)
+
+    assert runtime.status().active_session_id is None
+    runtime.close()
+
+
+def test_connected_enhanced_monitor_updates_live_integrity(tmp_path: Path) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(True, None))
+    runtime = monitored_runtime(tmp_path, source)
+    runtime.record_backend_connection(enhanced_info())
+    expected = UartIntegrity("loss_reported", "debug_helper_rx_buffer", 12)
+    source.health = CaptureSourceHealth(True, expected)
+
+    assert runtime.status().integrity == expected
+    runtime.close()
+
+
+def test_basic_monitor_without_integrity_stays_not_observable(tmp_path: Path) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(True, None))
+    runtime = monitored_runtime(tmp_path, source)
+    runtime.record_backend_connection(
+        BackendInfo(
+            mode="basic",
+            port="/dev/ttyUSB0",
+            firmware=None,
+            device=None,
+            capabilities=frozenset({"uart_receive"}),
+        )
+    )
+
+    assert runtime.status().integrity == UartIntegrity("not_observable", None, None)
+    runtime.close()
+
+
+def test_connected_monitor_cannot_restore_disconnected_runtime(tmp_path: Path) -> None:
+    expected = UartIntegrity("loss_reported", "debug_helper_rx_buffer", 3)
+    source = MutableHealthSource(CaptureSourceHealth(True, expected))
+    runtime = monitored_runtime(tmp_path, source)
+    runtime.record_backend_connection(enhanced_info())
+    runtime.disconnect()
+
+    status = runtime.status()
+
+    assert status.connected is False
+    assert status.connection_state == "disconnected"
+    assert status.integrity is None
+    runtime.close()
+
+
+def test_plain_capture_source_remains_compatible(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    source = FakeCaptureSource([], clock=clock)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info())
+
+    assert runtime.status().connected is True
+    runtime.close()
+
+
+def test_disconnected_monitor_does_not_erase_reconnect_deadline(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+    source = MutableHealthSource(CaptureSourceHealth(True, None))
+    runtime = monitored_runtime(tmp_path, source, clock=clock)
+    runtime.record_backend_connection(enhanced_info())
+    runtime._reconnect_deadline = 10.0  # noqa: SLF001 - precedence assertion.
+    source.health = CaptureSourceHealth(False, None)
+
+    status = runtime.status()
+
+    assert status.connected is False
+    assert status.connection_state == "reconnecting"
+    assert status.reconnect_remaining_s == 10.0
+    runtime._reconnect_deadline = None  # noqa: SLF001 - test cleanup.
+    runtime.close()

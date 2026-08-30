@@ -9,12 +9,13 @@
 Read this document first whenever development resumes.
 
 - **Current milestone:** Phase 1A is accepted; service-owned continuous
-  ingestion is complete for both selected backends. Each selected Basic or
-  Enhanced source is consumed through one coordinator and one normalized
-  processing pipeline; finite-workflow reconnect remains intentionally
-  synchronous/transitional.
-- **Next step:** Continuously ingest and monitor connection state outside finite
-  workflows for either backend.
+  ingestion and runtime connection-state reconciliation are complete for both
+  selected backends. Each selected Basic or Enhanced source is consumed through
+  one coordinator and one normalized processing pipeline; finite-workflow
+  reconnect remains intentionally synchronous/transitional.
+- **Next step:** Coordinate reconnect, hello/identity validation, source
+  replacement, and segment origins without creating a second processing
+  pipeline.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -56,7 +57,14 @@ for the real-hardware gates in the Phase 1 done criteria.
 ## Latest Validation
 
 Working tree based on code baseline
-`2f03b022086d754e2086417253a1c854238c64fe`, reviewed 2026-08-30:
+`87100cd` (`Project continuous UART integrity health`), reviewed 2026-08-30:
+
+- Task 3 runtime reconciliation focused suite (`tests/unit/runtime/test_device_core_monitoring.py`)
+  and runtime regressions (`test_device_core_capture.py`,
+  `test_device_core_wait.py`, `test_device_core_uart_send.py`, and
+  `test_device_core_lifecycle.py`): 64 passed in 0.75s. Ruff and mypy passed;
+  the full suite had 3 startup-test failures because idle malformed input now
+  correctly publishes disconnected source health before admission.
 
 - Focused continuous-ingestion/service/runtime gate (`apps/service/tests/test_continuous_ingestion.py`,
   `apps/service/tests/test_backend_reconnect.py`,
@@ -205,7 +213,7 @@ remaining.
 - [x] Add one service-owned continuous ingestion coordinator for the selected
   backend. It may consume the Basic adapter's existing async FIFO boundary but
   must not create a second Basic serial reader.
-- [ ] Continuously ingest and monitor connection state outside finite workflows
+- [x] Continuously ingest and monitor connection state outside finite workflows
   for either backend.
 - [ ] Coordinate reconnect, hello/identity validation, source replacement, and
   segment origins without creating a second processing pipeline.
