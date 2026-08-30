@@ -12,7 +12,10 @@ from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendEvent,
     BackendInputError,
+    BufferOverflowEvent,
+    BufferStatusEvent,
     SegmentContext,
+    UartIntegrity,
 )
 from dutchmate_core.workflows.capture import CaptureEventSource, CaptureSourceHealth
 
@@ -314,8 +317,10 @@ class ContinuousIngestionCoordinator:
 
             source_segment = _source_segment(source)
             with self._condition:
-                if source is self._source:
+                if source is self._source and not self._closing:
                     self._segment = source_segment
+                    if event is not None:
+                        self._health = _project_event_health(self._health, event)
                 if self._closing:
                     return
                 if source is not self._source or event is None or not self._workflow_active:
@@ -371,6 +376,39 @@ class ContinuousIngestionCoordinator:
 def _source_segment(source: CaptureEventSource) -> SegmentContext | None:
     segment = getattr(source, "segment", None)
     return segment if isinstance(segment, SegmentContext) else None
+
+
+def _project_event_health(
+    health: CaptureSourceHealth,
+    event: BackendEvent,
+) -> CaptureSourceHealth:
+    integrity = health.integrity
+    previous_dropped = (
+        integrity.dropped_bytes
+        if integrity is not None and integrity.dropped_bytes is not None
+        else 0
+    )
+    if isinstance(event, BufferOverflowEvent):
+        return CaptureSourceHealth(
+            health.connected,
+            UartIntegrity(
+                "loss_reported",
+                "debug_helper_rx_buffer",
+                previous_dropped + event.dropped_bytes,
+            ),
+        )
+    if isinstance(event, BufferStatusEvent):
+        reported_loss = event.dropped_bytes_total > 0 or event.overflow_events > 0
+        prior_loss = integrity is not None and integrity.loss_status == "loss_reported"
+        return CaptureSourceHealth(
+            health.connected,
+            UartIntegrity(
+                "loss_reported" if prior_loss or reported_loss else "none_reported",
+                "debug_helper_rx_buffer",
+                max(previous_dropped, event.dropped_bytes_total),
+            ),
+        )
+    return health
 
 
 def _close_source(source: CaptureEventSource) -> None:

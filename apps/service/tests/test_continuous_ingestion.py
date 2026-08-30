@@ -12,9 +12,11 @@ from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendEvent,
     BackendInputError,
+    BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
     SegmentTimestamp,
+    UartIntegrity,
     UartReceiveEvent,
 )
 from dutchmate_core.workflows.capture import CaptureSourceHealth
@@ -126,15 +128,31 @@ def uart_event(data: bytes, *, segment_id: int = 0) -> UartReceiveEvent:
     )
 
 
-def buffer_status_event(*, segment_id: int = 0) -> BufferStatusEvent:
+def buffer_overflow_event(
+    dropped_bytes: int, *, segment_id: int = 0
+) -> BufferOverflowEvent:
+    return BufferOverflowEvent(
+        segment_id=segment_id,
+        timestamp_us=0,
+        channel=0,
+        dropped_bytes=dropped_bytes,
+    )
+
+
+def buffer_status_event(
+    *,
+    dropped_bytes_total: int = 0,
+    overflow_events: int = 0,
+    segment_id: int = 0,
+) -> BufferStatusEvent:
     return BufferStatusEvent(
         segment_id=segment_id,
         timestamp_us=0,
         size_bytes=256,
         used_bytes=8,
         high_water_bytes=16,
-        dropped_bytes_total=0,
-        overflow_events=0,
+        dropped_bytes_total=dropped_bytes_total,
+        overflow_events=overflow_events,
     )
 
 
@@ -157,6 +175,100 @@ def wait_for_health(
             timeout=1,
         )
         return coordinator.capture_source_health()
+
+
+def test_idle_zero_status_publishes_none_reported_integrity() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(buffer_status_event())
+        assert source.wait_for_reads(2)
+        assert coordinator.capture_source_health().integrity == UartIntegrity(
+            "none_reported", "debug_helper_rx_buffer", 0
+        )
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_idle_incremental_and_cumulative_telemetry_do_not_double_count() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(buffer_overflow_event(5))
+        source.publish(buffer_status_event(dropped_bytes_total=5, overflow_events=1))
+        source.publish(buffer_status_event(dropped_bytes_total=3))
+        source.publish(buffer_status_event(dropped_bytes_total=9, overflow_events=1))
+        assert source.wait_for_reads(5)
+        assert coordinator.capture_source_health().integrity == UartIntegrity(
+            "loss_reported", "debug_helper_rx_buffer", 9
+        )
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_active_telemetry_updates_health_and_enters_fifo_once() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source, event_wait_timeout_s=0.01)
+    event = buffer_overflow_event(7)
+    try:
+        coordinator.begin_workflow()
+        source.publish(event)
+        assert coordinator.read_event() is event
+        assert coordinator.capture_source_health().integrity == UartIntegrity(
+            "loss_reported", "debug_helper_rx_buffer", 7
+        )
+        assert coordinator.read_event() is None
+        coordinator.end_workflow()
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_replacement_resets_monitor_integrity() -> None:
+    source = ControlledSource()
+    replacement = ControlledSource(segment_id=1)
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(buffer_overflow_event(4))
+        assert source.wait_for_reads(2)
+        coordinator.begin_workflow()
+        source.publish(BackendDisconnectedError("removed"))
+        with pytest.raises(BackendDisconnectedError):
+            coordinator.read_event()
+        coordinator.close_current_source_for_reconnect()
+        coordinator.replace_source(replacement)
+        assert coordinator.capture_source_health() == CaptureSourceHealth(True, None)
+        coordinator.end_workflow()
+    finally:
+        close_coordinator(coordinator)
+
+
+class EventReleasedByCloseSource(ControlledSource):
+    def __init__(self, event: BackendEvent) -> None:
+        super().__init__()
+        self._event = event
+        self._release_read = Event()
+
+    def read_event(self) -> BackendEvent:
+        self.read_started.set()
+        assert self._release_read.wait(timeout=1)
+        return self._event
+
+    def close(self) -> None:
+        self.close_count += 1
+        self.closed = True
+        self._release_read.set()
+
+
+def test_outcome_released_by_close_cannot_update_disconnected_health() -> None:
+    source = EventReleasedByCloseSource(
+        buffer_status_event(dropped_bytes_total=8, overflow_events=1)
+    )
+    coordinator = ContinuousIngestionCoordinator(source)
+    assert source.read_started.wait(timeout=1)
+
+    close_coordinator(coordinator)
+
+    assert coordinator.capture_source_health() == CaptureSourceHealth(False, None)
 
 
 def test_initial_timeout_and_uart_preserve_connected_health() -> None:
