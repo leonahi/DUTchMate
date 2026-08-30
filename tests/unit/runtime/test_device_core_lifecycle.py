@@ -35,43 +35,77 @@ def test_runtime_close_closes_current_source_once(tmp_path: Path) -> None:
     assert source.close_count == 1
 
 
-def test_runtime_close_owns_reconnect_replacement_without_reclosing_original(
+def test_runtime_reconnect_keeps_stable_facade_as_message_source(
     tmp_path: Path,
 ) -> None:
-    """Catch shutdown retaining the pre-reconnect source instead of its replacement."""
+    """Catch reconnect replacing the stable facade with a concrete source identity."""
 
     clock = FakeMonotonicClock()
-    initial = FakeCaptureSource([], clock=clock)
-    replacement = FakeCaptureSource([], clock=clock)
+    facade = FakeCaptureSource([], clock=clock)
     snapshot = _replacement_snapshot(segment_id=1)
-    replacement.segment = snapshot.segment
+    facade.segment = snapshot.segment
 
     def reconnect(*, segment_id: int, deadline: float) -> ReconnectedCaptureSource:
         assert segment_id == 1
         assert deadline == 10.0
-        initial.close()
-        return ReconnectedCaptureSource(source=replacement, backend_snapshot=snapshot)
+        assert runtime._message_source is None  # noqa: SLF001
+        assert runtime._reconnect_source is facade  # noqa: SLF001
+        return ReconnectedCaptureSource(source=facade, backend_snapshot=snapshot)
 
     runtime = DeviceCoreRuntime(
         device_control=EnhancedDeviceControl(FakeTransport()),
-        message_source=initial,
+        message_source=facade,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
     )
 
-    assert (
-        runtime._reconnect_capture_source(  # noqa: SLF001 - exercises replacement ownership.
-            expected_snapshot=snapshot,
-            segment_id=1,
-            deadline=10.0,
-        )
-        is not None
+    result = runtime._reconnect_capture_source(  # noqa: SLF001
+        expected_snapshot=snapshot,
+        segment_id=1,
+        deadline=10.0,
     )
 
+    assert result == ReconnectedCaptureSource(source=facade, backend_snapshot=snapshot)
+    assert runtime._message_source is facade  # noqa: SLF001
+    assert runtime._reconnect_source is None  # noqa: SLF001
     runtime.close()
+    assert facade.close_count == 1
 
-    assert initial.close_count == 1
-    assert replacement.close_count == 1
+
+def test_runtime_restores_stable_facade_when_reconnect_returns_none(
+    tmp_path: Path,
+) -> None:
+    """Catch a timed-out reconnect dropping the facade needed for final shutdown."""
+
+    clock = FakeMonotonicClock()
+    facade = FakeCaptureSource([], clock=clock)
+    snapshot = _replacement_snapshot(segment_id=1)
+
+    def reconnect(*, segment_id: int, deadline: float) -> None:
+        assert segment_id == 1
+        assert deadline == 10.0
+        assert runtime._message_source is None  # noqa: SLF001
+        assert runtime._reconnect_source is facade  # noqa: SLF001
+        return None
+
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=facade,
+        session_store=SessionStore(root=tmp_path),
+        backend_reconnect=reconnect,
+    )
+
+    result = runtime._reconnect_capture_source(  # noqa: SLF001
+        expected_snapshot=snapshot,
+        segment_id=1,
+        deadline=10.0,
+    )
+
+    assert result is None
+    assert runtime._message_source is facade  # noqa: SLF001
+    assert runtime._reconnect_source is None  # noqa: SLF001
+    runtime.close()
+    assert facade.close_count == 1
 
 
 def test_concurrent_runtime_closers_wait_for_and_share_cleanup_error(tmp_path: Path) -> None:
@@ -126,30 +160,30 @@ def test_runtime_close_during_reconnect_waits_and_rejects_replacement(
     """Catch close returning while reconnect can still publish a live replacement."""
 
     clock = FakeMonotonicClock()
-    initial = FakeCaptureSource([], clock=clock)
     replacement_close_error = (
         RuntimeError("replacement close failed") if replacement_close_fails else None
     )
-    replacement = BlockingCloseCaptureSource(
+    facade = BlockingCloseCaptureSource(
         clock=clock,
         close_error=replacement_close_error,
     )
     snapshot = _replacement_snapshot(segment_id=1)
-    replacement.segment = snapshot.segment
+    facade.segment = snapshot.segment
     reopen_started = Event()
     release_reopen = Event()
 
     def reconnect(*, segment_id: int, deadline: float) -> ReconnectedCaptureSource:
         assert segment_id == 1
         assert deadline == 10.0
-        initial.close()
+        assert runtime._message_source is None  # noqa: SLF001
+        assert runtime._reconnect_source is facade  # noqa: SLF001
         reopen_started.set()
         assert release_reopen.wait(timeout=1)
-        return ReconnectedCaptureSource(source=replacement, backend_snapshot=snapshot)
+        return ReconnectedCaptureSource(source=facade, backend_snapshot=snapshot)
 
     runtime = DeviceCoreRuntime(
         device_control=EnhancedDeviceControl(FakeTransport()),
-        message_source=initial,
+        message_source=facade,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
     )
@@ -190,11 +224,11 @@ def test_runtime_close_during_reconnect_waits_and_rejects_replacement(
     try:
         assert not close_completed.wait(timeout=0.1)
         release_reopen.set()
-        assert replacement.close_started.wait(timeout=1)
+        assert facade.close_started.wait(timeout=1)
         assert not close_completed.wait(timeout=0.1)
     finally:
         release_reopen.set()
-        replacement.release_close.set()
+        facade.release_close.set()
         reconnect_thread.join(timeout=1)
         close_thread.join(timeout=1)
 
@@ -211,8 +245,9 @@ def test_runtime_close_during_reconnect_waits_and_rejects_replacement(
         with pytest.raises(RuntimeError) as repeated:
             runtime.close()
         assert repeated.value is replacement_close_error
-    assert initial.close_count == 1
-    assert replacement.close_count == 1
+    assert facade.close_count == 1
+    assert runtime._message_source is None  # noqa: SLF001
+    assert runtime._reconnect_source is None  # noqa: SLF001
     assert runtime.status().connected is False
 
 
@@ -244,6 +279,8 @@ def test_reconnect_after_runtime_close_does_not_open_backend(tmp_path: Path) -> 
 
     assert replacement is None
     assert reconnect_calls == []
+    assert runtime._message_source is None  # noqa: SLF001
+    assert runtime._reconnect_source is None  # noqa: SLF001
 
 
 def test_runtime_close_publishes_disconnected_status(tmp_path: Path) -> None:

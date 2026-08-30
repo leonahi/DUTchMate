@@ -55,6 +55,19 @@ class OpenCaptureReplacement(Protocol):
         """Return a fully prepared replacement or raise for a failed attempt."""
 
 
+class ReplaceableCaptureSource(CaptureEventSource, Protocol):
+    """Stable capture facade that exclusively owns concrete backend sources."""
+
+    def close_current_source_for_reconnect(self) -> None:
+        """Detach and close the consumed source before reconnect opening."""
+
+    def replace_source(self, replacement: CaptureEventSource) -> None:
+        """Accept ownership of one validated concrete replacement."""
+
+    def close(self) -> None:
+        """Terminalize the stable facade and its current concrete source."""
+
+
 class OpenBasicConnection(Protocol):
     """Open one raw Basic connection from resolved settings."""
 
@@ -80,7 +93,7 @@ class RetryingCaptureReconnect:
     def __init__(
         self,
         *,
-        current_source: CaptureEventSource,
+        source_owner: ReplaceableCaptureSource,
         open_replacement: OpenCaptureReplacement,
         on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
@@ -89,7 +102,7 @@ class RetryingCaptureReconnect:
     ) -> None:
         if retry_interval_s <= 0:
             raise ValueError("reconnect retry interval must be positive")
-        self._current_source = current_source
+        self._source_owner = source_owner
         self._open_replacement = open_replacement
         self._on_connected = on_connected
         self._clock = monotonic_clock
@@ -102,7 +115,7 @@ class RetryingCaptureReconnect:
         segment_id: int,
         deadline: float,
     ) -> ReconnectedCaptureSource | None:
-        self._close_source(self._current_source)
+        self._source_owner.close_current_source_for_reconnect()
         while self._clock() < deadline:
             try:
                 replacement = self._open_replacement(
@@ -117,10 +130,18 @@ class RetryingCaptureReconnect:
             if self._clock() >= deadline:
                 self._close_source(replacement.source)
                 return None
-            self._current_source = replacement.source
-            if self._on_connected is not None:
-                self._on_connected(replacement)
-            return replacement
+            self._source_owner.replace_source(replacement.source)
+            try:
+                if self._on_connected is not None:
+                    self._on_connected(replacement)
+            except BaseException:
+                with suppress(BaseException):
+                    self._source_owner.close()
+                raise
+            return ReconnectedCaptureSource(
+                source=self._source_owner,
+                backend_snapshot=replacement.backend_snapshot,
+            )
         return None
 
     def _wait_for_retry(self, deadline: float) -> None:
@@ -133,7 +154,7 @@ class RetryingCaptureReconnect:
         close = getattr(source, "close", None)
         if not callable(close):
             return
-        with suppress(Exception):
+        with suppress(BaseException):
             close()
 
 
@@ -196,7 +217,8 @@ class ReplaceableUartSender:
 def build_basic_capture_reconnect(
     *,
     settings: BackendSettings,
-    current_source: BasicBackendEventSource,
+    source_owner: ReplaceableCaptureSource,
+    expected_snapshot: BackendSnapshot,
     open_connection: OpenBasicConnection,
     sender: ReplaceableUartSender,
     monotonic_clock: Callable[[], float],
@@ -214,6 +236,12 @@ def build_basic_capture_reconnect(
         del deadline
         connection = open_connection(settings)
         source = BasicBackendEventSource(connection, segment_id=segment_id)
+        try:
+            _require_matching_basic_snapshot(expected_snapshot, source.snapshot)
+        except BaseException:
+            with suppress(BaseException):
+                source.close()
+            raise
         opened_senders[id(source)] = connection
         return ReconnectedCaptureSource(
             source=source,
@@ -224,7 +252,7 @@ def build_basic_capture_reconnect(
         sender.replace(opened_senders.pop(id(replacement.source)))
 
     return RetryingCaptureReconnect(
-        current_source=current_source,
+        source_owner=source_owner,
         open_replacement=open_replacement,
         on_connected=publish_sender,
         monotonic_clock=monotonic_clock,
@@ -235,7 +263,7 @@ def build_basic_capture_reconnect(
 def build_enhanced_capture_reconnect(
     *,
     settings: BackendSettings,
-    current_source: CaptureEventSource,
+    source_owner: ReplaceableCaptureSource,
     expected_info: BackendInfo,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
@@ -304,7 +332,7 @@ def build_enhanced_capture_reconnect(
         sender.replace(replacement_sender)
 
     return RetryingCaptureReconnect(
-        current_source=current_source,
+        source_owner=source_owner,
         open_replacement=open_replacement,
         on_connected=publish_control,
         monotonic_clock=monotonic_clock,
@@ -353,4 +381,21 @@ def _require_matching_enhanced_identity(
         raise BackendInputError(
             "Reconnected Debug Helper identity changed",
             backend_mode="enhanced",
+        )
+
+
+def _require_matching_basic_snapshot(
+    expected: BackendSnapshot,
+    replacement: BackendSnapshot,
+) -> None:
+    if (
+        replacement.info.mode != expected.info.mode
+        or replacement.info.port != expected.info.port
+        or replacement.info.device != expected.info.device
+        or replacement.info.firmware != expected.info.firmware
+        or replacement.capability_policy != expected.capability_policy
+    ):
+        raise BackendInputError(
+            "Reconnected Basic backend identity changed",
+            backend_mode="basic",
         )

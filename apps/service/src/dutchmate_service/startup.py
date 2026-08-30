@@ -38,6 +38,7 @@ from dutchmate_service.backend_reconnect import (
     build_enhanced_capture_reconnect,
     read_enhanced_hello,
 )
+from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.enhanced_async import open_enhanced_async_host
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
@@ -111,29 +112,37 @@ def build_startup_runtime(
     if backend_settings.mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
-        sender = ReplaceableUartSender(connection)
-        control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
-        reconnect = build_basic_capture_reconnect(
-            settings=backend_settings,
-            current_source=basic_source,
-            open_connection=open_basic_backend_connection,
-            sender=sender,
-            monotonic_clock=reconnect_clock,
-            sleep=reconnect_sleep,
-        )
-        runtime = DeviceCoreRuntime(
-            device_control=control,
-            uart_sender=sender,
-            message_source=basic_source,
-            session_store=session_store,
-            capture_clock=monotonic_clock,
-            port=connection.info.port,
-            backend_mode="basic",
-            tx_policy_enabled=backend_settings.tx_enabled,
-            reconnect_timeout_s=backend_settings.reconnect_timeout_s,
-            backend_reconnect=reconnect,
-        )
-        runtime.record_backend_connection(connection.info)
+        initial_snapshot = basic_source.snapshot
+        coordinator = ContinuousIngestionCoordinator(basic_source)
+        try:
+            sender = ReplaceableUartSender(connection)
+            control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
+            reconnect = build_basic_capture_reconnect(
+                settings=backend_settings,
+                source_owner=coordinator,
+                expected_snapshot=initial_snapshot,
+                open_connection=open_basic_backend_connection,
+                sender=sender,
+                monotonic_clock=reconnect_clock,
+                sleep=reconnect_sleep,
+            )
+            runtime = DeviceCoreRuntime(
+                device_control=control,
+                uart_sender=sender,
+                message_source=coordinator,
+                session_store=session_store,
+                capture_clock=monotonic_clock,
+                port=connection.info.port,
+                backend_mode="basic",
+                tx_policy_enabled=backend_settings.tx_enabled,
+                reconnect_timeout_s=backend_settings.reconnect_timeout_s,
+                backend_reconnect=reconnect,
+            )
+            runtime.record_backend_connection(connection.info)
+        except BaseException:
+            with suppress(BaseException):
+                coordinator.close()
+            raise
         return runtime
 
     serial_port = backend_settings.serial_port
@@ -150,13 +159,14 @@ def build_startup_runtime(
         baudrate=backend_settings.baudrate,
         segment_id=0,
     )
+    coordinator = ContinuousIngestionCoordinator(enhanced_host)
     try:
         info = enhanced_host.info
         control = ReplaceableDeviceControl(enhanced_host)
         sender = ReplaceableUartSender(enhanced_host)
         reconnect = build_enhanced_capture_reconnect(
             settings=backend_settings,
-            current_source=enhanced_host,
+            source_owner=coordinator,
             expected_info=info,
             control=control,
             sender=sender,
@@ -167,7 +177,7 @@ def build_startup_runtime(
         runtime = DeviceCoreRuntime(
             device_control=control,
             uart_sender=sender,
-            message_source=enhanced_host,
+            message_source=coordinator,
             session_store=session_store,
             capture_clock=monotonic_clock,
             port=serial_port,
@@ -179,7 +189,7 @@ def build_startup_runtime(
         runtime.record_backend_connection(info)
     except BaseException:
         with suppress(BaseException):
-            enhanced_host.close()
+            coordinator.close()
         raise
     return runtime
 

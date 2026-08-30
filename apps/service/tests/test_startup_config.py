@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Condition, Thread
 from threading import Event as ThreadEvent
 
 import pytest
@@ -18,7 +19,7 @@ from dutchmate_core.backends import (
     SegmentTimestamp,
     UartReceiveEvent,
 )
-from dutchmate_core.backends.basic import BasicBackendConnection
+from dutchmate_core.backends.basic import BasicBackendConnection, BasicBackendEventSource
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl, normalize_enhanced_hello
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import (
@@ -31,8 +32,10 @@ from dutchmate_core.device_connection.serial_transport import SerialCommandTrans
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
+from dutchmate_core.workflows.capture import CaptureEventSource, CaptureWorkflow
 from dutchmate_service import startup
 from dutchmate_service.app import create_app
+from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.startup import (
     apply_startup_hardware_config,
     build_startup_runtime,
@@ -80,12 +83,14 @@ class ScriptedBasicSerial:
         self._reads = reads
         self.closed = False
         self._closed = ThreadEvent()
+        self.read_started = ThreadEvent()
 
     def write(self, data: bytes) -> int:
         return len(data)
 
     def read(self, size: int = 1) -> bytes:
         del size
+        self.read_started.set()
         if not self._reads:
             self._closed.wait()
             raise OSError("serial closed")
@@ -154,6 +159,7 @@ class FakeEnhancedAsyncHost:
         self._close_error = close_error
         self.closed = False
         self.close_count = 0
+        self._condition = Condition()
         self.discard_count = 0
         self.configuration_requests: list[tuple[str, str, str, str | None]] = []
         self.pulse_requests: list[tuple[str, int]] = []
@@ -189,23 +195,75 @@ class FakeEnhancedAsyncHost:
         return BackendUartSendResult(bytes_accepted=len(data), device_timestamp_us=123)
 
     def read_event(self) -> BackendEvent | None:
-        if not self._read_outcomes:
-            return None
-        outcome = self._read_outcomes.pop(0)
+        with self._condition:
+            while not self._read_outcomes and not self.closed:
+                self._condition.wait()
+            if self.closed:
+                return None
+            outcome = self._read_outcomes.pop(0)
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+    def publish(self, outcome: BackendEvent | BaseException | None) -> None:
+        with self._condition:
+            self._read_outcomes.append(outcome)
+            self._condition.notify_all()
 
     def discard_pending_events(self) -> None:
         self.discard_count += 1
 
     def close(self) -> None:
-        self.closed = True
-        self.close_count += 1
+        with self._condition:
+            if self.closed:
+                return
+            self.closed = True
+            self.close_count += 1
+            self._condition.notify_all()
         if self._close_order is not None:
             self._close_order.append("async_closed")
         if self._close_error is not None:
             raise self._close_error
+
+
+class WorkflowBarrierCoordinator(ContinuousIngestionCoordinator):
+    def __init__(self, source: CaptureEventSource) -> None:
+        self.workflow_started = ThreadEvent()
+        super().__init__(source)
+
+    def begin_workflow(self) -> None:
+        super().begin_workflow()
+        self.workflow_started.set()
+
+
+class ConditionBackedBasicSource:
+    def __init__(self) -> None:
+        self.segment = _basic_segment(segment_id=0)
+        self.idle_drained = ThreadEvent()
+        self._condition = Condition()
+        self._outcomes: list[BackendEvent] = []
+        self._closed = False
+
+    def publish(self, event: BackendEvent) -> None:
+        with self._condition:
+            self._outcomes.append(event)
+            self._condition.notify_all()
+
+    def read_event(self) -> BackendEvent | None:
+        with self._condition:
+            while not self._outcomes and not self._closed:
+                self._condition.wait()
+            if self._closed:
+                return None
+            event = self._outcomes.pop(0)
+        if isinstance(event, UartReceiveEvent) and event.data == b"IDLE\n":
+            self.idle_drained.set()
+        return event
+
+    def close(self) -> None:
+        with self._condition:
+            self._closed = True
+            self._condition.notify_all()
 
 
 def backend_settings(
@@ -346,6 +404,8 @@ def test_enhanced_startup_selects_one_async_host(
 ) -> None:
     host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
     opened: list[tuple[str, int, int]] = []
+    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
+    coordinators: list[ContinuousIngestionCoordinator] = []
 
     def fake_open_host(
         *,
@@ -356,7 +416,21 @@ def test_enhanced_startup_selects_one_async_host(
         opened.append((port, baudrate, segment_id))
         return host
 
+    def track_coordinator(
+        source: FakeEnhancedAsyncHost,
+    ) -> ContinuousIngestionCoordinator:
+        coordinator_factory_calls.append(source)
+        coordinator = ContinuousIngestionCoordinator(source)
+        coordinators.append(coordinator)
+        return coordinator
+
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        track_coordinator,
+        raising=False,
+    )
     monkeypatch.setattr(
         startup,
         "open_serial_command_transport",
@@ -373,8 +447,13 @@ def test_enhanced_startup_selects_one_async_host(
     )
 
     assert opened == [("/dev/ttyACM0", 460800, 0)]
+    assert coordinator_factory_calls == [host]
+    assert runtime._message_source is coordinators[0]  # noqa: SLF001
+    assert host.close_count == 0
     assert runtime.status().connected is True
     assert runtime.status().device == "dutchmate-rp2040"
+    runtime.close()
+    assert host.close_count == 1
 
 
 def test_enhanced_startup_closes_host_when_connection_recording_fails(
@@ -383,6 +462,13 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
 ) -> None:
     host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
     primary_error = RuntimeError("connection recording failed")
+    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
+
+    def track_coordinator(
+        source: FakeEnhancedAsyncHost,
+    ) -> ContinuousIngestionCoordinator:
+        coordinator_factory_calls.append(source)
+        return ContinuousIngestionCoordinator(source)
 
     def fail_connection_recording(
         self: DeviceCoreRuntime,
@@ -392,6 +478,12 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
         raise primary_error
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        track_coordinator,
+        raising=False,
+    )
     monkeypatch.setattr(
         DeviceCoreRuntime,
         "record_backend_connection",
@@ -409,7 +501,8 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
         )
 
     assert raised.value is primary_error
-    assert host.closed is True
+    assert coordinator_factory_calls == [host]
+    assert host.close_count == 1
 
 
 def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
@@ -423,11 +516,24 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
         segment_id=0,
         close_error=cleanup_error,
     )
+    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
+
+    def track_coordinator(
+        source: FakeEnhancedAsyncHost,
+    ) -> ContinuousIngestionCoordinator:
+        coordinator_factory_calls.append(source)
+        return ContinuousIngestionCoordinator(source)
 
     def fail_reconnect_composition(**_kwargs: object) -> None:
         raise primary_error
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        track_coordinator,
+        raising=False,
+    )
     monkeypatch.setattr(
         startup,
         "build_enhanced_capture_reconnect",
@@ -445,7 +551,49 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
         )
 
     assert raised.value is primary_error
-    assert host.closed is True
+    assert coordinator_factory_calls == [host]
+    assert host.close_count == 1
+
+
+def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    primary_error = RuntimeError("runtime construction failed")
+    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
+
+    def track_coordinator(
+        source: FakeEnhancedAsyncHost,
+    ) -> ContinuousIngestionCoordinator:
+        coordinator_factory_calls.append(source)
+        return ContinuousIngestionCoordinator(source)
+
+    def fail_runtime_construction(**_kwargs: object) -> None:
+        raise primary_error
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        track_coordinator,
+        raising=False,
+    )
+    monkeypatch.setattr(startup, "DeviceCoreRuntime", fail_runtime_construction)
+
+    with pytest.raises(RuntimeError) as raised:
+        build_startup_runtime(
+            session_root=tmp_path,
+            backend_settings=backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+        )
+
+    assert raised.value is primary_error
+    assert coordinator_factory_calls == [host]
+    assert host.close_count == 1
 
 
 def test_enhanced_startup_hardware_config_reaches_async_host(
@@ -477,8 +625,11 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
         }
     )
 
-    assert apply_startup_hardware_config(runtime, config) is True
-    assert host.configuration_requests == [("CTRL0", "open_drain", "low", None)]
+    try:
+        assert apply_startup_hardware_config(runtime, config) is True
+        assert host.configuration_requests == [("CTRL0", "open_drain", "low", None)]
+    finally:
+        runtime.close()
 
 
 def test_enhanced_startup_captures_normalized_events_from_async_host(
@@ -489,16 +640,14 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
         info=_enhanced_info(),
         segment_id=0,
         segment=_enhanced_segment(segment_id=0),
-        read_outcomes=[
-            UartReceiveEvent(
-                segment_id=0,
-                timestamp_us=25,
-                channel=0,
-                data=b"READY\n",
-            )
-        ],
     )
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        WorkflowBarrierCoordinator,
+        raising=False,
+    )
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -511,8 +660,29 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
         sleep=clock.sleep,
     )
 
-    summary = runtime.capture_uart(duration_s=0.2)
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, WorkflowBarrierCoordinator)
 
+    def publish_workflow_event() -> None:
+        assert coordinator.workflow_started.wait(timeout=1)
+        host.publish(
+            UartReceiveEvent(
+                segment_id=0,
+                timestamp_us=25,
+                channel=0,
+                data=b"READY\n",
+            )
+        )
+
+    publisher = Thread(target=publish_workflow_event)
+    publisher.start()
+    try:
+        summary = runtime.capture_uart(duration_s=0.2)
+    finally:
+        publisher.join(timeout=1)
+        runtime.close()
+
+    assert not publisher.is_alive()
     assert summary.state == "completed"
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
 
@@ -620,7 +790,9 @@ def test_build_startup_runtime_opens_basic_without_hello(
         baudrate=115200,
         tx_enabled=True,
     )
-    serial = FakeSerial([])
+    serial = ScriptedBasicSerial([])
+    coordinator_factory_calls: list[BasicBackendEventSource] = []
+    coordinators: list[ContinuousIngestionCoordinator] = []
 
     def fake_open_basic_backend_connection(
         received_settings: BackendSettings,
@@ -628,13 +800,35 @@ def test_build_startup_runtime_opens_basic_without_hello(
         assert received_settings == settings
         return BasicBackendConnection(serial_port=serial, settings=settings)
 
+    def track_coordinator(
+        source: BasicBackendEventSource,
+    ) -> ContinuousIngestionCoordinator:
+        coordinator_factory_calls.append(source)
+        coordinator = ContinuousIngestionCoordinator(source)
+        coordinators.append(coordinator)
+        return coordinator
+
     monkeypatch.setattr(
         "dutchmate_service.startup.open_basic_backend_connection",
         fake_open_basic_backend_connection,
     )
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        track_coordinator,
+        raising=False,
+    )
 
     runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
 
+    assert len(coordinator_factory_calls) == 1
+    assert isinstance(coordinator_factory_calls[0], BasicBackendEventSource)
+    assert runtime._message_source is coordinators[0]  # noqa: SLF001
+    assert serial.read_started.wait(timeout=1)
+    reader = coordinator_factory_calls[0]._reader  # noqa: SLF001
+    assert reader is not None
+    assert reader.name == "dutchmate-basic-serial-reader"
+    assert reader.is_alive()
     status = runtime.status()
     assert status.connected is True
     assert status.backend_mode == "basic"
@@ -669,6 +863,55 @@ def test_build_startup_runtime_opens_basic_without_hello(
     )
     assert apply_startup_hardware_config(runtime, config) is False
     assert runtime.gpio_registry.get("CTRL0").state == "unconfigured"
+    runtime.close()
+    assert serial.closed is True
+    assert not reader.is_alive()
+
+
+def test_real_coordinator_discards_idle_basic_event_before_capture(
+    tmp_path: Path,
+) -> None:
+    source = ConditionBackedBasicSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    source.publish(
+        UartReceiveEvent(
+            segment_id=0,
+            timestamp_us=1,
+            channel=0,
+            data=b"IDLE\n",
+        )
+    )
+    assert source.idle_drained.wait(timeout=1)
+
+    session_started = ThreadEvent()
+    publisher = Thread(
+        target=lambda: _publish_after_barrier(
+            source,
+            session_started,
+            UartReceiveEvent(
+                segment_id=0,
+                timestamp_us=2,
+                channel=0,
+                data=b"ACTIVE\n",
+            ),
+        )
+    )
+    publisher.start()
+    clock = AdvancingClock()
+    try:
+        summary = CaptureWorkflow(session_store=SessionStore(root=tmp_path)).run(
+            source=coordinator,
+            duration_s=0.2,
+            command="capture --duration 0.2",
+            monotonic_clock=clock,
+            on_session_handle_started=lambda _handle: session_started.set(),
+        )
+    finally:
+        publisher.join(timeout=1)
+        coordinator.close()
+
+    assert not publisher.is_alive()
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"ACTIVE\n"
 
 
 def test_basic_startup_runtime_reopens_disconnected_capture_source(
@@ -699,15 +942,16 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
 
     try:
         summary = runtime.capture_uart(duration_s=0.2)
+        connection_state = runtime.status().connection_state
     finally:
-        replacement_serial.close()
+        runtime.close()
 
     assert summary.state == "completed"
     assert summary.interrupted is True
     assert summary.resumed is True
     assert summary.segment_count == 2
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
-    assert runtime.status().connection_state == "connected"
+    assert connection_state == "connected"
 
 
 def test_enhanced_startup_runtime_reopens_and_validates_hello(
@@ -780,6 +1024,7 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     assert status.timestamp_provenance.segment_id == 1
     assert initial_host.closed is True
     assert order == ["async_closed", "sync_opened"]
+    runtime.close()
 
 
 def test_enhanced_reconnect_rejects_changed_device_identity(
@@ -826,6 +1071,8 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         monotonic_clock=clock,
         sleep=clock.sleep,
     )
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, ContinuousIngestionCoordinator)
 
     with pytest.raises(BackendInputError, match="identity changed"):
         runtime.capture_uart(duration_s=0.2)
@@ -838,6 +1085,9 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     assert runtime.status().connection_state == "disconnected"
     assert serials == []
     assert initial_host.closed is True
+    coordinator_stopped = not coordinator._thread.is_alive()  # noqa: SLF001
+    runtime.close()
+    assert coordinator_stopped
 
 
 def test_build_startup_runtime_recovers_sessions_before_opening_backend(
@@ -850,6 +1100,7 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
         baudrate=115200,
     )
     order: list[str] = []
+    serial = ScriptedBasicSerial([])
 
     def fake_recover(store: SessionStore) -> SessionRecoveryResult:
         order.append("recover")
@@ -859,7 +1110,10 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
         assert received_settings == settings
         assert order == ["recover"]
         order.append("open")
-        return BasicBackendConnection(serial_port=FakeSerial([]), settings=settings)
+        return BasicBackendConnection(
+            serial_port=serial,
+            settings=settings,
+        )
 
     monkeypatch.setattr(SessionStore, "recover_stale_sessions", fake_recover)
     monkeypatch.setattr(
@@ -867,7 +1121,9 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
         fake_open,
     )
 
-    build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+    runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+    assert serial.read_started.wait(timeout=1)
+    runtime.close()
 
     assert order == ["recover", "open"]
 
@@ -977,3 +1233,27 @@ def _enhanced_segment(*, segment_id: int) -> SegmentContext:
             event_granularity="uart_event",
         ),
     )
+
+
+def _basic_segment(*, segment_id: int) -> SegmentContext:
+    return SegmentContext(
+        segment_id=segment_id,
+        timestamp=SegmentTimestamp(
+            source="host",
+            clock="monotonic",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=0,
+            observation_point="host_serial_read",
+            event_granularity="serial_read_chunk",
+        ),
+    )
+
+
+def _publish_after_barrier(
+    source: ConditionBackedBasicSource,
+    barrier: ThreadEvent,
+    event: BackendEvent,
+) -> None:
+    assert barrier.wait(timeout=1)
+    source.publish(event)

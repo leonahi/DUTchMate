@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import partial
@@ -223,6 +224,7 @@ class DeviceCoreRuntime:
         uart_attempt_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._message_source = message_source
+        self._reconnect_source: CaptureEventSource | None = None
         self._capture_clock = capture_clock
         self._status_clock = capture_clock or time.monotonic
         self._backend_reconnect = backend_reconnect
@@ -315,9 +317,17 @@ class DeviceCoreRuntime:
             else:
                 self._closing = True
                 first_closer = True
-                source = self._message_source
-                self._message_source = None
                 reconnect_in_progress = self._reconnect_in_progress
+                if reconnect_in_progress:
+                    source = None
+                else:
+                    source = (
+                        self._message_source
+                        if self._message_source is not None
+                        else self._reconnect_source
+                    )
+                    self._message_source = None
+                    self._reconnect_source = None
                 self._mark_backend_disconnected()
 
         if not first_closer:
@@ -330,13 +340,21 @@ class DeviceCoreRuntime:
 
         close_error: BaseException | None = None
         try:
+            if reconnect_in_progress:
+                self._reconnect_complete.wait()
+                with self._operation_lock:
+                    source = (
+                        self._message_source
+                        if self._message_source is not None
+                        else self._reconnect_source
+                    )
+                    self._message_source = None
+                    self._reconnect_source = None
             if source is not None:
                 self._close_event_source(source)
         except BaseException as exc:
             close_error = exc
         finally:
-            if reconnect_in_progress:
-                self._reconnect_complete.wait()
             with self._operation_lock:
                 if close_error is None:
                     close_error = self._reconnect_cleanup_error
@@ -826,6 +844,12 @@ class DeviceCoreRuntime:
                     self._integrity = summary.integrity
             return summary
         except BackendInputError:
+            with self._operation_lock:
+                source = self._message_source
+                self._message_source = None
+            if source is not None:
+                with suppress(BaseException):
+                    self._close_event_source(source)
             self._mark_backend_disconnected()
             raise
         finally:
@@ -873,14 +897,28 @@ class DeviceCoreRuntime:
             self._reconnect_cleanup_error = None
             self._reconnect_complete.clear()
             self._reconnect_deadline = deadline
+            self._reconnect_source = self._message_source
             self._message_source = None
         try:
-            replacement = reconnect(segment_id=segment_id, deadline=deadline)
+            try:
+                replacement = reconnect(segment_id=segment_id, deadline=deadline)
+            except BaseException:
+                with self._operation_lock:
+                    if not self._closing and not self._closed:
+                        self._message_source = self._reconnect_source
+                        self._reconnect_source = None
+                raise
             if replacement is None:
+                with self._operation_lock:
+                    if not self._closing and not self._closed:
+                        self._message_source = self._reconnect_source
+                        self._reconnect_source = None
                 return None
             try:
                 self._validate_replacement(expected_snapshot, replacement.backend_snapshot)
             except Exception:
+                with self._operation_lock:
+                    self._reconnect_source = None
                 try:
                     self._close_event_source(replacement.source)
                 except BaseException as exc:
@@ -891,6 +929,7 @@ class DeviceCoreRuntime:
                 raise
             with self._operation_lock:
                 reject_replacement = self._closing or self._closed
+                self._reconnect_source = None
                 if not reject_replacement:
                     snapshot = replacement.backend_snapshot
                     self._message_source = replacement.source
