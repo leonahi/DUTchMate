@@ -82,8 +82,8 @@ class ScriptedBasicSerial:
     def __init__(self, reads: list[bytes | Exception]) -> None:
         self._reads = reads
         self.closed = False
-        self._closed = ThreadEvent()
         self.read_started = ThreadEvent()
+        self._condition = Condition()
 
     def write(self, data: bytes) -> int:
         return len(data)
@@ -91,17 +91,25 @@ class ScriptedBasicSerial:
     def read(self, size: int = 1) -> bytes:
         del size
         self.read_started.set()
-        if not self._reads:
-            self._closed.wait()
-            raise OSError("serial closed")
-        result = self._reads.pop(0)
+        with self._condition:
+            while not self._reads and not self.closed:
+                self._condition.wait()
+            if self.closed:
+                raise OSError("serial closed")
+            result = self._reads.pop(0)
         if isinstance(result, Exception):
             raise result
         return result
 
+    def publish(self, result: bytes | Exception) -> None:
+        with self._condition:
+            self._reads.append(result)
+            self._condition.notify_all()
+
     def close(self) -> None:
-        self.closed = True
-        self._closed.set()
+        with self._condition:
+            self.closed = True
+            self._condition.notify_all()
 
 
 class ScriptedEnhancedSerial(FakeSerial):
@@ -942,7 +950,7 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
         serial_port="/dev/ttyUSB0",
         baudrate=115200,
     )
-    initial_serial = ScriptedBasicSerial([OSError("device removed")])
+    initial_serial = ScriptedBasicSerial([])
     replacement_serial = ScriptedBasicSerial([b"READY\n"])
     serials = [initial_serial, replacement_serial]
 
@@ -951,6 +959,12 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
         return BasicBackendConnection(serial_port=serials.pop(0), settings=settings)
 
     monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
+    monkeypatch.setattr(
+        startup,
+        "ContinuousIngestionCoordinator",
+        WorkflowBarrierCoordinator,
+        raising=False,
+    )
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -958,13 +972,24 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
         monotonic_clock=clock,
         sleep=clock.sleep,
     )
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, WorkflowBarrierCoordinator)
+
+    def publish_disconnect() -> None:
+        assert coordinator.workflow_started.wait(timeout=1)
+        initial_serial.publish(OSError("device removed"))
+
+    publisher = Thread(target=publish_disconnect)
+    publisher.start()
 
     try:
         summary = runtime.capture_uart(duration_s=0.2)
         connection_state = runtime.status().connection_state
     finally:
+        publisher.join(timeout=1)
         runtime.close()
 
+    assert not publisher.is_alive()
     assert summary.state == "completed"
     assert summary.interrupted is True
     assert summary.resumed is True
