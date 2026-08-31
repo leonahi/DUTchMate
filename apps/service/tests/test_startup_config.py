@@ -136,7 +136,6 @@ class FakeEnhancedAsyncHost:
         info: BackendInfo,
         segment_id: int,
         segment: SegmentContext | None = None,
-        segment_on_wait: SegmentContext | None = None,
         read_outcomes: list[BackendEvent | BaseException | None] | None = None,
         send_outcomes: list[BackendUartSendResult | BaseException] | None = None,
         close_order: list[str] | None = None,
@@ -145,7 +144,6 @@ class FakeEnhancedAsyncHost:
         self.info = info
         self.segment_id = segment_id
         self.segment = segment
-        self._segment_on_wait = segment_on_wait
         self._read_outcomes = list(read_outcomes or [])
         self._send_outcomes = list(send_outcomes or [])
         self._close_order = close_order
@@ -208,9 +206,16 @@ class FakeEnhancedAsyncHost:
 
     def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
         del timeout_s
-        if self.segment is None and self._segment_on_wait is not None:
-            self.segment = self._segment_on_wait
-        return self.segment
+        with self._condition:
+            if self.segment is None and self._read_outcomes:
+                origin_event = self._read_outcomes[0]
+                if (
+                    isinstance(origin_event, UartReceiveEvent)
+                    and origin_event.segment_id == self.segment_id
+                    and origin_event.timestamp_us == 0
+                ):
+                    self.segment = _enhanced_segment(segment_id=self.segment_id)
+            return self.segment
 
     def close(self) -> None:
         with self._condition:
@@ -405,6 +410,7 @@ def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
 def test_enhanced_startup_selects_one_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
     opened: list[tuple[str, int, int]] = []
@@ -457,6 +463,7 @@ def test_enhanced_startup_selects_one_async_host(
             baudrate=460800,
         ),
     )
+    request.addfinalizer(runtime.close)
 
     assert opened == [("/dev/ttyACM0", 460800, 0)]
     assert coordinator_factory_calls == [host]
@@ -914,6 +921,7 @@ def test_enhanced_capture_closes_source_on_malformed_input(
 def test_build_startup_runtime_opens_basic_without_hello(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     settings = backend_settings(
         "basic",
@@ -957,6 +965,7 @@ def test_build_startup_runtime_opens_basic_without_hello(
     )
 
     runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+    request.addfinalizer(runtime.close)
 
     assert len(coordinator_factory_calls) == 1
     assert isinstance(coordinator_factory_calls[0], BasicBackendEventSource)
@@ -1182,8 +1191,13 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
     replacement_host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
         segment_id=1,
-        segment_on_wait=_enhanced_segment(segment_id=1),
         read_outcomes=[
+            UartReceiveEvent(
+                segment_id=1,
+                timestamp_us=0,
+                channel=0,
+                data=b"ORIGIN\n",
+            ),
             UartReceiveEvent(
                 segment_id=1,
                 timestamp_us=25,
@@ -1261,7 +1275,15 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
         _enhanced_segment(segment_id=0),
         _enhanced_segment(segment_id=1),
     )
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+    session_root = tmp_path / summary.session_id
+    assert session_root.joinpath("uart_raw.log").read_bytes() == b"ORIGIN\nREADY\n"
+    uart_events = [
+        json.loads(line)
+        for line in session_root.joinpath("uart_events.jsonl").read_text().splitlines()
+    ]
+    assert [event["segment_id"] for event in uart_events] == [1, 1]
+    assert [event["timestamp_us"] for event in uart_events] == [0, 25]
+    assert [event["text"] for event in uart_events] == ["ORIGIN\n", "READY\n"]
     assert status.connection_state == "connected"
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 1
