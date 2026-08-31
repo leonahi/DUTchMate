@@ -96,6 +96,7 @@ class AsyncEnhancedSerialAdapter:
         self._active_write_task: asyncio.Task[None] | None = None
         self._info: BackendInfo | None = None
         self._segment: SegmentContext | None = None
+        self._segment_ready = asyncio.Event()
         self._terminal_error: BackendDisconnectedError | BackendInputError | None = None
         self._terminal = asyncio.Event()
         self._closed = False
@@ -234,6 +235,8 @@ class AsyncEnhancedSerialAdapter:
                         self._segment_id,
                         timestamp_us,
                     )
+                    self._segment = segment
+                    self._segment_ready.set()
                 event = normalize_enhanced_message(
                     message,
                     segment_id=self._segment_id,
@@ -400,6 +403,43 @@ class AsyncEnhancedSerialAdapter:
             raise AssertionError("terminal event set without terminal error")
         finally:
             for task in (event_task, terminal_task):
+                if not task.done():
+                    task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+    async def wait_for_segment(
+        self,
+        timeout_s: float | None = None,
+    ) -> SegmentContext | None:
+        """Wait for timestamp provenance without consuming queued evidence."""
+
+        if timeout_s is not None:
+            _validate_timeout(
+                timeout_s,
+                field="Enhanced segment timeout",
+                allow_zero=True,
+            )
+        if self._segment is not None:
+            return self._segment
+        self._raise_if_terminal()
+        segment_task = asyncio.create_task(self._segment_ready.wait())
+        terminal_task = asyncio.create_task(self._terminal.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {segment_task, terminal_task},
+                timeout=timeout_s,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                return None
+            if self._segment_ready.is_set():
+                assert self._segment is not None
+                return self._segment
+            self._raise_if_terminal()
+            raise AssertionError("terminal event set without terminal error")
+        finally:
+            for task in (segment_task, terminal_task):
                 if not task.done():
                     task.cancel()
                 with suppress(asyncio.CancelledError):

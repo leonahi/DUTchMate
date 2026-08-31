@@ -13,6 +13,7 @@ from dutchmate_core.backends import (
     BufferStatusEvent,
     UartReceiveEvent,
 )
+from dutchmate_core.backends.enhanced import enhanced_segment_context
 from dutchmate_core.backends.enhanced_serial import AsyncEnhancedSerialAdapter
 from dutchmate_core.device_connection.commands import MAX_HOST_FRAME_BYTES
 from dutchmate_core.device_connection.errors import HostCommandFrameTooLargeError
@@ -623,6 +624,85 @@ async def test_start_accepts_evidence_after_hello_in_the_same_batch() -> None:
 
     await adapter.close()
     assert reader.close_count == 1
+
+
+async def test_wait_for_segment_preserves_origin_event_in_fifo() -> None:
+    """Fails if segment readiness consumes the first normalized evidence event."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, segment_id=3)
+    await adapter.start(1.0)
+
+    waiter = asyncio.create_task(adapter.wait_for_segment(timeout_s=1.0))
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":4200,"data_b64":"Ym9vdAo="}\n'
+    )
+
+    assert await waiter == enhanced_segment_context(3, 4_200)
+    assert await adapter.receive_event(timeout_s=0) == UartReceiveEvent(
+        segment_id=3,
+        timestamp_us=0,
+        channel=0,
+        data=b"boot\n",
+    )
+    await adapter.close()
+
+
+async def test_wait_for_segment_timeout_does_not_consume_later_event() -> None:
+    """Fails if a timed-out readiness wait interferes with later FIFO admission."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, segment_id=1)
+    await adapter.start(1.0)
+
+    assert await adapter.wait_for_segment(timeout_s=0) is None
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":9000,"data_b64":"bGF0ZXI="}\n'
+    )
+
+    assert await adapter.wait_for_segment(timeout_s=1.0) == enhanced_segment_context(1, 9_000)
+    assert await adapter.receive_event(timeout_s=0) is not None
+    await adapter.close()
+
+
+async def test_wait_for_segment_reraises_retained_disconnect_error() -> None:
+    """Fails if a terminal disconnect leaves readiness callers blocked or changes its error."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(1.0)
+
+    waiter = asyncio.create_task(adapter.wait_for_segment(timeout_s=1.0))
+    reader.fail(OSError("device removed"))
+
+    with pytest.raises(BackendDisconnectedError, match="read failed") as raised:
+        await waiter
+    with pytest.raises(BackendDisconnectedError, match="read failed") as replayed:
+        await adapter.wait_for_segment(timeout_s=0)
+    assert replayed.value is raised.value
+    await adapter.close()
+
+
+async def test_wait_for_segment_reraises_retained_input_error() -> None:
+    """Fails if terminal input failures leave readiness callers blocked or change errors."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(1.0)
+
+    waiter = asyncio.create_task(adapter.wait_for_segment(timeout_s=1.0))
+    reader.feed(b'{"type":}\n')
+
+    with pytest.raises(BackendInputError, match="not valid JSON") as raised:
+        await waiter
+    with pytest.raises(BackendInputError, match="not valid JSON") as replayed:
+        await adapter.wait_for_segment(timeout_s=0)
+    assert replayed.value is raised.value
+    await adapter.close()
 
 
 async def test_start_rejects_unexpected_message_after_hello_in_the_same_batch() -> None:

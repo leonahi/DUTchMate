@@ -49,6 +49,8 @@ class _AsyncEnhancedAdapter(Protocol):
         timeout_s: float | None = None,
     ) -> BackendEvent | None: ...
 
+    async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None: ...
+
     async def discard_pending_events(self) -> None: ...
 
     async def close(self) -> None: ...
@@ -175,6 +177,13 @@ class EnhancedAsyncHost:
         with self._state_lock:
             self._segment = segment
         return event
+
+    def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
+        adapter = self._adapter_for_operation()
+        segment = self._submit(lambda: adapter.wait_for_segment(timeout_s))
+        with self._state_lock:
+            self._segment = segment
+        return segment
 
     def discard_pending_events(self) -> None:
         adapter = self._adapter_for_operation()

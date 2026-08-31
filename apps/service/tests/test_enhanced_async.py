@@ -58,6 +58,7 @@ class FakeAsyncEnhancedAdapter:
         segment_id: int,
         request_outcomes: Sequence[DeviceMessage | BaseException] = (),
         event_outcomes: Sequence[BackendEvent | BaseException | None] = (),
+        segment_wait_outcomes: Sequence[SegmentContext | BaseException | None] = (),
         segment_after_receive: SegmentContext | None = None,
         block_receive: bool = False,
         block_close: bool = False,
@@ -70,6 +71,7 @@ class FakeAsyncEnhancedAdapter:
         self.segment: SegmentContext | None = None
         self.request_outcomes = list(request_outcomes)
         self.event_outcomes = list(event_outcomes)
+        self.segment_wait_outcomes = list(segment_wait_outcomes)
         self.segment_after_receive = segment_after_receive
         self.block_receive = block_receive
         self.close_error = close_error
@@ -77,7 +79,9 @@ class FakeAsyncEnhancedAdapter:
         self.before_close = before_close
         self.close_count = 0
         self.discard_count = 0
+        self.receive_count = 0
         self.discard_thread_id: int | None = None
+        self.wait_for_segment_timeouts: list[float] = []
         self.operation_thread_ids: list[int] = []
         self.receive_started = threading.Event()
         self.release_receive = threading.Event()
@@ -103,6 +107,7 @@ class FakeAsyncEnhancedAdapter:
     ) -> BackendEvent | None:
         del timeout_s
         self.operation_thread_ids.append(threading.get_ident())
+        self.receive_count += 1
         self.receive_started.set()
         if self.block_receive:
             await asyncio.to_thread(self.release_receive.wait)
@@ -110,6 +115,16 @@ class FakeAsyncEnhancedAdapter:
         if isinstance(outcome, BaseException):
             raise outcome
         self.segment = self.segment_after_receive
+        return outcome
+
+    async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
+        self.operation_thread_ids.append(threading.get_ident())
+        self.wait_for_segment_timeouts.append(timeout_s)
+        outcome = (
+            self.segment_wait_outcomes.pop(0) if self.segment_wait_outcomes else None
+        )
+        if isinstance(outcome, BaseException):
+            raise outcome
         return outcome
 
     async def discard_pending_events(self) -> None:
@@ -262,6 +277,31 @@ def test_event_delivery_updates_a_thread_safe_segment_snapshot() -> None:
     assert host.segment is None
     assert host.read_event() is not None
     assert host.segment == segment
+    host.close()
+
+
+def test_segment_readiness_uses_owner_loop_without_consuming_an_event() -> None:
+    """Fails if readiness drains FIFO evidence or bypasses the adapter owner loop."""
+
+    segment = _segment(segment_id=0, source_origin_us=1_000)
+    fake = FakeAsyncEnhancedAdapter(
+        info=_info(),
+        segment_id=0,
+        segment_wait_outcomes=[segment],
+    )
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0",
+        baudrate=460800,
+        segment_id=0,
+        open_adapter=OpenAdapterFake(fake),
+    )
+
+    assert host.segment is None
+    assert host.wait_for_segment(timeout_s=1.0) == segment
+    assert host.segment == segment
+    assert fake.wait_for_segment_timeouts == [1.0]
+    assert fake.receive_count == 0
+    assert fake.operation_thread_ids == [host.owner_thread_id]
     host.close()
 
 
