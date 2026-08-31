@@ -9,15 +9,19 @@ from threading import enumerate as enumerate_threads
 import pytest
 
 from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
     BackendDisconnectedError,
     BackendEvent,
+    BackendInfo,
     BackendInputError,
+    BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
     SegmentTimestamp,
     UartIntegrity,
     UartReceiveEvent,
+    UartSendCapabilityPolicy,
 )
 from dutchmate_core.workflows.capture import CaptureSourceHealth
 from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
@@ -82,6 +86,20 @@ class FailingCloseSource(ControlledSource):
         raise self.close_error
 
 
+class ThrowingSegmentSource(ControlledSource):
+    def __init__(self, segment_error: BaseException) -> None:
+        self._segment_error = segment_error
+        super().__init__(segment_id=1)
+
+    @property
+    def segment(self) -> SegmentContext:
+        raise self._segment_error
+
+    @segment.setter
+    def segment(self, value: SegmentContext) -> None:
+        self._stored_segment = value
+
+
 class BlockingCloseSource(ControlledSource):
     def __init__(self) -> None:
         super().__init__()
@@ -116,6 +134,26 @@ def segment(segment_id: int) -> SegmentContext:
             observation_point="host_serial_read",
             event_granularity="serial_read_chunk",
         ),
+    )
+
+
+def backend_snapshot(segment_id: int) -> BackendSnapshot:
+    policy = BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+    )
+    info = BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        capabilities=frozenset({"gpio_control", "uart_receive"}),
+    )
+    return BackendSnapshot(
+        info=info,
+        capabilities=info.capabilities,
+        capability_policy=policy,
+        segment=segment(segment_id),
+        integrity=UartIntegrity("none_reported", "debug_helper_rx_buffer", 0),
     )
 
 
@@ -236,7 +274,11 @@ def test_replacement_resets_monitor_integrity() -> None:
             coordinator.read_event()
         coordinator.close_current_source_for_reconnect()
         coordinator.replace_source(replacement)
-        assert coordinator.capture_source_health() == CaptureSourceHealth(True, None)
+        assert coordinator.capture_source_health() == CaptureSourceHealth(
+            True,
+            None,
+            connection_generation=1,
+        )
         coordinator.end_workflow()
     finally:
         close_coordinator(coordinator)
@@ -321,7 +363,11 @@ def test_valid_replacement_restores_monitor_health_without_restarting_thread() -
         assert coordinator.capture_source_health().connected is False
         coordinator.close_current_source_for_reconnect()
         coordinator.replace_source(replacement)
-        assert coordinator.capture_source_health() == CaptureSourceHealth(True, None)
+        assert coordinator.capture_source_health() == CaptureSourceHealth(
+            True,
+            None,
+            connection_generation=1,
+        )
         assert coordinator._thread is ingestion_thread  # noqa: SLF001
         assert ingestion_thread.is_alive()
         coordinator.end_workflow()
@@ -426,6 +472,181 @@ def test_idle_disconnect_is_retained_for_next_workflow() -> None:
         assert raised.value is terminal
     finally:
         close_coordinator(coordinator)
+
+
+def test_idle_disconnect_claim_detaches_without_workflow_read() -> None:
+    """Catches an idle reconnect path that requires a synthetic workflow read."""
+
+    source = ControlledSource()
+    terminal = BackendDisconnectedError("removed while idle")
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(terminal)
+        assert source.terminal_raised.wait(timeout=1)
+
+        assert coordinator.wait_for_idle_disconnect(timeout_s=1.0)
+        coordinator.close_current_source_for_reconnect(idle=True)
+
+        assert source.close_count == 1
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_active_workflow_cannot_claim_idle_disconnect() -> None:
+    """Catches an idle claimant detaching a source owned by an active workflow."""
+
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        coordinator.begin_workflow()
+        source.publish(BackendDisconnectedError("removed while active"))
+        assert source.terminal_raised.wait(timeout=1)
+
+        assert not coordinator.wait_for_idle_disconnect(timeout_s=0.0)
+
+        coordinator.end_workflow()
+        assert coordinator.wait_for_idle_disconnect(timeout_s=1.0)
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_active_terminal_consumption_permits_legacy_reconnect_detach() -> None:
+    """Catches changing active reconnect callers to require the idle claim path."""
+
+    source = ControlledSource()
+    terminal = BackendDisconnectedError("removed while active")
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        coordinator.begin_workflow()
+        source.publish(terminal)
+        with pytest.raises(BackendDisconnectedError) as raised:
+            coordinator.read_event()
+
+        assert raised.value is terminal
+        coordinator.close_current_source_for_reconnect()
+
+        assert source.close_count == 1
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_idle_replacement_commits_snapshot_and_next_connection_generation() -> None:
+    """Catches replacement publishing connected health without its validated identity."""
+
+    source = ControlledSource()
+    replacement = ControlledSource(segment_id=1)
+    snapshot = backend_snapshot(segment_id=1)
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(BackendDisconnectedError("removed while idle"))
+        assert coordinator.wait_for_idle_disconnect(timeout_s=1.0)
+        coordinator.close_current_source_for_reconnect(idle=True)
+
+        coordinator.replace_source(replacement, backend_snapshot=snapshot)
+
+        health = coordinator.capture_source_health()
+        assert health.connected is True
+        assert health.backend_snapshot is snapshot
+        assert health.connection_generation == 1
+        assert coordinator.segment == replacement.segment
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_replacement_segment_failure_closes_candidate_without_publishing() -> None:
+    """Catches a failed replacement segment lookup partially publishing the candidate."""
+
+    source = ControlledSource()
+    segment_error = RuntimeError("replacement segment unavailable")
+    replacement = ThrowingSegmentSource(segment_error)
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(BackendDisconnectedError("removed while idle"))
+        assert coordinator.wait_for_idle_disconnect(timeout_s=1.0)
+        coordinator.close_current_source_for_reconnect(idle=True)
+
+        with pytest.raises(RuntimeError) as raised:
+            coordinator.replace_source(
+                replacement,
+                backend_snapshot=backend_snapshot(segment_id=1),
+            )
+
+        assert raised.value is segment_error
+        assert replacement.close_count == 1
+        assert coordinator.capture_source_health() == CaptureSourceHealth(False, None)
+        assert coordinator._connection_generation == 0  # noqa: SLF001 - atomicity proof.
+        assert coordinator._source is None  # noqa: SLF001 - atomicity proof.
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_failed_idle_replacement_publication_closes_candidate() -> None:
+    """Catches rejected idle replacement candidates being left open."""
+
+    source = ControlledSource()
+    replacement = ControlledSource(segment_id=1)
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(BackendDisconnectedError("removed while idle"))
+        assert coordinator.wait_for_idle_disconnect(timeout_s=1.0)
+        coordinator.close_current_source_for_reconnect(idle=True)
+        coordinator.close()
+
+        with pytest.raises(RuntimeError, match="cannot accept replacement"):
+            coordinator.replace_source(
+                replacement,
+                backend_snapshot=backend_snapshot(segment_id=1),
+            )
+
+        assert replacement.close_count == 1
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_backend_input_error_is_never_idle_reconnectable() -> None:
+    """Catches malformed backend input being retried as an idle disconnect."""
+
+    source = ControlledSource()
+    terminal = BackendInputError("malformed")
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(terminal)
+        assert source.terminal_raised.wait(timeout=1)
+
+        assert not coordinator.wait_for_idle_disconnect(timeout_s=0.0)
+        with pytest.raises(RuntimeError, match="cannot detach source for reconnect"):
+            coordinator.close_current_source_for_reconnect(idle=True)
+    finally:
+        close_coordinator(coordinator)
+
+
+def test_close_wakes_idle_disconnect_waiter() -> None:
+    """Catches close leaving an idle reconnect waiter blocked until its timeout."""
+
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    idle_waiting = Event()
+    original_wait = coordinator._condition.wait  # noqa: SLF001 - deterministic barrier.
+
+    def signaling_wait(timeout: float | None = None) -> bool:
+        idle_waiting.set()
+        return original_wait(timeout)
+
+    coordinator._condition.wait = signaling_wait  # type: ignore[method-assign]  # noqa: SLF001
+    outcomes: list[bool] = []
+
+    def wait_for_idle_disconnect() -> None:
+        outcomes.append(coordinator.wait_for_idle_disconnect(timeout_s=10.0))
+
+    waiter = Thread(target=wait_for_idle_disconnect)
+    waiter.start()
+    assert idle_waiting.wait(timeout=1)
+
+    coordinator.close()
+    waiter.join(timeout=1)
+
+    assert not waiter.is_alive()
+    assert outcomes == [False]
 
 
 def test_unexpected_terminal_is_retained_and_replacement_is_rejected() -> None:

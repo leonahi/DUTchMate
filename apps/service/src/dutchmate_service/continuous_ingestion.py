@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from contextlib import suppress
+from dataclasses import replace
 from threading import Condition, Event, RLock, Thread
 from typing import Final
 
@@ -12,6 +13,7 @@ from dutchmate_core.backends import (
     BackendDisconnectedError,
     BackendEvent,
     BackendInputError,
+    BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
@@ -32,6 +34,7 @@ class ContinuousIngestionCoordinator:
         *,
         queue_capacity: int = DEFAULT_INGESTION_QUEUE_CAPACITY,
         event_wait_timeout_s: float = DEFAULT_INGESTION_EVENT_WAIT_TIMEOUT_S,
+        backend_snapshot: BackendSnapshot | None = None,
     ) -> None:
         if (
             isinstance(queue_capacity, bool)
@@ -52,7 +55,13 @@ class ContinuousIngestionCoordinator:
         self._condition = Condition(RLock())
         self._source: CaptureEventSource | None = source
         self._segment = _source_segment(source)
-        self._health = CaptureSourceHealth(connected=True, integrity=None)
+        self._connection_generation = 0
+        self._health = CaptureSourceHealth(
+            connected=True,
+            integrity=None,
+            backend_snapshot=backend_snapshot,
+            connection_generation=self._connection_generation,
+        )
         self._events: deque[BackendEvent] = deque()
         self._queue_capacity = queue_capacity
         self._event_wait_timeout_s = float(event_wait_timeout_s)
@@ -134,24 +143,57 @@ class ContinuousIngestionCoordinator:
     def discard_pending_events(self) -> None:
         """Retain active events because workflow activation owns cursor freshness."""
 
-    def close_current_source_for_reconnect(self) -> None:
+    def wait_for_idle_disconnect(self, timeout_s: float) -> bool:
+        """Wait until an idle source disconnect can be claimed for replacement."""
+
+        with self._condition:
+            self._condition.wait_for(
+                lambda: self._closing
+                or self._closed
+                or self._ingestion_stopped
+                or (
+                    not self._workflow_active
+                    and isinstance(self._terminal_error, BackendDisconnectedError)
+                    and self._replacement_allowed
+                    and self._source is not None
+                ),
+                timeout=timeout_s,
+            )
+            return (
+                not self._closing
+                and not self._closed
+                and not self._ingestion_stopped
+                and not self._workflow_active
+                and isinstance(self._terminal_error, BackendDisconnectedError)
+                and self._replacement_allowed
+                and self._source is not None
+            )
+
+    def close_current_source_for_reconnect(self, *, idle: bool = False) -> None:
         """Detach and close the consumed disconnected source."""
 
         with self._condition:
             if self._close_error is not None:
                 raise self._close_error
-            if (
-                self._closing
-                or self._closed
-                or not isinstance(self._terminal_error, BackendDisconnectedError)
-                or not self._terminal_consumed
-                or not self._replacement_allowed
-                or self._source is None
-            ):
+            can_detach = (
+                not self._closing
+                and not self._closed
+                and isinstance(self._terminal_error, BackendDisconnectedError)
+                and self._replacement_allowed
+                and self._source is not None
+                and (
+                    (idle and not self._workflow_active)
+                    or (not idle and self._terminal_consumed)
+                )
+            )
+            if not can_detach:
                 raise RuntimeError(
                     "continuous ingestion coordinator cannot detach source for reconnect"
                 )
+            if idle:
+                self._terminal_consumed = True
             source = self._source
+            assert source is not None
             self._source = None
             self._replacement_allowed = False
             self._source_close_complete.clear()
@@ -182,9 +224,15 @@ class ContinuousIngestionCoordinator:
                 self._replacement_allowed = True
             self._condition.notify_all()
 
-    def replace_source(self, replacement: CaptureEventSource) -> None:
+    def replace_source(
+        self,
+        replacement: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot | None = None,
+    ) -> None:
         """Transfer one validated replacement into the stable coordinator."""
 
+        preparation_error: BaseException | None = None
         with self._condition:
             can_accept = (
                 not self._closing
@@ -197,17 +245,32 @@ class ContinuousIngestionCoordinator:
                 and self._close_error is None
             )
             if can_accept:
-                self._source = replacement
-                self._segment = _source_segment(replacement)
-                self._health = CaptureSourceHealth(connected=True, integrity=None)
-                self._terminal_error = None
-                self._terminal_consumed = False
-                self._replacement_allowed = False
-                self._condition.notify_all()
-                return
+                try:
+                    replacement_segment = _source_segment(replacement)
+                    connection_generation = self._connection_generation + 1
+                    health = CaptureSourceHealth(
+                        connected=True,
+                        integrity=None,
+                        backend_snapshot=backend_snapshot,
+                        connection_generation=connection_generation,
+                    )
+                except BaseException as error:
+                    preparation_error = error
+                else:
+                    self._connection_generation = connection_generation
+                    self._source = replacement
+                    self._segment = replacement_segment
+                    self._health = health
+                    self._terminal_error = None
+                    self._terminal_consumed = False
+                    self._replacement_allowed = False
+                    self._condition.notify_all()
+                    return
 
         with suppress(BaseException):
             _close_source(replacement)
+        if preparation_error is not None:
+            raise preparation_error
         raise RuntimeError("continuous ingestion coordinator cannot accept replacement")
 
     def close(self) -> None:
@@ -226,10 +289,7 @@ class ContinuousIngestionCoordinator:
             else:
                 first_closer = True
                 self._closing = True
-                self._health = CaptureSourceHealth(
-                    connected=False,
-                    integrity=self._health.integrity,
-                )
+                self._health = replace(self._health, connected=False)
                 self._workflow_active = False
                 self._events.clear()
                 if self._terminal_error is None:
@@ -296,10 +356,7 @@ class ContinuousIngestionCoordinator:
             except (BackendDisconnectedError, BackendInputError) as exc:
                 with self._condition:
                     if source is self._source and not self._closing:
-                        self._health = CaptureSourceHealth(
-                            connected=False,
-                            integrity=self._health.integrity,
-                        )
+                        self._health = replace(self._health, connected=False)
                         self._terminal_error = exc
                         self._terminal_consumed = False
                         self._replacement_allowed = isinstance(
@@ -348,10 +405,7 @@ class ContinuousIngestionCoordinator:
         with self._condition:
             if self._closing or source is not self._source:
                 return
-            self._health = CaptureSourceHealth(
-                connected=False,
-                integrity=self._health.integrity,
-            )
+            self._health = replace(self._health, connected=False)
             self._source = None
             self._terminal_error = error
             self._terminal_consumed = False
@@ -389,9 +443,9 @@ def _project_event_health(
         else 0
     )
     if isinstance(event, BufferOverflowEvent):
-        return CaptureSourceHealth(
-            health.connected,
-            UartIntegrity(
+        return replace(
+            health,
+            integrity=UartIntegrity(
                 "loss_reported",
                 "debug_helper_rx_buffer",
                 previous_dropped + event.dropped_bytes,
@@ -400,9 +454,9 @@ def _project_event_health(
     if isinstance(event, BufferStatusEvent):
         reported_loss = event.dropped_bytes_total > 0 or event.overflow_events > 0
         prior_loss = integrity is not None and integrity.loss_status == "loss_reported"
-        return CaptureSourceHealth(
-            health.connected,
-            UartIntegrity(
+        return replace(
+            health,
+            integrity=UartIntegrity(
                 "loss_reported" if prior_loss or reported_loss else "none_reported",
                 "debug_helper_rx_buffer",
                 max(previous_dropped, event.dropped_bytes_total),

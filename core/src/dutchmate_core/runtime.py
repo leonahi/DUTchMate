@@ -901,7 +901,7 @@ class DeviceCoreRuntime:
         ):
             self._adopt_backend_snapshot(snapshot)
             self._source_connection_generation = health.connection_generation
-        elif (
+        if (
             self._connected
             and health.integrity is not None
             and (
