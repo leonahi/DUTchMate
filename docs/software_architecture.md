@@ -74,8 +74,10 @@ device_connection
 Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
-`docs/phase1_implementation_spec.md`. Production Enhanced input currently enters
-through the synchronous compatibility source described below.
+`docs/phase1_implementation_spec.md`. Production Enhanced input enters through
+one service-owned async host and the service-owned continuous-ingestion
+coordinator. The synchronous Enhanced source and command transport remain only
+as compatibility definitions pending their separate removal.
 
 ## Data Flow
 
@@ -99,11 +101,11 @@ NDJSON bytes
 Production workflows receive normalized events and never import Enhanced wire
 messages, parsers, commands, or transports.
 
-The finite serial path is:
+The production Enhanced path is:
 
 ```text
-SerialCommandTransport queued/new messages
-  -> EnhancedCaptureEventSource
+EnhancedAsyncHost (one owner loop and one async adapter)
+  -> ContinuousIngestionCoordinator
   -> normalized backend events
   -> DeviceCoreRuntime.capture_uart / run_boot_test
   -> TransportCaptureRunner
@@ -115,9 +117,10 @@ SerialCommandTransport queued/new messages
 ```
 
 `DeviceCoreRuntime` publishes the active session while a finite workflow runs
-and rejects conflicting capture or hardware-changing operations. The Enhanced
-serial path is synchronous and Debug Helper-oriented; downstream processing is
-shared with Basic.
+and rejects conflicting capture or hardware-changing operations. The currently
+owned async host supplies Enhanced events, semantic control, and UART send;
+initial startup and every accepted replacement install exactly one such host.
+Downstream processing remains shared with Basic.
 
 ## Supported Core Facades
 
@@ -148,6 +151,8 @@ The committed v1 wire still contains these compatibility details:
 
 - host command frames are not bounded at the final protocol limit
 - transport writes do not expose a complete-acceptance contract
+- the synchronous command transport and Enhanced source remain available for
+  compatibility, but production startup and reconnect do not select them
 
 `hardware/protocol/v1/` is the wire authority. Its schemas, examples,
 parser/encoder models, tests, and firmware handling change atomically.
@@ -303,12 +308,21 @@ Native workflows persist and echo accepted duration/reconnect policy and
 terminal lifecycle state, and startup resolves interrupted evidence units and
 abandons stale active sessions before opening a backend. The session store owns
 durable disconnect/resume mutations. The capture workflow owns deadline
-precedence, the 32-segment stop, source replacement, and canonical reconnect
-failures through a small injected reopen port and does not own serial details.
-Service composition retries the configured Basic port or reopens Enhanced,
-validates an exact identity and timestamp provenance, and replaces the live
-control and UART-send transports. Runtime publishes connected, disconnected,
-and reconnecting state plus the active workflow and remaining reconnect window.
+precedence, the 32-segment stop, and canonical reconnect failures through a
+small injected reopen port and does not own serial details. The service-owned
+`BackendReconnectCoordinator` serializes idle and active replacement, validates
+the selected Basic identity or exact Enhanced identity, and publishes the new
+source plus stable control/UART-send ports. Idle retries use exponential backoff
+from 0.1 seconds through a 2.0-second cap; an active workflow instead retains
+its immutable reconnect deadline, which takes precedence over retry or Enhanced
+origin establishment. Enhanced reconnect uses the same async-host opener as
+startup and waits for the segment origin through `wait_for_segment()` without
+consuming the first evidence event. The continuous-ingestion owner exposes
+versioned connection generations, and runtime adopts a reconnected snapshot
+only when a pull observes a newer generation, preventing stale health from
+overwriting the replacement. Runtime publishes connected, disconnected, and
+reconnecting state plus the active workflow and remaining reconnect window,
+and runtime close owns reconnect-coordinator shutdown before closing its source.
 
 ### `backends` (Contract Foundation)
 
@@ -323,10 +337,12 @@ converts each delivered byte chunk to one FIFO normalized event with
 host-monotonic provenance, and exposes a blocking compatibility read to the
 current shared capture runner. Basic UART writes are capability-gated and retry
 ordered short writes to completion. The Enhanced adapter translates
-parsed v1 messages and synchronous read timeouts before shared capture. When
-its device-timer origin is unavailable at connection creation, the first
-timestamped evidence event establishes the segment origin and is normalized to
-zero before its immutable context is persisted.
+parsed v1 messages and async receive timeouts before shared capture. Its one
+service-owned async host remains the resource owner across event, control, and
+UART-send operations. When the device-timer origin is unavailable at connection
+creation, the first timestamped evidence establishes the segment origin and is
+normalized to zero before its immutable context is persisted; the adapter's
+origin wait observes that transition without dequeuing the event.
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
 format CLI output.
@@ -346,11 +362,15 @@ owns request/response serialization and HTTP error mapping.
 The service accepts one explicit Basic/Enhanced selection. Basic requires and
 opens a raw serial port without `hello`, wiring its normalized source into the
 same finite capture path. Enhanced validates `hello` when a port is selected
-and may start disconnected without one. Status and finite capture responses
+and opens exactly one async host at startup and for each replacement. A single
+service-owned reconnect coordinator handles both idle disconnects and
+finite-workflow disconnects, while the continuous-ingestion coordinator remains
+the stable normalized source owner. Status and finite capture responses
 serialize backend identity, raw/effective capabilities, TX-policy provenance,
 segment timing, UART-loss integrity, and volatile reconnect state. Active
 capture/boot-test workflows reopen the selected Basic port or validate an exact
-Enhanced hello before resuming.
+Enhanced hello before resuming, bounded by the workflow's existing reconnect
+deadline.
 
 ### CLI
 
