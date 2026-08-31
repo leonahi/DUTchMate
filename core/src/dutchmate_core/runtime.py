@@ -894,11 +894,21 @@ class DeviceCoreRuntime:
         snapshot = health.backend_snapshot
         if (
             snapshot is not None
-            and health.connection_generation != self._source_connection_generation
+            and (
+                self._source_connection_generation is None
+                or health.connection_generation > self._source_connection_generation
+            )
         ):
             self._adopt_backend_snapshot(snapshot)
             self._source_connection_generation = health.connection_generation
-        elif self._connected and health.integrity is not None:
+        elif (
+            self._connected
+            and health.integrity is not None
+            and (
+                snapshot is None
+                or health.connection_generation == self._source_connection_generation
+            )
+        ):
             self._integrity = health.integrity
 
     def _adopt_backend_snapshot(self, snapshot: BackendSnapshot) -> None:

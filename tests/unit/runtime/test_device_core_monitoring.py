@@ -230,6 +230,45 @@ def test_newer_connection_generation_adopts_validated_backend_snapshot(
     runtime.close()
 
 
+def test_older_connection_generation_cannot_restore_after_newer_adoption(
+    tmp_path: Path,
+) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(False, None))
+    runtime = monitored_runtime(tmp_path, source)
+    newer = replacement_snapshot(segment_id=2)
+    source.segment = newer.segment
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=newer.integrity,
+        backend_snapshot=newer,
+        connection_generation=2,
+    )
+    assert runtime.status().connected is True
+
+    source.health = CaptureSourceHealth(
+        connected=False,
+        integrity=None,
+        backend_snapshot=newer,
+        connection_generation=2,
+    )
+    assert runtime.status().connected is False
+
+    older = replacement_snapshot(segment_id=1)
+    source.segment = older.segment
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=older.integrity,
+        backend_snapshot=older,
+        connection_generation=1,
+    )
+
+    status = runtime.status()
+
+    assert status.connected is False
+    assert status.integrity is None
+    runtime.close()
+
+
 def test_connection_generation_rejects_changed_capability_policy(tmp_path: Path) -> None:
     source = MutableHealthSource(CaptureSourceHealth(False, None))
     runtime = monitored_runtime(tmp_path, source)
