@@ -260,6 +260,7 @@ class DeviceCoreRuntime:
         )
         self._port = port
         self._connected = False
+        self._source_connection_generation: int | None = None
         self._commanded_boot_mode: CommandedBootMode | None = None
         self._backend_mode = backend_mode
         self._backend_info: BackendInfo | None = None
@@ -890,8 +891,27 @@ class DeviceCoreRuntime:
         if not health.connected:
             self._mark_backend_disconnected()
             return
-        if self._connected and health.integrity is not None:
+        snapshot = health.backend_snapshot
+        if (
+            snapshot is not None
+            and health.connection_generation != self._source_connection_generation
+        ):
+            self._adopt_backend_snapshot(snapshot)
+            self._source_connection_generation = health.connection_generation
+        elif self._connected and health.integrity is not None:
             self._integrity = health.integrity
+
+    def _adopt_backend_snapshot(self, snapshot: BackendSnapshot) -> None:
+        if snapshot.capability_policy != self._capability_policy:
+            raise ValueError("reconnected backend capability policy changed")
+        self._connected = True
+        self._commanded_boot_mode = None
+        self._backend_mode = snapshot.info.mode
+        self._backend_info = snapshot.info
+        self._backend_capabilities = snapshot.info.capabilities
+        self._segment_context = snapshot.segment
+        self._integrity = snapshot.integrity
+        self._port = snapshot.info.port
 
     def _reconnect_capture_source(
         self,

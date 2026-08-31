@@ -45,10 +45,16 @@ class CaptureEventSource(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CaptureSourceHealth:
-    """Immutable current-source connection and integrity projection."""
+    """Immutable current-source connection, integrity, and replacement projection."""
 
     connected: bool
     integrity: UartIntegrity | None
+    backend_snapshot: BackendSnapshot | None = None
+    connection_generation: int = 0
+
+    def __post_init__(self) -> None:
+        if self.connection_generation < 0:
+            raise ValueError("source connection generation must be non-negative")
 
 
 @runtime_checkable

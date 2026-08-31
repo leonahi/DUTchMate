@@ -3,7 +3,15 @@ from pathlib import Path
 import pytest
 from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
 
-from dutchmate_core.backends import BackendInfo, SegmentContext, SegmentTimestamp, UartIntegrity
+from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendInfo,
+    BackendSnapshot,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+)
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import SessionStore
@@ -48,6 +56,43 @@ def monitored_runtime(
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
+    )
+
+
+def replacement_snapshot(
+    *,
+    segment_id: int,
+    tx_policy_enabled: bool = False,
+) -> BackendSnapshot:
+    policy = BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=tx_policy_enabled)
+    )
+    info = enhanced_info(port="/dev/ttyACM0")
+    return BackendSnapshot(
+        info=info,
+        capabilities=(
+            info.capabilities
+            if tx_policy_enabled
+            else frozenset({"gpio_control", "uart_receive"})
+        ),
+        capability_policy=policy,
+        segment=SegmentContext(
+            segment_id=segment_id,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=segment_id * 10_000,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
     )
 
 
@@ -130,6 +175,81 @@ def test_connected_monitor_cannot_restore_disconnected_runtime(tmp_path: Path) -
     assert status.connection_state == "disconnected"
     assert status.integrity is None
     runtime.close()
+
+
+def test_newer_connection_generation_adopts_validated_backend_snapshot(
+    tmp_path: Path,
+) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(False, None))
+    runtime = monitored_runtime(tmp_path, source)
+    replacement = replacement_snapshot(segment_id=1)
+    source.segment = replacement.segment
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=replacement.integrity,
+        backend_snapshot=replacement,
+        connection_generation=1,
+    )
+
+    status = runtime.status()
+
+    assert status.connected is True
+    assert status.backend_capabilities == tuple(sorted(replacement.info.capabilities))
+    assert status.timestamp_provenance == replacement.segment
+
+    source.health = CaptureSourceHealth(
+        connected=False,
+        integrity=None,
+        backend_snapshot=replacement,
+        connection_generation=1,
+    )
+    assert runtime.status().connected is False
+
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=replacement.integrity,
+        backend_snapshot=replacement,
+        connection_generation=1,
+    )
+    assert runtime.status().connected is False
+
+    replacement = replacement_snapshot(segment_id=2)
+    source.segment = replacement.segment
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=replacement.integrity,
+        backend_snapshot=replacement,
+        connection_generation=2,
+    )
+
+    status = runtime.status()
+
+    assert status.connected is True
+    assert status.backend_capabilities == tuple(sorted(replacement.info.capabilities))
+    assert status.timestamp_provenance == replacement.segment
+    runtime.close()
+
+
+def test_connection_generation_rejects_changed_capability_policy(tmp_path: Path) -> None:
+    source = MutableHealthSource(CaptureSourceHealth(False, None))
+    runtime = monitored_runtime(tmp_path, source)
+    replacement = replacement_snapshot(segment_id=1, tx_policy_enabled=True)
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=replacement.integrity,
+        backend_snapshot=replacement,
+        connection_generation=1,
+    )
+
+    with pytest.raises(ValueError, match="reconnected backend capability policy changed"):
+        runtime.status()
+
+    runtime.close()
+
+
+def test_capture_source_health_rejects_negative_connection_generation() -> None:
+    with pytest.raises(ValueError, match="source connection generation must be non-negative"):
+        CaptureSourceHealth(True, None, connection_generation=-1)
 
 
 def test_plain_capture_source_remains_compatible(tmp_path: Path) -> None:
