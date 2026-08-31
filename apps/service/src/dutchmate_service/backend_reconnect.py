@@ -117,6 +117,7 @@ class BackendReconnectCoordinator:
         monotonic_clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         wait_for_idle_retry: Callable[[float], bool] | None = None,
+        wait_for_active_retry: Callable[[float], bool] | None = None,
         active_retry_interval_s: float = 0.1,
         idle_initial_retry_s: float = 0.1,
         idle_max_retry_s: float = 2.0,
@@ -136,7 +137,6 @@ class BackendReconnectCoordinator:
         self._open_replacement = open_replacement
         self._on_connected = on_connected
         self._clock = monotonic_clock
-        self._sleep = sleep
         self._active_retry_interval_s = active_retry_interval_s
         self._idle_initial_retry_s = idle_initial_retry_s
         self._idle_max_retry_s = idle_max_retry_s
@@ -147,8 +147,20 @@ class BackendReconnectCoordinator:
             if wait_for_idle_retry is not None
             else self._stop_requested.wait
         )
+        if wait_for_active_retry is not None:
+            self._active_retry_wait = wait_for_active_retry
+        elif sleep is time.sleep:
+            self._active_retry_wait = self._stop_requested.wait
+        else:
+
+            def deterministic_active_retry_wait(delay: float) -> bool:
+                sleep(delay)
+                return self._stop_requested.is_set()
+
+            self._active_retry_wait = deterministic_active_retry_wait
         self._worker: Thread | None = None
         self._attempt_active = False
+        self._attempt_owner: Thread | None = None
         self._closing = False
         self._closed = False
         self._close_error: BaseException | None = None
@@ -187,12 +199,14 @@ class BackendReconnectCoordinator:
             if self._attempt_active:
                 raise RuntimeError("backend reconnect is already active")
             self._attempt_active = True
+            self._attempt_owner = current_thread()
         try:
             self._source_owner.close_current_source_for_reconnect()
             return self._retry_active(segment_id=segment_id, deadline=deadline)
         finally:
             with self._condition:
                 self._attempt_active = False
+                self._attempt_owner = None
                 self._condition.notify_all()
 
     def close(self) -> None:
@@ -226,7 +240,8 @@ class BackendReconnectCoordinator:
             if worker is not None and worker is not current_thread():
                 worker.join()
             with self._condition:
-                self._condition.wait_for(lambda: not self._attempt_active)
+                if self._attempt_owner is not current_thread():
+                    self._condition.wait_for(lambda: not self._attempt_active)
         except BaseException as exc:
             close_error = exc
         finally:
@@ -254,6 +269,7 @@ class BackendReconnectCoordinator:
                         )
                         continue
                     self._attempt_active = True
+                    self._attempt_owner = current_thread()
                 try:
                     if self._stop_requested.is_set():
                         return
@@ -262,6 +278,7 @@ class BackendReconnectCoordinator:
                 finally:
                     with self._condition:
                         self._attempt_active = False
+                        self._attempt_owner = None
                         self._condition.notify_all()
         except BaseException as exc:
             self._retain_close_error(exc)
@@ -282,7 +299,8 @@ class BackendReconnectCoordinator:
             except BackendInputError:
                 raise
             except Exception:
-                self._wait_for_active_retry(deadline)
+                if self._wait_for_active_retry(deadline):
+                    return None
                 continue
             if self._stop_requested.is_set() or self._clock() >= deadline:
                 self._close_rejected(replacement)
@@ -312,10 +330,14 @@ class BackendReconnectCoordinator:
             self._publish(replacement)
             return
 
-    def _wait_for_active_retry(self, deadline: float) -> None:
+    def _wait_for_active_retry(self, deadline: float) -> bool:
         remaining_s = deadline - self._clock()
         if remaining_s > 0 and not self._stop_requested.is_set():
-            self._sleep(min(self._active_retry_interval_s, remaining_s))
+            interrupted = self._active_retry_wait(
+                min(self._active_retry_interval_s, remaining_s)
+            )
+            return interrupted or self._stop_requested.is_set()
+        return self._stop_requested.is_set()
 
     def _publish(
         self,
@@ -333,14 +355,17 @@ class BackendReconnectCoordinator:
                 except BaseException as exc:
                     callback_error = exc
                 else:
-                    self._source_owner.replace_source(
-                        replacement.source,
-                        backend_snapshot=replacement.backend_snapshot,
-                    )
-                    return ReconnectedCaptureSource(
-                        source=self._source_owner,
-                        backend_snapshot=replacement.backend_snapshot,
-                    )
+                    if self._closing or self._closed:
+                        publish = False
+                    else:
+                        self._source_owner.replace_source(
+                            replacement.source,
+                            backend_snapshot=replacement.backend_snapshot,
+                        )
+                        return ReconnectedCaptureSource(
+                            source=self._source_owner,
+                            backend_snapshot=replacement.backend_snapshot,
+                        )
 
         if not publish or callback_error is not None:
             self._close_rejected(replacement)

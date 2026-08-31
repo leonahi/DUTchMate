@@ -667,6 +667,153 @@ def test_close_rejects_candidate_returned_after_shutdown_begins() -> None:
     assert owner.replacements == []
 
 
+def test_active_callback_can_close_without_waiting_on_its_own_attempt() -> None:
+    owner = FakeSourceOwner()
+    replacement_source = ClosableSource()
+    callback_entered = Event()
+    callback_returned = Event()
+    call_complete = Event()
+    results: list[ReconnectedCaptureSource | None] = []
+    errors: list[BaseException] = []
+    reconnect: BackendReconnectCoordinator
+
+    def close_from_callback(_replacement: ReconnectedCaptureSource) -> None:
+        callback_entered.set()
+        reconnect.close()
+        callback_returned.set()
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=lambda **_kwargs: ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(1),
+        ),
+        on_connected=close_from_callback,
+        monotonic_clock=lambda: 0.0,
+    )
+
+    def run_active() -> None:
+        try:
+            results.append(reconnect(segment_id=1, deadline=1.0))
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            call_complete.set()
+
+    active_thread = Thread(target=run_active, daemon=True)
+    active_thread.start()
+    assert callback_entered.wait(timeout=1.0)
+    returned_without_self_deadlock = callback_returned.wait(timeout=0.1)
+    if not returned_without_self_deadlock:
+        _release_stuck_attempt(reconnect)
+    assert call_complete.wait(timeout=1.0)
+    active_thread.join(timeout=1.0)
+
+    assert returned_without_self_deadlock
+    assert errors == []
+    assert results == [None]
+    assert replacement_source.closed is True
+    assert owner.replacements == []
+
+
+def test_idle_callback_can_close_without_waiting_on_its_own_attempt() -> None:
+    owner = FakeSourceOwner()
+    replacement_source = ClosableSource()
+    callback_entered = Event()
+    callback_returned = Event()
+    reconnect: BackendReconnectCoordinator
+
+    def close_from_callback(_replacement: ReconnectedCaptureSource) -> None:
+        callback_entered.set()
+        reconnect.close()
+        callback_returned.set()
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=lambda **_kwargs: ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(0),
+        ),
+        on_connected=close_from_callback,
+    )
+    reconnect.start()
+    worker = reconnect._worker
+    assert worker is not None
+    owner.disconnect_while_idle()
+    assert callback_entered.wait(timeout=1.0)
+    returned_without_self_deadlock = callback_returned.wait(timeout=0.1)
+    if not returned_without_self_deadlock:
+        _release_stuck_attempt(reconnect)
+    worker.join(timeout=1.0)
+
+    assert returned_without_self_deadlock
+    assert not worker.is_alive()
+    assert replacement_source.closed is True
+    assert owner.replacements == []
+    reconnect.close()
+
+
+def test_close_interrupts_active_retry_wait() -> None:
+    owner = FakeSourceOwner()
+    open_failed = Event()
+    retry_wait_entered = Event()
+    close_returned = Event()
+    active_complete = Event()
+    stop_requests: list[Event] = []
+    results: list[ReconnectedCaptureSource | None] = []
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        del segment_id, deadline
+        stop_requests.append(stop_requested)
+        open_failed.set()
+        raise OSError("port unavailable")
+
+    def wait_for_active_retry(delay: float) -> bool:
+        assert delay == 0.1
+        retry_wait_entered.set()
+        return stop_requests[0].wait(timeout=delay)
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        monotonic_clock=lambda: 0.0,
+        wait_for_active_retry=wait_for_active_retry,
+    )
+
+    def run_active() -> None:
+        results.append(reconnect(segment_id=1, deadline=1.0))
+        active_complete.set()
+
+    active_thread = Thread(target=run_active)
+    active_thread.start()
+    assert open_failed.wait(timeout=1.0)
+    assert retry_wait_entered.wait(timeout=1.0)
+
+    def run_close() -> None:
+        reconnect.close()
+        close_returned.set()
+
+    close_thread = Thread(target=run_close)
+    close_thread.start()
+
+    assert close_returned.wait(timeout=1.0)
+    assert active_complete.wait(timeout=1.0)
+    close_thread.join(timeout=1.0)
+    active_thread.join(timeout=1.0)
+    assert results == [None]
+
+
+def _release_stuck_attempt(reconnect: BackendReconnectCoordinator) -> None:
+    with reconnect._condition:
+        reconnect._attempt_active = False
+        reconnect._condition.notify_all()
+
+
 def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
     clock = FakeClock()
     owner = FakeSourceOwner()
