@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from threading import Condition, Event, Lock, Thread
+from typing import cast
 
 import pytest
 
@@ -8,9 +10,11 @@ from dutchmate_core.backends import (
     BackendInfo,
     BackendInputError,
     BackendSnapshot,
+    BackendUartSendResult,
     SegmentContext,
     SegmentTimestamp,
     UartIntegrity,
+    UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
 from dutchmate_core.backends.basic import BasicBackendConnection, BasicBackendEventSource
@@ -23,6 +27,7 @@ from dutchmate_service.backend_reconnect import (
     ReplaceableUartSender,
     RetryingCaptureReconnect,
     build_basic_capture_reconnect,
+    build_enhanced_capture_reconnect,
 )
 
 
@@ -156,7 +161,7 @@ class FakeSourceOwner:
 
 class FakeControl:
     def __init__(self, marker: int) -> None:
-        self.marker = marker
+        self._control_marker = marker
         self.configuration_requests: list[tuple[str, str, str, str | None]] = []
         self.pulse_requests: list[tuple[str, int]] = []
         self.state_requests: list[tuple[str, str]] = []
@@ -170,15 +175,69 @@ class FakeControl:
         idle_level: str | None,
     ) -> int:
         self.configuration_requests.append((channel, mode, active_level, idle_level))
-        return self.marker
+        return self._control_marker
 
     def pulse_control(self, *, channel: str, pulse_ms: int) -> int:
         self.pulse_requests.append((channel, pulse_ms))
-        return self.marker
+        return self._control_marker
 
     def set_control_state(self, *, channel: str, state: ControlState) -> int:
         self.state_requests.append((channel, state))
-        return self.marker
+        return self._control_marker
+
+
+class FakeSender:
+    def __init__(self, marker: int) -> None:
+        self._sender_marker = marker
+        self.requests: list[bytes] = []
+
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        self.requests.append(data)
+        return BackendUartSendResult(
+            bytes_accepted=len(data),
+            device_timestamp_us=self._sender_marker,
+        )
+
+
+class FakeEnhancedReconnectHost(FakeControl, FakeSender):
+    def __init__(
+        self,
+        *,
+        info: BackendInfo,
+        segment: SegmentContext | None,
+        established_segment: SegmentContext | None = None,
+        events: list[BackendEvent] | None = None,
+        wait_hook: Callable[[float], None] | None = None,
+    ) -> None:
+        FakeControl.__init__(self, marker=123)
+        FakeSender.__init__(self, marker=456)
+        self.info = info
+        self._segment = segment
+        self._established_segment = established_segment
+        self._events = list(events or [])
+        self._wait_hook = wait_hook
+        self.segment_wait_timeouts: list[float] = []
+        self.close_count = 0
+
+    @property
+    def segment(self) -> SegmentContext | None:
+        return self._segment
+
+    def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
+        self.segment_wait_timeouts.append(timeout_s)
+        if self._wait_hook is not None:
+            self._wait_hook(timeout_s)
+        if self._established_segment is not None:
+            self._segment = self._established_segment
+        return self._segment
+
+    def read_event(self) -> BackendEvent | None:
+        if not self._events:
+            return None
+        return self._events.pop(0)
+
+    def close(self) -> None:
+        self.close_count += 1
 
 
 def test_reconnect_retries_open_and_publishes_stable_source_owner() -> None:
@@ -814,6 +873,273 @@ def _release_stuck_attempt(reconnect: BackendReconnectCoordinator) -> None:
         reconnect._condition.notify_all()
 
 
+def test_enhanced_active_candidate_waits_for_origin_without_consuming_event() -> None:
+    clock = FakeClock()
+    expected_info = _enhanced_info()
+    origin = _segment(1, source_origin_us=4_000)
+    origin_event = UartReceiveEvent(
+        segment_id=1,
+        timestamp_us=4_000,
+        channel=0,
+        data=b"ready\n",
+    )
+    host = FakeEnhancedReconnectHost(
+        info=expected_info,
+        segment=None,
+        established_segment=origin,
+        events=[origin_event],
+    )
+    opened: list[tuple[str, int, int]] = []
+    control = ReplaceableDeviceControl(FakeControl(10))
+    sender = ReplaceableUartSender(FakeSender(20))
+
+    class PortCheckingOwner(FakeSourceOwner):
+        def replace_source(
+            self,
+            replacement: CaptureEventSource,
+            *,
+            backend_snapshot: BackendSnapshot | None = None,
+        ) -> None:
+            assert control.pulse_control(channel="CTRL0", pulse_ms=1) == 123
+            assert sender.send_uart(b"x").device_timestamp_us == 456
+            super().replace_source(
+                replacement,
+                backend_snapshot=backend_snapshot,
+            )
+
+    owner = PortCheckingOwner()
+
+    def open_host(*, port: str, baudrate: int, segment_id: int) -> FakeEnhancedReconnectHost:
+        opened.append((port, baudrate, segment_id))
+        return host
+
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=owner,
+        expected_info=expected_info,
+        control=control,
+        sender=sender,
+        open_host=open_host,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    result = reconnect(segment_id=1, deadline=1.0)
+    reconnect.close()
+
+    assert isinstance(reconnect, BackendReconnectCoordinator)
+    assert result is not None
+    assert opened == [("/dev/ttyACM0", 460800, 1)]
+    assert host.segment_wait_timeouts == [0.1]
+    assert host.read_event() == origin_event
+    assert owner.replacements == [host]
+    assert result.backend_snapshot.info == expected_info
+    assert result.backend_snapshot.segment == origin
+    assert result.backend_snapshot.capabilities == frozenset(
+        {"uart_receive", "gpio_control", "device_timestamp"}
+    )
+
+
+def test_enhanced_idle_candidate_publishes_without_waiting_for_origin() -> None:
+    expected_info = _enhanced_info()
+    host = FakeEnhancedReconnectHost(info=expected_info, segment=None)
+    owner = FakeSourceOwner()
+    opened = Event()
+
+    def open_host(**_kwargs: object) -> FakeEnhancedReconnectHost:
+        opened.set()
+        return host
+
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=owner,
+        expected_info=expected_info,
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=open_host,
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert opened.wait(timeout=1.0)
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    assert host.segment_wait_timeouts == []
+    assert owner.replacements == [host]
+    snapshot = owner.replacement_snapshots[0]
+    assert snapshot is not None
+    assert snapshot.info == expected_info
+    assert snapshot.segment is None
+
+
+def test_enhanced_active_identity_mismatch_is_fatal_and_closes_host() -> None:
+    host = FakeEnhancedReconnectHost(
+        info=_enhanced_info(firmware="9.9.9"),
+        segment=_segment(1),
+    )
+    attempts = 0
+
+    def open_host(**_kwargs: object) -> FakeEnhancedReconnectHost:
+        nonlocal attempts
+        attempts += 1
+        return host
+
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=FakeSourceOwner(),
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=open_host,
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    with pytest.raises(
+        BackendInputError,
+        match="Reconnected Debug Helper identity changed",
+    ):
+        reconnect(segment_id=1, deadline=1.0)
+    reconnect.close()
+
+    assert attempts == 1
+    assert host.close_count == 1
+
+
+def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
+    mismatched = FakeEnhancedReconnectHost(
+        info=_enhanced_info(device="other-helper"),
+        segment=None,
+    )
+    accepted = FakeEnhancedReconnectHost(info=_enhanced_info(), segment=None)
+    candidates = [mismatched, accepted]
+    owner = FakeSourceOwner()
+
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=owner,
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=lambda **_kwargs: candidates.pop(0),
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    assert mismatched.close_count == 1
+    assert accepted.close_count == 0
+    assert owner.replacements == [accepted]
+
+
+def test_enhanced_active_origin_timeout_closes_host() -> None:
+    clock = FakeClock()
+    host = FakeEnhancedReconnectHost(
+        info=_enhanced_info(),
+        segment=None,
+        wait_hook=clock.sleep,
+    )
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=FakeSourceOwner(),
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=lambda **_kwargs: host,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    assert reconnect(segment_id=1, deadline=0.25) is None
+    reconnect.close()
+
+    assert host.segment_wait_timeouts == pytest.approx([0.1, 0.1, 0.05])
+    assert host.close_count == 1
+
+
+def test_basic_active_candidate_uses_coordinator_and_replaces_sender() -> None:
+    clock = FakeClock()
+    settings = _basic_settings(port="/dev/ttyUSB0", tx_enabled=True)
+    expected = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=FakeBasicSerial(), settings=settings),
+        segment_id=0,
+    ).snapshot
+    replacement_serial = FakeBasicSerial()
+    replacement = BasicBackendConnection(
+        serial_port=replacement_serial,
+        settings=settings,
+    )
+    sender = ReplaceableUartSender(FakeSender(20))
+    owner = FakeSourceOwner()
+    reconnect = build_basic_capture_reconnect(
+        settings=settings,
+        source_owner=owner,
+        expected_snapshot=expected,
+        open_connection=lambda _settings: replacement,
+        sender=sender,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    result = reconnect(segment_id=2, deadline=1.0)
+    reconnect.close()
+
+    assert isinstance(reconnect, BackendReconnectCoordinator)
+    assert result is not None
+    assert result.backend_snapshot.info == expected.info
+    assert result.backend_snapshot.segment is not None
+    assert result.backend_snapshot.segment.segment_id == 2
+    assert sender.send_uart(b"abc").bytes_accepted == 3
+    assert len(owner.replacements) == 1
+    cast(BasicBackendEventSource, owner.replacements[0]).close()
+    assert replacement_serial.close_count == 1
+
+
+def test_basic_idle_candidate_preserves_identity_and_segment_zero() -> None:
+    settings = _basic_settings(port="/dev/ttyUSB0")
+    expected = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=FakeBasicSerial(), settings=settings),
+        segment_id=0,
+    ).snapshot
+    replacement = BasicBackendConnection(
+        serial_port=FakeBasicSerial(),
+        settings=settings,
+    )
+    owner = FakeSourceOwner()
+    reconnect = build_basic_capture_reconnect(
+        settings=settings,
+        source_owner=owner,
+        expected_snapshot=expected,
+        open_connection=lambda _settings: replacement,
+        sender=ReplaceableUartSender(FakeSender(20)),
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    snapshot = owner.replacement_snapshots[0]
+    assert snapshot is not None
+    assert snapshot.info == expected.info
+    assert snapshot.capability_policy == expected.capability_policy
+    assert snapshot.segment is not None
+    assert snapshot.segment.segment_id == 0
+    cast(BasicBackendEventSource, owner.replacements[0]).close()
+
+
 def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
     clock = FakeClock()
     owner = FakeSourceOwner()
@@ -850,6 +1176,7 @@ def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
     assert owner.closed_current == 1
     assert owner.replacements == []
     assert replacement_serial.close_count == 1
+    reconnect.close()
 
 
 def test_replaceable_device_control_forwards_to_latest_adapter() -> None:
@@ -912,7 +1239,56 @@ def _snapshot(segment_id: int) -> BackendSnapshot:
     )
 
 
-def _basic_settings(*, port: str) -> BackendSettings:
+def _segment(segment_id: int, *, source_origin_us: int = 1_000) -> SegmentContext:
+    return SegmentContext(
+        segment_id=segment_id,
+        timestamp=SegmentTimestamp(
+            source="device",
+            clock="rp2040_timer",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=source_origin_us,
+            observation_point="debug_helper_uart_receive",
+            event_granularity="uart_event",
+        ),
+    )
+
+
+def _enhanced_info(
+    *,
+    device: str = "dutchmate-rp2040",
+    firmware: str = "0.1.0",
+) -> BackendInfo:
+    return BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        device=device,
+        firmware=firmware,
+        capabilities=frozenset(
+            {
+                "uart_receive",
+                "uart_send",
+                "gpio_control",
+                "device_timestamp",
+            }
+        ),
+    )
+
+
+def _enhanced_settings() -> BackendSettings:
+    return BackendSettings(
+        mode="enhanced",
+        serial_port="/dev/ttyACM0",
+        reconnect_timeout_s=1.0,
+        baudrate=460800,
+        data_bits=8,
+        parity="none",
+        stop_bits=1,
+        tx_enabled=False,
+    )
+
+
+def _basic_settings(*, port: str, tx_enabled: bool = False) -> BackendSettings:
     return BackendSettings(
         mode="basic",
         serial_port=port,
@@ -921,5 +1297,5 @@ def _basic_settings(*, port: str) -> BackendSettings:
         data_bits=8,
         parity="none",
         stop_bits=1,
-        tx_enabled=False,
+        tx_enabled=tx_enabled,
     )
