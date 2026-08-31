@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `1af0876d6fc28c5ff0e17e860e0b4a25eafac0a7` on 2026-08-31
+> Code baseline reviewed: `53c96bbde8070ae5a9bf8fffb7b806363d1fa0a5` on 2026-08-31
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -56,7 +56,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 ## Latest Validation
 
 Working tree based on code baseline
-`1af0876d6fc28c5ff0e17e860e0b4a25eafac0a7`, reviewed 2026-08-31:
+`53c96bbde8070ae5a9bf8fffb7b806363d1fa0a5`, reviewed 2026-08-31:
 
 - Acceptance searches found synchronous Enhanced names only in compatibility
   definitions and their callers, no app/service import in `core/src`, and the
