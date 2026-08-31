@@ -116,6 +116,43 @@ def enhanced_replacement_snapshot() -> BackendSnapshot:
     )
 
 
+def test_initial_validated_snapshot_reaches_existing_status_response(
+    tmp_path: Path,
+) -> None:
+    """Catch startup health omitting initial identity, segment, or integrity."""
+
+    source = QueueSource()
+    snapshot = enhanced_replacement_snapshot()
+    coordinator = ContinuousIngestionCoordinator(
+        source,
+        backend_snapshot=snapshot,
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=NoopDeviceControl(),
+        message_source=coordinator,
+        session_store=SessionStore(root=tmp_path),
+        backend_mode="enhanced",
+        port="/dev/ttyACM0",
+    )
+    runtime.record_backend_connection(snapshot.info)
+
+    try:
+        response = TestClient(create_app(runtime)).get("/status")
+    finally:
+        runtime.close()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["connected"] is True
+    assert payload["device"] == "dutchmate-rp2040-replacement"
+    assert payload["timestamp_provenance"]["segment_id"] == 1
+    assert payload["integrity"] == {
+        "loss_status": "none_reported",
+        "observation_scope": "debug_helper_rx_buffer",
+        "dropped_bytes": 0,
+    }
+
+
 def test_idle_basic_disconnect_reaches_existing_status_response(tmp_path: Path) -> None:
     source = QueueSource()
     coordinator = ContinuousIngestionCoordinator(source)

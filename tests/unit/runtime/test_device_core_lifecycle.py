@@ -35,6 +35,54 @@ def test_runtime_close_closes_current_source_once(tmp_path: Path) -> None:
     assert source.close_count == 1
 
 
+def test_runtime_close_stops_reconnect_before_closing_source(tmp_path: Path) -> None:
+    """Catch source cleanup racing a still-running reconnect lifecycle."""
+
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = TracingCaptureSource(clock=clock, trace=trace)
+    reconnect = ClosableReconnect(trace=trace)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        session_store=SessionStore(root=tmp_path),
+        backend_reconnect=reconnect,
+    )
+
+    runtime.close()
+
+    assert trace == ["reconnect_close", "source_close"]
+
+
+def test_runtime_close_retains_reconnect_error_and_continues_source_cleanup(
+    tmp_path: Path,
+) -> None:
+    """Catch reconnect shutdown failure masking or skipping source cleanup."""
+
+    reconnect_error = RuntimeError("reconnect close failed")
+    source_error = RuntimeError("source close failed")
+    trace: list[str] = []
+    clock = FakeMonotonicClock()
+    source = TracingCaptureSource(
+        clock=clock,
+        trace=trace,
+        close_error=source_error,
+    )
+    reconnect = ClosableReconnect(trace=trace, close_error=reconnect_error)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        session_store=SessionStore(root=tmp_path),
+        backend_reconnect=reconnect,
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        runtime.close()
+
+    assert raised.value is reconnect_error
+    assert trace == ["reconnect_close", "source_close"]
+
+
 def test_runtime_reconnect_keeps_stable_facade_as_message_source(
     tmp_path: Path,
 ) -> None:
@@ -346,6 +394,50 @@ class BlockingCloseCaptureSource(FakeCaptureSource):
         self.close_count += 1
         self.close_started.set()
         assert self.release_close.wait(timeout=1)
+        if self._close_error is not None:
+            raise self._close_error
+
+
+class TracingCaptureSource(FakeCaptureSource):
+    def __init__(
+        self,
+        *,
+        clock: FakeMonotonicClock,
+        trace: list[str],
+        close_error: BaseException | None = None,
+    ) -> None:
+        super().__init__([], clock=clock)
+        self._trace = trace
+        self._close_error = close_error
+
+    def close(self) -> None:
+        self.close_count += 1
+        self._trace.append("source_close")
+        if self._close_error is not None:
+            raise self._close_error
+
+
+class ClosableReconnect:
+    def __init__(
+        self,
+        *,
+        trace: list[str],
+        close_error: BaseException | None = None,
+    ) -> None:
+        self._trace = trace
+        self._close_error = close_error
+
+    def __call__(
+        self,
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource | None:
+        del segment_id, deadline
+        raise AssertionError("reconnect attempt was not expected")
+
+    def close(self) -> None:
+        self._trace.append("reconnect_close")
         if self._close_error is not None:
             raise self._close_error
 

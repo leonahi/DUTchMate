@@ -341,6 +341,12 @@ class DeviceCoreRuntime:
             return
 
         close_error: BaseException | None = None
+        reconnect_close = getattr(self._backend_reconnect, "close", None)
+        if callable(reconnect_close):
+            try:
+                reconnect_close()
+            except BaseException as exc:
+                close_error = exc
         try:
             if reconnect_in_progress:
                 self._reconnect_complete.wait()
@@ -355,7 +361,8 @@ class DeviceCoreRuntime:
             if source is not None:
                 self._close_event_source(source)
         except BaseException as exc:
-            close_error = exc
+            if close_error is None:
+                close_error = exc
         finally:
             with self._operation_lock:
                 if close_error is None:

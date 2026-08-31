@@ -676,7 +676,7 @@ def _build_async_enhanced_capture_reconnect(
                     host.wait_for_segment(min(0.1, remaining_s))
             return ReconnectedCaptureSource(
                 source=host,
-                backend_snapshot=_backend_snapshot(
+                backend_snapshot=backend_snapshot(
                     info=host.info,
                     segment=host.segment,
                     tx_enabled=settings.tx_enabled,
@@ -756,7 +756,7 @@ def _build_legacy_enhanced_capture_reconnect(
                     )
             replacement = ReconnectedCaptureSource(
                 source=source,
-                backend_snapshot=_backend_snapshot(
+                backend_snapshot=backend_snapshot(
                     info=info,
                     segment=source.segment,
                     tx_enabled=settings.tx_enabled,
@@ -797,7 +797,7 @@ def read_enhanced_hello(transport: SerialCommandTransport) -> HelloMessage:
     return message
 
 
-def _backend_snapshot(
+def backend_snapshot(
     *,
     info: BackendInfo,
     segment: SegmentContext | None,

@@ -12,6 +12,7 @@ from dutchmate_core.gpio_config.config import HardwareGpioConfig, parse_hardware
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_service import app as app_module
+from dutchmate_service.backend_reconnect import BackendReconnectCoordinator
 from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 
 
@@ -91,24 +92,44 @@ def test_app_lifespan_closes_runtime_coordinator_and_ingestion_thread(
 
     source = BlockingCaptureSource()
     coordinator = ContinuousIngestionCoordinator(source)
+    reconnect = BackendReconnectCoordinator(
+        source_owner=coordinator,
+        open_replacement=lambda **_kwargs: pytest.fail(
+            "connected source unexpectedly attempted reconnect"
+        ),
+    )
     runtime = DeviceCoreRuntime(
         device_control=NoopDeviceControl(),
         message_source=coordinator,
         session_store=SessionStore(root=tmp_path),
+        backend_reconnect=reconnect,
     )
+    reconnect.start()
+    reconnect_worker = reconnect._worker  # noqa: SLF001 - lifecycle assertion.
+    assert reconnect_worker is not None
     monkeypatch.setattr(app_module, "build_startup_runtime", lambda **_kwargs: runtime)
 
-    with TestClient(app_module.create_app()) as client:
-        assert source.read_started.wait(timeout=1)
-        assert client.get("/status").status_code == 200
-        assert any(
-            thread.name == "dutchmate-continuous-ingestion"
-            for thread in threading.enumerate()
-        )
+    try:
+        with TestClient(app_module.create_app()) as client:
+            assert source.read_started.wait(timeout=1)
+            assert client.get("/status").status_code == 200
+            assert reconnect_worker.is_alive()
+            assert any(
+                thread.name == "dutchmate-continuous-ingestion"
+                for thread in threading.enumerate()
+            )
+        worker_alive_after_lifespan = reconnect_worker.is_alive()
+    finally:
+        if reconnect_worker.is_alive():
+            reconnect.close()
+        if coordinator._thread.is_alive():  # noqa: SLF001 - failed-test cleanup.
+            coordinator.close()
 
     assert source.close_count == 1
+    assert worker_alive_after_lifespan is False
     assert all(
-        thread.name != "dutchmate-continuous-ingestion"
+        thread.name
+        not in {"dutchmate-backend-reconnect", "dutchmate-continuous-ingestion"}
         for thread in threading.enumerate()
     )
 

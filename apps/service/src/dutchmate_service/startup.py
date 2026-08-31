@@ -16,10 +16,7 @@ from dutchmate_core.backends.basic import (
 from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.serial_transport import (
-    SerialCommandTransport,
-    open_serial_command_transport,
-)
+from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.config import (
     HardwareGpioConfig,
     load_hardware_gpio_config,
@@ -34,6 +31,7 @@ from dutchmate_core.session_store.store import (
 from dutchmate_service.backend_reconnect import (
     ReplaceableDeviceControl,
     ReplaceableUartSender,
+    backend_snapshot,
     build_basic_capture_reconnect,
     build_enhanced_capture_reconnect,
     read_enhanced_hello,
@@ -113,7 +111,11 @@ def build_startup_runtime(
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
         initial_snapshot = basic_source.snapshot
-        coordinator = ContinuousIngestionCoordinator(basic_source)
+        coordinator = ContinuousIngestionCoordinator(
+            basic_source,
+            backend_snapshot=initial_snapshot,
+        )
+        reconnect = None
         try:
             sender = ReplaceableUartSender(connection)
             control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
@@ -138,8 +140,12 @@ def build_startup_runtime(
                 reconnect_timeout_s=backend_settings.reconnect_timeout_s,
                 backend_reconnect=reconnect,
             )
-            runtime.record_backend_connection(connection.info)
+            runtime.record_backend_connection(initial_snapshot.info)
+            reconnect.start()
         except BaseException:
+            if reconnect is not None:
+                with suppress(BaseException):
+                    reconnect.close()
             with suppress(BaseException):
                 coordinator.close()
             raise
@@ -159,18 +165,26 @@ def build_startup_runtime(
         baudrate=backend_settings.baudrate,
         segment_id=0,
     )
-    coordinator = ContinuousIngestionCoordinator(enhanced_host)
+    initial_snapshot = backend_snapshot(
+        info=enhanced_host.info,
+        segment=enhanced_host.segment,
+        tx_enabled=backend_settings.tx_enabled,
+    )
+    coordinator = ContinuousIngestionCoordinator(
+        enhanced_host,
+        backend_snapshot=initial_snapshot,
+    )
+    reconnect = None
     try:
-        info = enhanced_host.info
         control = ReplaceableDeviceControl(enhanced_host)
         sender = ReplaceableUartSender(enhanced_host)
         reconnect = build_enhanced_capture_reconnect(
             settings=backend_settings,
             source_owner=coordinator,
-            expected_info=info,
+            expected_info=initial_snapshot.info,
             control=control,
             sender=sender,
-            open_transport=open_serial_command_transport,
+            open_host=open_enhanced_async_host,
             monotonic_clock=reconnect_clock,
             sleep=reconnect_sleep,
         )
@@ -186,8 +200,12 @@ def build_startup_runtime(
             reconnect_timeout_s=backend_settings.reconnect_timeout_s,
             backend_reconnect=reconnect,
         )
-        runtime.record_backend_connection(info)
+        runtime.record_backend_connection(initial_snapshot.info)
+        reconnect.start()
     except BaseException:
+        if reconnect is not None:
+            with suppress(BaseException):
+                reconnect.close()
         with suppress(BaseException):
             coordinator.close()
         raise

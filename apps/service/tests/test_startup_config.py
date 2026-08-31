@@ -14,6 +14,7 @@ from dutchmate_core.backends import (
     BackendEvent,
     BackendInfo,
     BackendInputError,
+    BackendSnapshot,
     BackendUartSendResult,
     SegmentContext,
     SegmentTimestamp,
@@ -35,6 +36,7 @@ from dutchmate_core.session_store.store import SessionRecoveryResult, SessionSto
 from dutchmate_core.workflows.capture import CaptureEventSource, CaptureWorkflow
 from dutchmate_service import startup
 from dutchmate_service.app import create_app
+from dutchmate_service.backend_reconnect import BackendReconnectCoordinator
 from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.startup import (
     apply_startup_hardware_config,
@@ -112,25 +114,6 @@ class ScriptedBasicSerial:
             self._condition.notify_all()
 
 
-class ScriptedEnhancedSerial(FakeSerial):
-    def __init__(self, reads: list[bytes | Exception]) -> None:
-        super().__init__([])
-        self._script = reads
-        self.closed = False
-
-    def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
-        del expected, size
-        if not self._script:
-            return b""
-        result = self._script.pop(0)
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    def close(self) -> None:
-        self.closed = True
-
-
 class AdvancingClock:
     def __init__(self, step_s: float = 0.01) -> None:
         self.value = 0.0
@@ -153,6 +136,7 @@ class FakeEnhancedAsyncHost:
         info: BackendInfo,
         segment_id: int,
         segment: SegmentContext | None = None,
+        segment_on_wait: SegmentContext | None = None,
         read_outcomes: list[BackendEvent | BaseException | None] | None = None,
         send_outcomes: list[BackendUartSendResult | BaseException] | None = None,
         close_order: list[str] | None = None,
@@ -161,6 +145,7 @@ class FakeEnhancedAsyncHost:
         self.info = info
         self.segment_id = segment_id
         self.segment = segment
+        self._segment_on_wait = segment_on_wait
         self._read_outcomes = list(read_outcomes or [])
         self._send_outcomes = list(send_outcomes or [])
         self._close_order = close_order
@@ -221,6 +206,12 @@ class FakeEnhancedAsyncHost:
     def discard_pending_events(self) -> None:
         self.discard_count += 1
 
+    def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
+        del timeout_s
+        if self.segment is None and self._segment_on_wait is not None:
+            self.segment = self._segment_on_wait
+        return self.segment
+
     def close(self) -> None:
         with self._condition:
             if self.closed:
@@ -235,9 +226,14 @@ class FakeEnhancedAsyncHost:
 
 
 class WorkflowBarrierCoordinator(ContinuousIngestionCoordinator):
-    def __init__(self, source: CaptureEventSource) -> None:
+    def __init__(
+        self,
+        source: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot | None = None,
+    ) -> None:
         self.workflow_started = ThreadEvent()
-        super().__init__(source)
+        super().__init__(source, backend_snapshot=backend_snapshot)
 
     def begin_workflow(self) -> None:
         super().begin_workflow()
@@ -426,9 +422,16 @@ def test_enhanced_startup_selects_one_async_host(
 
     def track_coordinator(
         source: FakeEnhancedAsyncHost,
+        *,
+        backend_snapshot: BackendSnapshot,
     ) -> ContinuousIngestionCoordinator:
         coordinator_factory_calls.append(source)
-        coordinator = ContinuousIngestionCoordinator(source)
+        assert backend_snapshot.info == host.info
+        assert backend_snapshot.segment == host.segment
+        coordinator = ContinuousIngestionCoordinator(
+            source,
+            backend_snapshot=backend_snapshot,
+        )
         coordinators.append(coordinator)
         return coordinator
 
@@ -443,6 +446,7 @@ def test_enhanced_startup_selects_one_async_host(
         startup,
         "open_serial_command_transport",
         lambda **_kwargs: pytest.fail("initial Enhanced startup opened sync transport"),
+        raising=False,
     )
 
     runtime = build_startup_runtime(
@@ -460,8 +464,91 @@ def test_enhanced_startup_selects_one_async_host(
     assert host.close_count == 0
     assert runtime.status().connected is True
     assert runtime.status().device == "dutchmate-rp2040"
+    reconnect = runtime._backend_reconnect  # noqa: SLF001
+    assert isinstance(reconnect, BackendReconnectCoordinator)
+    worker = reconnect._worker  # noqa: SLF001
+    assert worker is not None
+    assert worker.is_alive()
     runtime.close()
     assert host.close_count == 1
+    assert not worker.is_alive()
+
+
+def test_enhanced_startup_idle_reconnect_restores_existing_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    initial_host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
+    replacement_host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
+    hosts = [initial_host, replacement_host]
+    opened: list[tuple[str, int, int]] = []
+    replacement_opened = ThreadEvent()
+
+    def fake_open_host(
+        *,
+        port: str,
+        baudrate: int,
+        segment_id: int,
+    ) -> FakeEnhancedAsyncHost:
+        opened.append((port, baudrate, segment_id))
+        host = hosts.pop(0)
+        if host is replacement_host:
+            replacement_opened.set()
+        return host
+
+    def fail_sync_open(**_kwargs: object) -> None:
+        raise AssertionError("synchronous Enhanced reconnect opener was selected")
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
+    monkeypatch.setattr(
+        startup,
+        "open_serial_command_transport",
+        fail_sync_open,
+        raising=False,
+    )
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=backend_settings(
+            "enhanced",
+            serial_port="/dev/ttyACM0",
+            baudrate=460800,
+        ),
+    )
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, ContinuousIngestionCoordinator)
+
+    try:
+        initial_host.publish(BackendDisconnectedError("removed while idle"))
+        assert replacement_opened.wait(timeout=1)
+        condition = coordinator._condition  # noqa: SLF001 - deterministic barrier.
+        with condition:
+            assert condition.wait_for(
+                lambda: coordinator.capture_source_health().connection_generation == 1,
+                timeout=1,
+            )
+        status = runtime.status()
+        assert status.connected is True
+        assert status.connection_state == "connected"
+        assert status.device == "dutchmate-rp2040"
+        assert status.timestamp_provenance == replacement_host.segment
+    finally:
+        runtime.close()
+
+    assert opened == [
+        ("/dev/ttyACM0", 460800, 0),
+        ("/dev/ttyACM0", 460800, 0),
+    ]
+    assert initial_host.closed is True
+    assert replacement_host.closed is True
+    assert hosts == []
 
 
 def test_enhanced_startup_closes_host_when_connection_recording_fails(
@@ -474,9 +561,14 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
 
     def track_coordinator(
         source: FakeEnhancedAsyncHost,
+        *,
+        backend_snapshot: BackendSnapshot,
     ) -> ContinuousIngestionCoordinator:
         coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(source)
+        return ContinuousIngestionCoordinator(
+            source,
+            backend_snapshot=backend_snapshot,
+        )
 
     def fail_connection_recording(
         self: DeviceCoreRuntime,
@@ -528,9 +620,14 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
 
     def track_coordinator(
         source: FakeEnhancedAsyncHost,
+        *,
+        backend_snapshot: BackendSnapshot,
     ) -> ContinuousIngestionCoordinator:
         coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(source)
+        return ContinuousIngestionCoordinator(
+            source,
+            backend_snapshot=backend_snapshot,
+        )
 
     def fail_reconnect_composition(**_kwargs: object) -> None:
         raise primary_error
@@ -573,9 +670,14 @@ def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
 
     def track_coordinator(
         source: FakeEnhancedAsyncHost,
+        *,
+        backend_snapshot: BackendSnapshot,
     ) -> ContinuousIngestionCoordinator:
         coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(source)
+        return ContinuousIngestionCoordinator(
+            source,
+            backend_snapshot=backend_snapshot,
+        )
 
     def fail_runtime_construction(**_kwargs: object) -> None:
         raise primary_error
@@ -698,6 +800,7 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
 def test_enhanced_uart_send_projects_malformed_response_without_input(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     secret = "DUT-SECRET-MESSAGE-TYPE"
     host = FakeEnhancedAsyncHost(
@@ -720,6 +823,7 @@ def test_enhanced_uart_send_projects_malformed_response_without_input(
             tx_enabled=True,
         ),
     )
+    request.addfinalizer(runtime.close)
 
     response = TestClient(create_app(runtime)).post(
         "/dut/uart/send",
@@ -829,9 +933,15 @@ def test_build_startup_runtime_opens_basic_without_hello(
 
     def track_coordinator(
         source: BasicBackendEventSource,
+        *,
+        backend_snapshot: BackendSnapshot,
     ) -> ContinuousIngestionCoordinator:
         coordinator_factory_calls.append(source)
-        coordinator = ContinuousIngestionCoordinator(source)
+        assert backend_snapshot == source.snapshot
+        coordinator = ContinuousIngestionCoordinator(
+            source,
+            backend_snapshot=backend_snapshot,
+        )
         coordinators.append(coordinator)
         return coordinator
 
@@ -873,6 +983,11 @@ def test_build_startup_runtime_opens_basic_without_hello(
     assert status.integrity is not None
     assert status.integrity.loss_status == "not_observable"
     assert status.integrity.observation_scope is None
+    reconnect = runtime._backend_reconnect  # noqa: SLF001
+    assert isinstance(reconnect, BackendReconnectCoordinator)
+    worker = reconnect._worker  # noqa: SLF001
+    assert worker is not None
+    assert worker.is_alive()
 
     config = parse_hardware_gpio_config(
         {
@@ -893,6 +1008,58 @@ def test_build_startup_runtime_opens_basic_without_hello(
     runtime.close()
     assert serial.closed is True
     assert not reader.is_alive()
+    assert not worker.is_alive()
+
+
+def test_basic_startup_idle_reconnect_restores_existing_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    settings = backend_settings(
+        "basic",
+        serial_port="/dev/ttyUSB0",
+        baudrate=115200,
+    )
+    initial_serial = ScriptedBasicSerial([])
+    replacement_serial = ScriptedBasicSerial([])
+    serials = [initial_serial, replacement_serial]
+    replacement_opened = ThreadEvent()
+
+    def fake_open(received_settings: BackendSettings) -> BasicBackendConnection:
+        assert received_settings == settings
+        serial = serials.pop(0)
+        if serial is replacement_serial:
+            replacement_opened.set()
+        return BasicBackendConnection(serial_port=serial, settings=settings)
+
+    monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        backend_settings=settings,
+    )
+    coordinator = runtime._message_source  # noqa: SLF001
+    assert isinstance(coordinator, ContinuousIngestionCoordinator)
+
+    try:
+        initial_serial.publish(OSError("removed while idle"))
+        assert replacement_opened.wait(timeout=1)
+        condition = coordinator._condition  # noqa: SLF001 - deterministic barrier.
+        with condition:
+            assert condition.wait_for(
+                lambda: coordinator.capture_source_health().connection_generation == 1,
+                timeout=1,
+            )
+        status = runtime.status()
+        assert status.connected is True
+        assert status.connection_state == "connected"
+        assert status.backend_mode == "basic"
+        assert status.port == "/dev/ttyUSB0"
+    finally:
+        runtime.close()
+
+    assert initial_serial.closed is True
+    assert replacement_serial.closed is True
+    assert serials == []
 
 
 def test_real_coordinator_discards_idle_basic_event_before_capture(
@@ -998,7 +1165,7 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
     assert connection_state == "connected"
 
 
-def test_enhanced_startup_runtime_reopens_and_validates_hello(
+def test_enhanced_startup_reconnect_reopens_with_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1007,44 +1174,53 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
         serial_port="/dev/ttyACM0",
         baudrate=460800,
     )
-    order: list[str] = []
     initial_host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
         segment_id=0,
         segment=_enhanced_segment(segment_id=0),
-        close_order=order,
     )
-    hello = (
-        b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
+    replacement_host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=1,
+        segment_on_wait=_enhanced_segment(segment_id=1),
+        read_outcomes=[
+            UartReceiveEvent(
+                segment_id=1,
+                timestamp_us=25,
+                channel=0,
+                data=b"READY\n",
+            )
+        ],
     )
-    serials = [
-        ScriptedEnhancedSerial(
-            [
-                hello,
-                b'{"type":"uart","channel":0,"timestamp_us":25,"data_b64":"UkVBRFkK"}\n',
-            ]
-        ),
-    ]
+    hosts = [initial_host, replacement_host]
+    opened: list[tuple[str, int, int]] = []
 
-    def fake_open_serial_command_transport(
+    def fake_open_host(
         *,
         port: str,
         baudrate: int,
-    ) -> SerialCommandTransport:
+        segment_id: int,
+    ) -> FakeEnhancedAsyncHost:
         assert port == "/dev/ttyACM0"
         assert baudrate == 460800
-        assert order == ["async_closed"]
-        order.append("sync_opened")
-        return SerialCommandTransport(serials.pop(0))
+        opened.append((port, baudrate, segment_id))
+        host = hosts.pop(0)
+        assert host.segment_id == segment_id
+        return host
+
+    def fail_sync_open(**_kwargs: object) -> None:
+        raise AssertionError("synchronous Enhanced reconnect opener was selected")
 
     monkeypatch.setattr(
         startup,
         "open_enhanced_async_host",
-        lambda **_kwargs: initial_host,
+        fake_open_host,
     )
     monkeypatch.setattr(
-        startup, "open_serial_command_transport", fake_open_serial_command_transport
+        startup,
+        "open_serial_command_transport",
+        fail_sync_open,
+        raising=False,
     )
     monkeypatch.setattr(
         startup,
@@ -1081,12 +1257,21 @@ def test_enhanced_startup_runtime_reopens_and_validates_hello(
     assert summary.interrupted is True
     assert summary.resumed is True
     assert summary.segment_count == 2
+    assert summary.segment_contexts == (
+        _enhanced_segment(segment_id=0),
+        _enhanced_segment(segment_id=1),
+    )
     assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
     assert status.connection_state == "connected"
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 1
     assert initial_host.closed is True
-    assert order == ["async_closed", "sync_opened"]
+    assert replacement_host.closed is True
+    assert opened == [
+        ("/dev/ttyACM0", 460800, 0),
+        ("/dev/ttyACM0", 460800, 1),
+    ]
+    assert hosts == []
 
 
 def test_enhanced_reconnect_rejects_changed_device_identity(
@@ -1103,27 +1288,39 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         segment_id=0,
         segment=_enhanced_segment(segment_id=0),
     )
-    changed_hello = (
-        b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"another-helper","capabilities":["uart_receive"]}\n'
+    changed_host = FakeEnhancedAsyncHost(
+        info=BackendInfo(
+            mode="enhanced",
+            port="/dev/ttyACM0",
+            device="another-helper",
+            firmware="0.1.0",
+            capabilities=frozenset({"uart_receive"}),
+        ),
+        segment_id=1,
+        segment=_enhanced_segment(segment_id=1),
     )
-    serials = [
-        ScriptedEnhancedSerial([changed_hello]),
-    ]
+    hosts = [initial_host, changed_host]
 
-    def fake_open_serial_command_transport(
+    def fake_open_host(
         *,
         port: str,
         baudrate: int,
-    ) -> SerialCommandTransport:
+        segment_id: int,
+    ) -> FakeEnhancedAsyncHost:
         del port, baudrate
-        return SerialCommandTransport(serials.pop(0))
+        host = hosts.pop(0)
+        assert host.segment_id == segment_id
+        return host
 
-    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: initial_host)
+    def fail_sync_open(**_kwargs: object) -> None:
+        raise AssertionError("synchronous Enhanced reconnect opener was selected")
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
     monkeypatch.setattr(
         startup,
         "open_serial_command_transport",
-        fake_open_serial_command_transport,
+        fail_sync_open,
+        raising=False,
     )
     monkeypatch.setattr(
         startup,
@@ -1162,8 +1359,9 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     assert summary.error is not None
     assert summary.error["code"] == "backend_input_error"
     assert runtime.status().connection_state == "disconnected"
-    assert serials == []
+    assert hosts == []
     assert initial_host.closed is True
+    assert changed_host.closed is True
     coordinator_stopped = not coordinator._thread.is_alive()  # noqa: SLF001
     assert coordinator_stopped
 
