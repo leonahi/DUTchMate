@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from threading import RLock
+from threading import Condition, Event, RLock, Thread, current_thread
 from typing import Protocol
 
 from dutchmate_core.backends.basic import (
@@ -50,7 +50,8 @@ class OpenCaptureReplacement(Protocol):
         self,
         *,
         segment_id: int,
-        deadline: float,
+        deadline: float | None,
+        stop_requested: Event,
     ) -> ReconnectedCaptureSource:
         """Return a fully prepared replacement or raise for a failed attempt."""
 
@@ -58,10 +59,18 @@ class OpenCaptureReplacement(Protocol):
 class ReplaceableCaptureSource(CaptureEventSource, Protocol):
     """Stable capture facade that exclusively owns concrete backend sources."""
 
-    def close_current_source_for_reconnect(self) -> None:
+    def wait_for_idle_disconnect(self, timeout_s: float) -> bool:
+        """Wait for an idle disconnected source that can be claimed."""
+
+    def close_current_source_for_reconnect(self, *, idle: bool = False) -> None:
         """Detach and close the consumed source before reconnect opening."""
 
-    def replace_source(self, replacement: CaptureEventSource) -> None:
+    def replace_source(
+        self,
+        replacement: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot | None = None,
+    ) -> None:
         """Accept ownership of one validated concrete replacement."""
 
     def close(self) -> None:
@@ -87,6 +96,276 @@ class OpenEnhancedTransport(Protocol):
         """Return an opened Enhanced command transport."""
 
 
+class _LegacyOpenCaptureReplacement(Protocol):
+    def __call__(
+        self,
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource: ...
+
+
+class BackendReconnectCoordinator:
+    """Serialize idle and active reconnect attempts for one stable source owner."""
+
+    def __init__(
+        self,
+        *,
+        source_owner: ReplaceableCaptureSource,
+        open_replacement: OpenCaptureReplacement,
+        on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+        wait_for_idle_retry: Callable[[float], bool] | None = None,
+        active_retry_interval_s: float = 0.1,
+        idle_initial_retry_s: float = 0.1,
+        idle_max_retry_s: float = 2.0,
+    ) -> None:
+        if active_retry_interval_s <= 0:
+            raise ValueError("active reconnect retry interval must be positive")
+        if idle_initial_retry_s <= 0:
+            raise ValueError("idle reconnect initial retry interval must be positive")
+        if idle_max_retry_s <= 0:
+            raise ValueError("idle reconnect maximum retry interval must be positive")
+        if idle_initial_retry_s > idle_max_retry_s:
+            raise ValueError(
+                "idle reconnect initial retry interval must not exceed maximum"
+            )
+
+        self._source_owner = source_owner
+        self._open_replacement = open_replacement
+        self._on_connected = on_connected
+        self._clock = monotonic_clock
+        self._sleep = sleep
+        self._active_retry_interval_s = active_retry_interval_s
+        self._idle_initial_retry_s = idle_initial_retry_s
+        self._idle_max_retry_s = idle_max_retry_s
+        self._condition = Condition()
+        self._stop_requested = Event()
+        self._wait_for_idle_retry = (
+            wait_for_idle_retry
+            if wait_for_idle_retry is not None
+            else self._stop_requested.wait
+        )
+        self._worker: Thread | None = None
+        self._attempt_active = False
+        self._closing = False
+        self._closed = False
+        self._close_error: BaseException | None = None
+
+    def start(self) -> None:
+        """Start the single non-daemon idle reconnect worker."""
+
+        with self._condition:
+            if self._closing or self._closed:
+                raise RuntimeError("backend reconnect coordinator is closed")
+            if self._worker is not None:
+                raise RuntimeError("backend reconnect coordinator is already started")
+            worker = Thread(
+                target=self._run_idle,
+                name="dutchmate-backend-reconnect",
+                daemon=False,
+            )
+            self._worker = worker
+            try:
+                worker.start()
+            except BaseException:
+                self._worker = None
+                raise
+
+    def __call__(
+        self,
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource | None:
+        """Own one bounded active-workflow reconnect attempt."""
+
+        with self._condition:
+            if self._closing or self._closed:
+                return None
+            if self._attempt_active:
+                raise RuntimeError("backend reconnect is already active")
+            self._attempt_active = True
+        try:
+            self._source_owner.close_current_source_for_reconnect()
+            return self._retry_active(segment_id=segment_id, deadline=deadline)
+        finally:
+            with self._condition:
+                self._attempt_active = False
+                self._condition.notify_all()
+
+    def close(self) -> None:
+        """Stop reconnect activity and join the idle worker exactly once."""
+
+        with self._condition:
+            if self._closed:
+                retained_error = self._close_error
+                if retained_error is not None:
+                    raise retained_error
+                return
+            if self._closing:
+                first_closer = False
+                worker = None
+            else:
+                first_closer = True
+                self._closing = True
+                self._stop_requested.set()
+                worker = self._worker
+                self._condition.notify_all()
+
+            if not first_closer:
+                self._condition.wait_for(lambda: self._closed)
+                retained_error = self._close_error
+                if retained_error is not None:
+                    raise retained_error
+                return
+
+        close_error: BaseException | None = None
+        try:
+            if worker is not None and worker is not current_thread():
+                worker.join()
+            with self._condition:
+                self._condition.wait_for(lambda: not self._attempt_active)
+        except BaseException as exc:
+            close_error = exc
+        finally:
+            with self._condition:
+                if self._close_error is None:
+                    self._close_error = close_error
+                retained_error = self._close_error
+                self._closed = True
+                self._condition.notify_all()
+
+        if retained_error is not None:
+            raise retained_error
+
+    def _run_idle(self) -> None:
+        try:
+            while not self._stop_requested.is_set():
+                if not self._source_owner.wait_for_idle_disconnect(0.1):
+                    continue
+                with self._condition:
+                    if self._closing or self._closed:
+                        return
+                    if self._attempt_active:
+                        self._condition.wait_for(
+                            lambda: not self._attempt_active or self._closing
+                        )
+                        continue
+                    self._attempt_active = True
+                try:
+                    if self._stop_requested.is_set():
+                        return
+                    self._source_owner.close_current_source_for_reconnect(idle=True)
+                    self._retry_idle()
+                finally:
+                    with self._condition:
+                        self._attempt_active = False
+                        self._condition.notify_all()
+        except BaseException as exc:
+            self._retain_close_error(exc)
+
+    def _retry_active(
+        self,
+        *,
+        segment_id: int,
+        deadline: float,
+    ) -> ReconnectedCaptureSource | None:
+        while not self._stop_requested.is_set() and self._clock() < deadline:
+            try:
+                replacement = self._open_replacement(
+                    segment_id=segment_id,
+                    deadline=deadline,
+                    stop_requested=self._stop_requested,
+                )
+            except BackendInputError:
+                raise
+            except Exception:
+                self._wait_for_active_retry(deadline)
+                continue
+            if self._stop_requested.is_set() or self._clock() >= deadline:
+                self._close_rejected(replacement)
+                return None
+            return self._publish(replacement)
+        return None
+
+    def _retry_idle(self) -> None:
+        retry_delay_s = self._idle_initial_retry_s
+        while not self._stop_requested.is_set():
+            try:
+                replacement = self._open_replacement(
+                    segment_id=0,
+                    deadline=None,
+                    stop_requested=self._stop_requested,
+                )
+            except Exception:
+                if self._stop_requested.is_set():
+                    return
+                if self._wait_for_idle_retry(retry_delay_s):
+                    return
+                retry_delay_s = min(retry_delay_s * 2, self._idle_max_retry_s)
+                continue
+            if self._stop_requested.is_set():
+                self._close_rejected(replacement)
+                return
+            self._publish(replacement)
+            return
+
+    def _wait_for_active_retry(self, deadline: float) -> None:
+        remaining_s = deadline - self._clock()
+        if remaining_s > 0 and not self._stop_requested.is_set():
+            self._sleep(min(self._active_retry_interval_s, remaining_s))
+
+    def _publish(
+        self,
+        replacement: ReconnectedCaptureSource,
+    ) -> ReconnectedCaptureSource | None:
+        callback_error: BaseException | None = None
+        with self._condition:
+            if self._closing or self._closed:
+                publish = False
+            else:
+                publish = True
+                try:
+                    if self._on_connected is not None:
+                        self._on_connected(replacement)
+                except BaseException as exc:
+                    callback_error = exc
+                else:
+                    self._source_owner.replace_source(
+                        replacement.source,
+                        backend_snapshot=replacement.backend_snapshot,
+                    )
+                    return ReconnectedCaptureSource(
+                        source=self._source_owner,
+                        backend_snapshot=replacement.backend_snapshot,
+                    )
+
+        if not publish or callback_error is not None:
+            self._close_rejected(replacement)
+        if callback_error is not None:
+            raise callback_error
+        return None
+
+    def _close_rejected(self, replacement: ReconnectedCaptureSource) -> None:
+        close = getattr(replacement.source, "close", None)
+        if not callable(close):
+            return
+        try:
+            close()
+        except BaseException as exc:
+            self._retain_close_error(exc)
+            raise
+
+    def _retain_close_error(self, error: BaseException) -> None:
+        with self._condition:
+            if self._close_error is None:
+                self._close_error = error
+            self._stop_requested.set()
+            self._condition.notify_all()
+
+
 class RetryingCaptureReconnect:
     """Retry backend opening within the workflow-supplied monotonic deadline."""
 
@@ -94,7 +373,7 @@ class RetryingCaptureReconnect:
         self,
         *,
         source_owner: ReplaceableCaptureSource,
-        open_replacement: OpenCaptureReplacement,
+        open_replacement: _LegacyOpenCaptureReplacement,
         on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,

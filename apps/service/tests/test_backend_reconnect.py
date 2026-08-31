@@ -1,3 +1,5 @@
+from threading import Condition, Event, Lock, Thread
+
 import pytest
 
 from dutchmate_core.backends import (
@@ -16,6 +18,7 @@ from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.workflows.capture import CaptureEventSource, ReconnectedCaptureSource
 from dutchmate_service.backend_reconnect import (
+    BackendReconnectCoordinator,
     ReplaceableDeviceControl,
     ReplaceableUartSender,
     RetryingCaptureReconnect,
@@ -61,25 +64,94 @@ class FakeBasicSerial:
 
 
 class FakeSourceOwner:
-    def __init__(self, *, order: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        order: list[str] | None = None,
+        record_install_order: bool = False,
+    ) -> None:
         self.closed_current = 0
+        self.idle_claims = 0
+        self.active_claims = 0
         self.replacements: list[CaptureEventSource] = []
+        self.replacement_snapshots: list[BackendSnapshot | None] = []
         self.close_count = 0
         self._order = order
+        self._record_install_order = record_install_order
+        self._condition = Condition()
+        self._idle_disconnected = False
+        self._closed = False
+        self.idle_wait_calls = 0
+        self.idle_disconnect_observed = Event()
 
     def read_event(self) -> BackendEvent | None:
         return None
 
-    def close_current_source_for_reconnect(self) -> None:
-        self.closed_current += 1
+    def disconnect_while_idle(self) -> None:
+        with self._condition:
+            self._idle_disconnected = True
+            self._condition.notify_all()
+
+    def wait_for_idle_disconnect(self, timeout_s: float) -> bool:
+        with self._condition:
+            self.idle_wait_calls += 1
+            self._condition.notify_all()
+            self._condition.wait_for(
+                lambda: self._idle_disconnected or self._closed,
+                timeout=timeout_s,
+            )
+            disconnected = self._idle_disconnected and not self._closed
+        if disconnected:
+            self.idle_disconnect_observed.set()
+        return disconnected
+
+    def wait_for_idle_waits(self, count: int, timeout_s: float = 1.0) -> bool:
+        with self._condition:
+            return self._condition.wait_for(
+                lambda: self.idle_wait_calls >= count,
+                timeout=timeout_s,
+            )
+
+    def close_current_source_for_reconnect(self, *, idle: bool = False) -> None:
+        with self._condition:
+            if idle:
+                if not self._idle_disconnected:
+                    raise RuntimeError("idle disconnect is no longer claimable")
+                self.idle_claims += 1
+                self._idle_disconnected = False
+            else:
+                self.active_claims += 1
+            self.closed_current += 1
+            self._condition.notify_all()
         if self._order is not None:
             self._order.append("current_closed")
 
-    def replace_source(self, replacement: CaptureEventSource) -> None:
-        self.replacements.append(replacement)
+    def replace_source(
+        self,
+        replacement: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot | None = None,
+    ) -> None:
+        with self._condition:
+            self.replacements.append(replacement)
+            self.replacement_snapshots.append(backend_snapshot)
+            self._idle_disconnected = False
+            self._condition.notify_all()
+        if self._order is not None and self._record_install_order:
+            self._order.append("source_installed")
+
+    def wait_for_replacements(self, count: int, timeout_s: float = 1.0) -> bool:
+        with self._condition:
+            return self._condition.wait_for(
+                lambda: len(self.replacements) >= count,
+                timeout=timeout_s,
+            )
 
     def close(self) -> None:
-        self.close_count += 1
+        with self._condition:
+            self.close_count += 1
+            self._closed = True
+            self._condition.notify_all()
 
 
 class FakeControl:
@@ -273,6 +345,326 @@ def test_reconnect_closes_source_owner_when_adapter_publication_fails() -> None:
     assert owner.closed_current == 1
     assert owner.replacements == [replacement_source]
     assert owner.close_count == 1
+
+
+def test_idle_reconnect_retries_transient_open_and_publishes_once() -> None:
+    owner = FakeSourceOwner()
+    replacement_source = ClosableSource()
+    replacement = ReconnectedCaptureSource(
+        source=replacement_source,
+        backend_snapshot=_snapshot(0),
+    )
+    attempts = 0
+    retry_delays: list[float] = []
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        nonlocal attempts
+        assert segment_id == 0
+        assert deadline is None
+        assert not stop_requested.is_set()
+        attempts += 1
+        if attempts == 1:
+            raise OSError("port unavailable")
+        return replacement
+
+    def wait_for_idle_retry(delay: float) -> bool:
+        retry_delays.append(delay)
+        return False
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        wait_for_idle_retry=wait_for_idle_retry,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    assert attempts == 2
+    assert retry_delays == [0.1]
+    assert owner.idle_claims == 1
+    assert owner.replacements == [replacement_source]
+    assert owner.replacement_snapshots == [replacement.backend_snapshot]
+
+
+def test_idle_reconnect_uses_capped_exponential_delays() -> None:
+    owner = FakeSourceOwner()
+    recorded_delays: list[float] = []
+    delays_recorded = Event()
+
+    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
+        raise OSError("still unavailable")
+
+    def wait_for_idle_retry(delay: float) -> bool:
+        recorded_delays.append(delay)
+        if len(recorded_delays) == 7:
+            delays_recorded.set()
+            return True
+        return False
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        wait_for_idle_retry=wait_for_idle_retry,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert delays_recorded.wait(timeout=1.0)
+    finally:
+        reconnect.close()
+
+    assert recorded_delays == [0.1, 0.2, 0.4, 0.8, 1.6, 2.0, 2.0]
+    assert owner.idle_claims == 1
+
+
+def test_active_reconnect_suppresses_stale_idle_claim_and_open_overlap() -> None:
+    owner = FakeSourceOwner()
+    active_opened = Event()
+    release_active = Event()
+    concurrent_lock = Lock()
+    concurrent_opens = 0
+    maximum_concurrent_opens = 0
+    active_result: list[ReconnectedCaptureSource | None] = []
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        nonlocal concurrent_opens, maximum_concurrent_opens
+        assert deadline == 1.0
+        assert not stop_requested.is_set()
+        with concurrent_lock:
+            concurrent_opens += 1
+            maximum_concurrent_opens = max(maximum_concurrent_opens, concurrent_opens)
+        try:
+            active_opened.set()
+            assert release_active.wait(timeout=1.0)
+            return ReconnectedCaptureSource(
+                source=ClosableSource(),
+                backend_snapshot=_snapshot(segment_id),
+            )
+        finally:
+            with concurrent_lock:
+                concurrent_opens -= 1
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        monotonic_clock=lambda: 0.0,
+    )
+    reconnect.start()
+    active_thread = Thread(
+        target=lambda: active_result.append(reconnect(segment_id=1, deadline=1.0))
+    )
+    active_thread.start()
+    try:
+        assert active_opened.wait(timeout=1.0)
+        owner.disconnect_while_idle()
+        assert owner.idle_disconnect_observed.wait(timeout=1.0)
+        assert owner.idle_claims == 0
+        release_active.set()
+        active_thread.join(timeout=1.0)
+        assert not active_thread.is_alive()
+        assert owner.wait_for_idle_waits(2)
+    finally:
+        release_active.set()
+        active_thread.join(timeout=1.0)
+        reconnect.close()
+
+    assert maximum_concurrent_opens == 1
+    assert owner.active_claims == 1
+    assert owner.idle_claims == 0
+    assert len(active_result) == 1
+    assert active_result[0] is not None
+
+
+def test_active_reconnect_reraises_backend_input_without_retry() -> None:
+    owner = FakeSourceOwner()
+    attempts = 0
+
+    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
+        nonlocal attempts
+        attempts += 1
+        raise BackendInputError("invalid reconnect hello")
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        monotonic_clock=lambda: 0.0,
+    )
+
+    with pytest.raises(BackendInputError, match="invalid reconnect hello"):
+        reconnect(segment_id=1, deadline=1.0)
+    reconnect.close()
+
+    assert attempts == 1
+    assert owner.active_claims == 1
+
+
+def test_idle_reconnect_retries_backend_input() -> None:
+    owner = FakeSourceOwner()
+    replacement_source = ClosableSource()
+    attempts = 0
+
+    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise BackendInputError("incompatible idle candidate")
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(0),
+        )
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        wait_for_idle_retry=lambda _delay: False,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    assert attempts == 2
+    assert owner.replacements == [replacement_source]
+
+
+def test_active_reconnect_closes_candidate_opened_at_deadline() -> None:
+    clock = FakeClock()
+    owner = FakeSourceOwner()
+    replacement_source = ClosableSource()
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        del stop_requested
+        assert deadline is not None
+        clock.value = deadline
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(segment_id),
+        )
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    assert reconnect(segment_id=1, deadline=0.5) is None
+    reconnect.close()
+
+    assert replacement_source.closed is True
+    assert owner.replacements == []
+
+
+def test_reconnect_publishes_ports_before_source_with_snapshot() -> None:
+    clock = FakeClock()
+    order: list[str] = []
+    owner = FakeSourceOwner(order=order, record_install_order=True)
+    replacement_source = ClosableSource()
+    replacement = ReconnectedCaptureSource(
+        source=replacement_source,
+        backend_snapshot=_snapshot(1),
+    )
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=lambda **_kwargs: replacement,
+        on_connected=lambda _replacement: order.append("ports_published"),
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    result = reconnect(segment_id=1, deadline=1.0)
+    reconnect.close()
+
+    assert result == ReconnectedCaptureSource(
+        source=owner,
+        backend_snapshot=replacement.backend_snapshot,
+    )
+    assert order == ["current_closed", "ports_published", "source_installed"]
+    assert owner.replacement_snapshots == [replacement.backend_snapshot]
+
+
+def test_close_interrupts_idle_retry_and_joins_worker() -> None:
+    owner = FakeSourceOwner()
+    open_failed = Event()
+    attempts = 0
+
+    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
+        nonlocal attempts
+        attempts += 1
+        open_failed.set()
+        raise OSError("port unavailable")
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+    )
+    reconnect.start()
+    worker = reconnect._worker
+    assert worker is not None
+    owner.disconnect_while_idle()
+    assert open_failed.wait(timeout=1.0)
+
+    reconnect.close()
+    reconnect.close()
+
+    assert attempts == 1
+    assert not worker.is_alive()
+    assert owner.replacements == []
+
+
+def test_close_rejects_candidate_returned_after_shutdown_begins() -> None:
+    owner = FakeSourceOwner()
+    opening = Event()
+    replacement_source = ClosableSource()
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        assert segment_id == 0
+        assert deadline is None
+        opening.set()
+        assert stop_requested.wait(timeout=1.0)
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(0),
+        )
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=owner,
+        open_replacement=open_replacement,
+    )
+    reconnect.start()
+    owner.disconnect_while_idle()
+    assert opening.wait(timeout=1.0)
+
+    reconnect.close()
+
+    assert replacement_source.closed is True
+    assert owner.replacements == []
 
 
 def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
