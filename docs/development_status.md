@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `3ffc1f81d21bfff558f602890b0ce4601e0c2305` on 2026-09-01
+> Code baseline reviewed: `747667d75942987a5a0cf7206754368dd12abd3d` on 2026-09-01
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -58,8 +58,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on reviewed fix base
-`3ffc1f81d21bfff558f602890b0ce4601e0c2305`, reviewed 2026-09-01:
+Working tree based on final-review implementation commit
+`747667d75942987a5a0cf7206754368dd12abd3d`, reviewed 2026-09-01:
 
 - Focused reconnect/runtime gate passed: 96 tests across backend reconnect,
   startup configuration, wait-pattern, connection-monitoring, and UART-send
