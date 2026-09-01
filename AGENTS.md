@@ -78,63 +78,195 @@ changes.
 - Requirements, architecture, plans, and validation records must not maintain
   competing progress summaries or next-step lists.
 
-## graphify
+## Graphify Usage
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+Graphify is an architectural navigation and impact-analysis tool. It is not the default mechanism for understanding every code change.
 
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+Use Graphify when the task involves:
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Keep the shared canonical graph artifacts tracked: `graph.json`, `graph.html`,
-  `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json`,
-  `.graphify_labels.json.sig`, `.vocab.txt`, and `cost.json`.
-- Treat caches, dated snapshots, query memory, learning/reflection state,
-  interpreter/root paths, query stamps, and temporary extraction files as local
-  runtime state. They must remain ignored and must not be staged.
-- A Graphify query may update ignored local runtime state, but it should not leave
-  tracked canonical artifacts dirty. Unexpected canonical changes should be
-  investigated rather than carried as unrelated working-tree dirt.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+* architecture or subsystem exploration;
+* cross-module dependency or impact analysis;
+* changes to shared interfaces, ports, or abstractions;
+* significant multi-module refactoring;
+* tracing relationships across architectural layers;
+* understanding an unfamiliar subsystem;
+* identifying architectural boundary violations.
 
-## DUTchMate Graphify Usage Policy
+Do not use Graphify by default for:
 
-Graphify is an architectural navigation and impact-analysis tool, not a
-replacement for reading source code.
+* localized implementation changes;
+* isolated test failures;
+* known symbols or literal reference searches;
+* changes within a single well-understood module;
+* dead-code removal after consumers have already been identified;
+* formatting, configuration, comments, or documentation-only changes.
 
-Use Graphify first when the task involves:
-- architecture or subsystem exploration;
-- cross-module dependency analysis;
-- impact analysis before a refactor;
-- tracing relationships between CLI, API, application, domain, and
-  infrastructure layers;
-- understanding an unfamiliar subsystem;
-- identifying architectural boundary violations;
-- changes to shared interfaces or abstractions.
+For straightforward code navigation, prefer direct source inspection and `rg`.
 
-Do not require Graphify for:
-- small localized implementation changes;
-- fixing an isolated failing test;
-- literal text or symbol searches;
-- changes confined to a single well-understood module;
-- formatting, comments, or documentation-only changes.
+### Query Policy
 
-For architectural decisions or refactors, treat Graphify results as navigation
-evidence. Verify relevant relationships against the actual source code and
-tests before changing interfaces or architecture.
+When Graphify is appropriate:
 
-Update the Graphify graph after meaningful structural changes such as:
-- adding, removing, or moving modules;
-- changing shared interfaces or ports;
-- changing dependencies between architectural layers;
-- significant multi-module refactoring.
+1. Prefer one focused `graphify query`, `graphify path`, or `graphify explain` call.
+2. Keep queries narrowly scoped to the architectural question being answered.
+3. Prefer a modest query budget when sufficient.
+4. Verify important Graphify relationships against actual source code and tests.
+5. Do not repeatedly query Graphify during routine implementation once the relevant impact area is understood.
 
-After such a change, run `graphify update .` and include changed canonical graph
-artifacts in the same commit as the structural change. Do not stage ignored local
-runtime state.
+Do not read `graphify-out/graph.json` directly.
 
-Do not update the graph after every trivial localized edit.
+Do not read `graphify-out/GRAPH_REPORT.md` unless performing a broad architecture review or targeted Graphify queries are insufficient.
+
+Avoid including generated `graphify-out/` artifacts in broad source searches unless they are specifically being inspected.
+
+### Graph Updates
+
+Run `graphify update .` only after meaningful structural changes such as:
+
+* adding, removing, or moving modules;
+* changing shared interfaces or ports;
+* changing dependencies between architectural layers;
+* significant multi-module refactoring.
+
+Do not update Graphify after routine localized edits.
+
+Run the update once near completion of the structural development slice rather than repeatedly during implementation.
+
+## Development Workflow
+
+Match development process and planning effort to the risk of the change. Do not apply heavyweight planning or workflow ceremony to every task.
+
+### General Rule
+
+Prefer the simplest workflow that preserves correctness.
+
+For localized, well-specified changes:
+
+* Inspect the relevant code and existing specification.
+* Do not create a separate design document.
+* Do not create a large implementation-plan document.
+* State a short implementation approach when useful.
+* Implement in small coherent changes.
+* Run focused tests while developing.
+* Run the required final validation before completion.
+
+Use a structured workflow only when the change materially affects architectural boundaries, concurrency, ownership, lifecycle, reconnect behavior, persistence/schema compatibility, protocol compatibility, public interfaces, or multiple subsystems.
+
+Do not redesign an established architecture unless the task explicitly requires it or a concrete correctness problem makes the existing design invalid.
+
+### Existing Specifications Are Authoritative
+
+Before proposing new architecture or creating new design documents:
+
+* Check whether the required behavior is already defined in existing project specifications, architecture documents, protocol documents, or `development_status.md`.
+* Reference existing normative documents instead of restating them.
+* Do not create another design document when the required behavior is already specified.
+* Do not repeat large amounts of existing specification content in implementation plans.
+
+When continuing an existing implementation:
+
+* Inspect `git status` and relevant diffs first.
+* Understand the intent of existing in-progress changes.
+* Preserve established architecture and conventions.
+* Do not rewrite working changes merely because another implementation style is preferred.
+
+## Planning Policy
+
+Use a written implementation plan only for genuinely cross-cutting or high-risk changes.
+
+A plan should normally:
+
+* contain approximately 5–10 meaningful implementation steps;
+* identify the components or files likely to change;
+* identify important invariants and compatibility constraints;
+* identify the critical tests or acceptance criteria;
+* reference existing specifications rather than duplicating them;
+* avoid large blocks of anticipated implementation code;
+* avoid decomposing routine work into minute-by-minute steps.
+
+For migration or cleanup work, prefer an inventory of affected consumers and compatibility paths over a large design document.
+
+Example:
+
+```text
+Legacy component        Consumer(s)        Action
+-------------------------------------------------
+Old transport path      service A          migrate
+Compatibility adapter   tests B/C          remove
+Legacy reconnect path   none               delete
+```
+
+## Selective Skill Usage
+
+Superpowers skills are optional tools, not the default workflow.
+
+### systematic-debugging
+
+Use `systematic-debugging` when:
+
+* a failure is reproducible but its root cause is unclear;
+* there is a race condition or timing-dependent failure;
+* reconnect, UART, USB, persistence, or lifecycle behavior is inconsistent;
+* an attempted fix does not explain the underlying failure.
+
+Do not use systematic debugging for obvious, localized corrections where the cause is already known.
+
+### test-driven-development
+
+Use `test-driven-development` when changing behavior where regression risk matters, especially:
+
+* state machines;
+* concurrency and ownership behavior;
+* reconnect semantics;
+* protocol parsing;
+* persistence invariants;
+* externally visible behavior.
+
+Do not manufacture failing tests purely to justify deleting clearly dead code or making mechanical changes.
+
+For dead-code removal, existing coverage, reference search, and final validation are sufficient when behavior is unchanged.
+
+### verification-before-completion
+
+Use `verification-before-completion` for development slices before declaring them complete.
+
+Completion claims must be backed by fresh validation evidence.
+
+Run the smallest relevant tests during implementation and the complete required validation gate once before completion.
+
+Do not repeatedly run the full suite after every small edit unless required to diagnose a failure.
+
+### brainstorming
+
+Use `brainstorming` only when a genuine design decision remains open, such as:
+
+* introducing a new subsystem;
+* choosing between materially different architectures;
+* defining a new protocol or hardware/software boundary;
+* resolving requirements with multiple viable designs.
+
+Do not use brainstorming for migrations, cleanup, implementation of already-specified behavior, or routine bug fixes.
+
+## Validation Strategy
+
+During implementation:
+
+1. Run focused tests for the code being changed.
+2. Use targeted static analysis, searches, or diagnostics as needed.
+3. Resolve failures before broadening validation.
+
+Before completing a development slice:
+
+* run the required full test suite;
+* run Ruff or equivalent lint checks;
+* run mypy or the project's required type checks;
+* verify relevant stale/legacy references are removed;
+* review the final diff;
+* update architecture documentation when architecture actually changed;
+* update `development_status.md` when project status changed;
+* update Graphify when required by the repository's Graphify policy.
+
+Do not claim completion when required validation has not been run or when failures remain.
 
 ## Token-Efficient Tool Usage
 

@@ -16,12 +16,14 @@ from dutchmate_core.backends import (
     BackendInputError,
     BackendSnapshot,
     BackendUartSendResult,
+    DeviceControlError,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
 )
 from dutchmate_core.backends.basic import BasicBackendConnection, BasicBackendEventSource
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl, normalize_enhanced_hello
+from dutchmate_core.backends.contracts import ControlState
+from dutchmate_core.backends.enhanced import normalize_enhanced_hello
 from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
@@ -29,7 +31,6 @@ from dutchmate_core.device_connection.messages import (
     HelloMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
-from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
@@ -42,42 +43,52 @@ from dutchmate_service.startup import (
     apply_startup_hardware_config,
     build_startup_runtime,
     load_startup_hardware_config,
-    read_startup_hello,
 )
 
 
-class FakeTransport:
+class FakeDeviceControl:
     def __init__(self, responses: list[DeviceMessage]) -> None:
         self._responses = responses
-        self.requests: list[bytes] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def request(self, command: bytes) -> DeviceMessage:
-        self.requests.append(command)
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        self.calls.append(
+            (
+                "configure_gpio_mode",
+                {
+                    "channel": channel,
+                    "mode": mode,
+                    "active_level": active_level,
+                    "idle_level": idle_level,
+                },
+            )
+        )
+        return self._next_timestamp()
+
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
+        self.calls.append(("pulse_control", {"channel": channel, "pulse_ms": pulse_ms}))
+        return self._next_timestamp()
+
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
+        self.calls.append(("set_control_state", {"channel": channel, "state": state}))
+        return self._next_timestamp()
+
+    def _next_timestamp(self) -> int | None:
         if not self._responses:
-            raise AssertionError("fake transport has no queued response")
-        return self._responses.pop(0)
-
-
-class FakeSerial:
-    def __init__(self, reads: list[bytes]) -> None:
-        self._reads = reads
-
-    def write(self, data: bytes) -> int:
-        return len(data)
-
-    def read(self, size: int = 1) -> bytes:
-        raise AssertionError("Basic startup must not read or wait for hello")
-
-    def flush(self) -> None:
-        pass
-
-    def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
-        if not self._reads:
-            return b""
-        return self._reads.pop(0)
-
-    def close(self) -> None:
-        pass
+            raise AssertionError("fake control has no queued response")
+        response = self._responses.pop(0)
+        if isinstance(response, CommandSuccessMessage):
+            return response.timestamp_us
+        if isinstance(response, CommandErrorMessage):
+            raise DeviceControlError(error=response.error, detail=response.detail)
+        raise AssertionError(f"unexpected fake control response: {type(response).__name__}")
 
 
 class ScriptedBasicSerial:
@@ -323,33 +334,6 @@ def test_apply_startup_hardware_config_skips_disconnected_runtime() -> None:
     assert runtime.hardware_configs == []
 
 
-def test_read_startup_hello_returns_initial_hello() -> None:
-    transport = SerialCommandTransport(
-        FakeSerial(
-            [
-                b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
-                b'"capabilities":["gpio_control"]}\n'
-            ]
-        )
-    )
-
-    hello = read_startup_hello(transport)
-
-    assert hello == _hello()
-
-
-def test_read_startup_hello_rejects_non_hello_message() -> None:
-    transport = SerialCommandTransport(
-        FakeSerial([b'{"type":"uart","channel":0,"timestamp_us":1,"data_b64":"WA=="}\n'])
-    )
-
-    with pytest.raises(
-        RuntimeError,
-        match="Expected Debug Helper hello message, got UartMessage",
-    ):
-        read_startup_hello(transport)
-
-
 def test_build_startup_runtime_without_serial_port_is_disconnected(tmp_path: Path) -> None:
     runtime = build_startup_runtime(session_root=tmp_path)
 
@@ -448,13 +432,6 @@ def test_enhanced_startup_selects_one_async_host(
         track_coordinator,
         raising=False,
     )
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        lambda **_kwargs: pytest.fail("initial Enhanced startup opened sync transport"),
-        raising=False,
-    )
-
     runtime = build_startup_runtime(
         session_root=tmp_path,
         backend_settings=backend_settings(
@@ -511,16 +488,7 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
             replacement_opened.set()
         return host
 
-    def fail_sync_open(**_kwargs: object) -> None:
-        raise AssertionError("synchronous Enhanced reconnect opener was selected")
-
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        fail_sync_open,
-        raising=False,
-    )
     runtime = build_startup_runtime(
         session_root=tmp_path,
         backend_settings=backend_settings(
@@ -1222,19 +1190,10 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
         assert host.segment_id == segment_id
         return host
 
-    def fail_sync_open(**_kwargs: object) -> None:
-        raise AssertionError("synchronous Enhanced reconnect opener was selected")
-
     monkeypatch.setattr(
         startup,
         "open_enhanced_async_host",
         fake_open_host,
-    )
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        fail_sync_open,
-        raising=False,
     )
     monkeypatch.setattr(
         startup,
@@ -1334,16 +1293,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         assert host.segment_id == segment_id
         return host
 
-    def fail_sync_open(**_kwargs: object) -> None:
-        raise AssertionError("synchronous Enhanced reconnect opener was selected")
-
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
-    monkeypatch.setattr(
-        startup,
-        "open_serial_command_transport",
-        fail_sync_open,
-        raising=False,
-    )
     monkeypatch.setattr(
         startup,
         "ContinuousIngestionCoordinator",
@@ -1429,9 +1379,9 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
 def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     tmp_path: Path,
 ) -> None:
-    transport = FakeTransport([CommandSuccessMessage(timestamp_us=123)])
+    control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=123)])
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))
@@ -1453,9 +1403,16 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     app = create_app(runtime, hardware_config=config)
     response = TestClient(app).get("/status")
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"open_drain","active_level":"low"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        )
     ]
     assert response.status_code == 200
     payload = response.json()
@@ -1466,11 +1423,11 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
 
 
 def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [CommandErrorMessage(error="hardware_fault", detail="CTRL0 cannot drive RESET_N")]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))

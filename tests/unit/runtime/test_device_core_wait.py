@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
+from runtime_test_support import (
+    FakeCaptureSource,
+    FakeDeviceControl,
+    FakeMonotonicClock,
+    enhanced_info,
+)
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -15,7 +20,6 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.models import NativeSessionDetail
 from dutchmate_core.session_store.store import SessionStore
@@ -187,7 +191,7 @@ def test_wait_pattern_never_joins_requested_literal_across_reconnect(tmp_path: P
         return ReconnectedCaptureSource(source=replacement, backend_snapshot=snapshot)
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=initial,
         capture_clock=clock,
         session_store=_store(tmp_path),
@@ -213,7 +217,7 @@ def test_wait_pattern_validates_before_capability_or_connection(
     timeout_s: object,
 ) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=_store(tmp_path),
     )
 
@@ -231,7 +235,7 @@ def test_wait_pattern_requires_effective_uart_receive_before_session_creation(
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([], clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=_store(tmp_path),
@@ -271,7 +275,7 @@ def test_wait_pattern_reconciles_idle_reconnect_before_capability_admission(
     clock = FakeMonotonicClock()
     source = MonitoredSource(clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=_store(tmp_path),
@@ -332,7 +336,7 @@ def _runtime(
     store: SessionStore,
 ) -> DeviceCoreRuntime:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,

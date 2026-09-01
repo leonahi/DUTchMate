@@ -6,9 +6,8 @@ import pytest
 from runtime_test_support import (
     AdvancingMonotonicClock,
     FakeCaptureSource,
+    FakeDeviceControl,
     FakeMonotonicClock,
-    FakeSerial,
-    FakeTransport,
     enhanced_info,
 )
 
@@ -23,12 +22,10 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.backends.enhanced import EnhancedCaptureEventSource, EnhancedDeviceControl
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
 )
-from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import (
     DeviceCoreRuntime,
@@ -70,7 +67,7 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         id_factory=lambda: "runtime",
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,
@@ -121,7 +118,7 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
 
 def test_capture_snapshots_commanded_boot_mode_at_session_start(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=200),
@@ -133,7 +130,7 @@ def test_capture_snapshots_commanded_boot_mode_at_session_start(tmp_path: Path) 
         id_factory=lambda: "boot-mode-snapshot",
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=store,
@@ -185,7 +182,7 @@ def test_runtime_publishes_reconnect_state_and_replacement_source(tmp_path: Path
         )
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=initial_source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -222,7 +219,7 @@ def test_new_capture_remaps_live_connection_to_session_segment_zero(tmp_path: Pa
     )
     source.segment = live_snapshot.segment
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -274,7 +271,7 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
 
     source = FakeCaptureSource([], clock=clock, on_read=assert_capture_guards)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -314,7 +311,7 @@ def test_capture_uart_stops_cleanly_when_first_uart_unit_exceeds_budget(
         evidence_budget_bytes=3,
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,
@@ -369,7 +366,7 @@ def test_capture_uart_stops_cleanly_when_hardware_event_exceeds_budget(
         evidence_budget_bytes=3,
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,
@@ -414,7 +411,7 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         id_factory=lambda: "reference",
     )
     reference_runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource([uart_event], clock=reference_clock),
         capture_clock=reference_clock,
         session_store=reference_store,
@@ -440,7 +437,7 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         evidence_budget_bytes=exact_budget - 1,
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource([uart_event], clock=clock),
         capture_clock=clock,
         session_store=store,
@@ -468,7 +465,7 @@ def test_capture_uart_terminalizes_cleanly_when_final_session_event_exceeds_budg
         evidence_budget_bytes=exact_budget - 1,
     )
     collision_runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource(
             [uart_event, DeviceCoreRuntimeError("backend disconnected")],
             clock=collision_clock,
@@ -504,7 +501,7 @@ def test_capture_updates_connected_integrity_from_buffer_telemetry(
         clock=clock,
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -523,7 +520,7 @@ def test_capture_updates_connected_integrity_from_buffer_telemetry(
 def test_capture_uart_requires_connection(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -535,7 +532,7 @@ def test_capture_uart_requires_connection(tmp_path: Path) -> None:
 
 def test_capture_uart_requires_message_source(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info())
@@ -548,7 +545,7 @@ def test_capture_uart_clears_active_session_after_transport_failure(tmp_path: Pa
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([RuntimeError("serial failed")], clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -581,7 +578,7 @@ def test_capture_uart_records_persistence_failure_and_clears_active_session(
     )
     store = SessionStore(root=tmp_path)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,
@@ -625,7 +622,7 @@ def test_capture_uart_does_not_terminalize_when_persistence_state_is_unsafe(
     )
     store = SessionStore(root=tmp_path)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=store,
@@ -657,7 +654,7 @@ def test_capture_uart_rejects_invalid_duration_before_creating_session(
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -675,8 +672,11 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
 ) -> None:
     runtime: DeviceCoreRuntime
 
-    def assert_session_reserved_before_reset(command: bytes) -> None:
-        if b'"cmd":"pulse_control"' not in command:
+    def assert_session_reserved_before_reset(
+        operation: str,
+        _arguments: dict[str, object],
+    ) -> None:
+        if operation != "pulse_control":
             return
         active_session_id = runtime.status().active_session_id
         assert active_session_id is not None
@@ -684,27 +684,25 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         assert json.loads(session_root.joinpath("metadata.json").read_text())["state"] == "active"
         assert session_root.joinpath(".terminal-reserve").stat().st_size == 262144
 
-    serial = FakeSerial(
+    control = FakeDeviceControl(
         [
-            b'{"ok":true,"timestamp_us":10}\n',
-            b'{"type":"uart","channel":0,"timestamp_us":20,"data_b64":"Qk9PVF9PSwo="}\n',
-            b'{"ok":true,"timestamp_us":30}\n',
+            CommandSuccessMessage(timestamp_us=10),
+            CommandSuccessMessage(timestamp_us=30),
         ],
-        on_write=assert_session_reserved_before_reset,
+        on_call=assert_session_reserved_before_reset,
     )
-    transport = SerialCommandTransport(serial)
+    source = FakeCaptureSource(
+        [UartReceiveEvent(segment_id=0, channel=0, timestamp_us=20, data=b"BOOT_OK\n")],
+        clock=FakeMonotonicClock(),
+    )
     store = SessionStore(
         root=tmp_path,
         clock=_fixed_session_time,
         id_factory=lambda: "boot-test",
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
-        message_source=EnhancedCaptureEventSource(
-            transport,
-            segment_id=0,
-            source_origin_us=0,
-        ),
+        device_control=control,
+        message_source=source,
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
         action_wall_clock=_fixed_session_time,
@@ -724,10 +722,17 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
     assert summary.schema_version == 1
     assert summary.state == "completed"
     assert summary.workflow == "boot_test"
-    assert serial.writes == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL2",'
-        b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"pulse_control","channel":"CTRL2","pulse_ms":100}\n',
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL2",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        ),
+        ("pulse_control", {"channel": "CTRL2", "pulse_ms": 100}),
     ]
     session_root = tmp_path / summary.session_id
     assert session_root.joinpath("uart_raw.log").read_bytes() == b"BOOT_OK\n"
@@ -749,9 +754,9 @@ def test_run_boot_test_requires_reset_role_before_creating_session(
     tmp_path: Path,
 ) -> None:
     clock = FakeMonotonicClock()
-    transport = FakeTransport()
+    control = FakeDeviceControl()
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -764,13 +769,13 @@ def test_run_boot_test_requires_reset_role_before_creating_session(
     assert exc_info.value.operation == "boot_test"
     assert exc_info.value.required_role == "reset"
     assert exc_info.value.role_state == "unconfigured"
-    assert transport.requests == []
+    assert control.calls == []
     assert list(tmp_path.iterdir()) == []
 
 
 def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandErrorMessage(
                 error="hardware_fault",
@@ -779,7 +784,7 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -797,8 +802,8 @@ def test_run_boot_test_clears_active_session_after_reset_failure(tmp_path: Path)
     with pytest.raises(DeviceActionError, match="reset pulse failed"):
         runtime.run_boot_test(duration_s=0.2)
 
-    assert transport.requests == [
-        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":100}\n'
+    assert control.calls == [
+        ("pulse_control", {"channel": "CTRL0", "pulse_ms": 100})
     ]
     assert runtime.status().active_session_id is None
     assert len(list(tmp_path.iterdir())) == 1
@@ -820,7 +825,7 @@ def test_run_boot_test_rejects_invalid_duration_before_creating_session(
 ) -> None:
     clock = FakeMonotonicClock()
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),

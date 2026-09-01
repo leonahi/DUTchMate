@@ -1,6 +1,7 @@
 import pytest
 
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
+from dutchmate_core.backends import DeviceControlError
+from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
@@ -11,20 +12,59 @@ from dutchmate_core.gpio_config.modes import GpioConfigurationError, GpioModeReg
 from dutchmate_core.validation import InputValidationError
 
 
-class FakeTransport:
+class FakeDeviceControl:
     def __init__(self, response: object) -> None:
         self.response = response
-        self.requests: list[bytes] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def request(self, command: bytes) -> object:
-        self.requests.append(command)
-        return self.response
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        self.calls.append(
+            (
+                "configure_gpio_mode",
+                {
+                    "channel": channel,
+                    "mode": mode,
+                    "active_level": active_level,
+                    "idle_level": idle_level,
+                },
+            )
+        )
+        return self._timestamp()
+
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
+        raise AssertionError(f"unexpected pulse: {channel=} {pulse_ms=}")
+
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
+        raise AssertionError(f"unexpected state change: {channel=} {state=}")
+
+    def _timestamp(self) -> int | None:
+        if isinstance(self.response, CommandSuccessMessage):
+            return self.response.timestamp_us
+        if isinstance(self.response, CommandErrorMessage):
+            raise DeviceControlError(
+                error=self.response.error,
+                detail=self.response.detail,
+            )
+        raise DeviceControlError(
+            error="unexpected_response",
+            detail=(
+                "Expected command response for GPIO mode configuration, "
+                f"got {type(self.response).__name__}"
+            ),
+        )
 
 
 def test_configure_mode_sends_command_and_accepts_success() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage(timestamp_us=182334400))
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage(timestamp_us=182334400))
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     state = configurator.configure_mode(
         role="reset",
@@ -35,9 +75,16 @@ def test_configure_mode_sends_command_and_accepts_success() -> None:
         source="runtime",
     )
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"open_drain","active_level":"low"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        )
     ]
     assert state.state == "configured"
     assert state.role == "reset"
@@ -52,8 +99,8 @@ def test_configure_mode_sends_command_and_accepts_success() -> None:
 
 def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     state = configurator.configure_mode(
         role="boot",
@@ -65,9 +112,16 @@ def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
         source="config",
     )
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL1",'
-        b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL1",
+                "mode": "push_pull",
+                "active_level": "high",
+                "idle_level": "low",
+            },
+        )
     ]
     assert state.state == "configured"
     assert state.role == "boot"
@@ -82,13 +136,13 @@ def test_configure_mode_accepts_boot_role_with_idle_level() -> None:
 
 def test_configure_mode_records_firmware_rejection() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         CommandErrorMessage(
             error="invalid_argument",
             detail="push_pull is not supported for reset",
         )
     )
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     state = configurator.configure_mode(
         role="reset",
@@ -100,9 +154,16 @@ def test_configure_mode_records_firmware_rejection() -> None:
         source="runtime",
     )
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"push_pull","active_level":"low","idle_level":"high"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "push_pull",
+                "active_level": "low",
+                "idle_level": "high",
+            },
+        )
     ]
     assert state.state == "rejected"
     assert state.last_rejected is not None
@@ -123,13 +184,13 @@ def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
         active_level="low",
         source="config",
     )
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         CommandErrorMessage(
             error="invalid_argument",
             detail="push_pull is not supported for reset",
         )
     )
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     state = configurator.configure_mode(
         role="reset",
@@ -152,8 +213,8 @@ def test_configure_mode_rejection_preserves_previous_accepted_mode() -> None:
 
 def test_invalid_channel_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     with pytest.raises(InputValidationError, match="GPIO control channel"):
         configurator.configure_mode(
@@ -165,15 +226,15 @@ def test_invalid_channel_is_rejected_before_transport_request() -> None:
             source="runtime",
         )
 
-    assert transport.requests == []
+    assert control.calls == []
     assert registry.get("CTRL0").state == "unconfigured"
     assert registry.get("CTRL1").state == "unconfigured"
 
 
 def test_custom_role_is_recorded_but_not_sent() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     state = configurator.configure_mode(
         role="power_en",
@@ -185,9 +246,16 @@ def test_custom_role_is_recorded_but_not_sent() -> None:
         source="runtime",
     )
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL2",'
-        b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL2",
+                "mode": "push_pull",
+                "active_level": "high",
+                "idle_level": "low",
+            },
+        )
     ]
     assert state.state == "configured"
     assert state.role == "power_en"
@@ -196,8 +264,8 @@ def test_custom_role_is_recorded_but_not_sent() -> None:
 
 def test_empty_role_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     with pytest.raises(InputValidationError, match="GPIO role"):
         configurator.configure_mode(
@@ -209,15 +277,15 @@ def test_empty_role_is_rejected_before_transport_request() -> None:
             source="runtime",
         )
 
-    assert transport.requests == []
+    assert control.calls == []
     assert registry.get("CTRL0").state == "unconfigured"
     assert registry.get("CTRL1").state == "unconfigured"
 
 
 def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     with pytest.raises(InputValidationError, match="dut_signal"):
         configurator.configure_mode(
@@ -229,13 +297,13 @@ def test_invalid_dut_signal_is_rejected_before_transport_request() -> None:
             source="runtime",
         )
 
-    assert transport.requests == []
+    assert control.calls == []
 
 
 def test_invalid_mode_is_rejected_before_transport_request() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(CommandSuccessMessage())
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    control = FakeDeviceControl(CommandSuccessMessage())
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     with pytest.raises(InputValidationError, match="GPIO mode"):
         configurator.configure_mode(
@@ -247,20 +315,20 @@ def test_invalid_mode_is_rejected_before_transport_request() -> None:
             source="runtime",
         )
 
-    assert transport.requests == []
+    assert control.calls == []
     assert registry.get("CTRL0").state == "unconfigured"
 
 
 def test_unexpected_response_does_not_update_registry() -> None:
     registry = GpioModeRegistry()
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         HelloMessage(
             firmware="0.1.0",
             device="debug-helper",
             capabilities=("uart_receive", "gpio_control"),
         )
     )
-    configurator = GpioConfigurator(registry=registry, control=EnhancedDeviceControl(transport))
+    configurator = GpioConfigurator(registry=registry, control=control)
 
     with pytest.raises(GpioConfigurationError, match="Expected command response"):
         configurator.configure_mode(
@@ -272,8 +340,15 @@ def test_unexpected_response_does_not_update_registry() -> None:
             source="runtime",
         )
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"open_drain","active_level":"low"}\n'
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        )
     ]
     assert registry.get("CTRL0").state == "unconfigured"

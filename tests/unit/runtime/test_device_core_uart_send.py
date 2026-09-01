@@ -4,10 +4,16 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
+from runtime_test_support import (
+    FakeCaptureSource,
+    FakeDeviceControl,
+    FakeMonotonicClock,
+    enhanced_info,
+)
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
+    BackendInputError,
     BackendSnapshot,
     BackendUartSendResult,
     BackendWriteError,
@@ -16,9 +22,6 @@ from dutchmate_core.backends import (
     UartSendCapabilityPolicy,
     UartSender,
 )
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl, EnhancedUartSender
-from dutchmate_core.device_connection.errors import ProtocolValidationError
-from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.models import (
     NativeSessionDetail,
@@ -46,13 +49,17 @@ class FakeSender:
         return outcome
 
 
-class ProtocolFailingTransport:
+class ProtocolFailingSender:
     def __init__(self, detail: str) -> None:
         self.detail = detail
 
-    def request(self, command: bytes) -> DeviceMessage:
-        del command
-        raise ProtocolValidationError(self.detail)
+    def send_uart(self, data: bytes) -> BackendUartSendResult:
+        del data
+        raise BackendInputError(
+            "Enhanced protocol message does not match the expected schema",
+            operation="uart_send",
+            backend_mode="enhanced",
+        )
 
 
 def test_standalone_send_appends_one_lf_and_creates_no_attempt(tmp_path: Path) -> None:
@@ -298,9 +305,7 @@ def test_forced_backend_input_failure_closes_source_and_fails_session(
     )
     runtime = _runtime(
         tmp_path,
-        sender=EnhancedUartSender(
-            ProtocolFailingTransport(f"Unsupported device message type: {secret}")
-        ),
+        sender=ProtocolFailingSender(f"Unsupported device message type: {secret}"),
         source=source,
         capture_clock=clock,
     )
@@ -503,7 +508,7 @@ def _runtime(
     store: SessionStore | None = None,
 ) -> DeviceCoreRuntime:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         uart_sender=sender,
         message_source=source,
         capture_clock=capture_clock,

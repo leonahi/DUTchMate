@@ -76,12 +76,11 @@ responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
 `docs/phase1_implementation_spec.md`. Production Enhanced input enters through
 one service-owned async host and the service-owned continuous-ingestion
-coordinator. The synchronous Enhanced source and command transport remain only
-as compatibility definitions pending their separate removal.
+coordinator. No synchronous Enhanced command/source path remains.
 
 ## Data Flow
 
-Enhanced byte-chunk compatibility composition is test-only:
+Enhanced byte-chunk normalization composition is test-only:
 
 ```text
 NDJSON bytes
@@ -143,16 +142,8 @@ Owns the current Enhanced v1 wire protocol and serial primitives:
 - host command encoders for GPIO mode, generic channel actions, and UART send
 - base64 decoding and lossy UART display projection
 - NDJSON chunk buffering and message validation
-- serial-port discovery and the synchronous command transport
-- queuing non-response UART/telemetry messages while waiting for a command
-  response, then returning them in FIFO order
-
-The committed v1 wire still contains these compatibility details:
-
-- host command frames are not bounded at the final protocol limit
-- transport writes do not expose a complete-acceptance contract
-- the synchronous command transport and Enhanced source remain available for
-  compatibility, but production startup and reconnect do not select them
+- serial-port discovery, host-frame validation, and the shared exact-write
+  primitive used by the async Enhanced serial adapter
 
 `hardware/protocol/v1/` is the wire authority. Its schemas, examples,
 parser/encoder models, tests, and firmware handling change atomically.
@@ -334,8 +325,8 @@ selection, exact serial ports, backend-specific baudrates, 8-N-1 framing, TX
 policy, and reconnect timeout. Basic connection setup opens raw serial without
 reading a `hello`. Its event source lazily starts one serial-reader thread,
 converts each delivered byte chunk to one FIFO normalized event with
-host-monotonic provenance, and exposes a blocking compatibility read to the
-current shared capture runner. Basic UART writes are capability-gated and retry
+host-monotonic provenance, and exposes a synchronous workflow read bridge to
+the current shared capture runner. Basic UART writes are capability-gated and retry
 ordered short writes to completion. The Enhanced adapter translates
 parsed v1 messages and async receive timeouts before shared capture. Its one
 service-owned async host remains the resource owner across event, control, and

@@ -1,16 +1,16 @@
-# Graph Report - coordinated-background-reconnect  (2026-08-31)
+# Graph Report - DUTchMate  (2026-09-01)
 
 ## Corpus Check
-- 217 files · ~198,462 words
+- 237 files · ~200,133 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4077 nodes · 11235 edges · 164 communities (149 shown, 15 thin omitted)
-- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 2014 edges (avg confidence: 0.92)
+- 4078 nodes · 11006 edges · 191 communities (172 shown, 19 thin omitted)
+- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 1871 edges (avg confidence: 0.92)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1af0876d`
+- Built from commit: `4c7d594e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,91 +20,91 @@
 - dutchmate_cli/config.py
 - client.py
 - dutchmate_cli/main.py
-- test_continuous_ingestion.py
+- ContinuousIngestionCoordinator
 - UartLine
 - main
 - settings.py
-- fixed_clock
-- EnhancedDeviceControl
+- UartReceiveEvent
+- FakeMonotonicClock
 - app.py
 - NdjsonStreamParser
 - metadata.py
 - create_app
 - validation.py
 - test_validation.py
-- CommandSuccessMessage
+- transport.py
 - SegmentContext
 - parse_device_message
-- UartReceiveEvent
+- UartCaptureProcessor
 - log_replay.py
-- ContinuousIngestionCoordinator
+- CaptureEventSource
 - service_error_from_exception
 - SerialPortCandidate
-- models.py
-- test_retrieval.py
-- DeviceActionResult
-- transactions.py
+- comparison.py
+- SessionStore
+- RuntimeProvider
+- SessionPaths
 - SessionListPage
 - test_contracts.py
 - test_enhanced.py
 - test_enhanced_serial_io.py
-- DeviceCoreClient
+- enhanced.py
 - evidence.py
 - test_basic.py
 - BasicSerialPort
 - GpioModeRegistry
 - DeviceCoreRuntime
 - EnhancedAsyncHost
-- CaptureSourceHealth
+- UartIntegrity
 - parser.py
-- store.py
-- dutchmate_cli/capture.py
-- test_enhanced_serial.py
-- AsyncEnhancedUartSender
-- enhanced.py
+- session_store/baseline.py
+- dutchmate_cli/__init__.py
+- FakeAsyncSerialReader
+- make_adapter
+- AsyncEnhancedSerialAdapter
 - gpio_config/config.py
 - Service-Owned Continuous Ingestion Design
 - BasicBackendEventSource
 - errors.schema.json
-- modes.py
+- helpers.py
 - test_app_lifecycle.py
 - logs.py
 - Continuous Connection And Integrity Monitoring Design
-- DeviceCoreSessionStorage
+- store.py
 - test_device_core_uart_send.py
-- SessionStore
+- SessionHandle
 - test_capture_workflows.py
 - Incremental Re-Extraction
 - sessions.py
 - retrieval.py
 - test_startup_config.py
-- SessionPersistenceError
+- persistence.py
 - Phase 1 Implementation Spec
 - enum
-- DeviceControl
+- backend_reconnect.py
 - Enhanced Asynchronous Serial Adapter Design
 - create_server
 - device_actions.py
 - test_capture_reconnect.py
-- InputValidationError
+- runtime.py
 - test_baseline.py
-- test_recovery.py
+- BufferStatusEvent
 - test_retention.py
-- WaitPatternResult
+- FakeAsyncFrameWriter
 - CaptureRecorder
 - Ring Buffer Sizing Plan
 - DUTchMate Project Context
 - test_reconnect_evidence.py
 - parse_hardware_gpio_config
-- FakeTransport
+- FakeDeviceControl
 - fixture_protocol.c
-- SerialPort
+- test_enhanced_serial.py
 - CaptureWorkflow
 - Revision A Voltage-Domain GPIO and UART Interface
 - test_fixture_protocol.py
-- dutchmate_cli/__init__.py
+- format_wait_pattern
 - format_baseline_mutation
-- test_connection_monitoring.py
+- BackendDisconnectedError
 - GPIO Configuration Semantics
 - Enhanced Asynchronous Serial I/O Design
 - Reconnect and Session Semantics
@@ -114,13 +114,13 @@
 - Debug Agent Context Contract
 - MCP Integration Plan
 - BlockingCloseSource
-- FakeMonotonicClock
+- UartLineBuffer
 - test_real_coordinator_discards_idle_basic_event_before_capture
 - AsyncSerialReader
 - Coordinated Background Reconnect Design
-- backend_reconnect.py
+- test_backend_reconnect.py
 - Software Architecture
-- ServiceApiError
+- test_dut.py
 - BackendInputError
 - _validator
 - Phase 1A Basic Hardware-in-the-Loop Validation
@@ -128,8 +128,8 @@
 - host_to_device.schema.json
 - test_device_core_wait.py
 - dutchmate-core
-- service_client.py
-- test_create_app_applies_startup_hardware_config_when_runtime_is_connected
+- DeviceCoreClient
+- FakeDeviceControl
 - test_device_core_lifecycle.py
 - Graph Exports
 - dutchmate_mcp_server/__init__.py
@@ -140,56 +140,83 @@
 - uart_capture/__init__.py
 - workflows/__init__.py
 - dutchmate-workspace
-- enhanced_serial_io.py
-- fixed_id
+- SerialFrameSink
+- .start
 - Enhanced Async Service Integration Design
 - backend_snapshot
-- BackendDisconnectedError
+- line_buffer.py
 - File Responsibility Map
 - File Responsibility Map
-- _StreamWriter
-- FakeSerial
-- AsyncEnhancedDeviceControl
-- StartupConfigRuntime
+- enhanced_serial_io.py
+- send_uart_command
+- FakeEnhancedAsyncHost
+- DeviceCoreStatus
 - File Map
 - File Responsibility Map
 - test_log_replay.py
-- SessionRecoveryResult
+- test_reader_failure_is_repeatable_disconnect
 - _UnavailableDeviceControl
 - test_gpio.py
 - ScriptedBasicSerial
-- CaptureEventSource
+- _request_after_entering
 - File Responsibility Map
-- GpioControlChannelState
-- SessionMutationLock
-- _OwnedStreamReader
+- HardwareGpioConfig
+- CaptureReconnect
+- BlockingCloseStreamWriter
 - test_transactions.py
-- load_backend_config
-- test_main.py
+- TransportTimeoutError
+- TerminationBarrierAdapter
 - .get_session
-- TransportCaptureRunner
+- test_device_message_examples.py
 - BackendUartSendResult
 - FakeStreamTransport
-- commands.py
+- _BoundedNewest
 - File Responsibility Map
 - test_host_command_encoder.py
-- BackendSettings
-- test_threaded_writer_uses_shared_exact_loop_off_event_loop
-- test_threaded_writer_preserves_partial_acceptance_error
-- apply_startup_hardware_config
-- .get_session
+- .__init__
+- validate_session_max_size_mb
+- .feed
+- project_diagnostic_detail
+- .__init__
+- Q: commit and tell me what is next development step in phase-1
+- Q: Before that what does Zephyr DUT exactly do and what is its use?
+- Q: What does DMF stands for
+- Q: I am ready to flash the pico.
+- Q: Drive disappears and the tx and rx are connected to the USB-to-UART adapter. The adapter is connected to host.
+- Q: commit and go to next step
+- Q: move to next step
+- Q: Remove host role and DUT signal metadata from firmware-facing configure_gpio_mode commands while preserving host policy
+- Q: Trace and enforce exact Enhanced device-to-host NDJSON frame boundaries
+- Q: Trace hello firmware and device identity validation through the protocol parser, schema, and tests.
+- Q: Where is the shared Enhanced host-command encoding and dispatch boundary?
+- Q: How should Enhanced serial command short writes complete or report partial acceptance?
+- Q: How should Phase 1 introduce the continuous asynchronous Enhanced serial adapter without competing readers?
+- Q: What is the approved Phase 1 design boundary for the first Enhanced asynchronous serial adapter slice?
+- Q: What is the next Phase 1 development step after pushing main?
+- Q: What remains in Phase 1 before proceeding with the Enhanced async service integration design?
+- Q: How should the service-owned continuous ingestion coordinator fit the current backend, runtime, session, and reconnect boundaries?
+- Q: Create a detailed implementation plan for the approved service-owned continuous ingestion coordinator design
+- Q: Create implementation plan for approved continuous connection monitoring design
+- Q: done, what is the next steps to finish phase 1
+- test_close_wakes_idle_disconnect_waiter
+- .begin_workflow
+- .capture_source_health
+- .discard_pending_events
+- .end_workflow
+- test_start_rejects_non_hello_first_message
+- test_discard_pending_events_advances_only_the_adapter_fifo
 
 ## God Nodes (most connected - your core abstractions)
 1. `SessionStore` - 252 edges
-2. `DeviceCoreRuntime` - 136 edges
-3. `UartReceiveEvent` - 104 edges
-4. `SegmentContext` - 96 edges
+2. `DeviceCoreRuntime` - 137 edges
+3. `UartReceiveEvent` - 103 edges
+4. `SegmentContext` - 94 edges
 5. `create_app()` - 90 edges
-6. `EnhancedDeviceControl` - 86 edges
-7. `ContinuousIngestionCoordinator` - 81 edges
-8. `FakeRuntime` - 73 edges
-9. `SessionHandle` - 73 edges
-10. `parse_device_message()` - 71 edges
+6. `ContinuousIngestionCoordinator` - 81 edges
+7. `FakeRuntime` - 73 edges
+8. `SessionHandle` - 73 edges
+9. `parse_device_message()` - 69 edges
+10. `BackendSnapshot` - 67 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Ring Buffer Validation Gate` --semantically_similar_to--> `Ring Buffer Acceptance Checklist`  [INFERRED] [semantically similar]
@@ -213,99 +240,99 @@
 - **Backend-Independent Evidence Pipeline** — docs_project_context_normalized_evidence_boundary, docs_phase1_implementation_spec_backend_independent_pipeline, docs_software_architecture_normalized_event_boundary, docs_software_architecture_backends_contracts [INFERRED 0.95]
 - **Phase 1 Hardware Acceptance Gate** — docs_development_status_hardware_acceptance, docs_phase1_implementation_spec_phase1_done_criteria, docs_ring_buffer_sizing_plan_validation_gate, hardware_schematics_revision_a_prototype_validation, hardware_validation_phase1_ring_buffer_acceptance_checklist [INFERRED 0.95]
 
-## Communities (164 total, 15 thin omitted)
+## Communities (191 total, 19 thin omitted)
 
 ### Community 0 - "ReconnectedCaptureSource"
-Cohesion: 0.09
-Nodes (33): BackendReconnectCoordinator, BaseException, Serialize idle and active reconnect attempts for one stable source owner., Start the single non-daemon idle reconnect worker., Own one bounded active-workflow reconnect attempt., Stop reconnect activity and join the idle worker exactly once., Retry backend opening within the workflow-supplied monotonic deadline., RetryingCaptureReconnect (+25 more)
+Cohesion: 0.07
+Nodes (31): BackendReconnectCoordinator, _close_unpublished_candidate(), OpenCaptureReplacement, BaseException, Event, Serialize idle and active reconnect attempts for one stable source owner., Start the single non-daemon idle reconnect worker., Own one bounded active-workflow reconnect attempt. (+23 more)
 
 ### Community 1 - "format_status"
 Cohesion: 0.16
 Nodes (25): _as_mapping(), _display(), _format_capabilities(), _format_connection(), _format_control_channel(), _format_control_channels(), _format_device(), _format_integrity() (+17 more)
 
 ### Community 2 - "dutchmate_cli/config.py"
-Cohesion: 0.11
-Nodes (35): CliConfig, CliConfigError, DaemonConfig, load_cli_config(), _optional_port(), _optional_positive_int(), _optional_str(), _optional_table() (+27 more)
+Cohesion: 0.10
+Nodes (38): CliConfig, CliConfigError, DaemonConfig, load_cli_config(), _optional_port(), _optional_positive_int(), _optional_str(), _optional_table() (+30 more)
 
 ### Community 3 - "client.py"
 Cohesion: 0.07
 Nodes (61): capture_uart(), clear_session_baseline(), configure_gpio_mode(), fetch_recent_logs(), fetch_status(), get_debug_session(), list_debug_sessions(), mark_session_baseline() (+53 more)
 
 ### Community 4 - "dutchmate_cli/main.py"
-Cohesion: 0.11
-Nodes (54): RuntimeError, Raised when the CLI cannot complete a Device Core Service request., Raised when the local Device Core Service cannot be reached., ServiceClientError, ServiceUnavailableError, boot_test(), capture(), clear_baseline_command() (+46 more)
+Cohesion: 0.13
+Nodes (50): RuntimeError, Raised when the CLI cannot complete a Device Core Service request., Raised when the local Device Core Service cannot be reached., ServiceClientError, ServiceUnavailableError, boot_test(), capture(), clear_baseline_command() (+42 more)
 
-### Community 5 - "test_continuous_ingestion.py"
-Cohesion: 0.14
-Nodes (36): buffer_overflow_event(), buffer_status_event(), close_coordinator(), ControlledSource, parametrize, Catches malformed backend input being retried as an idle disconnect., test_active_fifo_preserves_exact_order(), test_active_telemetry_updates_health_and_enters_fifo_once() (+28 more)
+### Community 5 - "ContinuousIngestionCoordinator"
+Cohesion: 0.12
+Nodes (51): ContinuousIngestionCoordinator, Continuously drain one source and expose an active-workflow FIFO., buffer_overflow_event(), buffer_status_event(), close_coordinator(), ControlledSource, MonkeyPatch, parametrize (+43 more)
 
 ### Community 6 - "UartLine"
-Cohesion: 0.06
-Nodes (52): PatternDetector, Pattern detection for completed UART log lines., Find configured text patterns in completed UART log lines., Configured patterns in scan order., Return all configured patterns present in one completed UART line., Return pattern matches for a sequence of completed UART lines., _validate_patterns(), line_limit_exceeded_event_json() (+44 more)
+Cohesion: 0.12
+Nodes (25): PatternDetector, Find configured text patterns in completed UART log lines., Configured patterns in scan order., Return all configured patterns present in one completed UART line., Return pattern matches for a sequence of completed UART lines., _validate_patterns(), One complete UART log line., UartLine (+17 more)
 
 ### Community 7 - "main"
 Cohesion: 0.09
 Nodes (43): is_process_running(), LifecycleError, Path, Protocol, RuntimeError, Local Device Core Service process lifecycle helpers., Stop the background Device Core Service process recorded in the PID file., Return whether a process ID currently exists. (+35 more)
 
 ### Community 8 - "settings.py"
-Cohesion: 0.13
-Nodes (37): main(), Service entrypoint for DUTchMate., Start the Device Core Service., BackendConfig, BackendConfigError, _baudrate(), _boolean(), _finite_number() (+29 more)
+Cohesion: 0.09
+Nodes (46): main(), Start the Device Core Service., Any, Path, test_service_main_passes_config_to_app_and_host_port_to_uvicorn(), BackendConfig, BackendConfigError, _baudrate() (+38 more)
 
-### Community 9 - "fixed_clock"
+### Community 9 - "UartReceiveEvent"
 Cohesion: 0.16
-Nodes (44): BufferOverflowEvent, BufferStatusEvent, Observed Enhanced-backend UART receive-buffer loss., Enhanced-backend UART receive-buffer telemetry., enhanced_snapshot(), fixed_clock(), fixed_id(), datetime (+36 more)
+Nodes (47): Raw UART bytes observed by a backend within one connection segment., UartReceiveEvent, enhanced_snapshot(), evidence_bytes(), fixed_clock(), fixed_id(), datetime, Path (+39 more)
 
-### Community 10 - "EnhancedDeviceControl"
-Cohesion: 0.18
-Nodes (33): EnhancedDeviceControl, Translate semantic control operations to Enhanced protocol commands., enhanced_info(), FakeCaptureSource, FakeMonotonicClock, BackendCapability, BackendEvent, Exception (+25 more)
+### Community 10 - "FakeMonotonicClock"
+Cohesion: 0.14
+Nodes (30): AdvancingMonotonicClock, FakeCaptureSource, FakeMonotonicClock, BackendEvent, Exception, _fixed_session_time(), datetime, MonkeyPatch (+22 more)
 
 ### Community 11 - "app.py"
 Cohesion: 0.05
-Nodes (52): _close_runtime(), FastAPI, FastAPI application factory for the Device Core Service., baseline_mutation_payload(), BootModeRequest, BootTestRequest, capture_summary_payload(), CaptureRequest (+44 more)
+Nodes (53): _close_runtime(), FastAPI, FastAPI application factory for the Device Core Service., Service entrypoint for DUTchMate., baseline_mutation_payload(), BootModeRequest, BootTestRequest, capture_summary_payload() (+45 more)
 
 ### Community 12 - "NdjsonStreamParser"
-Cohesion: 0.09
-Nodes (35): HelloMessage, Typed protocol messages received from the Debug Helper., Debug Helper hello handshake., UART bytes captured by the Debug Helper., UartMessage, NdjsonStreamParser, DeviceMessage, Buffer serial chunks and parse complete newline-terminated messages. (+27 more)
+Cohesion: 0.12
+Nodes (26): HelloMessage, Typed protocol messages received from the Debug Helper., Debug Helper hello handshake., UART bytes captured by the Debug Helper., UartMessage, NdjsonStreamParser, Buffer serial chunks and parse complete newline-terminated messages., Bytes buffered because they do not yet end in a newline. (+18 more)
 
 ### Community 13 - "metadata.py"
-Cohesion: 0.08
-Nodes (43): test_recent_logs_payload_removes_oldest_whole_records_to_fit_body_cap(), project_diagnostic_detail(), Bounded diagnostic projection shared by persistence and delivery adapters., Return a sanitized, non-empty diagnostic and whether it was truncated., _append_resumed_backend_segment(), _backend_segment_json(), _bounded_error(), _capability_policy_json() (+35 more)
+Cohesion: 0.09
+Nodes (40): _append_resumed_backend_segment(), _backend_segment_json(), _capability_policy_json(), _contiguous_native_segments(), _format_session_id_timestamp(), _format_utc_timestamp(), _initial_metadata(), _integrity_json() (+32 more)
 
 ### Community 14 - "create_app"
-Cohesion: 0.15
-Nodes (39): create_app(), Path, Create the Device Core Service application., connected_status(), FakeRuntime, parametrize, test_boot_test_active_uses_conflict_error_contract(), test_boot_test_disconnected_uses_service_unavailable_contract() (+31 more)
+Cohesion: 0.10
+Nodes (48): create_app(), Path, Create the Device Core Service application., connected_status(), FakeRuntime, SessionDetail, parametrize, test_boot_test_active_uses_conflict_error_contract() (+40 more)
 
 ### Community 15 - "validation.py"
-Cohesion: 0.09
-Nodes (30): BootMode, _is_unicode_whitespace(), GpioModeRequestSource, GpioRoleName, ValueError, Shared validation for public Device Core input contracts., Return a supported DUT boot mode., Validate and preserve an exact serial-port identifier. (+22 more)
+Cohesion: 0.08
+Nodes (37): BootMode, _format_utc_timestamp(), datetime, GPIO role configuration state tracking., _utc_now(), _is_unicode_whitespace(), GpioControlChannel, GpioModeRequestSource (+29 more)
 
 ### Community 16 - "test_validation.py"
-Cohesion: 0.09
-Nodes (35): CommandedBootMode, _validate_native_lifecycle_inputs(), GpioIdentifierValidationError, prepare_uart_send_payload(), Return a valid Phase 1 wait-pattern timeout in seconds., Validate and preserve one case-sensitive literal wait pattern., Encode one public text command and enforce its final UART payload bound., Return a positive per-session evidence budget in MiB units. (+27 more)
+Cohesion: 0.10
+Nodes (30): Capture new UART evidence until one literal completes or time expires., GpioIdentifierValidationError, prepare_uart_send_payload(), Return a valid Phase 1 wait-pattern timeout in seconds., Validate and preserve one case-sensitive literal wait pattern., Encode one public text command and enforce its final UART payload bound., Validate and return an exact 1..64-byte GPIO role or signal identifier., Raised when a public UART-send request has an invalid final payload. (+22 more)
 
-### Community 17 - "CommandSuccessMessage"
-Cohesion: 0.06
-Nodes (58): Return an opened Enhanced command transport., CommandSuccessMessage, Successful command response from the Debug Helper., _classify_serial_write_error(), open_serial_command_transport(), DeviceMessage, Exception, TransportWriteErrorCode (+50 more)
+### Community 17 - "transport.py"
+Cohesion: 0.11
+Nodes (29): _classify_serial_write_error(), Exception, TransportWriteErrorCode, Exact serial-frame writes shared by Enhanced transport adapters., Write and flush one complete frame with exact accepted-byte errors., write_serial_frame(), RuntimeError, TransportWriteErrorCode (+21 more)
 
 ### Community 18 - "SegmentContext"
-Cohesion: 0.12
-Nodes (36): backend_snapshot(), enhanced_replacement_snapshot(), test_recent_logs_endpoint_replays_native_uart_and_validates_limit(), _basic_segment(), test_status_returns_connected_gpio_mapping_state(), Basic generic USB-to-UART connection, receive, and send adapter., Return the complete Basic identity/policy/provenance snapshot., apply_capability_policy() (+28 more)
+Cohesion: 0.07
+Nodes (41): backend_snapshot(), _snapshot(), enhanced_replacement_snapshot(), test_recent_logs_endpoint_replays_native_uart_and_validates_limit(), BasicBackendConnection, BackendCapability, Basic generic USB-to-UART connection, receive, and send adapter., Return capabilities remaining after host policy is applied. (+33 more)
 
 ### Community 19 - "parse_device_message"
 Cohesion: 0.07
 Nodes (62): parse_device_message(), DeviceMessage, Parse one NDJSON device-to-host protocol line. This parser currently supports…, _command_error_line(), _hello_line(), parametrize, test_command_error_detail_accepts_and_preserves_exact_utf8_value(), test_command_error_detail_rejects_non_string_value() (+54 more)
 
-### Community 20 - "UartReceiveEvent"
+### Community 20 - "UartCaptureProcessor"
 Cohesion: 0.09
-Nodes (50): Raw UART bytes observed by a backend within one connection segment., UartReceiveEvent, PatternMatch, A configured pattern found in one UART log line., Backend-independent UART receive processing to log lines and matches., Finalize and discard trailing derived state for one connection segment., Completed UART lines and pattern matches produced from one processing step., Convert captured UART byte messages into complete lines and pattern matches. (+42 more)
+Nodes (28): PatternMatch, Pattern detection for completed UART log lines., A configured pattern found in one UART log line., Backend-independent UART receive processing to log lines and matches., Finalize and discard trailing derived state for one connection segment., Completed UART lines and pattern matches produced from one processing step., Convert captured UART byte messages into complete lines and pattern matches., Process one normalized UART receive event. (+20 more)
 
 ### Community 21 - "log_replay.py"
-Cohesion: 0.16
-Nodes (19): _BoundedNewest, _decode_uart_event(), _non_negative_int(), _normal_record(), _oversized_record(), _T, Bounded replay of persisted native UART evidence., Retain the newest coordinate-ordered records with bounded memory. (+11 more)
+Cohesion: 0.13
+Nodes (42): _decode_uart_event(), _existing_paths(), _latest_terminal_native(), _non_negative_int(), _normal_record(), _oversized_record(), Path, Bounded replay of persisted native UART evidence. (+34 more)
 
-### Community 22 - "ContinuousIngestionCoordinator"
-Cohesion: 0.08
-Nodes (19): _close_source(), ContinuousIngestionCoordinator, _project_event_health(), BackendEvent, Exception, Service-owned continuous draining for finite capture workflows., Return one immutable health snapshot for the installed source., Establish a fresh cursor for one finite workflow. (+11 more)
+### Community 22 - "CaptureEventSource"
+Cohesion: 0.13
+Nodes (13): _close_source(), _project_event_health(), BackendEvent, Exception, Service-owned continuous draining for finite capture workflows., Return the next active-workflow event or an inactivity timeout., Detach and close the consumed disconnected source., Transfer one validated replacement into the stable coordinator. (+5 more)
 
 ### Community 23 - "service_error_from_exception"
 Cohesion: 0.10
@@ -315,45 +342,45 @@ Nodes (38): _baseline_context(), _comparison_context(), _gpio_configuration_cont
 Cohesion: 0.10
 Nodes (36): DeviceSelectionError, format_devices(), _format_metadata(), RuntimeError, Terminal formatting for serial device discovery., Raised when the CLI cannot choose one Debug Helper serial port., Format discovered serial ports for CLI output., Resolve the serial port used by `dutchmate start`. (+28 more)
 
-### Community 25 - "models.py"
-Cohesion: 0.11
-Nodes (34): _compare_lines(), _compare_pattern_counts(), compare_session(), _decode_line(), _evidence_summary(), _line_excerpt(), _logs(), _native_detail() (+26 more)
+### Community 25 - "comparison.py"
+Cohesion: 0.10
+Nodes (33): Register service exception handlers on an app., register_error_handlers(), Return bounded recent UART replay for one selected native session., _compare_lines(), _compare_pattern_counts(), compare_session(), _decode_line(), _evidence_summary() (+25 more)
 
-### Community 26 - "test_retrieval.py"
-Cohesion: 0.22
-Nodes (18): _create_native_session(), parametrize, Path, test_get_session_distinguishes_not_found_unsupported_and_corrupt(), test_latest_session_returns_newest_or_none(), test_legacy_session_detail_returns_only_identity_and_artifact_sizes(), test_list_sessions_applies_positive_limit(), test_list_sessions_ignores_unrelated_files_and_directories() (+10 more)
+### Community 26 - "SessionStore"
+Cohesion: 0.09
+Nodes (31): SessionDetail, Create filesystem-backed debug sessions., Abandon stale native active sessions without mutating other schemas., Perform startup recovery while the store-wide lock is held., Transition one active native session to completed exactly once., Complete one wait session with an authoritative optional match index., Transition one active native session to failed with bounded detail., Transition one stale active native session during startup recovery. (+23 more)
 
-### Community 27 - "DeviceActionResult"
+### Community 27 - "RuntimeProvider"
 Cohesion: 0.06
-Nodes (21): Protocol, SessionDetail, Return one bounded newest-first session page., Return bounded schema-aware detail for one session., Return bounded recent UART replay for one selected session., Designate one eligible session as the project baseline., Clear the baseline only when it names the requested session., Compare one terminal session with the designated baseline. (+13 more)
+Nodes (19): Protocol, SessionDetail, Return one bounded newest-first session page., Return bounded schema-aware detail for one session., Return bounded recent UART replay for one selected session., Designate one eligible session as the project baseline., Clear the baseline only when it names the requested session., Compare one terminal session with the designated baseline. (+11 more)
 
-### Community 28 - "transactions.py"
+### Community 28 - "SessionPaths"
 Cohesion: 0.13
-Nodes (34): _append_offsets(), begin_evidence_transaction(), _cleanup(), _cleanup_orphan_backups(), _digest_bytes(), _digest_file(), _error(), evidence_transaction() (+26 more)
+Nodes (36): Filesystem paths for the required Phase 1 session files., SessionPaths, _append_offsets(), begin_evidence_transaction(), _cleanup(), _cleanup_orphan_backups(), _digest_bytes(), _digest_file() (+28 more)
 
 ### Community 29 - "SessionListPage"
-Cohesion: 0.13
-Nodes (14): _native_detail(), _native_item(), Path, SessionDetail, SessionRuntime, test_default_service_composition_queries_sessions_while_disconnected(), test_get_session_endpoint_serializes_bounded_native_detail(), test_list_sessions_endpoint_serializes_discriminated_page() (+6 more)
+Cohesion: 0.12
+Nodes (17): _native_detail(), _native_item(), Path, SessionDetail, SessionRuntime, test_default_service_composition_queries_sessions_while_disconnected(), test_get_session_endpoint_serializes_bounded_native_detail(), test_list_sessions_endpoint_serializes_discriminated_page() (+9 more)
 
 ### Community 30 - "test_contracts.py"
 Cohesion: 0.10
 Nodes (22): BackendEventSource, BackendEvent, Protocol, Asynchronous FIFO source of normalized events from one backend connection., Return immutable identity and physical capability information., Return the session-local segment ID assigned to this source., Return the next FIFO event, or ``None`` for an ordinary read timeout., SourceFactory (+14 more)
 
 ### Community 31 - "test_enhanced.py"
-Cohesion: 0.06
-Nodes (54): EnhancedCaptureEventSource, EnhancedNdjsonEventStream, EnhancedUartSender, Translate complete UART payloads to Enhanced protocol commands., Interim synchronous adapter for the existing Enhanced serial transport., Return device-timer provenance for this compatibility source., Advance a workflow ingestion cursor past already-normalized events., Establish timestamp provenance while retaining the first evidence event. (+46 more)
+Cohesion: 0.07
+Nodes (38): DeviceControlError, Raised when a backend rejects or cannot complete a semantic control operation., AsyncEnhancedDeviceControl, AsyncEnhancedUartSender, EnhancedNdjsonEventStream, ControlState, Translate complete UART payloads through an async Enhanced transport., Parse Enhanced NDJSON chunks and expose only normalized evidence events. (+30 more)
 
 ### Community 32 - "test_enhanced_serial_io.py"
-Cohesion: 0.16
-Nodes (19): FakeStreamReader, FakeStreamWriter, Concrete Enhanced async serial I/O boundary tests., Fails if startup, ownership, or exact command dispatch uses the wrong path., Fails if opener errors are replaced or close an unreturned stream., Fails if transport inspection leaks or cleanup replaces its primary error., Fails if adapter validation after open leaves the owned stream alive., Fails if hello classification or startup cleanup is bypassed. (+11 more)
+Cohesion: 0.15
+Nodes (21): FakeStreamReader, FakeStreamWriter, Concrete Enhanced async serial I/O boundary tests., Fails if command writes use the event loop or skip partial-write recovery., Fails if startup, ownership, or exact command dispatch uses the wrong path., Fails if opener errors are replaced or close an unreturned stream., Fails if transport inspection leaks or cleanup replaces its primary error., Fails if adapter validation after open leaves the owned stream alive. (+13 more)
 
-### Community 33 - "DeviceCoreClient"
-Cohesion: 0.14
-Nodes (8): DeviceCoreClient, BaseException, TracebackType, Close the owned HTTP connection pool., Call bounded Device Core endpoints without owning hardware or sessions., Return a valid Phase 1 capture duration in seconds., validate_capture_duration(), test_capture_duration_accepts_phase_one_range()
+### Community 33 - "enhanced.py"
+Cohesion: 0.10
+Nodes (31): backend_input_error_from_protocol(), _control_success_timestamp(), enhanced_message_timestamp_us(), enhanced_segment_context(), normalize_enhanced_hello(), normalize_enhanced_message(), BackendEvent, DeviceMessage (+23 more)
 
 ### Community 34 - "evidence.py"
-Cohesion: 0.11
-Nodes (26): buffer_overflow_event_json(), buffer_status_event_json(), _bytes_to_b64(), control_action_event_json(), detected_pattern_at(), detected_pattern_records(), first_error(), _match_coordinate() (+18 more)
+Cohesion: 0.13
+Nodes (22): buffer_overflow_event_json(), buffer_status_event_json(), _bytes_to_b64(), control_action_event_json(), detected_pattern_at(), detected_pattern_records(), first_error(), line_limit_exceeded_event_json() (+14 more)
 
 ### Community 35 - "test_basic.py"
 Cohesion: 0.14
@@ -364,64 +391,64 @@ Cohesion: 0.18
 Nodes (7): BasicSerialPort, Protocol, Small raw pyserial surface owned by the Basic backend., Read up to ``size`` raw UART bytes., Write raw UART bytes., Close the serial port., Return the owned raw serial port for the receive adapter.
 
 ### Community 37 - "GpioModeRegistry"
-Cohesion: 0.19
-Nodes (26): GpioModeRegistry, Track accepted and rejected GPIO mode configuration per control channel., GPIO role configuration state used by this runtime., fixed_clock(), datetime, parametrize, test_accept_mode_can_record_custom_role_and_idle_level(), test_accept_mode_marks_channel_configured_with_role_metadata() (+18 more)
+Cohesion: 0.08
+Nodes (40): GpioControlChannelState, GpioModeRegistry, GpioModeRejection, GpioControlChannel, GpioModeRequestSource, GpioRoleName, Return current states for all physical control channels., Return the configured channel state for a role, if one exists. (+32 more)
 
 ### Community 38 - "DeviceCoreRuntime"
-Cohesion: 0.05
-Nodes (31): Return timestamp provenance once the source origin is established., Core DUTchMate library., DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus, BackendCapability, GpioModeRequestSource, GpioRoleName (+23 more)
+Cohesion: 0.07
+Nodes (23): DeviceCoreRuntime, DeviceCoreRuntimeError, BackendCapability, GpioModeRequestSource, GpioRoleName, RuntimeError, SessionWorkflow, Compose Phase 1 core services behind one service-facing object. (+15 more)
 
 ### Community 39 - "EnhancedAsyncHost"
 Cohesion: 0.05
 Nodes (43): _AsyncEnhancedAdapter, EnhancedAsyncHost, open_enhanced_async_host(), _open_host_on_owner_loop(), OpenAsyncEnhancedAdapter, _OpenedHost, Any, BackendEvent (+35 more)
 
-### Community 40 - "CaptureSourceHealth"
+### Community 40 - "UartIntegrity"
 Cohesion: 0.22
-Nodes (18): CaptureSourceHealth, Immutable current-source connection, integrity, and replacement projection., Return one immutable current-source health snapshot., monitored_runtime(), MutableHealthSource, FakeMonotonicClock, Path, test_basic_monitor_without_integrity_stays_not_observable() (+10 more)
+Nodes (21): What the selected backend can report about upstream UART loss., UartIntegrity, CaptureSourceHealth, Immutable current-source connection, integrity, and replacement projection., monitored_runtime(), MutableHealthSource, FakeMonotonicClock, Path (+13 more)
 
 ### Community 41 - "parser.py"
+Cohesion: 0.18
+Nodes (28): InvalidUtf8Error, MalformedMessageError, ProtocolValidationError, ProtocolVersionError, Raised when a UTF-8 protocol frame is not valid JSON., Raised when a bounded frame body is not valid UTF-8., Raised when a JSON object does not match the v1 protocol contract., Raised when a device speaks an unsupported protocol version. (+20 more)
+
+### Community 42 - "session_store/baseline.py"
 Cohesion: 0.13
-Nodes (35): InvalidUtf8Error, MalformedMessageError, ProtocolError, ProtocolValidationError, ProtocolVersionError, ValueError, Typed failures at Enhanced wire-protocol boundaries., Base class for host-device protocol errors. (+27 more)
+Nodes (30): BaselineOperation, clear_baseline(), _ineligibility_reason(), mark_baseline(), _persistence_fault(), datetime, Path, SessionDetail (+22 more)
 
-### Community 42 - "store.py"
-Cohesion: 0.06
-Nodes (53): Register service exception handlers on an app., register_error_handlers(), BaselineOperation, clear_baseline(), _ineligibility_reason(), mark_baseline(), _persistence_fault(), datetime (+45 more)
+### Community 43 - "dutchmate_cli/__init__.py"
+Cohesion: 0.11
+Nodes (26): _display(), _first_error(), _flag(), format_boot_test_result(), format_capture_result(), _format_capture_summary(), _line_processing(), _loss_status() (+18 more)
 
-### Community 43 - "dutchmate_cli/capture.py"
-Cohesion: 0.12
-Nodes (25): _display(), _first_error(), _flag(), format_boot_test_result(), format_capture_result(), _format_capture_summary(), _line_processing(), _loss_status() (+17 more)
+### Community 44 - "FakeAsyncSerialReader"
+Cohesion: 0.08
+Nodes (21): FakeAsyncSerialReader, Fails if terminal input overtakes accepted evidence or changes on replay., Fails if a second hello is accepted as evidence or connection state., Fails if an uncorrelated response is dropped or exposed as evidence., Fails if post-hello input masks a retained parser terminal error., Fails if a timed-out readiness wait interferes with later FIFO admission., Fails if a terminal disconnect leaves readiness callers blocked or changes its…, Fails if a non-blocking evidence poll is rejected as an invalid timeout. (+13 more)
 
-### Community 44 - "test_enhanced_serial.py"
-Cohesion: 0.03
-Nodes (121): BlockingAsyncFrameWriter, _close_after_entering(), CloseBlockingAsyncSerialReader, _compact_json_frame_of_size(), FakeAsyncFrameWriter, FakeAsyncSerialReader, make_adapter(), Event (+113 more)
+### Community 45 - "make_adapter"
+Cohesion: 0.08
+Nodes (25): make_adapter(), Fails if shutdown leaves the sole reader blocked or closes it more than once., Fails if pending-frame overflow loses its exact bounded size context., Fails if concurrent starts each own a reader or do not share one hello., Fails if same-batch evidence still terminalizes a valid hello handshake., Fails if segment readiness consumes the first normalized evidence event., Fails if terminal input failures leave readiness callers blocked or change…, Fails if hello resolves before later same-batch input is validated. (+17 more)
 
-### Community 45 - "AsyncEnhancedUartSender"
-Cohesion: 0.14
-Nodes (10): AsyncEnhancedUartSender, Translate complete UART payloads through an async Enhanced transport., AsyncCommandTransport, CommandTransport, DeviceMessage, Protocol, Transport capable of sending one host command and returning its response., Send one encoded command and return one parsed device response. (+2 more)
-
-### Community 46 - "enhanced.py"
-Cohesion: 0.05
-Nodes (48): DeviceControlError, Raised when a backend rejects or cannot complete a semantic control operation., backend_input_error_from_protocol(), _control_success_timestamp(), enhanced_message_timestamp_us(), enhanced_segment_context(), EnhancedMessageSource, normalize_enhanced_hello() (+40 more)
+### Community 46 - "AsyncEnhancedSerialAdapter"
+Cohesion: 0.10
+Nodes (16): AsyncEnhancedSerialAdapter, _consume_hello_waiter_exception(), BackendEvent, Future, Return normalized identity after a valid hello., Return the session-local segment ID assigned by the caller., Return timestamp provenance once later event support establishes it., Start the sole reader and wait for its normalized hello. (+8 more)
 
 ### Community 47 - "gpio_config/config.py"
-Cohesion: 0.12
-Nodes (24): load_startup_hardware_config(), Path, Load startup hardware configuration, treating a missing file as empty config., test_load_startup_hardware_config_returns_empty_config_when_missing(), GpioConfigError, HardwareGpioConfig, load_hardware_gpio_config(), _optional_string() (+16 more)
+Cohesion: 0.17
+Nodes (18): GpioConfigError, load_hardware_gpio_config(), _optional_string(), _optional_voltage(), _parse_control_mapping(), Any, GpioRoleName, Path (+10 more)
 
 ### Community 48 - "Service-Owned Continuous Ingestion Design"
 Cohesion: 0.09
 Nodes (21): Active, Architectural Decision, Closing / Closed, Components And Boundaries, Concurrency Invariants, Context, `ContinuousIngestionCoordinator`, Coordinator State Model (+13 more)
 
 ### Community 49 - "BasicBackendEventSource"
-Cohesion: 0.11
-Nodes (12): BasicBackendEventSource, BackendEvent, Normalize raw Basic serial chunks through one FIFO reader thread., Return immutable Basic backend identity and capabilities., Return the session-local segment ID assigned to this source., Return host-monotonic provenance established at source creation., Return the next FIFO event, or ``None`` for an ordinary timeout., Blocking compatibility adapter used by the current capture runner. (+4 more)
+Cohesion: 0.12
+Nodes (11): BasicBackendEventSource, BackendEvent, Normalize raw Basic serial chunks through one FIFO reader thread., Return immutable Basic backend identity and capabilities., Return the session-local segment ID assigned to this source., Return host-monotonic provenance established at source creation., Return the next FIFO event, or ``None`` for an ordinary timeout., Blocking compatibility adapter used by the current capture runner. (+3 more)
 
 ### Community 50 - "errors.schema.json"
 Cohesion: 0.08
 Nodes (25): additionalProperties, $comment, minLength, type, enum, type, $id, const (+17 more)
 
-### Community 51 - "modes.py"
-Cohesion: 0.17
-Nodes (15): disconnected_status(), _enhanced_integrity(), _enhanced_segment(), _enhanced_timestamp(), _tx_policy(), BaselineRuntime, _capture(), Path (+7 more)
+### Community 51 - "helpers.py"
+Cohesion: 0.25
+Nodes (13): disconnected_status(), _enhanced_integrity(), _enhanced_segment(), _enhanced_timestamp(), _tx_policy(), _append_line(), _capture(), Path (+5 more)
 
 ### Community 52 - "test_app_lifecycle.py"
 Cohesion: 0.10
@@ -435,21 +462,21 @@ Nodes (11): _display(), _display_text(), format_recent_logs(), _merged_records()
 Cohesion: 0.08
 Nodes (24): Acceptance Criteria, Architectural Decision, Buffer Overflow, Buffer Status, Concurrency And Ownership Invariants, Context, Continuous Connection And Integrity Monitoring Design, Coordinator State And Event Projection (+16 more)
 
-### Community 55 - "DeviceCoreSessionStorage"
-Cohesion: 0.12
-Nodes (10): DeviceCoreSessionStorage, Protocol, Return one bounded newest-first session page., Return bounded recent UART replay for one selected native session., Return one authoritative stored detected-pattern record., Designate one eligible session as the project baseline., Clear the project baseline only when it names the requested session., Compare one terminal session with the designated baseline. (+2 more)
+### Community 55 - "store.py"
+Cohesion: 0.04
+Nodes (45): BaselineRuntime, SessionDetail, test_capture_summary_serializes_bounded_first_error_evidence(), _match(), DeviceCoreSessionStorage, Protocol, Return one authoritative stored detected-pattern record., Designate one eligible session as the project baseline. (+37 more)
 
 ### Community 56 - "test_device_core_uart_send.py"
-Cohesion: 0.21
-Nodes (24): FailingAttemptStore, FailingResultStore, FakeSender, _fixed_time(), _hardware_events(), ProtocolFailingTransport, datetime, DeviceMessage (+16 more)
+Cohesion: 0.22
+Nodes (27): RuntimeError, Canonical UART-send failure with optional audit context., UartSendError, FailingAttemptStore, FailingResultStore, FakeSender, _fixed_time(), _hardware_events() (+19 more)
 
-### Community 57 - "SessionStore"
+### Community 57 - "SessionHandle"
 Cohesion: 0.05
-Nodes (45): _append_line(), Reference to a created debug session., SessionHandle, CommandedBootMode, SessionDetail, SessionWorkflow, Durably append a forced-send attempt and reserve its result record., Create filesystem-backed debug sessions. (+37 more)
+Nodes (37): Reference to a created debug session., SessionHandle, CommandedBootMode, SessionWorkflow, Durably append a forced-send attempt and reserve its result record., Durably resolve one admitted forced-send attempt., Append one buffer overflow event to a session., Append one buffer status telemetry event to a session. (+29 more)
 
 ### Community 58 - "test_capture_workflows.py"
-Cohesion: 0.21
-Nodes (21): EnhancedCaptureFixtureRecorder, fixed_clock(), datetime, Record a finite Enhanced fixture stream and return its summary., Compose Enhanced fixture parsing with the shared capture recorder., run_enhanced_capture_fixture(), _failing_session_callback(), Path (+13 more)
+Cohesion: 0.13
+Nodes (33): EnhancedCaptureFixtureRecorder, FakeCaptureEventSource, FakeMonotonicClock, fixed_clock(), fixed_id(), LifecycleCaptureEventSource, BackendEvent, datetime (+25 more)
 
 ### Community 59 - "Incremental Re-Extraction"
 Cohesion: 0.10
@@ -460,16 +487,16 @@ Cohesion: 0.21
 Nodes (18): _as_mapping(), _display(), _format_artifacts(), _format_first_error(), _format_list_item(), format_session_detail(), format_session_list(), _nested_display() (+10 more)
 
 ### Community 61 - "retrieval.py"
-Cohesion: 0.08
-Nodes (70): _existing_paths(), _latest_terminal_native(), Path, _require_native_schema(), _select_session(), _stable_uart_snapshot(), _validate_snapshot_storage(), _validate_session_command() (+62 more)
+Cohesion: 0.09
+Nodes (46): _validate_session_command(), EvidenceTypeCount, FirstErrorReference, NativeSessionListItem, Raised when durable session evidence cannot be read or written., Compact first-error location used by bounded session list items., Bounded native lifecycle projection for one session list item., Logical size and optional record count for one session artifact. (+38 more)
 
 ### Community 62 - "test_startup_config.py"
-Cohesion: 0.18
-Nodes (29): build_startup_runtime(), Build the service runtime for one explicitly selected backend., AdvancingClock, backend_settings(), _enhanced_info(), _enhanced_segment(), FakeEnhancedAsyncHost, MonkeyPatch (+21 more)
+Cohesion: 0.25
+Nodes (27): build_startup_runtime(), Build the service runtime for one explicitly selected backend., AdvancingClock, backend_settings(), _enhanced_info(), _enhanced_segment(), MonkeyPatch, Path (+19 more)
 
-### Community 63 - "SessionPersistenceError"
-Cohesion: 0.11
-Nodes (38): Path, Raised when durable session evidence cannot be read or written., SessionPersistenceError, append_bytes(), append_serialized(), create_directory(), _error(), evidence_file_bytes() (+30 more)
+### Community 63 - "persistence.py"
+Cohesion: 0.13
+Nodes (35): append_bytes(), append_serialized(), create_directory(), _error(), evidence_file_bytes(), _fsync_directory(), OSError, Path (+27 more)
 
 ### Community 64 - "Phase 1 Implementation Spec"
 Cohesion: 0.12
@@ -479,9 +506,9 @@ Nodes (18): Atomic Protocol Change Workflow, Developer Guide, Package Boundaries
 Cohesion: 0.11
 Nodes (17): enum, type, $defs, capability, timestamp_us, $id, oneOf, $schema (+9 more)
 
-### Community 66 - "DeviceControl"
-Cohesion: 0.10
-Nodes (9): EnhancedReconnectHost, Ready async Enhanced host used as source, control, and UART sender., Publish a newly connected backend control adapter., DeviceControl, ControlState, Backend-neutral semantic DUT and GPIO control operations., Configure one physical control channel and return device time., Pulse one configured physical channel and return device time. (+1 more)
+### Community 66 - "backend_reconnect.py"
+Cohesion: 0.07
+Nodes (21): _CandidateCleanupFailure, EnhancedReconnectHost, OpenBasicConnection, OpenEnhancedHost, Exception, Protocol, Service-owned backend reopen and replaceable-control composition., Keep a rejected candidate's primary failure distinct from close failure. (+13 more)
 
 ### Community 67 - "Enhanced Asynchronous Serial Adapter Design"
 Cohesion: 0.11
@@ -492,36 +519,36 @@ Cohesion: 0.19
 Nodes (12): main(), MCP server entrypoint for DUTchMate., Start the DUTchMate MCP server., create_server(), Stateless MCP server composition for the stdio delivery adapter., Create one stateless MCP server with fixed protocol-facing metadata., Run the server over stdio; no other MCP transport is exposed., run_stdio() (+4 more)
 
 ### Community 69 - "device_actions.py"
-Cohesion: 0.11
-Nodes (25): Return a valid DUT reset pulse duration in milliseconds., validate_reset_pulse(), DeviceActionError, DeviceActionRunner, _format_utc(), datetime, RuntimeError, Hardware action workflows guarded by GPIO configuration state. (+17 more)
+Cohesion: 0.09
+Nodes (27): DeviceActionError, DeviceActionResult, DeviceActionRunner, _format_utc(), datetime, RuntimeError, Hardware action workflows guarded by GPIO configuration state., Raised when firmware rejects a hardware action command. (+19 more)
 
 ### Community 70 - "test_capture_reconnect.py"
 Cohesion: 0.21
 Nodes (19): _evidence_bytes(), FakeMonotonicClock, BackendEvent, Exception, Path, _read_jsonl(), _required_segment(), _run_one_reconnect() (+11 more)
 
-### Community 71 - "InputValidationError"
-Cohesion: 0.17
-Nodes (21): GpioConfigurator, GpioModeRequestSource, GPIO mode configuration workflow., Configure GPIO modes through firmware and update accepted host state., Send `configure_gpio_mode` and record the firmware result., GpioConfigurationError, RuntimeError, Raised when a GPIO-controlled workflow cannot run with current state. (+13 more)
+### Community 71 - "runtime.py"
+Cohesion: 0.08
+Nodes (34): Publish a newly connected backend control adapter., DeviceControl, ControlState, Backend-neutral semantic DUT and GPIO control operations., Configure one physical control channel and return device time., Pulse one configured physical channel and return device time., Apply one configured channel's active or idle state and return device time., CommandSuccessMessage (+26 more)
 
 ### Community 72 - "test_baseline.py"
-Cohesion: 0.49
-Nodes (13): _create_capture(), datetime, MonkeyPatch, Path, _store(), test_atomic_write_failure_preserves_existing_pointer(), test_basic_not_observable_session_is_baseline_eligible(), test_dangling_or_corrupt_pointer_fails_reads_and_mutations() (+5 more)
+Cohesion: 0.21
+Nodes (26): _create_capture(), datetime, MonkeyPatch, Path, _store(), test_atomic_write_failure_preserves_existing_pointer(), test_basic_not_observable_session_is_baseline_eligible(), test_dangling_or_corrupt_pointer_fails_reads_and_mutations() (+18 more)
 
-### Community 73 - "test_recovery.py"
-Cohesion: 0.38
-Nodes (13): _clock(), _create_active_native(), datetime, MonkeyPatch, parametrize, Path, _recovery_clock(), test_recovery_abandons_stale_active_native_session() (+5 more)
+### Community 73 - "BufferStatusEvent"
+Cohesion: 0.19
+Nodes (21): BufferOverflowEvent, BufferStatusEvent, Observed Enhanced-backend UART receive-buffer loss., Enhanced-backend UART receive-buffer telemetry., test_normalizes_buffer_telemetry(), MonkeyPatch, Path, test_append_buffer_overflow_can_write_nonzero_segment() (+13 more)
 
 ### Community 74 - "test_retention.py"
 Cohesion: 0.49
 Nodes (13): _create_capture(), _native_store(), datetime, MonkeyPatch, Path, test_corrupt_pointer_and_unknown_schema_suspend_retention(), test_corrupt_session_evidence_suspends_retention(), test_legacy_sessions_count_toward_limit_but_remain_protected() (+5 more)
 
-### Community 75 - "WaitPatternResult"
-Cohesion: 0.22
-Nodes (10): _match(), parametrize, test_wait_pattern_endpoint_preserves_capture_active_error(), test_wait_pattern_endpoint_rejects_invalid_input_before_runtime(), test_wait_pattern_endpoint_returns_structured_capability_error(), test_wait_pattern_endpoint_serializes_authoritative_match_reference(), test_wait_pattern_timeout_is_successful_with_null_match_fields(), WaitRuntime (+2 more)
+### Community 75 - "FakeAsyncFrameWriter"
+Cohesion: 0.10
+Nodes (19): FakeAsyncFrameWriter, Fails if same-batch response success masks invalid input or drops its prefix., Fails if post-transmission cancellation leaves an orphan response path., Fails if command routing consumes or reorders interleaved UART evidence., Fails if a response overtakes earlier evidence blocked outside the FIFO., Fails if a second uncorrelated command is written before the first resolves., Fails if async routing replaces write accounting or its repeatable terminal., Fails if caller cancellation leaves an uncorrelated response path alive. (+11 more)
 
 ### Community 76 - "CaptureRecorder"
-Cohesion: 0.09
-Nodes (15): CaptureRecorder, BackendEvent, Route normalized backend events into UART processing and session storage., Handle for the session this recorder writes to., Session identifier this recorder writes to., Whether storage has already ended this recorder's native session., Observe terminalization performed by a coordinated external evidence writer., Record one normalized backend event into the session. (+7 more)
+Cohesion: 0.08
+Nodes (16): CaptureRecorder, _normalized_control_timestamp(), BackendEvent, Route normalized backend events into UART processing and session storage., Handle for the session this recorder writes to., Session identifier this recorder writes to., Whether storage has already ended this recorder's native session., Observe terminalization performed by a coordinated external evidence writer. (+8 more)
 
 ### Community 77 - "Ring Buffer Sizing Plan"
 Cohesion: 0.18
@@ -539,21 +566,21 @@ Nodes (12): _create_active_session(), parametrize, Path, _snapshot_for_segment()
 Cohesion: 0.16
 Nodes (23): HardwareControlMapping, parse_hardware_gpio_config(), Configured mapping from a DUTchMate control channel to a DUT role., Parse and validate `[hardware.control.*]` configuration., parametrize, test_parse_custom_role_mapping(), test_parse_empty_config_leaves_all_controls_unconfigured(), test_parse_valid_boot_mapping_with_idle_level() (+15 more)
 
-### Community 81 - "FakeTransport"
-Cohesion: 0.21
-Nodes (14): AdvancingMonotonicClock, FakeTransport, DeviceMessage, Path, test_apply_hardware_config_requires_connection(), test_apply_hardware_config_sends_configured_modes(), test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(), test_disconnect_clears_connection_metadata_but_keeps_gpio_state() (+6 more)
+### Community 81 - "FakeDeviceControl"
+Cohesion: 0.20
+Nodes (17): enhanced_info(), FakeDeviceControl, BackendCapability, ControlState, DeviceMessage, test_capture_uart_requires_message_source(), Path, test_apply_hardware_config_requires_connection() (+9 more)
 
 ### Community 82 - "fixture_protocol.c"
 Cohesion: 0.16
 Nodes (12): dmf_sleep_fn, dmf_write_fn, command_equals(), dmf_fixture_emit_boot(), dmf_fixture_handle_command(), dmf_fixture_init(), emit_sequence(), write_data() (+4 more)
 
-### Community 83 - "SerialPort"
-Cohesion: 0.25
-Nodes (5): Protocol, Small pyserial-compatible surface used by the command transport., Read bytes until a delimiter or timeout., Close the serial port., SerialPort
+### Community 83 - "test_enhanced_serial.py"
+Cohesion: 0.12
+Nodes (18): _close_after_entering(), CloseBlockingAsyncSerialReader, _compact_json_frame_of_size(), Async Enhanced serial reader lifecycle tests., Fails if a full FIFO drops/reorders evidence or lets its sole reader advance., Fails if close strands hello or exposes a different terminal object., Fails if cancellation turns resource-close start into false completion., Fails if an invalid host frame reaches the serial writer. (+10 more)
 
 ### Community 84 - "CaptureWorkflow"
-Cohesion: 0.15
-Nodes (9): CaptureRecordResult, CaptureWorkflow, CommandedBootMode, Exception, SessionWorkflow, Create one capture session., Result of recording one normalized event into a capture session., Own the complete lifecycle of one finite capture session. (+1 more)
+Cohesion: 0.10
+Nodes (13): Return timestamp provenance once the source origin is established., CaptureRecordResult, CaptureWorkflow, CommandedBootMode, Exception, SessionWorkflow, Create one capture session., Record parsed transport messages until one fixed workflow deadline. (+5 more)
 
 ### Community 85 - "Revision A Voltage-Domain GPIO and UART Interface"
 Cohesion: 0.17
@@ -563,17 +590,17 @@ Nodes (12): Event Channel Translation, Fixed-Direction Signal Paths, Revision A 
 Cohesion: 0.31
 Nodes (16): CompletedProcess, _build_harness(), Path, _run_command(), test_binary_emits_invalid_utf8_bytes_without_encoding(), test_burst_is_bounded_numbered_and_self_checking(), test_info_reports_fixture_identity_and_build(), test_init_failure_boot_emits_stable_first_error() (+8 more)
 
-### Community 87 - "dutchmate_cli/__init__.py"
-Cohesion: 0.10
-Nodes (19): DUTchMate CLI package., _display(), format_wait_pattern(), _mapping(), CLI formatting for finite literal wait-pattern outcomes., Format a matched or ordinary unmatched wait outcome., default_cli_config(), MonkeyPatch (+11 more)
+### Community 87 - "format_wait_pattern"
+Cohesion: 0.25
+Nodes (9): _display(), format_wait_pattern(), _mapping(), CLI formatting for finite literal wait-pattern outcomes., Format a matched or ordinary unmatched wait outcome., MonkeyPatch, test_format_wait_pattern_prints_match_excerpt_and_provenance(), test_format_wait_pattern_prints_no_match_as_successful_outcome() (+1 more)
 
 ### Community 88 - "format_baseline_mutation"
 Cohesion: 0.23
 Nodes (10): _as_mapping(), _display(), format_baseline_mutation(), Terminal formatting for project baseline mutations., Format one mark or clear result without inferring evidence quality., MonkeyPatch, parametrize, test_baseline_commands_forward_named_session() (+2 more)
 
-### Community 89 - "test_connection_monitoring.py"
-Cohesion: 0.15
-Nodes (14): NoopDeviceControl, BackendEvent, BaseException, ControlState, Path, QueueSource, Catch startup health omitting initial identity, segment, or integrity., Catches replacement health omitting identity, integrity, or segment projection. (+6 more)
+### Community 89 - "BackendDisconnectedError"
+Cohesion: 0.14
+Nodes (16): NoopDeviceControl, BackendEvent, BaseException, ControlState, Path, QueueSource, Catch startup health omitting initial identity, segment, or integrity., Catches replacement health omitting identity, integrity, or segment projection. (+8 more)
 
 ### Community 90 - "GPIO Configuration Semantics"
 Cohesion: 0.18
@@ -608,16 +635,16 @@ Cohesion: 0.32
 Nodes (8): Device Core HTTP Adapter, MCP 2026-07-28 Specification, MCP Integration Plan, Official MCP Python SDK v2, Phase 2 MCP Tool Set, Stateless MCP Layer, MCP Stdio Transport, Deferred Streamable HTTP
 
 ### Community 98 - "BlockingCloseSource"
-Cohesion: 0.13
-Nodes (11): BlockingCloseSource, BlockingFailingCloseSource, EventReleasedByCloseSource, FailingCloseSource, BackendEvent, BaseException, test_close_while_workflow_active_is_safe_for_finally_cleanup(), test_concurrent_close_calls_share_exact_cleanup_error_and_close_once() (+3 more)
-
-### Community 99 - "FakeMonotonicClock"
 Cohesion: 0.14
-Nodes (11): FakeCaptureEventSource, FakeMonotonicClock, LifecycleCaptureEventSource, BackendEvent, MonkeyPatch, parametrize, test_capture_activates_cursor_after_session_creation_before_callbacks(), test_capture_does_not_activate_cursor_when_session_creation_fails() (+3 more)
+Nodes (10): BlockingCloseSource, BlockingFailingCloseSource, EventReleasedByCloseSource, FailingCloseSource, BackendEvent, BaseException, test_close_while_workflow_active_is_safe_for_finally_cleanup(), test_concurrent_close_calls_share_exact_cleanup_error_and_close_once() (+2 more)
+
+### Community 99 - "UartLineBuffer"
+Cohesion: 0.18
+Nodes (16): Buffer raw UART bytes until complete newline-terminated lines are available., Raw UART bytes not yet terminated by a newline., UartLineBuffer, test_byte_after_limit_discards_only_derived_copy_and_counts_until_lf(), test_exact_limit_line_is_emitted_normally(), test_feed_complete_line(), test_feed_multiple_lines(), test_feed_requires_bytes() (+8 more)
 
 ### Community 100 - "test_real_coordinator_discards_idle_basic_event_before_capture"
-Cohesion: 0.19
-Nodes (7): ConditionBackedBasicSource, _publish_after_barrier(), BackendEvent, BaseException, test_real_coordinator_discards_idle_basic_event_before_capture(), WorkflowBarrierCoordinator, ThreadEvent
+Cohesion: 0.25
+Nodes (6): _basic_segment(), ConditionBackedBasicSource, _publish_after_barrier(), test_real_coordinator_discards_idle_basic_event_before_capture(), WorkflowBarrierCoordinator, ThreadEvent
 
 ### Community 101 - "AsyncSerialReader"
 Cohesion: 0.18
@@ -627,21 +654,21 @@ Nodes (8): AsyncFrameWriter, AsyncSerialReader, Protocol, Async byte reader owne
 Cohesion: 0.10
 Nodes (19): Acceptance Criteria, Active-Workflow Disconnect, Add A Service-Owned Reconnect Coordinator, Atomic Replacement Publication, Considered Approaches, Context, Coordinated Background Reconnect Design, Documentation And Validation (+11 more)
 
-### Community 103 - "backend_reconnect.py"
-Cohesion: 0.06
-Nodes (43): _build_async_enhanced_capture_reconnect(), build_enhanced_capture_reconnect(), _build_legacy_enhanced_capture_reconnect(), _LegacyOpenCaptureReplacement, OpenCaptureReplacement, OpenEnhancedHost, OpenEnhancedTransport, ControlState (+35 more)
+### Community 103 - "test_backend_reconnect.py"
+Cohesion: 0.12
+Nodes (36): _build_async_enhanced_capture_reconnect(), build_basic_capture_reconnect(), build_enhanced_capture_reconnect(), ControlState, Keep runtime control ports stable while Enhanced transports are replaced., Keep the runtime UART-send port stable across backend replacement., Build coordinated idle and active reopen for one selected Basic backend., Build coordinated Enhanced reopen through the async host boundary. (+28 more)
 
 ### Community 104 - "Software Architecture"
 Cohesion: 0.43
 Nodes (7): Backend Contract Foundation, Device Connection Module, Log Processing Module, Software Architecture, Thin Delivery Adapters, UART Capture Module, Workflow Orchestration Modules
 
-### Community 105 - "ServiceApiError"
-Cohesion: 0.18
-Nodes (15): Raised when the local Device Core Service returns an error response., ServiceApiError, _display(), format_boot_mode_result(), format_reset_result(), Terminal formatting for DUT action commands., Format a successful DUT boot-mode response., Format a successful DUT reset response. (+7 more)
+### Community 105 - "test_dut.py"
+Cohesion: 0.20
+Nodes (13): _display(), format_boot_mode_result(), format_reset_result(), Terminal formatting for DUT action commands., Format a successful DUT boot-mode response., Format a successful DUT reset response., MonkeyPatch, test_dut_boot_mode_command_reports_service_error() (+5 more)
 
 ### Community 106 - "BackendInputError"
-Cohesion: 0.14
-Nodes (10): _require_matching_basic_snapshot(), _require_matching_enhanced_identity(), BackendInputKind, _ReaderFailure, BackendInputError, BackendMode, Raised when a backend emits malformed or otherwise invalid input., Return the same classified failure with workflow-owned context. (+2 more)
+Cohesion: 0.09
+Nodes (13): BackendInputKind, _ReaderFailure, BackendInputError, BackendMode, RuntimeError, Raised when a backend emits malformed or otherwise invalid input., Return the same classified failure with workflow-owned context., BackendEvent (+5 more)
 
 ### Community 107 - "_validator"
 Cohesion: 0.47
@@ -660,44 +687,44 @@ Cohesion: 0.40
 Nodes (4): $id, oneOf, $schema, title
 
 ### Community 111 - "test_device_core_wait.py"
-Cohesion: 0.48
-Nodes (11): FakeMonotonicClock, parametrize, Path, _runtime(), _store(), test_wait_pattern_discards_pre_cursor_events_and_uses_empty_local_buffer(), test_wait_pattern_excludes_oversized_lines_and_persists_default_matches(), test_wait_pattern_requires_effective_uart_receive_before_session_creation() (+3 more)
+Cohesion: 0.39
+Nodes (14): FakeMonotonicClock, parametrize, Path, Catch capability admission before newer connected monitor health is adopted., _runtime(), _store(), test_wait_pattern_discards_pre_cursor_events_and_uses_empty_local_buffer(), test_wait_pattern_excludes_oversized_lines_and_persists_default_matches() (+6 more)
 
 ### Community 112 - "dutchmate-core"
 Cohesion: 0.50
 Nodes (4): dutchmate-cli, dutchmate-core, dutchmate-mcp-server, dutchmate-service
 
-### Community 113 - "service_client.py"
-Cohesion: 0.08
-Nodes (28): DeviceCoreClientError, DeviceCoreProtocolError, DeviceCoreServiceError, DeviceCoreUnavailableError, _json_object(), NoReturn, Response, RuntimeError (+20 more)
+### Community 113 - "DeviceCoreClient"
+Cohesion: 0.06
+Nodes (35): DeviceCoreClient, DeviceCoreClientError, DeviceCoreProtocolError, DeviceCoreServiceError, DeviceCoreUnavailableError, _json_object(), BaseException, NoReturn (+27 more)
 
-### Community 114 - "test_create_app_applies_startup_hardware_config_when_runtime_is_connected"
-Cohesion: 0.13
-Nodes (10): Read and validate the initial Debug Helper hello message., read_startup_hello(), FakeSerial, FakeTransport, _hello(), DeviceMessage, test_create_app_applies_startup_hardware_config_when_runtime_is_connected(), test_read_startup_hello_rejects_non_hello_message() (+2 more)
+### Community 114 - "FakeDeviceControl"
+Cohesion: 0.25
+Nodes (6): FakeDeviceControl, _hello(), ControlState, DeviceMessage, test_create_app_applies_startup_hardware_config_when_runtime_is_connected(), test_rejected_startup_hardware_config_is_visible_in_status()
 
 ### Community 115 - "test_device_core_lifecycle.py"
 Cohesion: 0.10
 Nodes (28): BlockingCloseCaptureSource, ClosableReconnect, LifecycleCaptureSource, BaseException, FakeMonotonicClock, parametrize, Path, Catch a timed-out reconnect dropping the facade needed for final shutdown. (+20 more)
 
-### Community 126 - "enhanced_serial_io.py"
+### Community 126 - "SerialFrameSink"
 Cohesion: 0.18
-Nodes (12): _close_without_masking_primary(), open_async_enhanced_serial_adapter(), OpenSerialConnection, Concrete stream and exact-write I/O for one Enhanced serial connection., Open, hello-validate, and return one production Enhanced adapter., _run_cleanup(), _serial_asyncio_opener(), _ThreadedSerialFrameWriter (+4 more)
+Nodes (8): _ThreadedSerialFrameWriter, Protocol, Pyserial-compatible surface for exact host frame writes., Return the number of bytes accepted from data., Wait until accepted output is flushed., SerialFrameSink, Fails if a worker-thread write loses exact accepted-byte accounting., test_threaded_writer_preserves_partial_acceptance_error()
 
-### Community 127 - "fixed_id"
-Cohesion: 0.41
-Nodes (12): Create a capture session and return a recorder for it., fixed_id(), Path, read_jsonl(), Path, test_finalize_persists_unterminated_oversized_line_descriptor(), test_record_buffer_overflow_writes_hardware_event(), test_record_buffer_status_writes_hardware_event() (+4 more)
+### Community 127 - ".start"
+Cohesion: 0.37
+Nodes (11): Create a capture session and return a recorder for it., Path, read_jsonl(), Path, test_finalize_persists_unterminated_oversized_line_descriptor(), test_record_buffer_overflow_writes_hardware_event(), test_record_buffer_status_writes_hardware_event(), test_record_event_rejects_unsupported_value() (+3 more)
 
 ### Community 128 - "Enhanced Async Service Integration Design"
 Cohesion: 0.13
 Nodes (14): Acceptance Criteria, Architectural Decision, Command And Event Data Flow, Core Async Semantic Consumers, Enhanced Async Service Integration Design, Failure And Shutdown Semantics, Purpose, Runtime And FastAPI Lifecycle (+6 more)
 
 ### Community 129 - "backend_snapshot"
-Cohesion: 0.17
+Cohesion: 0.15
 Nodes (10): backend_snapshot(), Catches replacement publishing connected health without its validated identity., Catches a failed replacement segment lookup partially publishing the candidate., Catches rejected idle replacement candidates being left open., segment(), test_failed_idle_replacement_publication_closes_candidate(), test_idle_replacement_commits_snapshot_and_next_connection_generation(), test_replacement_segment_failure_closes_candidate_without_publishing() (+2 more)
 
-### Community 130 - "BackendDisconnectedError"
-Cohesion: 0.17
-Nodes (12): Catches an idle reconnect path that requires a synthetic workflow read., Catches an idle claimant detaching a source owned by an active workflow., Catches changing active reconnect callers to require the idle claim path., test_active_terminal_consumption_permits_legacy_reconnect_detach(), test_active_workflow_cannot_claim_idle_disconnect(), test_close_while_ingestion_waits_for_replacement_stops_thread(), test_idle_disconnect_claim_detaches_without_workflow_read(), test_idle_disconnect_is_retained_for_next_workflow() (+4 more)
+### Community 130 - "line_buffer.py"
+Cohesion: 0.15
+Nodes (9): OversizedUartLine, Line buffering for decoded DUT UART bytes., Return the trailing partial line, if any, and clear the buffer., Finalize trailing normal or oversized state at segment/session close., Bounded descriptor for one physical line that exceeded the derived limit., Normal lines and bounded oversized-line facts produced by one input., Consume UART bytes and return complete lines. Returned line `raw` values…, Consume bytes and return normal lines plus bounded overflow facts. (+1 more)
 
 ### Community 131 - "File Responsibility Map"
 Cohesion: 0.18
@@ -707,17 +734,21 @@ Nodes (10): Coordinated Background Reconnect Implementation Plan, File Responsib
 Cohesion: 0.20
 Nodes (9): Enhanced Async Service Integration Implementation Plan, File Responsibility Map, Global Constraints, Task 1: Add Async Enhanced Semantic Consumers, Task 2: Add Atomic Adapter FIFO Discard, Task 3: Implement The Service-Owned Enhanced Async Host, Task 4: Select The Async Host In Enhanced Startup, Task 5: Add Runtime And FastAPI Lifecycle Ownership (+1 more)
 
-### Community 133 - "_StreamWriter"
-Cohesion: 0.15
-Nodes (9): Protocol, Return the next bytes or empty bytes for EOF., Return transport-owned connection information., Begin closing the stream transport., Wait until the stream transport is closed., Open one pyserial-asyncio stream pair., _StreamReader, _StreamTransport (+1 more)
+### Community 133 - "enhanced_serial_io.py"
+Cohesion: 0.12
+Nodes (17): _close_without_masking_primary(), open_async_enhanced_serial_adapter(), OpenSerialConnection, _OwnedStreamReader, Protocol, Concrete stream and exact-write I/O for one Enhanced serial connection., Open, hello-validate, and return one production Enhanced adapter., Return the next bytes or empty bytes for EOF. (+9 more)
 
-### Community 135 - "AsyncEnhancedDeviceControl"
-Cohesion: 0.29
-Nodes (3): AsyncEnhancedDeviceControl, ControlState, Translate semantic control operations through an async Enhanced transport.
+### Community 134 - "send_uart_command"
+Cohesion: 0.19
+Nodes (12): Send one validated text command through the Device Core Service., send_uart_command(), _display(), format_uart_send(), CLI formatting for UART-send outcomes., Format a complete standalone or forced in-session UART send., MonkeyPatch, test_format_forced_send_reports_attempt_and_evidence_pair() (+4 more)
 
-### Community 136 - "StartupConfigRuntime"
-Cohesion: 0.25
-Nodes (6): GpioRoleName, Protocol, Runtime surface needed to apply startup hardware configuration., Return current runtime status., Apply configured hardware control mappings., StartupConfigRuntime
+### Community 135 - "FakeEnhancedAsyncHost"
+Cohesion: 0.18
+Nodes (4): FakeEnhancedAsyncHost, BackendEvent, BaseException, Synchronous test double for the service-owned async Enhanced host.
+
+### Community 136 - "DeviceCoreStatus"
+Cohesion: 0.12
+Nodes (11): Return the current Device Core status., GpioRoleName, Protocol, Runtime surface needed to apply startup hardware configuration., Return current runtime status., Apply configured hardware control mappings., StartupConfigRuntime, Core DUTchMate library. (+3 more)
 
 ### Community 137 - "File Map"
 Cohesion: 0.20
@@ -731,9 +762,9 @@ Nodes (7): Enhanced Asynchronous Serial I/O Implementation Plan, File Responsibi
 Cohesion: 0.50
 Nodes (7): _native_store(), parametrize, Path, test_recent_logs_prefers_active_then_latest_terminal_native(), test_recent_logs_rejects_invalid_line_limit(), test_recent_logs_rejects_legacy_and_malformed_complete_uart_evidence(), test_recent_logs_replays_complete_partial_and_oversized_records()
 
-### Community 140 - "SessionRecoveryResult"
-Cohesion: 0.22
-Nodes (7): Sessions abandoned at startup plus non-fatal compatibility diagnostics., One non-fatal startup-recovery observation for a stored session., SessionRecoveryDiagnostic, SessionRecoveryResult, Most recent startup-recovery result for this store instance., Abandon stale native active sessions without mutating other schemas., Perform startup recovery while the store-wide lock is held.
+### Community 140 - "test_reader_failure_is_repeatable_disconnect"
+Cohesion: 0.18
+Nodes (10): Exception, parametrize, Fails if invalid values can create ambiguous reader or queue bounds., Fails if EOF/read failure is raw, transient, or loses its original cause., Fails if a non-positive or non-finite command timeout reaches the writer., Fails if invalid waits are passed to asyncio instead of rejected at the…, test_constructor_rejects_invalid_bounds(), test_reader_failure_is_repeatable_disconnect() (+2 more)
 
 ### Community 141 - "_UnavailableDeviceControl"
 Cohesion: 0.36
@@ -743,69 +774,157 @@ Nodes (3): ControlState, NoReturn, _UnavailableDeviceControl
 Cohesion: 0.23
 Nodes (10): _display(), format_gpio_mode_result(), Terminal formatting for GPIO control commands., Format a successful GPIO mode configuration response., MonkeyPatch, parametrize, test_format_gpio_mode_result_renders_accepted_mapping(), test_gpio_mode_command_configures_channel() (+2 more)
 
-### Community 144 - "CaptureEventSource"
-Cohesion: 0.13
-Nodes (9): Accept ownership of one validated concrete replacement., Transfer one validated replacement into the stable coordinator., Return the latest timestamp provenance published by the source., _source_segment(), Map one live connection source onto a new session-local segment zero., Advance a wait cursor on the wrapped source when supported., _SessionCaptureSource, CaptureEventSource (+1 more)
+### Community 144 - "_request_after_entering"
+Cohesion: 0.22
+Nodes (11): Event, Fails if pre-transmission cancellation poisons the shared connection., Fails if close strands a consumer or closes its owned reader twice., Fails if close strands waiters, changes errors, or transmits queued work., Fails if close cannot release a transmitted request blocked in the writer., _receive_after_entering(), _request_after_entering(), test_cancel_while_waiting_for_command_lock_keeps_connection() (+3 more)
 
 ### Community 145 - "File Responsibility Map"
 Cohesion: 0.20
 Nodes (9): Continuous Connection Monitoring Implementation Plan, File Responsibility Map, Global Constraints, Requirement Coverage Check, Task 1: Publish Current-Source Connection Health, Task 2: Project Enhanced Integrity Without Double Delivery, Task 3: Reconcile Runtime State Before Observation And Admission, Task 4: Prove Existing Service Status Boundary End To End (+1 more)
 
-### Community 146 - "GpioControlChannelState"
-Cohesion: 0.08
-Nodes (19): Apply startup hardware control mappings., Configure a control channel GPIO mode., _format_utc_timestamp(), GpioControlChannelState, GpioModeRejection, datetime, GpioControlChannel, GpioModeRequestSource (+11 more)
+### Community 146 - "HardwareGpioConfig"
+Cohesion: 0.17
+Nodes (10): Apply startup hardware control mappings., apply_startup_hardware_config(), load_startup_hardware_config(), Path, Load startup hardware configuration, treating a missing file as empty config., Apply startup GPIO mappings if a Debug Helper is already connected., test_apply_startup_hardware_config_skips_disconnected_runtime(), test_load_startup_hardware_config_returns_empty_config_when_missing() (+2 more)
 
-### Community 147 - "SessionMutationLock"
-Cohesion: 0.10
-Nodes (15): CaptureReconnect, CaptureSourceMonitor, CaptureWorkflowLifecycle, BaseException, Protocol, TracebackType, Shared guard that serializes active-session evidence mutations., Acquire the mutation guard. (+7 more)
+### Community 147 - "CaptureReconnect"
+Cohesion: 0.13
+Nodes (11): CaptureReconnect, CaptureSourceMonitor, CaptureWorkflowLifecycle, Protocol, Optional current-source health observation boundary., Return one immutable current-source health snapshot., Optional fresh-cursor lifecycle implemented by continuous sources., Activate one new finite-workflow cursor. (+3 more)
 
-### Community 148 - "_OwnedStreamReader"
-Cohesion: 0.22
-Nodes (4): _OwnedStreamReader, BlockingCloseStreamWriter, Fails if paired stream closure is duplicated or not awaited by all callers., test_owned_stream_reader_delegates_reads_and_shares_close_completion()
+### Community 148 - "BlockingCloseStreamWriter"
+Cohesion: 0.33
+Nodes (3): BlockingCloseStreamWriter, Fails if paired stream closure is duplicated or not awaited by all callers., test_owned_stream_reader_delegates_reads_and_shares_close_completion()
 
 ### Community 149 - "test_transactions.py"
 Cohesion: 0.57
 Nodes (7): _create_active_session(), MonkeyPatch, Path, test_malformed_transaction_blocks_lifecycle_mutation(), test_startup_rolls_back_prepared_interrupted_transaction(), test_uart_unit_rolls_back_every_file_when_metadata_write_fails(), _transaction_artifacts()
 
-### Community 150 - "load_backend_config"
-Cohesion: 0.29
-Nodes (7): load_backend_config(), Any, Path, Load backend/UART configuration from a TOML file., _toml_module(), Path, test_load_backend_config_reads_shared_project_toml()
+### Community 150 - "TransportTimeoutError"
+Cohesion: 0.20
+Nodes (10): Raised when the Debug Helper does not provide a complete message in time., TransportTimeoutError, Fails if response timeout permits reuse of an uncorrelated command stream., Fails if hello timeout leaks the reader or permits a later restart., Fails if a timed-out response leaves the reader or connection reusable., Fails if a missing hello leaks the reader or exposes asyncio timeout errors., test_command_timeout_closes_connection(), test_hello_timeout_is_transport_timeout_then_disconnect() (+2 more)
 
-### Community 151 - "test_main.py"
-Cohesion: 0.33
-Nodes (3): Any, Path, test_service_main_passes_config_to_app_and_host_port_to_uvicorn()
+### Community 151 - "TerminationBarrierAdapter"
+Cohesion: 0.20
+Nodes (5): BlockingAsyncFrameWriter, Pause cleanup after request code has selected its terminal outcome., Fails if cancelling the response future races terminal cause selection., TerminationBarrierAdapter, test_cancellation_selects_terminal_before_response_can_be_orphaned()
 
 ### Community 152 - ".get_session"
 Cohesion: 0.40
 Nodes (3): SessionDetail, Return bounded schema-aware detail for one session., Return bounded session detail without expanding raw evidence arrays.
 
-### Community 153 - "TransportCaptureRunner"
-Cohesion: 0.40
-Nodes (3): Record parsed transport messages until one fixed workflow deadline., Record supported messages until the host-monotonic deadline., TransportCaptureRunner
+### Community 153 - "test_device_message_examples.py"
+Cohesion: 0.46
+Nodes (7): parse_example(), test_parse_buffer_overflow_example(), test_parse_buffer_status_example(), test_parse_error_response_example(), test_parse_hello_example(), test_parse_success_response_example(), test_parse_uart_event_example()
 
 ### Community 154 - "BackendUartSendResult"
-Cohesion: 0.06
-Nodes (32): Publish a newly connected UART-send adapter., Write a complete UART payload, retrying ordered short writes., BackendCapabilityError, BackendUartSendResult, BackendWriteError, RuntimeError, Raised when an operation is disabled or unsupported by the backend., Raised when a backend cannot accept a complete UART payload. (+24 more)
+Cohesion: 0.08
+Nodes (24): Publish a newly connected UART-send adapter., BackendUartSendResult, BackendWriteError, Raised when a backend cannot accept a complete UART payload., Complete backend acceptance of one UART payload., Backend-neutral port for complete UART payload transmission., Submit every payload byte or raise a backend write error., UartSender (+16 more)
 
-### Community 156 - "commands.py"
-Cohesion: 0.11
-Nodes (18): ConfigureGpioModeCommand, _encode_payload(), PulseControlCommand, Host-to-device protocol command encoding., Send raw bytes to the DUT UART RX line., Build a `uart_send` command from UTF-8 text., Configure the electrical behavior of a physical control channel., Pulse one configured physical control channel. (+10 more)
+### Community 156 - "_BoundedNewest"
+Cohesion: 0.40
+Nodes (3): _BoundedNewest, _T, Retain the newest coordinate-ordered records with bounded memory.
 
 ### Community 157 - "File Responsibility Map"
 Cohesion: 0.20
 Nodes (9): File Responsibility Map, Global Constraints, Service-Owned Continuous Ingestion Implementation Plan, Startup Composition, Task 1: Add The Backend-Neutral Workflow Cursor Lifecycle, Task 2: Implement Idle Drain And Active Lossless FIFO, Task 3: Add Terminal Ordering, Source Replacement, And Deterministic Close, Task 4: Reconnect And Compose Through The Stable Coordinator (+1 more)
 
 ### Community 158 - "test_host_command_encoder.py"
-Cohesion: 0.08
-Nodes (39): configure_gpio_mode_command(), pulse_control_command(), Build a validated `configure_gpio_mode` command., Build a validated `pulse_control` command., Build a validated `set_control_state` command., Build a validated `uart_send` command from raw bytes., set_control_state_command(), uart_send_command() (+31 more)
+Cohesion: 0.06
+Nodes (54): configure_gpio_mode_command(), ConfigureGpioModeCommand, _encode_payload(), pulse_control_command(), PulseControlCommand, Host-to-device protocol command encoding., Send raw bytes to the DUT UART RX line., Build a validated `configure_gpio_mode` command. (+46 more)
 
-### Community 159 - "BackendSettings"
-Cohesion: 0.11
-Nodes (19): build_basic_capture_reconnect(), OpenBasicConnection, Build coordinated idle and active reopen for one selected Basic backend., Open one raw Basic connection from resolved settings., Return an opened Basic connection., _basic_settings(), FakeBasicSerial, test_basic_active_candidate_uses_coordinator_and_replaces_sender() (+11 more)
+### Community 160 - "validate_session_max_size_mb"
+Cohesion: 0.40
+Nodes (6): Return a positive per-session evidence budget in MiB units., Convert a validated per-session MiB setting to exact evidence bytes., session_evidence_budget_bytes(), validate_session_max_size_mb(), test_session_max_size_accepts_positive_mib_values(), test_session_max_size_rejects_non_positive_integers()
 
-### Community 162 - "apply_startup_hardware_config"
-Cohesion: 0.67
-Nodes (3): apply_startup_hardware_config(), Apply startup GPIO mappings if a Debug Helper is already connected., test_apply_startup_hardware_config_skips_disconnected_runtime()
+### Community 161 - ".feed"
+Cohesion: 0.40
+Nodes (4): _frame_body(), DeviceMessage, Consume a serial byte chunk and return parsed complete messages., Return one exact JSON object body after removing one optional CR.
+
+### Community 162 - "project_diagnostic_detail"
+Cohesion: 0.40
+Nodes (4): project_diagnostic_detail(), Bounded diagnostic projection shared by persistence and delivery adapters., Return a sanitized, non-empty diagnostic and whether it was truncated., _bounded_error()
+
+### Community 164 - "Q: commit and tell me what is next development step in phase-1"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: commit and tell me what is next development step in phase-1, Source Nodes
+
+### Community 165 - "Q: Before that what does Zephyr DUT exactly do and what is its use?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Before that what does Zephyr DUT exactly do and what is its use?, Source Nodes
+
+### Community 166 - "Q: What does DMF stands for"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: What does DMF stands for, Source Nodes
+
+### Community 167 - "Q: I am ready to flash the pico."
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: I am ready to flash the pico., Source Nodes
+
+### Community 168 - "Q: Drive disappears and the tx and rx are connected to the USB-to-UART adapter. The adapter is connected to host."
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Drive disappears and the tx and rx are connected to the USB-to-UART adapter. The adapter is connected to host., Source Nodes
+
+### Community 169 - "Q: commit and go to next step"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: commit and go to next step, Source Nodes
+
+### Community 170 - "Q: move to next step"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: move to next step, Source Nodes
+
+### Community 171 - "Q: Remove host role and DUT signal metadata from firmware-facing configure_gpio_mode commands while preserving host policy"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Remove host role and DUT signal metadata from firmware-facing configure_gpio_mode commands while preserving host policy, Source Nodes
+
+### Community 172 - "Q: Trace and enforce exact Enhanced device-to-host NDJSON frame boundaries"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Trace and enforce exact Enhanced device-to-host NDJSON frame boundaries, Source Nodes
+
+### Community 173 - "Q: Trace hello firmware and device identity validation through the protocol parser, schema, and tests."
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Trace hello firmware and device identity validation through the protocol parser, schema, and tests., Source Nodes
+
+### Community 174 - "Q: Where is the shared Enhanced host-command encoding and dispatch boundary?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Where is the shared Enhanced host-command encoding and dispatch boundary?, Source Nodes
+
+### Community 175 - "Q: How should Enhanced serial command short writes complete or report partial acceptance?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: How should Enhanced serial command short writes complete or report partial acceptance?, Source Nodes
+
+### Community 176 - "Q: How should Phase 1 introduce the continuous asynchronous Enhanced serial adapter without competing readers?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: How should Phase 1 introduce the continuous asynchronous Enhanced serial adapter without competing readers?, Source Nodes
+
+### Community 177 - "Q: What is the approved Phase 1 design boundary for the first Enhanced asynchronous serial adapter slice?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: What is the approved Phase 1 design boundary for the first Enhanced asynchronous serial adapter slice?, Source Nodes
+
+### Community 178 - "Q: What is the next Phase 1 development step after pushing main?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: What is the next Phase 1 development step after pushing main?, Source Nodes
+
+### Community 179 - "Q: What remains in Phase 1 before proceeding with the Enhanced async service integration design?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: What remains in Phase 1 before proceeding with the Enhanced async service integration design?, Source Nodes
+
+### Community 180 - "Q: How should the service-owned continuous ingestion coordinator fit the current backend, runtime, session, and reconnect boundaries?"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: How should the service-owned continuous ingestion coordinator fit the current backend, runtime, session, and reconnect boundaries?, Source Nodes
+
+### Community 181 - "Q: Create a detailed implementation plan for the approved service-owned continuous ingestion coordinator design"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Create a detailed implementation plan for the approved service-owned continuous ingestion coordinator design, Source Nodes
+
+### Community 182 - "Q: Create implementation plan for approved continuous connection monitoring design"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: Create implementation plan for approved continuous connection monitoring design, Source Nodes
+
+### Community 183 - "Q: done, what is the next steps to finish phase 1"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: done, what is the next steps to finish phase 1, Source Nodes
+
+### Community 184 - "test_close_wakes_idle_disconnect_waiter"
+Cohesion: 0.50
+Nodes (3): Wait until an idle source disconnect can be claimed for replacement., Catches close leaving an idle reconnect waiter blocked until its timeout., test_close_wakes_idle_disconnect_waiter()
 
 ## Ambiguous Edges - Review These
 - `Phase 1A Basic Backend` → `Normalized Backend Contract`  [AMBIGUOUS]
@@ -814,9 +933,23 @@ Nodes (3): apply_startup_hardware_config(), Apply startup GPIO mappings if a Deb
   docs/phase1_implementation_spec.md · relation: implements
 
 ## Knowledge Gaps
-- **251 isolated node(s):** `dutchmate-cli`, `dutchmate-mcp-server`, `dutchmate-service`, `$schema`, `$id` (+246 more)
+- **311 isolated node(s):** `dutchmate-cli`, `dutchmate-mcp-server`, `dutchmate-service`, `$schema`, `$id` (+306 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+
+## Work-memory lessons
+
+**Preferred sources** — corroborated by past sessions; start here.
+- `EnhancedDeviceControl` (7× useful, score=6.327597127) _(code changed — re-verify)_
+- `Reconnect and Session Semantics` (4× useful, score=3.847314065)
+- `DeviceCoreRuntime` (4× useful, score=3.797785478) _(code changed — re-verify)_
+- `BackendEventSource` (4× useful, score=3.7401366)
+- `Continuous Ingestion and Async Enhanced Adapter` (3× useful, score=2.847397054) _(code changed — re-verify)_
+- `CaptureWorkflow` (3× useful, score=2.804070547) _(code changed — re-verify)_
+- `SerialCommandTransport` (3× useful, score=2.737769252) _(code changed — re-verify)_
+- `NdjsonStreamParser` (3× useful, score=2.735739733)
+- `Phase 1 Implementation Spec` (2× useful, score=1.935276262)
+- `Firmware RAM Report` (2× useful, score=1.935276262)
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -825,12 +958,12 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: implements) - confidence is low._
 - **What is the exact relationship between `Phase 1B Enhanced Backend` and `Normalized Backend Contract`?**
   _Edge tagged AMBIGUOUS (relation: implements) - confidence is low._
-- **Why does `SessionStore` connect `SessionStore` to `fixed_clock`, `EnhancedDeviceControl`, `test_log_replay.py`, `SessionRecoveryResult`, `SegmentContext`, `UartReceiveEvent`, `test_transactions.py`, `models.py`, `test_retrieval.py`, `SessionListPage`, `evidence.py`, `test_basic.py`, `DeviceCoreRuntime`, `CaptureSourceHealth`, `store.py`, `modes.py`, `test_app_lifecycle.py`, `test_device_core_uart_send.py`, `test_capture_workflows.py`, `retrieval.py`, `test_startup_config.py`, `SessionPersistenceError`, `test_capture_reconnect.py`, `test_baseline.py`, `test_recovery.py`, `test_retention.py`, `test_reconnect_evidence.py`, `FakeTransport`, `test_connection_monitoring.py`, `test_comparison.py`, `FakeMonotonicClock`, `test_real_coordinator_discards_idle_basic_event_before_capture`, `test_device_core_wait.py`, `test_create_app_applies_startup_hardware_config_when_runtime_is_connected`, `test_device_core_lifecycle.py`, `fixed_id`?**
-  _High betweenness centrality (0.098) - this node is a cross-community bridge._
-- **Why does `SegmentContext` connect `SegmentContext` to `ReconnectedCaptureSource`, `backend_snapshot`, `fixed_clock`, `EnhancedDeviceControl`, `metadata.py`, `CaptureEventSource`, `SessionMutationLock`, `UartReceiveEvent`, `models.py`, `TransportCaptureRunner`, `BackendUartSendResult`, `test_contracts.py`, `test_enhanced.py`, `DeviceCoreRuntime`, `EnhancedAsyncHost`, `CaptureSourceHealth`, `store.py`, `enhanced.py`, `BasicBackendEventSource`, `modes.py`, `SessionStore`, `test_capture_workflows.py`, `retrieval.py`, `test_startup_config.py`, `DeviceControl`, `test_capture_reconnect.py`, `CaptureRecorder`, `test_reconnect_evidence.py`, `CaptureWorkflow`, `test_comparison.py`, `backend_reconnect.py`, `BackendInputError`, `test_device_core_lifecycle.py`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
-- **Why does `DeviceCoreRuntime` connect `DeviceCoreRuntime` to `ReconnectedCaptureSource`, `UartLine`, `EnhancedDeviceControl`, `test_validation.py`, `CaptureEventSource`, `SegmentContext`, `GpioControlChannelState`, `UartReceiveEvent`, `SessionMutationLock`, `.get_session`, `models.py`, `BackendUartSendResult`, `DeviceActionResult`, `SessionListPage`, `GpioModeRegistry`, `CaptureSourceHealth`, `store.py`, `test_app_lifecycle.py`, `DeviceCoreSessionStorage`, `test_device_core_uart_send.py`, `SessionStore`, `retrieval.py`, `test_startup_config.py`, `DeviceControl`, `device_actions.py`, `InputValidationError`, `WaitPatternResult`, `FakeTransport`, `CaptureWorkflow`, `test_connection_monitoring.py`, `BackendInputError`, `test_device_core_wait.py`, `test_create_app_applies_startup_hardware_config_when_runtime_is_connected`, `test_device_core_lifecycle.py`?**
-  _High betweenness centrality (0.048) - this node is a cross-community bridge._
+- **Why does `SegmentContext` connect `SegmentContext` to `backend_snapshot`, `FakeEnhancedAsyncHost`, `DeviceCoreStatus`, `UartReceiveEvent`, `FakeMonotonicClock`, `metadata.py`, `create_app`, `UartCaptureProcessor`, `CaptureEventSource`, `SessionStore`, `BackendUartSendResult`, `test_contracts.py`, `.__init__`, `enhanced.py`, `DeviceCoreRuntime`, `EnhancedAsyncHost`, `UartIntegrity`, `AsyncEnhancedSerialAdapter`, `BasicBackendEventSource`, `helpers.py`, `store.py`, `SessionHandle`, `test_capture_workflows.py`, `test_startup_config.py`, `backend_reconnect.py`, `test_capture_reconnect.py`, `runtime.py`, `CaptureRecorder`, `test_reconnect_evidence.py`, `CaptureWorkflow`, `test_comparison.py`, `test_real_coordinator_discards_idle_basic_event_before_capture`, `test_backend_reconnect.py`, `BackendInputError`, `test_device_core_wait.py`, `test_device_core_lifecycle.py`?**
+  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+- **Why does `SessionStore` connect `SessionStore` to `UartReceiveEvent`, `FakeMonotonicClock`, `test_log_replay.py`, `SegmentContext`, `UartCaptureProcessor`, `test_transactions.py`, `comparison.py`, `SessionListPage`, `test_basic.py`, `UartIntegrity`, `session_store/baseline.py`, `helpers.py`, `test_app_lifecycle.py`, `store.py`, `test_device_core_uart_send.py`, `SessionHandle`, `test_capture_workflows.py`, `retrieval.py`, `test_startup_config.py`, `persistence.py`, `test_capture_reconnect.py`, `test_baseline.py`, `BufferStatusEvent`, `test_retention.py`, `test_reconnect_evidence.py`, `FakeDeviceControl`, `BackendDisconnectedError`, `test_comparison.py`, `test_real_coordinator_discards_idle_basic_event_before_capture`, `test_device_core_wait.py`, `FakeDeviceControl`, `test_device_core_lifecycle.py`, `.start`?**
+  _High betweenness centrality (0.062) - this node is a cross-community bridge._
+- **Why does `UartReceiveEvent` connect `UartReceiveEvent` to `ContinuousIngestionCoordinator`, `FakeMonotonicClock`, `test_log_replay.py`, `SegmentContext`, `UartCaptureProcessor`, `test_transactions.py`, `SessionStore`, `test_contracts.py`, `test_enhanced.py`, `enhanced.py`, `evidence.py`, `test_basic.py`, `EnhancedAsyncHost`, `FakeAsyncSerialReader`, `make_adapter`, `BasicBackendEventSource`, `helpers.py`, `store.py`, `test_device_core_uart_send.py`, `SessionHandle`, `test_capture_workflows.py`, `test_startup_config.py`, `test_capture_reconnect.py`, `FakeAsyncFrameWriter`, `CaptureRecorder`, `test_enhanced_serial.py`, `test_comparison.py`, `test_real_coordinator_discards_idle_basic_event_before_capture`, `test_backend_reconnect.py`, `BackendInputError`, `test_device_core_wait.py`, `.start`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
 - **Are the 181 inferred relationships involving `SessionStore` (e.g. with `build_startup_runtime()` and `test_app_lifespan_closes_runtime_coordinator_and_ingestion_thread()`) actually correct?**
   _`SessionStore` has 181 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 91 inferred relationships involving `DeviceCoreRuntime` (e.g. with `test_app_lifespan_closes_runtime_coordinator_and_ingestion_thread()` and `test_first_status_after_idle_replacement_projects_new_telemetry()`) actually correct?**

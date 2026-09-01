@@ -2,7 +2,12 @@ from pathlib import Path
 from threading import Event, Thread
 
 import pytest
-from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
+from runtime_test_support import (
+    FakeCaptureSource,
+    FakeDeviceControl,
+    FakeMonotonicClock,
+    enhanced_info,
+)
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -12,7 +17,6 @@ from dutchmate_core.backends import (
     UartIntegrity,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.capture import ReconnectedCaptureSource
@@ -24,7 +28,7 @@ def test_runtime_close_closes_current_source_once(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([], clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         session_store=SessionStore(root=tmp_path),
     )
@@ -43,7 +47,7 @@ def test_runtime_close_stops_reconnect_before_closing_source(tmp_path: Path) -> 
     source = TracingCaptureSource(clock=clock, trace=trace)
     reconnect = ClosableReconnect(trace=trace)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -70,7 +74,7 @@ def test_runtime_close_retains_reconnect_error_and_continues_source_cleanup(
     )
     reconnect = ClosableReconnect(trace=trace, close_error=reconnect_error)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -101,7 +105,7 @@ def test_runtime_reconnect_keeps_stable_facade_as_message_source(
         return ReconnectedCaptureSource(source=facade, backend_snapshot=snapshot)
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=facade,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -137,7 +141,7 @@ def test_runtime_restores_stable_facade_when_reconnect_returns_none(
         return None
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=facade,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -163,7 +167,7 @@ def test_concurrent_runtime_closers_wait_for_and_share_cleanup_error(tmp_path: P
     clock = FakeMonotonicClock()
     source = BlockingCloseCaptureSource(clock=clock, close_error=close_error)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         session_store=SessionStore(root=tmp_path),
     )
@@ -230,7 +234,7 @@ def test_runtime_close_during_reconnect_waits_and_rejects_replacement(
         return ReconnectedCaptureSource(source=facade, backend_snapshot=snapshot)
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=facade,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -312,7 +316,7 @@ def test_reconnect_after_runtime_close_does_not_open_backend(tmp_path: Path) -> 
         raise AssertionError("closed runtime attempted to reopen a backend")
 
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=initial,
         session_store=SessionStore(root=tmp_path),
         backend_reconnect=reconnect,
@@ -337,7 +341,7 @@ def test_runtime_close_publishes_disconnected_status(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([], clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         session_store=SessionStore(root=tmp_path),
     )
@@ -364,7 +368,7 @@ def test_session_capture_source_delegates_cursor_lifecycle_for_nonzero_segment(
     source = LifecycleCaptureSource([None], clock=clock, trace=trace)
     source.segment = _replacement_snapshot(segment_id=3).segment
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),

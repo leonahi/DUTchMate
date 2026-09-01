@@ -11,13 +11,6 @@ from dutchmate_core.device_connection.parser import DeviceMessage
 TransportWriteErrorCode: TypeAlias = Literal["hardware_fault", "timeout"]
 
 
-class CommandTransport(Protocol):
-    """Transport capable of sending one host command and returning its response."""
-
-    def request(self, command: bytes) -> DeviceMessage:
-        """Send one encoded command and return one parsed device response."""
-
-
 class AsyncCommandTransport(Protocol):
     """Asynchronous one-at-a-time host command exchange."""
 

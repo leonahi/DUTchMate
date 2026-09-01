@@ -11,12 +11,12 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A is accepted; both selected backends now
   reconnect while idle and during active finite workflows through one service
   coordinator. Production Enhanced startup and each replacement use exactly one
-  async host. Final review fixes reconcile newer connected health before
-  capability admission, reject capability-incompatible replacements, and retain
-  failed candidate cleanup; only the obsolete synchronous compatibility path
-  remains to migrate.
-- **Next step:** Remove the obsolete synchronous compatibility path after all
-  production consumers migrate.
+  async host. The obsolete synchronous Enhanced command/source, hello, startup,
+  and reconnect compatibility path is removed; shared runtime/workflow tests now
+  use backend-neutral semantic fakes, while wire behavior remains covered at the
+  async adapter boundary.
+- **Next step:** Begin Step 5 by adding the Zephyr RP2040 Debug Helper
+  application using the normative Revision A pin map.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -36,9 +36,8 @@ using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
 adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
-and active reconnect are complete. Production Enhanced reconnect remains async;
-the synchronous compatibility path still requires removal, and RP2040 firmware
-plus prototype/ring-buffer/HIL validation have not run.
+and active reconnect are complete. The Enhanced host stack is async-only;
+RP2040 firmware plus prototype/ring-buffer/HIL validation have not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -46,7 +45,7 @@ plus prototype/ring-buffer/HIL validation have not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, and coordinated idle/active reconnect are complete. Final review fixes preserve reconnect capability compatibility and retained candidate-cleanup failures; production startup and each replacement use exactly one async host, while the obsolete synchronous compatibility path remains to be removed. |
+| Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -58,21 +57,24 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on final-review implementation commit
+Sync-path removal working tree based on implementation commit
 `747667d75942987a5a0cf7206754368dd12abd3d`, reviewed 2026-09-01:
 
-- Focused reconnect/runtime gate passed: 96 tests across backend reconnect,
-  startup configuration, wait-pattern, connection-monitoring, and UART-send
-  coverage.
+- Focused removal gate passed: 195 tests across Enhanced adapter,
+  serial-frame writing, reconnect/startup, runtime, GPIO configuration, and
+  device-action workflow coverage.
 - Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`.
-- Mypy: `.venv/bin/mypy` passed with no issues in 73 source
-  files.
-- Full Pytest: `.venv/bin/pytest` passed: 1,210 passed with zero failures.
+- Mypy: `.venv/bin/mypy` passed with no issues in 73 source files.
+- Full Pytest: `.venv/bin/pytest` passed: 1,173 passed with zero failures.
 - `git diff --check`: passed with no whitespace errors.
+- Exact stale-reference search found no remaining synchronous Enhanced adapter,
+  transport, hello, startup, or reconnect compatibility symbols outside
+  historical design/implementation records.
 - The dependency-direction search for `apps` or `dutchmate_service` imports in
   `core/src` returned no matches.
-- Graphify: not refreshed for this localized final-review correction; module
-  ownership, dependency direction, and graph artifacts are unchanged.
+- Graphify code update completed with 4,078 nodes, 11,006 edges, and 191
+  communities. Its parser reported the existing Zephyr fixture header as a
+  partial-extraction warning; source compilation/tests remain authoritative.
 
 ## Already Complete — Do Not Reimplement
 
@@ -106,6 +108,8 @@ The following items are no longer backlog work:
 - coordinated idle and active reconnect for Basic and Enhanced, with production
   Enhanced startup and replacement retained on one async host, capability-
   compatible publication, and retained rejected-candidate cleanup failures.
+- removal of the obsolete synchronous Enhanced command/source, hello, startup,
+  and reconnect compatibility path.
 
 ## Active Queue — Phase 1
 
@@ -183,8 +187,7 @@ remaining.
 - [x] Migrate Enhanced semantic control and UART-send consumers plus service
   lifecycle ownership, then select the async factory without creating a second
   reader. Enhanced startup and coordinated reconnect now use the same async
-  host/adapter opener; the synchronous `SerialCommandTransport` remains only on
-  the obsolete compatibility path.
+  host/adapter opener.
 - [x] Add one service-owned continuous ingestion coordinator for the selected
   backend. It may consume the Basic adapter's existing async FIFO boundary but
   must not create a second Basic serial reader.
@@ -193,7 +196,7 @@ remaining.
 - [x] Coordinate reconnect, hello/identity validation, source replacement, and
   segment origins without creating a second processing pipeline. Both backends
   now reconnect while idle and active; production Enhanced stays async.
-- [ ] Remove the obsolete synchronous compatibility path after all production
+- [x] Remove the obsolete synchronous compatibility path after all production
   consumers migrate.
 
 Exit gate: shared fake-backend and transport tests cover interleaving,

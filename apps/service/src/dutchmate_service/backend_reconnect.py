@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from contextlib import suppress
 from threading import Condition, Event, RLock, Thread, current_thread
 from typing import Protocol, cast
 
@@ -26,17 +25,7 @@ from dutchmate_core.backends.contracts import (
     apply_capability_policy,
     integrity_for_backend,
 )
-from dutchmate_core.backends.enhanced import (
-    EnhancedCaptureEventSource,
-    EnhancedDeviceControl,
-    EnhancedUartSender,
-    backend_input_error_from_protocol,
-    normalize_enhanced_hello,
-)
 from dutchmate_core.backends.settings import BackendSettings
-from dutchmate_core.device_connection.errors import ProtocolError
-from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
     ReconnectedCaptureSource,
@@ -84,18 +73,6 @@ class OpenBasicConnection(Protocol):
         """Return an opened Basic connection."""
 
 
-class OpenEnhancedTransport(Protocol):
-    """Open one Enhanced serial command transport."""
-
-    def __call__(
-        self,
-        *,
-        port: str,
-        baudrate: int,
-    ) -> SerialCommandTransport:
-        """Return an opened Enhanced command transport."""
-
-
 class EnhancedReconnectHost(CaptureEventSource, DeviceControl, UartSender, Protocol):
     """Ready async Enhanced host used as source, control, and UART sender."""
 
@@ -120,15 +97,6 @@ class OpenEnhancedHost(Protocol):
         baudrate: int,
         segment_id: int,
     ) -> EnhancedReconnectHost: ...
-
-
-class _LegacyOpenCaptureReplacement(Protocol):
-    def __call__(
-        self,
-        *,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource: ...
 
 
 class _CandidateCleanupFailure(Exception):
@@ -452,77 +420,6 @@ class BackendReconnectCoordinator:
             self._condition.notify_all()
 
 
-class RetryingCaptureReconnect:
-    """Retry backend opening within the workflow-supplied monotonic deadline."""
-
-    def __init__(
-        self,
-        *,
-        source_owner: ReplaceableCaptureSource,
-        open_replacement: _LegacyOpenCaptureReplacement,
-        on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
-        monotonic_clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
-        retry_interval_s: float = 0.1,
-    ) -> None:
-        if retry_interval_s <= 0:
-            raise ValueError("reconnect retry interval must be positive")
-        self._source_owner = source_owner
-        self._open_replacement = open_replacement
-        self._on_connected = on_connected
-        self._clock = monotonic_clock
-        self._sleep = sleep
-        self._retry_interval_s = retry_interval_s
-
-    def __call__(
-        self,
-        *,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource | None:
-        self._source_owner.close_current_source_for_reconnect()
-        while self._clock() < deadline:
-            try:
-                replacement = self._open_replacement(
-                    segment_id=segment_id,
-                    deadline=deadline,
-                )
-            except BackendInputError:
-                raise
-            except Exception:
-                self._wait_for_retry(deadline)
-                continue
-            if self._clock() >= deadline:
-                self._close_source(replacement.source)
-                return None
-            self._source_owner.replace_source(replacement.source)
-            try:
-                if self._on_connected is not None:
-                    self._on_connected(replacement)
-            except BaseException:
-                with suppress(BaseException):
-                    self._source_owner.close()
-                raise
-            return ReconnectedCaptureSource(
-                source=self._source_owner,
-                backend_snapshot=replacement.backend_snapshot,
-            )
-        return None
-
-    def _wait_for_retry(self, deadline: float) -> None:
-        remaining_s = deadline - self._clock()
-        if remaining_s > 0:
-            self._sleep(min(self._retry_interval_s, remaining_s))
-
-    @staticmethod
-    def _close_source(source: CaptureEventSource) -> None:
-        close = getattr(source, "close", None)
-        if not callable(close):
-            return
-        with suppress(BaseException):
-            close()
-
-
 class ReplaceableDeviceControl:
     """Keep runtime control ports stable while Enhanced transports are replaced."""
 
@@ -644,43 +541,24 @@ def build_enhanced_capture_reconnect(
     expected_snapshot: BackendSnapshot | None = None,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
+    open_host: OpenEnhancedHost,
     monotonic_clock: Callable[[], float],
     sleep: Callable[[float], None],
-    open_host: OpenEnhancedHost | None = None,
-    open_transport: OpenEnhancedTransport | None = None,
 ) -> BackendReconnectCoordinator:
     """Build coordinated Enhanced reopen through the async host boundary."""
 
-    if (open_host is None) == (open_transport is None):
-        raise ValueError(
-            "Enhanced reconnect requires exactly one opener: async host or legacy transport"
-        )
     expected_snapshot = expected_snapshot or backend_snapshot(
         info=expected_info,
         segment=None,
         tx_enabled=settings.tx_enabled,
     )
-
-    if open_host is not None:
-        return _build_async_enhanced_capture_reconnect(
-            settings=settings,
-            source_owner=source_owner,
-            expected_snapshot=expected_snapshot,
-            control=control,
-            sender=sender,
-            open_host=open_host,
-            monotonic_clock=monotonic_clock,
-            sleep=sleep,
-        )
-
-    assert open_transport is not None
-    return _build_legacy_enhanced_capture_reconnect(
+    return _build_async_enhanced_capture_reconnect(
         settings=settings,
         source_owner=source_owner,
         expected_snapshot=expected_snapshot,
         control=control,
         sender=sender,
-        open_transport=open_transport,
+        open_host=open_host,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
     )
@@ -761,118 +639,6 @@ def _build_async_enhanced_capture_reconnect(
         monotonic_clock=monotonic_clock,
         sleep=sleep,
     )
-
-
-def _build_legacy_enhanced_capture_reconnect(
-    *,
-    settings: BackendSettings,
-    source_owner: ReplaceableCaptureSource,
-    expected_snapshot: BackendSnapshot,
-    control: ReplaceableDeviceControl,
-    sender: ReplaceableUartSender,
-    open_transport: OpenEnhancedTransport,
-    monotonic_clock: Callable[[], float],
-    sleep: Callable[[float], None],
-) -> BackendReconnectCoordinator:
-    """Keep unchanged startup callers working until they select ``open_host``."""
-
-    opened_adapters: dict[int, tuple[EnhancedDeviceControl, EnhancedUartSender]] = {}
-
-    def open_replacement(
-        *,
-        segment_id: int,
-        deadline: float | None,
-        stop_requested: Event,
-    ) -> ReconnectedCaptureSource:
-        if stop_requested.is_set():
-            raise RuntimeError("backend reconnect coordinator is closing")
-        serial_port = settings.serial_port
-        if serial_port is None:
-            raise ValueError("Enhanced reconnect requires an explicit serial port")
-        transport = open_transport(
-            port=serial_port,
-            baudrate=settings.baudrate,
-        )
-        try:
-            try:
-                hello = read_enhanced_hello(transport)
-            except BackendInputError:
-                raise
-            except ProtocolError as exc:
-                raise backend_input_error_from_protocol(exc) from exc
-            except RuntimeError as exc:
-                raise BackendInputError(str(exc), backend_mode="enhanced") from exc
-            info = normalize_enhanced_hello(hello, port=serial_port)
-            _require_matching_enhanced_snapshot(
-                expected_snapshot,
-                backend_snapshot(
-                    info=info,
-                    segment=None,
-                    tx_enabled=settings.tx_enabled,
-                ),
-            )
-            source = EnhancedCaptureEventSource(
-                transport,
-                segment_id=segment_id,
-                source_origin_us=None,
-            )
-            if deadline is not None:
-                while source.segment is None and monotonic_clock() < deadline:
-                    source.prime_segment()
-                if source.segment is None:
-                    raise TimeoutError(
-                        "Enhanced timestamp provenance was not established"
-                    )
-            replacement = ReconnectedCaptureSource(
-                source=source,
-                backend_snapshot=backend_snapshot(
-                    info=info,
-                    segment=source.segment,
-                    tx_enabled=settings.tx_enabled,
-                ),
-            )
-            opened_adapters[id(source)] = (
-                EnhancedDeviceControl(transport),
-                EnhancedUartSender(transport),
-            )
-            return replacement
-        except BaseException as primary_error:
-            cleanup_error = _close_unpublished_candidate(transport)
-            if cleanup_error is not None:
-                raise _CandidateCleanupFailure(
-                    primary_error=primary_error,
-                    cleanup_error=cleanup_error,
-                ) from primary_error
-            raise
-
-    def publish_control(replacement: ReconnectedCaptureSource) -> None:
-        replacement_control, replacement_sender = opened_adapters.pop(
-            id(replacement.source)
-        )
-        control.replace(replacement_control)
-        sender.replace(replacement_sender)
-
-    def discard_adapters(replacement: ReconnectedCaptureSource) -> None:
-        opened_adapters.pop(id(replacement.source), None)
-
-    return BackendReconnectCoordinator(
-        source_owner=source_owner,
-        open_replacement=open_replacement,
-        on_connected=publish_control,
-        on_rejected=discard_adapters,
-        monotonic_clock=monotonic_clock,
-        sleep=sleep,
-    )
-
-
-def read_enhanced_hello(transport: SerialCommandTransport) -> HelloMessage:
-    """Read and validate one Debug Helper hello message."""
-
-    message = transport.read_message()
-    if not isinstance(message, HelloMessage):
-        message_name = type(message).__name__
-        raise RuntimeError(f"Expected Debug Helper hello message, got {message_name}")
-    return message
 
 
 def backend_snapshot(

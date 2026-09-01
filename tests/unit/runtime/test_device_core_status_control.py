@@ -2,9 +2,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from runtime_test_support import FakeTransport, enhanced_info
+from runtime_test_support import FakeDeviceControl, enhanced_info
 
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
@@ -15,7 +14,7 @@ from dutchmate_core.workflows.device_actions import DeviceActionError, DeviceAct
 
 def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=SessionStore(root=tmp_path),
         port="/dev/ttyACM0",
     )
@@ -38,7 +37,7 @@ def test_initial_status_is_disconnected_with_unconfigured_gpio(tmp_path: Path) -
 
 def test_record_backend_connection_updates_status(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=SessionStore(root=tmp_path),
     )
 
@@ -61,7 +60,7 @@ def test_tx_policy_cannot_manufacture_unreported_backend_capability(
     tmp_path: Path,
 ) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=SessionStore(root=tmp_path),
         tx_policy_enabled=True,
     )
@@ -77,7 +76,7 @@ def test_tx_policy_cannot_manufacture_unreported_backend_capability(
 
 def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         session_store=SessionStore(root=tmp_path),
     )
     config = parse_hardware_gpio_config({})
@@ -87,14 +86,14 @@ def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
 
 
 def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=200),
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
@@ -122,11 +121,25 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
 
     states = runtime.apply_hardware_config(config)
 
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL1",'
-        b'"mode":"push_pull","active_level":"high","idle_level":"low"}\n',
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        ),
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL1",
+                "mode": "push_pull",
+                "active_level": "high",
+                "idle_level": "low",
+            },
+        ),
     ]
     assert states["reset"].state == "configured"
     assert states["reset"].channel == "CTRL0"
@@ -143,14 +156,14 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
 def test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(
     tmp_path: Path,
 ) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=200),
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info())
@@ -174,7 +187,7 @@ def test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(
 def test_uncertain_boot_command_failure_invalidates_prior_command(
     tmp_path: Path,
 ) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=200),
@@ -183,7 +196,7 @@ def test_uncertain_boot_command_failure_invalidates_prior_command(
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info())
@@ -211,7 +224,7 @@ def test_uncertain_boot_command_failure_invalidates_prior_command(
 def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
     tmp_path: Path,
 ) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=200),
@@ -220,7 +233,7 @@ def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info())
@@ -249,14 +262,14 @@ def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
 
 
 def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
-    transport = FakeTransport(
+    control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
             CommandSuccessMessage(timestamp_us=300),
         ]
     )
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport),
+        device_control=control,
         session_store=SessionStore(root=tmp_path),
         action_wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
     )
@@ -277,17 +290,24 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
         performed_at="2026-08-21T10:00:00Z",
         device_timestamp_us=300,
     )
-    assert transport.requests == [
-        b'{"cmd":"configure_gpio_mode","channel":"CTRL0",'
-        b'"mode":"open_drain","active_level":"low"}\n',
-        b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":250}\n',
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
+        ),
+        ("pulse_control", {"channel": "CTRL0", "pulse_ms": 250}),
     ]
 
 
 def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Path) -> None:
-    transport = FakeTransport([CommandSuccessMessage(timestamp_us=100)])
+    control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(transport), session_store=SessionStore(root=tmp_path)
+        device_control=control, session_store=SessionStore(root=tmp_path)
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.configure_gpio_mode(

@@ -4,51 +4,67 @@ from dutchmate_core.backends import (
     BackendCapability,
     BackendEvent,
     BackendInfo,
+    DeviceControlError,
     SegmentContext,
     SegmentTimestamp,
 )
+from dutchmate_core.backends.contracts import ControlState
+from dutchmate_core.device_connection.messages import CommandErrorMessage, CommandSuccessMessage
 from dutchmate_core.device_connection.parser import DeviceMessage
 
 
-class FakeTransport:
-    def __init__(self, responses: list[DeviceMessage] | None = None) -> None:
-        self.responses = responses or []
-        self.requests: list[bytes] = []
-
-    def request(self, command: bytes) -> DeviceMessage:
-        self.requests.append(command)
-        if not self.responses:
-            raise AssertionError("fake transport has no queued response")
-        return self.responses.pop(0)
-
-
-class FakeSerial:
+class FakeDeviceControl:
     def __init__(
         self,
-        reads: list[bytes],
+        responses: list[DeviceMessage] | None = None,
         *,
-        on_write: Callable[[bytes], None] | None = None,
+        on_call: Callable[[str, dict[str, object]], None] | None = None,
     ) -> None:
-        self.reads = reads
-        self.on_write = on_write
-        self.writes: list[bytes] = []
+        self._responses = responses or []
+        self._on_call = on_call
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def write(self, data: bytes) -> int:
-        self.writes.append(data)
-        if self.on_write is not None:
-            self.on_write(data)
-        return len(data)
+    def configure_gpio_mode(
+        self,
+        *,
+        channel: str,
+        mode: str,
+        active_level: str,
+        idle_level: str | None,
+    ) -> int | None:
+        self._record(
+            "configure_gpio_mode",
+            {
+                "channel": channel,
+                "mode": mode,
+                "active_level": active_level,
+                "idle_level": idle_level,
+            },
+        )
+        return self._next_timestamp()
 
-    def flush(self) -> None:
-        pass
+    def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
+        self._record("pulse_control", {"channel": channel, "pulse_ms": pulse_ms})
+        return self._next_timestamp()
 
-    def read_until(self, expected: bytes = b"\n", size: int | None = None) -> bytes:
-        if not self.reads:
-            return b""
-        return self.reads.pop(0)
+    def set_control_state(self, *, channel: str, state: ControlState) -> int | None:
+        self._record("set_control_state", {"channel": channel, "state": state})
+        return self._next_timestamp()
 
-    def close(self) -> None:
-        pass
+    def _record(self, operation: str, arguments: dict[str, object]) -> None:
+        self.calls.append((operation, arguments))
+        if self._on_call is not None:
+            self._on_call(operation, arguments)
+
+    def _next_timestamp(self) -> int | None:
+        if not self._responses:
+            raise AssertionError("fake control has no queued response")
+        response = self._responses.pop(0)
+        if isinstance(response, CommandSuccessMessage):
+            return response.timestamp_us
+        if isinstance(response, CommandErrorMessage):
+            raise DeviceControlError(error=response.error, detail=response.detail)
+        raise AssertionError(f"unexpected fake control response: {type(response).__name__}")
 
 
 class FakeMonotonicClock:

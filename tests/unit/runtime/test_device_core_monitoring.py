@@ -1,7 +1,12 @@
 from pathlib import Path
 
 import pytest
-from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
+from runtime_test_support import (
+    FakeCaptureSource,
+    FakeDeviceControl,
+    FakeMonotonicClock,
+    enhanced_info,
+)
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -12,7 +17,6 @@ from dutchmate_core.backends import (
     UartIntegrity,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.backends.enhanced import EnhancedDeviceControl
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.workflows.capture import CaptureSourceHealth
@@ -52,7 +56,7 @@ def monitored_runtime(
     clock: FakeMonotonicClock | None = None,
 ) -> DeviceCoreRuntime:
     return DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),
@@ -313,7 +317,7 @@ def test_plain_capture_source_remains_compatible(tmp_path: Path) -> None:
     clock = FakeMonotonicClock()
     source = FakeCaptureSource([], clock=clock)
     runtime = DeviceCoreRuntime(
-        device_control=EnhancedDeviceControl(FakeTransport()),
+        device_control=FakeDeviceControl(),
         message_source=source,
         capture_clock=clock,
         session_store=SessionStore(root=tmp_path),

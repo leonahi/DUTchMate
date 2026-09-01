@@ -15,8 +15,6 @@ from dutchmate_core.backends.basic import (
 )
 from dutchmate_core.backends.contracts import ControlState
 from dutchmate_core.backends.settings import BackendSettings
-from dutchmate_core.device_connection.messages import HelloMessage
-from dutchmate_core.device_connection.serial_transport import SerialCommandTransport
 from dutchmate_core.gpio_config.config import (
     HardwareGpioConfig,
     load_hardware_gpio_config,
@@ -34,7 +32,6 @@ from dutchmate_service.backend_reconnect import (
     backend_snapshot,
     build_basic_capture_reconnect,
     build_enhanced_capture_reconnect,
-    read_enhanced_hello,
 )
 from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.enhanced_async import open_enhanced_async_host
@@ -211,12 +208,6 @@ def build_startup_runtime(
             coordinator.close()
         raise
     return runtime
-
-
-def read_startup_hello(transport: SerialCommandTransport) -> HelloMessage:
-    """Read and validate the initial Debug Helper hello message."""
-
-    return read_enhanced_hello(transport)
 
 
 class _UnavailableDeviceControl:
