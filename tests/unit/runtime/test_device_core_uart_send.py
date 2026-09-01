@@ -7,9 +7,13 @@ import pytest
 from runtime_test_support import FakeCaptureSource, FakeMonotonicClock, FakeTransport, enhanced_info
 
 from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendSnapshot,
     BackendUartSendResult,
     BackendWriteError,
+    UartIntegrity,
     UartReceiveEvent,
+    UartSendCapabilityPolicy,
     UartSender,
 )
 from dutchmate_core.backends.enhanced import EnhancedDeviceControl, EnhancedUartSender
@@ -23,6 +27,7 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.validation import UartSendValidationError
+from dutchmate_core.workflows.capture import CaptureSourceHealth
 from dutchmate_core.workflows.uart_send import UartSendError
 
 
@@ -108,6 +113,57 @@ def test_tx_policy_reports_why_effective_capability_is_absent(tmp_path: Path) ->
     assert raised.value.error == "unsupported_capability"
     assert raised.value.context is not None
     assert raised.value.context["disabled_by_policy"] == ["hardware.uart.tx_enabled"]
+
+
+def test_send_uart_reconciles_idle_reconnect_before_capability_admission(
+    tmp_path: Path,
+) -> None:
+    """Catch UART-send capability admission before newer monitor health is adopted."""
+
+    class MonitoredSource(FakeCaptureSource):
+        def __init__(self, *, clock: FakeMonotonicClock) -> None:
+            super().__init__([], clock=clock)
+            self.health = CaptureSourceHealth(False, None)
+
+        def capture_source_health(self) -> CaptureSourceHealth:
+            return self.health
+
+    clock = FakeMonotonicClock()
+    sender = FakeSender(BackendUartSendResult(3, device_timestamp_us=150))
+    source = MonitoredSource(clock=clock)
+    runtime = _runtime(
+        tmp_path,
+        sender=sender,
+        source=source,
+        capture_clock=clock,
+    )
+    info = enhanced_info()
+    policy = BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=True)
+    )
+    snapshot = BackendSnapshot(
+        info=info,
+        capabilities=info.capabilities,
+        capability_policy=policy,
+        segment=source.segment,
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
+    )
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=snapshot.integrity,
+        backend_snapshot=snapshot,
+        connection_generation=1,
+    )
+
+    result = runtime.send_uart(cmd="go")
+
+    assert result.device_timestamp_us == 150
+    assert sender.payloads == [b"go\n"]
+    runtime.close()
 
 
 def test_forced_send_records_attempt_before_dispatch_and_matching_result(

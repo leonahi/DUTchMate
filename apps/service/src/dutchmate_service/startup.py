@@ -182,6 +182,7 @@ def build_startup_runtime(
             settings=backend_settings,
             source_owner=coordinator,
             expected_info=initial_snapshot.info,
+            expected_snapshot=initial_snapshot,
             control=control,
             sender=sender,
             open_host=open_enhanced_async_host,

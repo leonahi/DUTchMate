@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `53c96bbde8070ae5a9bf8fffb7b806363d1fa0a5` on 2026-08-31
+> Code baseline reviewed: `3ffc1f81d21bfff558f602890b0ce4601e0c2305` on 2026-09-01
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -11,7 +11,10 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 1A is accepted; both selected backends now
   reconnect while idle and during active finite workflows through one service
   coordinator. Production Enhanced startup and each replacement use exactly one
-  async host; only the obsolete synchronous compatibility path remains to migrate.
+  async host. Final review fixes reconcile newer connected health before
+  capability admission, reject capability-incompatible replacements, and retain
+  failed candidate cleanup; only the obsolete synchronous compatibility path
+  remains to migrate.
 - **Next step:** Remove the obsolete synchronous compatibility path after all
   production consumers migrate.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -43,7 +46,7 @@ plus prototype/ring-buffer/HIL validation have not run.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, and coordinated idle/active reconnect are complete; production startup and each replacement use exactly one async host, while the obsolete synchronous compatibility path remains to be removed. |
+| Phase 1B Enhanced host adapter | Partial | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, and coordinated idle/active reconnect are complete. Final review fixes preserve reconnect capability compatibility and retained candidate-cleanup failures; production startup and each replacement use exactly one async host, while the obsolete synchronous compatibility path remains to be removed. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
@@ -55,25 +58,21 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Working tree based on code baseline
-`53c96bbde8070ae5a9bf8fffb7b806363d1fa0a5`, reviewed 2026-08-31:
+Working tree based on reviewed fix base
+`3ffc1f81d21bfff558f602890b0ce4601e0c2305`, reviewed 2026-09-01:
 
-- Acceptance searches found synchronous Enhanced names only in compatibility
-  definitions and their callers, no app/service import in `core/src`, and the
-  coordinator, non-consuming segment wait, versioned connection generation,
-  and idle-disconnect wait in their intended layers.
+- Focused reconnect/runtime gate passed: 96 tests across backend reconnect,
+  startup configuration, wait-pattern, connection-monitoring, and UART-send
+  coverage.
 - Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`.
 - Mypy: `.venv/bin/mypy` passed with no issues in 73 source
   files.
-- Full Pytest: `.venv/bin/pytest` passed: 1,201 passed with zero failures.
+- Full Pytest: `.venv/bin/pytest` passed: 1,210 passed with zero failures.
 - `git diff --check`: passed with no whitespace errors.
 - The dependency-direction search for `apps` or `dutchmate_service` imports in
   `core/src` returned no matches.
-- Graphify: `graphify update .` re-extracted 194/194 uncached code files without
-  LLM work and refreshed the canonical graph to 4,077 nodes, 11,235 edges, and
-  164 communities. It retained the existing `fixture_protocol.h:L44`
-  syntax-error warning; 167 saved labels were reconciled to 164 communities and
-  97 communities were renamed by their hub.
+- Graphify: not refreshed for this localized final-review correction; module
+  ownership, dependency direction, and graph artifacts are unchanged.
 
 ## Already Complete — Do Not Reimplement
 
@@ -105,7 +104,8 @@ The following items are no longer backlog work:
 - continuous idle connection-state and Enhanced integrity projection through the
   existing status contract.
 - coordinated idle and active reconnect for Basic and Enhanced, with production
-  Enhanced startup and replacement retained on one async host.
+  Enhanced startup and replacement retained on one async host, capability-
+  compatible publication, and retained rejected-candidate cleanup failures.
 
 ## Active Queue — Phase 1
 

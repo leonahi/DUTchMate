@@ -131,6 +131,20 @@ class _LegacyOpenCaptureReplacement(Protocol):
     ) -> ReconnectedCaptureSource: ...
 
 
+class _CandidateCleanupFailure(Exception):
+    """Keep a rejected candidate's primary failure distinct from close failure."""
+
+    def __init__(
+        self,
+        *,
+        primary_error: BaseException,
+        cleanup_error: BaseException,
+    ) -> None:
+        super().__init__(str(primary_error))
+        self.primary_error = primary_error
+        self.cleanup_error = cleanup_error
+
+
 class BackendReconnectCoordinator:
     """Serialize idle and active reconnect attempts for one stable source owner."""
 
@@ -140,6 +154,7 @@ class BackendReconnectCoordinator:
         source_owner: ReplaceableCaptureSource,
         open_replacement: OpenCaptureReplacement,
         on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
+        on_rejected: Callable[[ReconnectedCaptureSource], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         wait_for_idle_retry: Callable[[float], bool] | None = None,
@@ -162,6 +177,7 @@ class BackendReconnectCoordinator:
         self._source_owner = source_owner
         self._open_replacement = open_replacement
         self._on_connected = on_connected
+        self._on_rejected = on_rejected
         self._clock = monotonic_clock
         self._active_retry_interval_s = active_retry_interval_s
         self._idle_initial_retry_s = idle_initial_retry_s
@@ -322,6 +338,13 @@ class BackendReconnectCoordinator:
                     deadline=deadline,
                     stop_requested=self._stop_requested,
                 )
+            except _CandidateCleanupFailure as exc:
+                self._retain_close_error(exc.cleanup_error)
+                if isinstance(exc.primary_error, BackendInputError):
+                    raise exc.primary_error from exc
+                if not isinstance(exc.primary_error, Exception):
+                    raise exc.primary_error from exc
+                return None
             except BackendInputError:
                 raise
             except Exception:
@@ -343,6 +366,9 @@ class BackendReconnectCoordinator:
                     deadline=None,
                     stop_requested=self._stop_requested,
                 )
+            except _CandidateCleanupFailure as exc:
+                self._retain_close_error(exc.cleanup_error)
+                return
             except Exception:
                 if self._stop_requested.is_set():
                     return
@@ -400,14 +426,23 @@ class BackendReconnectCoordinator:
         return None
 
     def _close_rejected(self, replacement: ReconnectedCaptureSource) -> None:
+        first_error: BaseException | None = None
+        if self._on_rejected is not None:
+            try:
+                self._on_rejected(replacement)
+            except BaseException as exc:
+                self._retain_close_error(exc)
+                first_error = exc
         close = getattr(replacement.source, "close", None)
-        if not callable(close):
-            return
-        try:
-            close()
-        except BaseException as exc:
-            self._retain_close_error(exc)
-            raise
+        if callable(close):
+            try:
+                close()
+            except BaseException as exc:
+                self._retain_close_error(exc)
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def _retain_close_error(self, error: BaseException) -> None:
         with self._condition:
@@ -571,9 +606,13 @@ def build_basic_capture_reconnect(
         source = BasicBackendEventSource(connection, segment_id=segment_id)
         try:
             _require_matching_basic_snapshot(expected_snapshot, source.snapshot)
-        except BaseException:
-            with suppress(BaseException):
-                source.close()
+        except BaseException as primary_error:
+            cleanup_error = _close_unpublished_candidate(source)
+            if cleanup_error is not None:
+                raise _CandidateCleanupFailure(
+                    primary_error=primary_error,
+                    cleanup_error=cleanup_error,
+                ) from primary_error
             raise
         opened_senders[id(source)] = connection
         return ReconnectedCaptureSource(
@@ -584,10 +623,14 @@ def build_basic_capture_reconnect(
     def publish_sender(replacement: ReconnectedCaptureSource) -> None:
         sender.replace(opened_senders.pop(id(replacement.source)))
 
+    def discard_sender(replacement: ReconnectedCaptureSource) -> None:
+        opened_senders.pop(id(replacement.source), None)
+
     return BackendReconnectCoordinator(
         source_owner=source_owner,
         open_replacement=open_replacement,
         on_connected=publish_sender,
+        on_rejected=discard_sender,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
     )
@@ -598,6 +641,7 @@ def build_enhanced_capture_reconnect(
     settings: BackendSettings,
     source_owner: ReplaceableCaptureSource,
     expected_info: BackendInfo,
+    expected_snapshot: BackendSnapshot | None = None,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
     monotonic_clock: Callable[[], float],
@@ -608,13 +652,20 @@ def build_enhanced_capture_reconnect(
     """Build coordinated Enhanced reopen through the async host boundary."""
 
     if (open_host is None) == (open_transport is None):
-        raise ValueError("Enhanced reconnect requires exactly one host opener")
+        raise ValueError(
+            "Enhanced reconnect requires exactly one opener: async host or legacy transport"
+        )
+    expected_snapshot = expected_snapshot or backend_snapshot(
+        info=expected_info,
+        segment=None,
+        tx_enabled=settings.tx_enabled,
+    )
 
     if open_host is not None:
         return _build_async_enhanced_capture_reconnect(
             settings=settings,
             source_owner=source_owner,
-            expected_info=expected_info,
+            expected_snapshot=expected_snapshot,
             control=control,
             sender=sender,
             open_host=open_host,
@@ -626,7 +677,7 @@ def build_enhanced_capture_reconnect(
     return _build_legacy_enhanced_capture_reconnect(
         settings=settings,
         source_owner=source_owner,
-        expected_info=expected_info,
+        expected_snapshot=expected_snapshot,
         control=control,
         sender=sender,
         open_transport=open_transport,
@@ -639,7 +690,7 @@ def _build_async_enhanced_capture_reconnect(
     *,
     settings: BackendSettings,
     source_owner: ReplaceableCaptureSource,
-    expected_info: BackendInfo,
+    expected_snapshot: BackendSnapshot,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
     open_host: OpenEnhancedHost,
@@ -663,7 +714,14 @@ def _build_async_enhanced_capture_reconnect(
             segment_id=segment_id,
         )
         try:
-            _require_matching_enhanced_identity(expected_info, host.info)
+            _require_matching_enhanced_snapshot(
+                expected_snapshot,
+                backend_snapshot(
+                    info=host.info,
+                    segment=host.segment,
+                    tx_enabled=settings.tx_enabled,
+                ),
+            )
             if deadline is not None:
                 while host.segment is None:
                     if stop_requested.is_set():
@@ -682,9 +740,13 @@ def _build_async_enhanced_capture_reconnect(
                     tx_enabled=settings.tx_enabled,
                 ),
             )
-        except BaseException:
-            with suppress(BaseException):
-                host.close()
+        except BaseException as primary_error:
+            cleanup_error = _close_unpublished_candidate(host)
+            if cleanup_error is not None:
+                raise _CandidateCleanupFailure(
+                    primary_error=primary_error,
+                    cleanup_error=cleanup_error,
+                ) from primary_error
             raise
 
     def publish_host(replacement: ReconnectedCaptureSource) -> None:
@@ -705,7 +767,7 @@ def _build_legacy_enhanced_capture_reconnect(
     *,
     settings: BackendSettings,
     source_owner: ReplaceableCaptureSource,
-    expected_info: BackendInfo,
+    expected_snapshot: BackendSnapshot,
     control: ReplaceableDeviceControl,
     sender: ReplaceableUartSender,
     open_transport: OpenEnhancedTransport,
@@ -741,7 +803,14 @@ def _build_legacy_enhanced_capture_reconnect(
             except RuntimeError as exc:
                 raise BackendInputError(str(exc), backend_mode="enhanced") from exc
             info = normalize_enhanced_hello(hello, port=serial_port)
-            _require_matching_enhanced_identity(expected_info, info)
+            _require_matching_enhanced_snapshot(
+                expected_snapshot,
+                backend_snapshot(
+                    info=info,
+                    segment=None,
+                    tx_enabled=settings.tx_enabled,
+                ),
+            )
             source = EnhancedCaptureEventSource(
                 transport,
                 segment_id=segment_id,
@@ -767,8 +836,13 @@ def _build_legacy_enhanced_capture_reconnect(
                 EnhancedUartSender(transport),
             )
             return replacement
-        except Exception:
-            transport.close()
+        except BaseException as primary_error:
+            cleanup_error = _close_unpublished_candidate(transport)
+            if cleanup_error is not None:
+                raise _CandidateCleanupFailure(
+                    primary_error=primary_error,
+                    cleanup_error=cleanup_error,
+                ) from primary_error
             raise
 
     def publish_control(replacement: ReconnectedCaptureSource) -> None:
@@ -778,10 +852,14 @@ def _build_legacy_enhanced_capture_reconnect(
         control.replace(replacement_control)
         sender.replace(replacement_sender)
 
+    def discard_adapters(replacement: ReconnectedCaptureSource) -> None:
+        opened_adapters.pop(id(replacement.source), None)
+
     return BackendReconnectCoordinator(
         source_owner=source_owner,
         open_replacement=open_replacement,
         on_connected=publish_control,
+        on_rejected=discard_adapters,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
     )
@@ -815,6 +893,17 @@ def backend_snapshot(
     )
 
 
+def _close_unpublished_candidate(candidate: object) -> BaseException | None:
+    close = getattr(candidate, "close", None)
+    if not callable(close):
+        return None
+    try:
+        close()
+    except BaseException as exc:
+        return exc
+    return None
+
+
 def _require_matching_enhanced_identity(
     expected: BackendInfo,
     replacement: BackendInfo,
@@ -827,6 +916,23 @@ def _require_matching_enhanced_identity(
     ):
         raise BackendInputError(
             "Reconnected Debug Helper identity changed",
+            backend_mode="enhanced",
+        )
+
+
+def _require_matching_enhanced_snapshot(
+    expected: BackendSnapshot,
+    replacement: BackendSnapshot,
+) -> None:
+    _require_matching_enhanced_identity(expected.info, replacement.info)
+    if replacement.capability_policy != expected.capability_policy:
+        raise BackendInputError(
+            "Reconnected Debug Helper capability policy changed",
+            backend_mode="enhanced",
+        )
+    if replacement.capabilities != expected.capabilities:
+        raise BackendInputError(
+            "Reconnected Debug Helper capabilities changed",
             backend_mode="enhanced",
         )
 

@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from dutchmate_core.backends import (
+    BackendCapability,
     BackendCapabilityPolicy,
     BackendEvent,
     BackendInfo,
@@ -54,8 +55,9 @@ class ClosableSource:
 
 
 class FakeBasicSerial:
-    def __init__(self) -> None:
+    def __init__(self, *, close_error: BaseException | None = None) -> None:
         self.close_count = 0
+        self._close_error = close_error
 
     def read(self, size: int = 1) -> bytes:
         del size
@@ -66,6 +68,8 @@ class FakeBasicSerial:
 
     def close(self) -> None:
         self.close_count += 1
+        if self._close_error is not None:
+            raise self._close_error
 
 
 class FakeSourceOwner:
@@ -208,6 +212,7 @@ class FakeEnhancedReconnectHost(FakeControl, FakeSender):
         established_segment: SegmentContext | None = None,
         events: list[BackendEvent] | None = None,
         wait_hook: Callable[[float], None] | None = None,
+        close_error: BaseException | None = None,
     ) -> None:
         FakeControl.__init__(self, marker=123)
         FakeSender.__init__(self, marker=456)
@@ -218,6 +223,7 @@ class FakeEnhancedReconnectHost(FakeControl, FakeSender):
         self._wait_hook = wait_hook
         self.segment_wait_timeouts: list[float] = []
         self.close_count = 0
+        self._close_error = close_error
 
     @property
     def segment(self) -> SegmentContext | None:
@@ -238,6 +244,8 @@ class FakeEnhancedReconnectHost(FakeControl, FakeSender):
 
     def close(self) -> None:
         self.close_count += 1
+        if self._close_error is not None:
+            raise self._close_error
 
 
 def test_reconnect_retries_open_and_publishes_stable_source_owner() -> None:
@@ -635,6 +643,46 @@ def test_active_reconnect_closes_candidate_opened_at_deadline() -> None:
     assert owner.replacements == []
 
 
+def test_reconnect_discards_rejected_candidate_before_closing_it() -> None:
+    clock = FakeClock()
+    discarded: list[CaptureEventSource] = []
+
+    class DiscardCheckingSource(ClosableSource):
+        def close(self) -> None:
+            assert discarded == [self]
+            super().close()
+
+    replacement_source = DiscardCheckingSource()
+
+    def open_replacement(
+        *,
+        segment_id: int,
+        deadline: float | None,
+        stop_requested: Event,
+    ) -> ReconnectedCaptureSource:
+        del stop_requested
+        assert deadline is not None
+        clock.value = deadline
+        return ReconnectedCaptureSource(
+            source=replacement_source,
+            backend_snapshot=_snapshot(segment_id),
+        )
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=FakeSourceOwner(),
+        open_replacement=open_replacement,
+        on_rejected=lambda replacement: discarded.append(replacement.source),
+        monotonic_clock=clock,
+        sleep=clock.sleep,
+    )
+
+    assert reconnect(segment_id=1, deadline=0.5) is None
+    reconnect.close()
+
+    assert discarded == [replacement_source]
+    assert replacement_source.closed is True
+
+
 def test_reconnect_publishes_ports_before_source_with_snapshot() -> None:
     clock = FakeClock()
     order: list[str] = []
@@ -867,6 +915,31 @@ def test_close_interrupts_active_retry_wait() -> None:
     assert results == [None]
 
 
+def test_active_retry_wait_is_clipped_to_the_remaining_deadline() -> None:
+    clock = FakeClock()
+    retry_delays: list[float] = []
+
+    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
+        raise OSError("port unavailable")
+
+    def wait_for_active_retry(delay: float) -> bool:
+        retry_delays.append(delay)
+        clock.sleep(delay)
+        return False
+
+    reconnect = BackendReconnectCoordinator(
+        source_owner=FakeSourceOwner(),
+        open_replacement=open_replacement,
+        monotonic_clock=clock,
+        wait_for_active_retry=wait_for_active_retry,
+    )
+
+    assert reconnect(segment_id=1, deadline=0.05) is None
+    reconnect.close()
+
+    assert retry_delays == [0.05]
+
+
 def _release_stuck_attempt(reconnect: BackendReconnectCoordinator) -> None:
     with reconnect._condition:
         reconnect._attempt_active = False
@@ -1010,6 +1083,35 @@ def test_enhanced_active_identity_mismatch_is_fatal_and_closes_host() -> None:
     assert host.close_count == 1
 
 
+def test_enhanced_active_rejection_retains_candidate_cleanup_failure() -> None:
+    cleanup_error = RuntimeError("host cleanup failed")
+    host = FakeEnhancedReconnectHost(
+        info=_enhanced_info(firmware="9.9.9"),
+        segment=_segment(1),
+        close_error=cleanup_error,
+    )
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=FakeSourceOwner(),
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=lambda **_kwargs: host,
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    with pytest.raises(BackendInputError, match="identity changed") as raised:
+        reconnect(segment_id=1, deadline=1.0)
+
+    assert raised.value.backend_mode == "enhanced"
+    with pytest.raises(RuntimeError) as retained:
+        reconnect.close()
+
+    assert retained.value is cleanup_error
+    assert host.close_count == 1
+
+
 def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
     mismatched = FakeEnhancedReconnectHost(
         info=_enhanced_info(device="other-helper"),
@@ -1039,6 +1141,63 @@ def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
     assert mismatched.close_count == 1
     assert accepted.close_count == 0
     assert owner.replacements == [accepted]
+
+
+def test_enhanced_idle_capability_mismatch_closes_host_then_retries() -> None:
+    mismatched = FakeEnhancedReconnectHost(
+        info=_enhanced_info(capabilities=frozenset({"gpio_control", "device_timestamp"})),
+        segment=None,
+    )
+    accepted = FakeEnhancedReconnectHost(info=_enhanced_info(), segment=None)
+    candidates = [mismatched, accepted]
+    owner = FakeSourceOwner()
+
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=owner,
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=lambda **_kwargs: candidates.pop(0),
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+    reconnect.start()
+    try:
+        owner.disconnect_while_idle()
+        assert owner.wait_for_replacements(1)
+    finally:
+        reconnect.close()
+
+    assert mismatched.close_count == 1
+    assert accepted.close_count == 0
+    assert owner.replacements == [accepted]
+
+
+def test_enhanced_active_capability_mismatch_is_fatal_and_closes_host() -> None:
+    host = FakeEnhancedReconnectHost(
+        info=_enhanced_info(capabilities=frozenset({"gpio_control", "device_timestamp"})),
+        segment=_segment(1),
+    )
+    reconnect = build_enhanced_capture_reconnect(
+        settings=_enhanced_settings(),
+        source_owner=FakeSourceOwner(),
+        expected_info=_enhanced_info(),
+        control=ReplaceableDeviceControl(FakeControl(10)),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        open_host=lambda **_kwargs: host,
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    with pytest.raises(
+        BackendInputError,
+        match="Reconnected Debug Helper capabilities changed",
+    ):
+        reconnect(segment_id=1, deadline=1.0)
+    reconnect.close()
+
+    assert host.close_count == 1
 
 
 def test_enhanced_active_origin_timeout_closes_host() -> None:
@@ -1179,6 +1338,41 @@ def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
     reconnect.close()
 
 
+def test_basic_active_rejection_retains_candidate_cleanup_failure() -> None:
+    cleanup_error = RuntimeError("serial cleanup failed")
+    expected_settings = _basic_settings(port="/dev/ttyUSB0")
+    expected_source = BasicBackendEventSource(
+        BasicBackendConnection(
+            serial_port=FakeBasicSerial(),
+            settings=expected_settings,
+        ),
+        segment_id=0,
+    )
+    replacement_serial = FakeBasicSerial(close_error=cleanup_error)
+    reconnect = build_basic_capture_reconnect(
+        settings=expected_settings,
+        source_owner=FakeSourceOwner(),
+        expected_snapshot=expected_source.snapshot,
+        open_connection=lambda _settings: BasicBackendConnection(
+            serial_port=replacement_serial,
+            settings=_basic_settings(port="/dev/ttyUSB1"),
+        ),
+        sender=ReplaceableUartSender(FakeSender(20)),
+        monotonic_clock=lambda: 0.0,
+        sleep=lambda _seconds: None,
+    )
+
+    with pytest.raises(BackendInputError, match="identity changed") as raised:
+        reconnect(segment_id=1, deadline=1.0)
+
+    assert raised.value.backend_mode == "basic"
+    with pytest.raises(RuntimeError) as retained:
+        reconnect.close()
+
+    assert retained.value is cleanup_error
+    assert replacement_serial.close_count == 1
+
+
 def test_replaceable_device_control_forwards_to_latest_adapter() -> None:
     first = FakeControl(10)
     control = ReplaceableDeviceControl(first)
@@ -1258,19 +1452,24 @@ def _enhanced_info(
     *,
     device: str = "dutchmate-rp2040",
     firmware: str = "0.1.0",
+    capabilities: frozenset[BackendCapability] | None = None,
 ) -> BackendInfo:
     return BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
         device=device,
         firmware=firmware,
-        capabilities=frozenset(
-            {
-                "uart_receive",
-                "uart_send",
-                "gpio_control",
-                "device_timestamp",
-            }
+        capabilities=(
+            capabilities
+            if capabilities is not None
+            else frozenset(
+                {
+                    "uart_receive",
+                    "uart_send",
+                    "gpio_control",
+                    "device_timestamp",
+                }
+            )
         ),
     )
 

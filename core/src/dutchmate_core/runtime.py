@@ -696,6 +696,7 @@ class DeviceCoreRuntime:
         if not isinstance(force, bool):
             raise UartSendValidationError("UART send force must be a boolean")
         with self._session_mutation_lock, self._operation_lock:
+            self._require_connected()
             effective_capabilities = apply_capability_policy(
                 self._backend_capabilities,
                 self._capability_policy,
@@ -735,7 +736,6 @@ class DeviceCoreRuntime:
                     handle=self._active_session_handle,
                     segment=self._active_segment_context,
                 )
-            self._require_connected()
             if self._uart_send_workflow is None:
                 raise DeviceCoreRuntimeError("UART sender is not configured")
             try:
@@ -774,6 +774,7 @@ class DeviceCoreRuntime:
         discard_preexisting: bool = False,
     ) -> SessionSummary:
         with self._operation_lock:
+            self._require_connected()
             effective_capabilities = apply_capability_policy(
                 self._backend_capabilities,
                 self._capability_policy,
@@ -794,7 +795,6 @@ class DeviceCoreRuntime:
                         "disabled_by_policy": [],
                     },
                 )
-            self._require_connected()
             self._require_no_active_capture()
             if self._message_source is None:
                 raise DeviceCoreRuntimeError("Capture message source is not configured")
@@ -1027,6 +1027,8 @@ class DeviceCoreRuntime:
             raise ValueError("reconnected backend identity does not match active session")
         if replacement.capability_policy != self._capability_policy:
             raise ValueError("reconnected backend capability policy changed")
+        if replacement.capabilities != expected.capabilities:
+            raise ValueError("reconnected backend capabilities changed")
 
     @staticmethod
     def _close_event_source(source: CaptureEventSource) -> None:

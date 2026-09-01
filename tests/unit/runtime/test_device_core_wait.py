@@ -20,7 +20,10 @@ from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.models import NativeSessionDetail
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
-from dutchmate_core.workflows.capture import ReconnectedCaptureSource
+from dutchmate_core.workflows.capture import (
+    CaptureSourceHealth,
+    ReconnectedCaptureSource,
+)
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -247,6 +250,72 @@ def test_wait_pattern_requires_effective_uart_receive_before_session_creation(
         "disabled_by_policy": [],
     }
     assert not tuple(tmp_path.iterdir())
+
+
+def test_wait_pattern_reconciles_idle_reconnect_before_capability_admission(
+    tmp_path: Path,
+) -> None:
+    """Catch capability admission before newer connected monitor health is adopted."""
+
+    class MonitoredSource(FakeCaptureSource):
+        def __init__(self, *, clock: FakeMonotonicClock) -> None:
+            super().__init__(
+                [UartReceiveEvent(1, 100, 0, b"READY\n")],
+                clock=clock,
+            )
+            self.health = CaptureSourceHealth(False, None)
+
+        def capture_source_health(self) -> CaptureSourceHealth:
+            return self.health
+
+    clock = FakeMonotonicClock()
+    source = MonitoredSource(clock=clock)
+    runtime = DeviceCoreRuntime(
+        device_control=EnhancedDeviceControl(FakeTransport()),
+        message_source=source,
+        capture_clock=clock,
+        session_store=_store(tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info(capabilities=frozenset()))
+    replacement = BackendSnapshot(
+        info=enhanced_info(),
+        capabilities=frozenset({"gpio_control", "uart_receive"}),
+        capability_policy=BackendCapabilityPolicy(
+            uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+        ),
+        segment=SegmentContext(
+            segment_id=1,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2040_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=100,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
+    )
+    source.segment = replacement.segment
+    source.health = CaptureSourceHealth(
+        connected=True,
+        integrity=replacement.integrity,
+        backend_snapshot=replacement,
+        connection_generation=1,
+    )
+
+    result = runtime.wait_pattern(pattern="READY", timeout_s=1.0)
+
+    assert result.matched is True
+    assert runtime.status().backend_capabilities == tuple(
+        sorted(replacement.info.capabilities)
+    )
+    runtime.close()
 
 
 def _store(root: Path) -> SessionStore:
