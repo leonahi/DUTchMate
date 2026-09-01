@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `747667d75942987a5a0cf7206754368dd12abd3d` on 2026-09-01
+> Code baseline reviewed: `11e5bd24d665a8f113884acfc5f6cd509ba82909` on 2026-09-01
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -58,7 +58,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 ## Latest Validation
 
 Sync-path removal working tree based on implementation commit
-`747667d75942987a5a0cf7206754368dd12abd3d`, reviewed 2026-09-01:
+`11e5bd24d665a8f113884acfc5f6cd509ba82909`, reviewed 2026-09-01:
 
 - Focused removal gate passed: 195 tests across Enhanced adapter,
   serial-frame writing, reconnect/startup, runtime, GPIO configuration, and
