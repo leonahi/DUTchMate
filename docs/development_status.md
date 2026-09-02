@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `11e5bd24d665a8f113884acfc5f6cd509ba82909` on 2026-09-02
+> Code baseline reviewed: `31e9d4a50f6fa9aee012f23bb51dffaf469d7a47` on 2026-09-02
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -62,7 +62,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 firmware architecture documentation working tree, reviewed 2026-09-02:
+RP2350 firmware architecture documentation commit
+`31e9d4a50f6fa9aee012f23bb51dffaf469d7a47`, reviewed 2026-09-02:
 
 - Architecture self-review found no placeholders, RP2040 target leakage, or
   unresolved scope contradiction. The known capability mismatch is explicit
