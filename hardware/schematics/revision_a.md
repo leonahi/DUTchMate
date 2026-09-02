@@ -119,7 +119,7 @@ The prototype schematic uses three naming layers:
 |---|---|---|
 | Connector side | `DUT_CTRL0`, `DUT_EVENT0`, `DUT_UART_TX` | External DUT header nets, protected by ESD parts. |
 | Translator side | `CTRL0`, `EVENT0`, `UART_TX` | Internal nets after the series-resistor arrays. |
-| Debugger side | `DBG_CTRL_DATA0`, `DBG_EVENT0`, `DBG_UART_RX` | Raspberry Pi Pico / 3.3 V domain nets. |
+| Debugger side | `DBG_CTRL_DATA0`, `DBG_EVENT0`, `DBG_UART_RX` | Raspberry Pi Pico 2 / 3.3 V domain nets. |
 
 The software-facing channel names remain `CTRL0` through `CTRL3` and `EVENT0`
 through `EVENT3`. In the schematic these channel names correspond to the
@@ -803,21 +803,22 @@ Detailed signal paths from the DUT connector to the active devices:
 The Revision A baseline uses **17 MCU pins**: separate UART/event interface
 enables and the provisioned `DUT_VIO_SENSE` ADC input are included.
 
-### 10.1 Phase 1 Revision A Raspberry Pi Pico pin assignment
+### 10.1 Phase 1 Revision A Raspberry Pi Pico 2 pin assignment
 
 This table is the normative Phase 1 Revision A mapping for schematic capture,
 PCB net assignment, firmware pin configuration, and hardware tests. It targets
-a standard Raspberry Pi Pico/Pico H header and is optimized for translators
-placed in the area between the Pico's two header rows, as shown in the
+a non-wireless Raspberry Pi Pico 2 or Pico 2 H with the RP2350A MCU. The board
+retains the 40-pin Pico form factor used by this mapping. Translators are
+optimized for placement between the Pico 2's two header rows, as shown in the
 preliminary PCB placement:
 
 ```text
-Pico USB end
+Pico 2 USB end
              |    SN74LVC2G06DBVR x2   |
 pin 1-20 row |     SN74LV4T125PWR      | pin 40-21 row
              |       TXU0202DCUR       |
              |       TXU0104PWR        |
-Pico bottom end
+Pico 2 bottom end
 ```
 
 This allocation intentionally uses both Pico header rows. Component rotation,
@@ -868,16 +869,16 @@ change requires the architecture table, schematic/net labels, firmware pin
 configuration, and mapping tests to change together and creates a new hardware
 revision.
 
-### 10.2 Other required Raspberry Pi Pico connections
+### 10.2 Other required Raspberry Pi Pico 2 connections
 
 | Net | Pico pin or rail | Notes |
 |---|---|---|
-| Debugger 3.3 V | `3V3(OUT)`, physical pin 36 | Powers `SN74LVC2G06.VCC`, `TXU0104.VCCB`, and `TXU0202.VCCA`. Confirm total load remains inside the Pico regulator budget. |
+| Debugger 3.3 V | `3V3(OUT)`, physical pin 36 | Powers `SN74LVC2G06.VCC`, `TXU0104.VCCB`, and `TXU0202.VCCA`. Confirm total load remains inside the Pico 2 regulator budget. |
 | Common ground | Any Pico `GND`; use several pins for cable return | Connect to translator grounds and DUT connector ground. Interleave ground pins with UART and event/control signals on the external connector where practical. |
 | `DUT_VIO_SENSE` divider | `GP28_ADC2`, physical pin 34 | Use 47 kOhm from `DUT_VIO` to ADC and 47 kOhm from ADC to ground, plus an optional small capacitor at the ADC node. This maps 5.0 V to about 2.5 V and draws about 53 uA from `DUT_VIO` at 5.0 V. |
 | `ADC_VREF` | Physical pin 35 | Keep decoupled and quiet. Use the firmware's measured/calibrated 3.3 V reference tolerance when validating `DUT_VIO`. |
-| Pico `RUN` | Physical pin 30 | Optional local reset control for DUTchMate itself only; do not connect to DUT reset. |
-| `VBUS` / `VSYS` | Physical pins 40 / 39 | Use according to the Pico power design. Do not connect either rail to `DUT_VIO`. |
+| Pico 2 `RUN` | Physical pin 30 | Optional local reset control for DUTchMate itself only; do not connect to DUT reset. |
+| `VBUS` / `VSYS` | Physical pins 40 / 39 | Use according to the Pico 2 power design. Do not connect either rail to `DUT_VIO`. |
 
 ## 11. Suggested firmware model
 
@@ -1089,7 +1090,7 @@ unpowered or inactive and avoids a direct push-pull connection between the
 - [ ] Test debugger-powered/DUT-unpowered leakage.
 - [ ] Test DUT-powered/debugger-unpowered leakage.
 - [ ] Verify `SN74LVC2G06DBVR` leaves every `SN74LV4T125PWR` `/OE` pulled high and disabled through all debugger/DUT power-up and power-down orderings.
-- [ ] Verify `SN74LV4T125PWR` input thresholds and output levels at every supported `DUT_VIO` using 3.3 V Pico control inputs.
+- [ ] Verify `SN74LV4T125PWR` input thresholds and output levels at every supported `DUT_VIO` using 3.3 V Pico 2 control inputs.
 - [ ] Verify `TXU0104PWR` and `TXU0202DCUR` isolation/high-impedance behavior when either supply is absent.
 - [ ] Test hot-plug and unplug behaviour.
 - [ ] Check for back-powering through every external signal.
@@ -1130,6 +1131,10 @@ optional pull-ups remain subject to measurement and layout review.
 
 ## 16. Source documents
 
+- Raspberry Pi, **Raspberry Pi Pico 2 datasheet**:
+  <https://datasheets.raspberrypi.com/pico/pico-2-datasheet.pdf>
+- Zephyr Project, **Raspberry Pi Pico 2 board documentation**:
+  <https://docs.zephyrproject.org/latest/boards/raspberrypi/rpi_pico2/doc/index.html>
 - Texas Instruments, **SN74LV4T125 product page and datasheet**:  
   <https://www.ti.com/product/SN74LV4T125>
 - Texas Instruments, **SN74LVC2G06 product page and datasheet**:  
@@ -1147,7 +1152,7 @@ optional pull-ups remain subject to measurement and layout review.
 
 ## 17. Revision A Recommendation
 
-Proceed with the following five-IC implementation and the Revision A Pico pin
+Proceed with the following five-IC implementation and the Revision A Pico 2 pin
 mapping in section 10.1 for the first DUTchMate prototype:
 
 ```text

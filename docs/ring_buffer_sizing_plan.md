@@ -1,6 +1,7 @@
 # Ring Buffer Sizing Plan
 
-> Scope: RP2040 Debug Helper UART RX buffering for Phase 1.
+> Scope: RP2350-based Raspberry Pi Pico 2 Debug Helper UART RX buffering for
+> Phase 1.
 
 ## Decision Summary
 
@@ -8,8 +9,8 @@ Implement a **32 KiB UART RX ring buffer** for Phase 1B, with a drop-oldest
 overflow policy and explicit `buffer_overflow` events.
 
 The nominal throughput calculation indicates that this size should absorb short
-host/USB scheduling stalls at 460800 baud while leaving most of the RP2040's
-264 KiB SRAM available for firmware, stacks, USB buffers, and protocol
+host/USB scheduling stalls at 460800 baud while leaving most of the RP2350's
+520 KiB SRAM available for firmware, stacks, USB buffers, and protocol
 encoding. The validation gate must confirm both assumptions.
 
 This is the selected implementation baseline, not a validated final size. Its
@@ -175,7 +176,7 @@ If only dense synthetic continuous logging overflows, keep 32 KiB for MVP and do
 
 ## Memory Budget
 
-RP2040 SRAM: 264 KiB.
+RP2350 SRAM: 520 KiB.
 
 Initial Phase 1 budget target:
 

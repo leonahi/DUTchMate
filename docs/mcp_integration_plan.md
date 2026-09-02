@@ -44,7 +44,7 @@ Device Core Service (`dutchmate start`, 127.0.0.1:2040)
         |
         | selected backend serial connection
         v
-Basic generic USB-to-UART (raw UART) or Enhanced RP2040 Debug Helper (NDJSON)
+Basic generic USB-to-UART (raw UART) or Enhanced RP2350 Debug Helper (NDJSON)
 ```
 
 The planned MCP server is a thin adapter:

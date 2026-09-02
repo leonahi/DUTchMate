@@ -78,7 +78,7 @@ Configured channels also track:
 - `source`: `config` or `runtime`
 - `configured_at`: RFC 3339 UTC host timestamp recording when Device Core
   accepted the configuration result
-- `device_timestamp_us`: optional raw RP2040 timer value from the accepted
+- `device_timestamp_us`: optional raw RP2350 timer value from the accepted
   firmware command response; it is not session-relative
 - `last_rejected`: optional rejected request and error detail, if a later override failed
 

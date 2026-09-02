@@ -1,7 +1,8 @@
 # Phase 1 Ring Buffer Validation Record
 
 > Status: selected_unvalidated
-> Scope: Phase 1B RP2040 Debug Helper 32 KiB UART RX ring-buffer acceptance evidence.
+> Scope: Phase 1B RP2350-based Raspberry Pi Pico 2 Debug Helper 32 KiB UART RX
+> ring-buffer acceptance evidence.
 
 ## Decision State
 
@@ -22,11 +23,12 @@ This record must finish in exactly one state:
 |---|---|
 | Date/time | Not run |
 | Operator | Not run |
+| Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
 | Debug Helper board revision | Not run |
 | DUT/fixture | Not run |
 | Host OS | Not run |
 | Zephyr version | Not run |
-| Board target | Not run |
+| Zephyr board target | `rpi_pico2/rp2350a/m33` required; build not run |
 | Application commit | Not run |
 | Build ID/configuration | Not run |
 | Related DUTchMate session IDs | Not run |

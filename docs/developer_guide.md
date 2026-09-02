@@ -22,7 +22,7 @@ core/
   src/             Reusable Python library.
 
 hardware/
-  firmware/        RP2040/Zephyr firmware location.
+  firmware/        RP2350/Pico 2 Zephyr firmware location.
   protocol/        Versioned wire schemas and examples.
   schematics/      Electrical design notes and schematic files.
   validation/      Hardware acceptance records and unrun templates.

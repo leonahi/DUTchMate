@@ -1,6 +1,8 @@
 # Phase 1 Implementation Spec
 
-> Scope: Basic generic USB-to-UART backend, Enhanced RP2040 Debug Helper backend, Device Core Service, host CLI, and shared protocol/session contracts.
+> Scope: Basic generic USB-to-UART backend, Enhanced RP2350-based Raspberry Pi
+> Pico 2 Debug Helper backend, Device Core Service, host CLI, and shared
+> protocol/session contracts.
 
 ## Goal
 
@@ -17,7 +19,8 @@ Phase 1 is split into two ordered milestones:
 - **Phase 1A, Basic backend:** receive UART through a user-selected generic
   USB-to-UART adapter, optionally send UART bytes, preserve raw evidence, and
   return structured sessions through the local CLI and Device Core Service.
-- **Phase 1B, Enhanced backend:** use the RP2040 Debug Helper behind the same
+- **Phase 1B, Enhanced backend:** use the RP2350 Debug Helper on a non-wireless
+  Raspberry Pi Pico 2 behind the same
   UART receive/session pipeline, add device timestamps and buffer telemetry,
   and run automated reset/boot-test workflows through user-configured `CTRLn`
   roles.
@@ -83,15 +86,16 @@ next implementation step live only in `docs/development_status.md`.
     the legacy role-specific wire actions with generic configured-channel pulse
     and active/idle actions, and remove user role metadata from firmware
     commands.
-11. Implement RP2040 firmware for UART receive/send, device timestamps, buffer
-    telemetry, and `CTRLn` control. Start with the 32 KiB UART RX ring-buffer
-    baseline and close its measurement gate as defined in
+11. Implement RP2350 firmware for a non-wireless Raspberry Pi Pico 2 using the
+    Zephyr `rpi_pico2/rp2350a/m33` board target for UART receive/send, device
+    timestamps, buffer telemetry, and `CTRLn` control. Start with the 32 KiB
+    UART RX ring-buffer baseline and close its measurement gate as defined in
     `docs/ring_buffer_sizing_plan.md`.
 12. Define the Enhanced backend as the sole future owner of `EVENTn` input, but
     defer the `gpio_events` implementation and HIL criteria to Phase 5.
-13. Pass mocked Enhanced-backend tests and a real RP2040 + the same Zephyr DUT
-    fixture smoke test for reset, boot-test, UART evidence, timestamps, and
-    overflow telemetry.
+13. Pass mocked Enhanced-backend tests and a real RP2350 Debug Helper + the
+    same Zephyr DUT fixture smoke test for reset, boot-test, UART evidence,
+    timestamps, and overflow telemetry.
 
 Implementation ownership and current data flow are documented only in
 `docs/software_architecture.md`.
@@ -131,7 +135,7 @@ class BackendInfo:
 @dataclass(frozen=True, slots=True)
 class SegmentTimestamp:
     source: Literal["host", "device"]
-    clock: Literal["monotonic", "rp2040_timer"]
+    clock: Literal["monotonic", "rp2350_timer"]
     unit: Literal["us"]
     origin: Literal["segment_start"]
     source_origin_us: int
@@ -258,7 +262,7 @@ core/
     workflows/           Mock capture recording plus guarded reset/boot actions.
 
 hardware/
-  firmware/      RP2040 firmware.
+  firmware/      RP2350/Pico 2 firmware.
   protocol/      Versioned protocol schemas, examples, and fixtures.
   schematics/    Debug Helper hardware design files.
 
@@ -847,7 +851,7 @@ the origin and receives timestamp zero.
 
 Basic backends use `time.monotonic_ns()`, timestamp once per delivered serial
 read chunk, and assign that timestamp to all bytes in the chunk. Enhanced
-backends use the RP2040 timer and timestamp once per firmware UART event before
+backends use the RP2350 timer and timestamp once per firmware UART event before
 USB delivery. Neither backend may infer per-byte timing. A reconnect always
 creates a new segment/origin, and timestamps are never compared across segments.
 RFC 3339 wall-clock fields are descriptive metadata only.
@@ -1820,8 +1824,10 @@ Enhanced-backend coverage:
 
 ### DUT Firmware Validation Fixture
 
-The first real DUT fixture uses Zephyr and is separate from the Zephyr firmware
-on the RP2040 Debug Helper. It provides deterministic modes for:
+The first real DUT fixture uses Zephyr on the existing first-generation
+Raspberry Pi Pico 1 and is separate from the Zephyr firmware on the RP2350
+Debug Helper. Changing the Debug Helper target does not change this DUT fixture.
+It provides deterministic modes for:
 
 - successful boot with an unambiguous completion marker
 - initialization failure with a stable first-error marker
@@ -1893,7 +1899,8 @@ Additional ecosystems may be added after this baseline is stable.
   or `revised_with_evidence`.
 - Shared host unit/integration/CLI tests pass with a fake Enhanced backend and
   Debug Helper protocol fixtures.
-- A real RP2040 + the same Zephyr DUT fixture smoke test demonstrates reset,
+- A real RP2350-based Raspberry Pi Pico 2 Debug Helper + the same Zephyr DUT
+  fixture smoke test demonstrates reset,
   UART receive, boot-test, overflow reporting, and session storage.
 - `EVENTn` ownership is documented, but GPIO event capture is not required.
 

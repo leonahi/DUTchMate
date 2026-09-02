@@ -57,7 +57,7 @@ Device Core library (no HTTP, MCP, or AI dependency)
 Exactly one device backend
   +-- Basic: generic USB-to-UART
   |     +-- UART receive and optional UART send
-  +-- Enhanced: RP2040 DUTchMate Debug Helper
+  +-- Enhanced: RP2350-based Raspberry Pi Pico 2 DUTchMate Debug Helper
         +-- UART receive/send
         +-- CTRLn control
         +-- EVENTn observation (Phase 5)
@@ -78,7 +78,7 @@ Phase 1 supports two mutually exclusive backend modes:
 |---|---|---|
 | UART receive | Yes | Yes |
 | UART send | Optional and policy-gated | Firmware capability and policy-gated |
-| Timestamp source | Host serial-read observation | RP2040 device timer |
+| Timestamp source | Host serial-read observation | RP2350 device timer |
 | Standardized overflow telemetry | No | Yes |
 | `CTRLn` control | No | Yes |
 | `EVENTn` observation | No | Hardware provisioned; software is Phase 5 |
@@ -92,7 +92,8 @@ directly to DUT logic pins without external translation. Software transmit
 disablement is permission policy, not proof that an attached adapter TX pin is
 electrically high impedance.
 
-The Enhanced backend is the complete RP2040-based DUTchMate Debug Helper. It
+The Enhanced backend is the complete RP2350-based DUTchMate Debug Helper built
+on a non-wireless Raspberry Pi Pico 2. It
 normalizes its private NDJSON protocol into the same host evidence model used by
 Basic, adds device-side timestamps and buffer telemetry, and implements generic
 `CTRL0` through `CTRL3` control. It is also the sole future owner of `EVENT0`
@@ -134,7 +135,7 @@ Enhanced backend waits for command responses.
 
 Each connection or reconnect creates a new session segment with immutable
 timestamp provenance. Basic timestamps describe host observation of a serial
-read chunk. Enhanced timestamps describe firmware observation using the RP2040
+read chunk. Enhanced timestamps describe firmware observation using the RP2350
 timer. Neither implies per-byte timing, and timestamps are never compared across
 segments.
 
@@ -184,7 +185,8 @@ Phase 1 includes:
   project baseline
 - local Device Core Service and CLI
 - Enhanced generic control channels with configured reset/boot workflows
-- RP2040 firmware, device timestamps, ring-buffer telemetry, and HIL validation
+- RP2350 firmware for Raspberry Pi Pico 2, device timestamps, ring-buffer
+  telemetry, and HIL validation
 
 The project roadmap also includes Phase 2 MCP access, Phase 4 optional AI debug
 reports, and Phase 5 GPIO event evidence and other advanced measurements.
@@ -255,7 +257,7 @@ Phase 1A establishes the normalized event boundary, explicit Basic selection,
 generic raw-serial receive/send, shared session and retrieval behavior, and a
 real generic-adapter HIL path around a manual or external reset.
 
-Phase 1B places the RP2040 Debug Helper behind the same boundary, migrates the
+Phase 1B places the RP2350 Debug Helper behind the same boundary, migrates the
 Enhanced protocol to `uart_receive` and generic channel actions, implements the
 firmware and control workflows, validates the ring buffer, and runs Enhanced
 HIL tests against the same DUT fixture.
@@ -300,7 +302,7 @@ Phase 1 succeeds when the same host pipeline can:
 
 1. Receive a real DUT boot through a generic USB-to-UART adapter, preserve its
    evidence, detect relevant patterns, and expose the session through the CLI.
-2. Repeat through the RP2040 Debug Helper without changing downstream
+2. Repeat through the RP2350 Debug Helper without changing downstream
    processing, while adding device timestamps, overflow telemetry, UART send,
    and configured reset/boot-test control.
 3. Report backend capability and evidence-quality differences explicitly.
@@ -311,8 +313,9 @@ advisory.
 
 ## Design Constraints And Deferred Scope
 
-- **Zephyr RP2040 PIO support:** Phase 1 uses supported UART, GPIO, timer, and
-  USB CDC peripherals. Future PIO-based event/timing work may require custom
+- **Zephyr RP2350 peripheral support:** Phase 1 targets the Arm Cortex-M33 mode
+  of the non-wireless Raspberry Pi Pico 2 and uses UART, GPIO, timer, and USB
+  CDC peripherals. Future PIO-based event/timing work may require custom
   drivers or Pico SDK integration.
 - **Timestamp precision varies:** Basic host-read timestamps include adapter,
   USB, driver, scheduler, and application latency. Enhanced timer timestamps
@@ -327,7 +330,7 @@ advisory.
   release gate; see `hardware/schematics/revision_a.md`.
 - **NDJSON overhead:** JSON and base64 increase Enhanced USB traffic. Phase 3
   may adopt a binary framed protocol if measured throughput requires it.
-- **Firmware-sampled UART timestamps:** RP2040 timestamps are taken at firmware
+- **Firmware-sampled UART timestamps:** RP2350 timestamps are taken at firmware
   event handling granularity and are suitable for boot analysis, not precision
   logic analysis.
 - **Platform scope:** service lifecycle management is POSIX-specific and serial

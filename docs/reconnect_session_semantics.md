@@ -49,7 +49,7 @@ successfully at most 31 times.
         "mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "backend_capabilities": ["uart_receive", "gpio_control", "uart_send"],
         "capabilities": ["uart_receive", "gpio_control", "uart_send"],
         "capability_policy": {
@@ -61,7 +61,7 @@ successfully at most 31 times.
       },
       "timestamp": {
         "source": "device",
-        "clock": "rp2040_timer",
+        "clock": "rp2350_timer",
         "unit": "us",
         "origin": "segment_start",
         "source_origin_us": 1000,
@@ -80,7 +80,7 @@ successfully at most 31 times.
         "mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "backend_capabilities": ["uart_receive", "gpio_control", "uart_send"],
         "capabilities": ["uart_receive", "gpio_control", "uart_send"],
         "capability_policy": {
@@ -92,7 +92,7 @@ successfully at most 31 times.
       },
       "timestamp": {
         "source": "device",
-        "clock": "rp2040_timer",
+        "clock": "rp2350_timer",
         "unit": "us",
         "origin": "segment_start",
         "source_origin_us": 500,
@@ -178,7 +178,7 @@ Rules:
 - The Basic backend uses `time.monotonic_ns()` and timestamps once when a host
   serial-read callback delivers a chunk. All bytes in that chunk share one
   timestamp.
-- The Enhanced backend timestamps one UART event with the RP2040 timer before
+- The Enhanced backend timestamps one UART event with the RP2350 timer before
   USB delivery. All bytes in that firmware event share one timestamp.
 - If a source clock cannot be sampled at segment creation, the first event
   establishes `source_origin_us` and receives `timestamp_us: 0`.
@@ -489,7 +489,7 @@ Minimum tests:
 - `uart_events.jsonl` includes `segment_id` and segment-relative `timestamp_us`.
 - Basic serial-read chunks share one host-monotonic timestamp and do not infer
   per-byte timing.
-- Enhanced UART events use RP2040 timer provenance and are normalized relative
+- Enhanced UART events use RP2350 timer provenance and are normalized relative
   to their segment origin.
 - No ordering operation compares timestamps from different segments.
 - Each reconnect replaces the old event source with a source bound to the new

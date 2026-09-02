@@ -1,22 +1,27 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `11e5bd24d665a8f113884acfc5f6cd509ba82909` on 2026-09-01
+> Code baseline reviewed: `11e5bd24d665a8f113884acfc5f6cd509ba82909` on 2026-09-02
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; both selected backends now
+- **Current milestone:** Phase 1A is accepted; Phase 1B now targets a
+  non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
+  Helper. The initial firmware architecture is agreed and recorded for written
+  review. Both selected backends now
   reconnect while idle and during active finite workflows through one service
   coordinator. Production Enhanced startup and each replacement use exactly one
   async host. The obsolete synchronous Enhanced command/source, hello, startup,
   and reconnect compatibility path is removed; shared runtime/workflow tests now
   use backend-neutral semantic fakes, while wire behavior remains covered at the
   async adapter boundary.
-- **Next step:** Begin Step 5 by adding the Zephyr RP2040 Debug Helper
-  application using the normative Revision A pin map.
+- **Next step:** Review
+  `docs/superpowers/specs/2026-09-02-rp2350-debug-helper-firmware-design.md`.
+  After approval, begin Step 5 with the capability-contract alignment slice;
+  do not create a large implementation plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -37,7 +42,7 @@ adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
 and active reconnect are complete. The Enhanced host stack is async-only;
-RP2040 firmware plus prototype/ring-buffer/HIL validation have not run.
+RP2350 firmware plus prototype/ring-buffer/HIL validation have not run.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -47,7 +52,7 @@ RP2040 firmware plus prototype/ring-buffer/HIL validation have not run.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2040 Debug Helper firmware | Not started | The DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
+| RP2350 Debug Helper firmware | Not started | The target is a non-wireless Raspberry Pi Pico 2 (RP2350A). The Pico 1 DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -57,7 +62,19 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Sync-path removal working tree based on implementation commit
+RP2350 firmware architecture documentation working tree, reviewed 2026-09-02:
+
+- Architecture self-review found no placeholders, RP2040 target leakage, or
+  unresolved scope contradiction. The known capability mismatch is explicit
+  and assigned to the first implementation slice.
+- Ruff: `.venv/bin/ruff check .` passed with `All checks passed!`.
+- Mypy: `.venv/bin/mypy` passed with no issues in 73 source files.
+- Full Pytest: `.venv/bin/pytest` passed: 1,173 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- Firmware build and HIL validation were not run because firmware implementation
+  has not started.
+
+Previous sync-path removal validation based on implementation commit
 `11e5bd24d665a8f113884acfc5f6cd509ba82909`, reviewed 2026-09-01:
 
 - Focused removal gate passed: 195 tests across Enhanced adapter,
@@ -203,11 +220,20 @@ Exit gate: shared fake-backend and transport tests cover interleaving,
 cancellation/shutdown, malformed input, disconnect/reconnect, and bounded
 queues; no production workflow imports Enhanced wire DTOs.
 
-### 5. Implement RP2040 Debug Helper Firmware
+### 5. Implement RP2350 Debug Helper Firmware
 
-- [ ] Add the Zephyr RP2040 application using the normative Revision A pin map.
-- [ ] Finalize and implement the Enhanced USB VID/PID and identity used for
-  host discovery.
+- [x] Agree and record the initial firmware architecture, concurrency ownership,
+  ring invariants, safe states, failure semantics, and test boundaries.
+- [ ] Align `device_timestamp` and `overflow_telemetry` atomically across the
+  device schema, host capability parser, canonical examples, and tests.
+- [ ] Add the Zephyr RP2350 application for a non-wireless Raspberry Pi Pico 2
+  using the normative Revision A pin map and the
+  `rpi_pico2/rp2350a/m33` board target.
+- [ ] Update Enhanced identity fixtures and normalized timer provenance from
+  RP2040-specific names to RP2350-specific names before firmware/HIL acceptance.
+- [ ] Implement build-configurable Enhanced USB identity with development
+  VID/PID `2E8A:000A`, `device = "dutchmate-rp2350"`, and a required production
+  VID/PID override.
 - [ ] Implement USB protocol handling, UART receive/send, device timestamps,
   the 32 KiB drop-oldest RX ring, and buffer telemetry.
 - [ ] Implement generic `CTRLn` configuration, pulse, and active/idle actions
@@ -235,7 +261,7 @@ reproducible measured evidence.
 
 ### 7. Accept Phase 1B On Real Hardware
 
-- [ ] Run the RP2040 Debug Helper against the same Zephyr DUT fixture used for
+- [ ] Run the RP2350 Debug Helper against the same Zephyr DUT fixture used for
   Phase 1A.
 - [ ] Demonstrate configured reset, boot-test, UART receive/send, device
   timestamps, overflow telemetry, reconnect behavior, and session retrieval.

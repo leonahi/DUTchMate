@@ -8,7 +8,8 @@ Phase 1 supports two mutually exclusive backends:
 
 - **Basic:** a user-selected generic TTL/logic-level USB-to-UART adapter for
   UART receive and optional UART send.
-- **Enhanced:** an RP2040 DUTchMate Debug Helper for UART receive/send,
+- **Enhanced:** an RP2350-based Raspberry Pi Pico 2 DUTchMate Debug Helper for
+  UART receive/send,
   device-side timestamps, buffer telemetry, and generic `CTRLn` control.
 
 Both use one shared host processing and session pipeline. Hybrid operation is
