@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `c8a9aba8278283421df79b8033f27b58aa44dd44` on 2026-09-03
+> Code baseline reviewed: `dcf8d8d94fd961055e236a3cb09941b9f7322ff6` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -66,7 +66,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 application and safe-I/O scaffold working tree, reviewed 2026-09-03:
+RP2350 application and safe-I/O scaffold commit
+`dcf8d8d94fd961055e236a3cb09941b9f7322ff6`, reviewed 2026-09-03:
 
 - Zephyr 4.4.0 with SDK 1.0.1 cross-built the application for
   `rpi_pico2/rp2350a/m33` and generated a 27,648-byte UF2 image.
