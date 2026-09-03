@@ -1,3 +1,21 @@
 mainmenu "DUTchMate RP2350 Debug Helper"
 
 source "Kconfig.zephyr"
+
+menu "DUTchMate identity"
+
+config DUTCHMATE_FIRMWARE_VERSION
+	string "Firmware version reported by hello"
+	default "development"
+	help
+	  A 1..64 byte identifier using ASCII letters, digits, dot, underscore,
+	  plus, or hyphen.
+
+config DUTCHMATE_PRODUCTION_BUILD
+	bool "Enforce production USB identity"
+	help
+	  Reject a build that still uses the development VID/PID pair. Production
+	  builds must provide an assigned pair through CDC_ACM_SERIAL_VID and
+	  CDC_ACM_SERIAL_PID.
+
+endmenu

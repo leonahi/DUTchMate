@@ -1,6 +1,5 @@
 #include "platform_io.h"
-
-#include <zephyr/kernel.h>
+#include "usb_connection.h"
 
 int main(void)
 {
@@ -10,6 +9,5 @@ int main(void)
 		return result;
 	}
 
-	k_sleep(K_FOREVER);
-	return 0;
+	return dutchmate_usb_connection_run();
 }

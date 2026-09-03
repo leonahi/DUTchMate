@@ -14,17 +14,19 @@ Read this document first whenever development resumes.
   align required capabilities, canonical `dutchmate-rp2350` identity fixtures,
   and new `rp2350_timer` provenance while retaining read compatibility for
   legacy RP2040 session evidence. The initial RP2350 application now builds for
-  the required target and owns the Revision A mapping, startup safe outputs,
-  and input-only EVENT reservation. Both selected backends reconnect while idle
-  and during active finite workflows through one service
-  coordinator. Production Enhanced startup and each replacement use exactly one
-  async host. The obsolete synchronous Enhanced command/source, hello, startup,
-  and reconnect compatibility path is removed; shared runtime/workflow tests now
-  use backend-neutral semantic fakes, while wire behavior remains covered at the
-  async adapter boundary.
-- **Next step:** Continue Step 5 with build-configurable USB identity and the
-  CDC connection-epoch `hello` slice. Keep implementation in small vertical
-  slices; do not create a large implementation plan.
+  the required target, owns the Revision A mapping and safe GPIO states, and
+  now exposes its build-configurable USB CDC identity. Each DTR assertion emits
+  one exact v1 `hello`; DTR loss forces safe GPIO state. Both selected backends
+  reconnect while idle and during active finite workflows through one service
+  coordinator. Production Enhanced startup and each replacement use exactly
+  one async host. The obsolete synchronous Enhanced command/source, hello,
+  startup, and reconnect compatibility path is removed; shared runtime/workflow
+  tests now use backend-neutral semantic fakes, while wire behavior remains
+  covered at the async adapter boundary.
+- **Next step:** Continue Step 5 with the hardware-independent 32 KiB RX ring,
+  timestamp-descriptor, and drop-oldest invariant slice using TDD. Keep
+  implementation in small vertical slices; do not create a large implementation
+  plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -45,8 +47,9 @@ adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
 and active reconnect are complete. The Enhanced host stack is async-only. The
-RP2350 firmware scaffold cross-builds; functional USB/UART/control firmware plus
-prototype, ring-buffer, and HIL validation remain incomplete.
+RP2350 firmware cross-builds with its USB identity and connection-epoch hello;
+USB command handling, UART, control, ring, telemetry, prototype, and HIL
+validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -56,7 +59,7 @@ prototype, ring-buffer, and HIL validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Scaffold target-build verified; functional firmware and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map, starts CTRL/UART/EVENT translator enables inactive, and reserves EVENT0–EVENT3 as inputs without pulls. USB, UART, protocol, control, ring, telemetry, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | USB identity/hello target-build verified; functional firmware and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Its build-configurable CDC identity, production VID/PID guard, exact v1 hello encoder, and DTR connection-epoch transitions are covered. USB commands, UART, control, ring, telemetry, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -65,6 +68,26 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 USB identity and connection-epoch hello working tree, reviewed
+2026-09-03:
+
+- TDD red gates failed as expected: eight hello tests first lacked the encoder,
+  then three connection-epoch tests lacked the state machine.
+- Focused green gate passed all 11 portable firmware tests, including the exact
+  five-capability v1 hello, firmware-version bounds, and DTR edge semantics.
+- Zephyr 4.4.0 with SDK 1.0.1 built warning-free for
+  `rpi_pico2/rp2350a/m33`: 39,212 bytes flash, 15,120 bytes RAM, and a
+  78,848-byte UF2 image.
+- A production build retaining development VID/PID `2E8A:000A` failed at the
+  intended compile-time guard. A validation build using replacement VID/PID
+  `1234:5678` passed; these are test values, not assigned production identity.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,190 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- USB enumeration and DTR reconnect HIL were not run because the Revision A
+  prototype is not available in this workspace.
 
 RP2350 application and safe-I/O scaffold commit
 `dcf8d8d94fd961055e236a3cb09941b9f7322ff6`, reviewed 2026-09-03:
@@ -286,7 +309,7 @@ queues; no production workflow imports Enhanced wire DTOs.
   `rpi_pico2/rp2350a/m33` board target.
 - [x] Update Enhanced identity fixtures and normalized timer provenance from
   RP2040-specific names to RP2350-specific names before firmware/HIL acceptance.
-- [ ] Implement build-configurable Enhanced USB identity with development
+- [x] Implement build-configurable Enhanced USB identity with development
   VID/PID `2E8A:000A`, `device = "dutchmate-rp2350"`, and a required production
   VID/PID override.
 - [ ] Implement USB protocol handling, UART receive/send, device timestamps,

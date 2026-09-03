@@ -5,18 +5,24 @@ RP2350A MCU.
 
 ## Current slice
 
-This initial application slice owns the Revision A GPIO mapping and establishes
-startup safe states before any higher-level firmware service exists:
+The application owns the Revision A GPIO mapping, establishes startup safe
+states, and exposes its initial USB CDC identity:
 
 - `CTRL0` through `CTRL3` enables are inactive, so every DUT control is high
   impedance;
 - UART and EVENT translator enables are inactive;
 - `EVENT0` through `EVENT3` are inputs without internal pulls;
-- EVENT interrupt capture is absent and `gpio_events` is not advertised.
+- EVENT interrupt capture is absent and `gpio_events` is not advertised;
+- the development USB identity is VID/PID `2E8A:000A`, manufacturer
+  `DUTchMate`, and product `Debug Helper`;
+- the USB serial descriptor uses the stable board identifier supplied by
+  Zephyr hardware information when available;
+- each DTR assertion starts one connection epoch and emits the exact v1
+  `hello` first and once; DTR loss forces the GPIO safe state.
 
-USB CDC, the Enhanced protocol, UART transfer, control commands, timestamps,
-ring buffering, and telemetry are later vertical slices. This application is
-therefore not yet usable as an Enhanced Debug Helper.
+USB command parsing, UART transfer, control commands, timestamps, ring
+buffering, and telemetry remain later vertical slices. This application is
+therefore not yet usable as a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -54,6 +60,14 @@ Keeping the build at this repository-relative path also supplies the
 first build, restart the clangd language server in VS Code so Zephyr headers,
 generated devicetree macros, and target compiler flags are recognized.
 
-This build proves compilation and devicetree mapping only. Startup voltage,
-translator-disable, and EVENT input state require the Revision A prototype HIL
-checks defined by the approved firmware architecture.
+Set `CONFIG_DUTCHMATE_FIRMWARE_VERSION` to a 1..64-byte build identifier made
+from ASCII letters, digits, `.`, `_`, `+`, and `-`. Production builds must also
+set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
+`CONFIG_CDC_ACM_SERIAL_VID` and `CONFIG_CDC_ACM_SERIAL_PID` with an assigned
+pair. A production build that retains `2E8A:000A` fails at compile time.
+
+This build proves compilation, identity configuration, protocol-independent
+epoch logic, and devicetree mapping only. USB enumeration/descriptor behavior,
+CDC reconnect behavior, startup voltage, translator-disable, and EVENT input
+state require the Revision A prototype HIL checks defined by the approved
+firmware architecture.
