@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `31e9d4a50f6fa9aee012f23bb51dffaf469d7a47` on 2026-09-03
+> Code baseline reviewed: `816055db8990aeee07fc07b740aeaf0a8435320f` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -63,7 +63,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 capability-contract alignment working tree, reviewed 2026-09-03:
+RP2350 capability-contract alignment commit
+`816055db8990aeee07fc07b740aeaf0a8435320f`, reviewed 2026-09-03:
 
 - TDD red gate failed in the expected five places because the schema and host
   parser rejected `device_timestamp` / `overflow_telemetry`, while the canonical
