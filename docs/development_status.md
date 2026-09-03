@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `816055db8990aeee07fc07b740aeaf0a8435320f` on 2026-09-03
+> Code baseline reviewed: `c8a9aba8278283421df79b8033f27b58aa44dd44` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -63,8 +63,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 identity and timestamp-provenance migration working tree, reviewed
-2026-09-03:
+RP2350 identity and timestamp-provenance migration commit
+`c8a9aba8278283421df79b8033f27b58aa44dd44`, reviewed 2026-09-03:
 
 - TDD red gate failed in the expected two places because Enhanced segment
   normalization still emitted `rp2040_timer` and the canonical hello still
