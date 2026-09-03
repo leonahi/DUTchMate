@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `dcf8d8d94fd961055e236a3cb09941b9f7322ff6` on 2026-09-03
+> Code baseline reviewed: `6bbee39b37ed35d41fa4d3b01372303038dcfb46` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -69,8 +69,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 USB identity and connection-epoch hello working tree, reviewed
-2026-09-03:
+RP2350 USB identity and connection-epoch hello commit
+`6bbee39b37ed35d41fa4d3b01372303038dcfb46`, reviewed 2026-09-03:
 
 - TDD red gates failed as expected: eight hello tests first lacked the encoder,
   then three connection-epoch tests lacked the state machine.
