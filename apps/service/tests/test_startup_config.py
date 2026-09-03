@@ -447,7 +447,7 @@ def test_enhanced_startup_selects_one_async_host(
     assert runtime._message_source is coordinators[0]  # noqa: SLF001
     assert host.close_count == 0
     assert runtime.status().connected is True
-    assert runtime.status().device == "dutchmate-rp2040"
+    assert runtime.status().device == "dutchmate-rp2350"
     reconnect = runtime._backend_reconnect  # noqa: SLF001
     assert isinstance(reconnect, BackendReconnectCoordinator)
     worker = reconnect._worker  # noqa: SLF001
@@ -512,7 +512,7 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
         status = runtime.status()
         assert status.connected is True
         assert status.connection_state == "connected"
-        assert status.device == "dutchmate-rp2040"
+        assert status.device == "dutchmate-rp2350"
         assert status.timestamp_provenance == replacement_host.segment
     finally:
         runtime.close()
@@ -1460,7 +1460,7 @@ def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -
 def _hello() -> HelloMessage:
     return HelloMessage(
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=("gpio_control",),
     )
 
@@ -1469,7 +1469,7 @@ def _enhanced_info() -> BackendInfo:
     return BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         firmware="0.1.0",
         capabilities=frozenset({"gpio_control", "uart_receive", "uart_send"}),
     )
@@ -1480,7 +1480,7 @@ def _enhanced_segment(*, segment_id: int) -> SegmentContext:
         segment_id=segment_id,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=0,

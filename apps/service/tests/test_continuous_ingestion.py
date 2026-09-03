@@ -145,7 +145,7 @@ def backend_snapshot(segment_id: int) -> BackendSnapshot:
         mode="enhanced",
         port="/dev/ttyACM0",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=frozenset({"gpio_control", "uart_receive"}),
     )
     return BackendSnapshot(

@@ -26,7 +26,7 @@ def _hello_line(**overrides: object) -> str:
         "type": "hello",
         "v": 1,
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "capabilities": [],
     }
     payload.update(overrides)
@@ -55,7 +55,7 @@ def test_parse_valid_hello_message() -> None:
                 "type": "hello",
                 "v": 1,
                 "firmware": "0.1.0",
-                "device": "dutchmate-rp2040",
+                "device": "dutchmate-rp2350",
                 "capabilities": ["uart_receive", "gpio_control", "uart_send"],
             }
         )
@@ -63,19 +63,19 @@ def test_parse_valid_hello_message() -> None:
 
     assert message == HelloMessage(
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=("uart_receive", "gpio_control", "uart_send"),
     )
 
 
 def test_parse_hello_from_bytes() -> None:
     message = parse_device_message(
-        b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":[]}'
+        b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":[]}'
     )
 
     assert message == HelloMessage(
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=(),
     )
 
@@ -86,7 +86,7 @@ def test_parse_hello_accepts_phase1_telemetry_capabilities(capability: str) -> N
 
     assert message == HelloMessage(
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=(capability,),
     )
 
@@ -178,42 +178,42 @@ def test_rejects_non_object_json() -> None:
 def test_rejects_protocol_version_mismatch() -> None:
     with pytest.raises(ProtocolVersionError):
         parse_device_message(
-            '{"type":"hello","v":2,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":[]}'
+            '{"type":"hello","v":2,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":[]}'
         )
 
 
 def test_rejects_boolean_protocol_version() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":true,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":[]}'
+            '{"type":"hello","v":true,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":[]}'
         )
 
 
 def test_rejects_unknown_capability() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["unknown"]}'
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":["unknown"]}'
         )
 
 
 def test_rejects_legacy_uart_capture_capability() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["uart_capture"]}'
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":["uart_capture"]}'
         )
 
 
 def test_rejects_duplicate_capability() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":["uart_receive","uart_receive"]}'
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":["uart_receive","uart_receive"]}'
         )
 
 
 def test_rejects_unexpected_hello_field() -> None:
     with pytest.raises(ProtocolValidationError):
         parse_device_message(
-            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040","capabilities":[],"extra":true}'
+            '{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350","capabilities":[],"extra":true}'
         )
 
 

@@ -88,7 +88,7 @@ def test_stream_recorder_ignores_non_capture_messages(tmp_path: Path) -> None:
     recorder = EnhancedCaptureFixtureRecorder.start(session_store=store, command="capture")
 
     results = recorder.feed(
-        b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
+        b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350",'
         b'"capabilities":[]}\n'
         b'{"ok":true,"timestamp_us":10}\n'
         b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"WAo="}\n'
@@ -111,7 +111,7 @@ def test_enhanced_capture_fixture_returns_final_session_summary(tmp_path: Path) 
 
     summary = run_enhanced_capture_fixture(
         chunks=[
-            b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2040",'
+            b'{"type":"hello","v":1,"firmware":"0.1.0","device":"dutchmate-rp2350",'
             b'"capabilities":[]}\n',
             b'{"type":"uart","channel":0,"timestamp_us":100,"data_b64":"Qk9PVF9PSwo="}\n',
             b'{"type":"buffer_status","timestamp_us":200,"uart_rx_size_bytes":32768,'
@@ -121,13 +121,13 @@ def test_enhanced_capture_fixture_returns_final_session_summary(tmp_path: Path) 
         session_store=store,
         command="capture",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
     )
 
     assert summary.session_id == "20260714T123045Z-capture01"
     assert summary.command == "capture"
     assert summary.firmware == "0.1.0"
-    assert summary.device == "dutchmate-rp2040"
+    assert summary.device == "dutchmate-rp2350"
     assert summary.overflow is False
     assert summary.segment_count == 1
 
@@ -219,13 +219,13 @@ def test_capture_workflow_records_capture_messages_until_deadline(
         duration_s=0.6,
         command="capture --seconds 0.6",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         monotonic_clock=clock,
     )
 
     assert summary.command == "capture --seconds 0.6"
     assert summary.firmware == "0.1.0"
-    assert summary.device == "dutchmate-rp2040"
+    assert summary.device == "dutchmate-rp2350"
     session_root = tmp_path / summary.session_id
     assert (session_root / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
     assert [event["type"] for event in read_jsonl(session_root / "hardware_events.jsonl")] == [
@@ -245,7 +245,7 @@ def test_transport_capture_persists_source_segment_context_before_event(
         segment_id=0,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=8_500,
@@ -464,7 +464,7 @@ def _native_snapshot() -> BackendSnapshot:
         info=BackendInfo(
             mode="enhanced",
             port="/dev/ttyACM0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             firmware="0.1.0",
             capabilities=frozenset({"uart_receive"}),
         ),
@@ -474,7 +474,7 @@ def _native_snapshot() -> BackendSnapshot:
             segment_id=0,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=0,

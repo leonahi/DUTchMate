@@ -142,7 +142,7 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
         "backend_identity": {
             "port": "/dev/ttyACM0",
             "firmware": "0.1.0",
-            "device": "dutchmate-rp2040",
+            "device": "dutchmate-rp2350",
         },
         "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
         "capabilities": ["gpio_control", "uart_receive"],
@@ -157,7 +157,7 @@ def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
                 "segment_id": 0,
                 "timestamp": {
                     "source": "device",
-                    "clock": "rp2040_timer",
+                    "clock": "rp2350_timer",
                     "unit": "us",
                     "origin": "segment_start",
                     "source_origin_us": 100,
@@ -198,7 +198,7 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
                 overflow=True,
                 baseline=False,
                 firmware="0.1.0",
-                device="dutchmate-rp2040",
+                device="dutchmate-rp2350",
                 segment_count=2,
             )
 
@@ -223,7 +223,7 @@ def test_capture_serializes_incomplete_evidence_flags() -> None:
         "backend_identity": {
             "port": None,
             "firmware": "0.1.0",
-            "device": "dutchmate-rp2040",
+            "device": "dutchmate-rp2350",
         },
         "backend_capabilities": [],
         "capabilities": [],

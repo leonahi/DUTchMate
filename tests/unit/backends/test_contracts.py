@@ -87,7 +87,7 @@ def _enhanced_source(*outcomes: BackendEvent | Exception) -> BackendEventSource:
         info=BackendInfo(
             mode="enhanced",
             port="/dev/ttyACM0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             firmware="0.1.0",
             capabilities=frozenset(
                 {
@@ -103,7 +103,7 @@ def _enhanced_source(*outcomes: BackendEvent | Exception) -> BackendEventSource:
             segment_id=2,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=500,
@@ -191,7 +191,7 @@ def test_basic_and_enhanced_identity_and_provenance_are_explicit() -> None:
     assert basic.segment is not None
     assert basic.segment.timestamp.source == "host"
     assert enhanced.info.mode == "enhanced"
-    assert enhanced.info.device == "dutchmate-rp2040"
+    assert enhanced.info.device == "dutchmate-rp2350"
     assert enhanced.segment is not None
     assert enhanced.segment.timestamp.source == "device"
     assert enhanced.segment_id == 2

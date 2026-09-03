@@ -29,7 +29,7 @@ from dutchmate_core.device_connection.transport import (
 
 HELLO_FRAME = (
     b'{"type":"hello","v":1,"firmware":"0.1.0",'
-    b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
+    b'"device":"dutchmate-rp2350","capabilities":["uart_receive"]}\n'
 )
 UART_FRAME = b'{"type":"uart","channel":0,"timestamp_us":1,"data_b64":"WA=="}\n'
 
@@ -547,7 +547,7 @@ async def test_start_uses_one_reader_and_returns_normalized_hello() -> None:
     expected = BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         firmware="0.1.0",
         capabilities=frozenset({"uart_receive"}),
     )
@@ -617,7 +617,7 @@ async def test_start_accepts_evidence_after_hello_in_the_same_batch() -> None:
     assert await adapter.start(0.1) == BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         firmware="0.1.0",
         capabilities=frozenset({"uart_receive"}),
     )

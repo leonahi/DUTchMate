@@ -232,7 +232,7 @@ def test_recent_logs_endpoint_replays_native_uart_and_validates_limit(tmp_path: 
             info=BackendInfo(
                 mode="enhanced",
                 port="/dev/ttyACM0",
-                device="dutchmate-rp2040",
+                device="dutchmate-rp2350",
                 firmware="0.1.0",
                 capabilities=frozenset(
                     {"uart_receive", "gpio_control", "device_timestamp"}
@@ -383,7 +383,7 @@ def _native_detail() -> NativeSessionDetail:
         error=None,
         backend_identity={
             "port": "/dev/ttyACM0",
-            "device": "dutchmate-rp2040",
+            "device": "dutchmate-rp2350",
             "firmware": "0.1.0",
         },
         backend_capabilities=("uart_receive",),

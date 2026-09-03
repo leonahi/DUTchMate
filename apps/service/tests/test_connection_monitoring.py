@@ -89,7 +89,7 @@ def enhanced_replacement_snapshot() -> BackendSnapshot:
         mode="enhanced",
         port="/dev/ttyACM0",
         firmware="0.2.0",
-        device="dutchmate-rp2040-replacement",
+        device="dutchmate-rp2350-replacement",
         capabilities=frozenset({"gpio_control", "uart_receive"}),
     )
     return BackendSnapshot(
@@ -100,7 +100,7 @@ def enhanced_replacement_snapshot() -> BackendSnapshot:
             segment_id=1,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=10_000,
@@ -144,7 +144,7 @@ def test_initial_validated_snapshot_reaches_existing_status_response(
     assert response.status_code == 200
     payload = response.json()
     assert payload["connected"] is True
-    assert payload["device"] == "dutchmate-rp2040-replacement"
+    assert payload["device"] == "dutchmate-rp2350-replacement"
     assert payload["timestamp_provenance"]["segment_id"] == 1
     assert payload["integrity"] == {
         "loss_status": "none_reported",
@@ -209,7 +209,7 @@ def test_idle_enhanced_telemetry_reaches_existing_integrity_response(
             mode="enhanced",
             port="/dev/ttyACM0",
             firmware="0.1.0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             capabilities=frozenset({"uart_receive"}),
         )
     )
@@ -276,7 +276,7 @@ def test_idle_replacement_restores_existing_status_identity_and_segment(
         assert payload["connection_state"] == "connected"
         assert payload["backend_mode"] == "enhanced"
         assert payload["firmware"] == "0.2.0"
-        assert payload["device"] == "dutchmate-rp2040-replacement"
+        assert payload["device"] == "dutchmate-rp2350-replacement"
         assert payload["backend_capabilities"] == ["gpio_control", "uart_receive"]
         assert payload["integrity"] == {
             "loss_status": "none_reported",

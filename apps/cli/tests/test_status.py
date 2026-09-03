@@ -16,7 +16,7 @@ def test_format_status_renders_channel_first_state() -> None:
         "backend_mode": "enhanced",
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
         "capabilities": ["gpio_control", "uart_receive"],
         "capability_policy": {
@@ -29,7 +29,7 @@ def test_format_status_renders_channel_first_state() -> None:
             "segment_id": 0,
             "timestamp": {
                 "source": "device",
-                "clock": "rp2040_timer",
+                "clock": "rp2350_timer",
                 "observation_point": "debug_helper_uart_receive",
                 "event_granularity": "uart_event",
             },
@@ -74,12 +74,12 @@ def test_format_status_renders_channel_first_state() -> None:
             "Session: none",
             "Commanded boot mode: bootloader",
             "Connection: connected",
-            "Device: connected (dutchmate-rp2040, firmware 0.1.0)",
+            "Device: connected (dutchmate-rp2350, firmware 0.1.0)",
             "Port: /dev/ttyACM0",
             "Backend capabilities: gpio_control, uart_receive, uart_send",
             "Capabilities: gpio_control, uart_receive",
             "UART TX policy: disabled (hardware.uart.tx_enabled)",
-            "Timestamp provenance: segment 0: device/rp2040_timer, "
+            "Timestamp provenance: segment 0: device/rp2350_timer, "
             "debug_helper_uart_receive/uart_event",
             "UART loss: none_reported (scope=debug_helper_rx_buffer, dropped_bytes=0)",
             "Retention: healthy (3/25 sessions)",

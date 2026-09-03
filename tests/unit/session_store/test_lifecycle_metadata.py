@@ -19,7 +19,11 @@ from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 def test_create_session_initializes_required_files(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
-    handle = store.create_session(command="capture", firmware="0.1.0", device="dutchmate-rp2040")
+    handle = store.create_session(
+        command="capture",
+        firmware="0.1.0",
+        device="dutchmate-rp2350",
+    )
 
     assert handle == SessionHandle(
         session_id="20260714T123045Z-abc12345",
@@ -76,7 +80,7 @@ def test_create_session_writes_initial_metadata(tmp_path: Path) -> None:
     handle = store.create_session(
         command="boot-test --seconds 15",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         baseline=True,
     )
 
@@ -90,7 +94,7 @@ def test_create_session_writes_initial_metadata(tmp_path: Path) -> None:
         "overflow": False,
         "baseline": True,
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "line_processing": {
             "status": "complete",
             "max_line_bytes": 65536,
@@ -119,7 +123,7 @@ def test_create_session_writes_backend_identity_policy_and_provenance(
     handle = store.create_session(
         command="capture --seconds 1",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         backend_snapshot=enhanced_snapshot(),
     )
 
@@ -127,7 +131,7 @@ def test_create_session_writes_backend_identity_policy_and_provenance(
     assert metadata["backend_mode"] == "enhanced"
     assert metadata["backend_identity"] == {
         "port": "/dev/ttyACM0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "firmware": "0.1.0",
     }
     assert metadata["backend_capabilities"] == [
@@ -149,7 +153,7 @@ def test_create_session_writes_backend_identity_policy_and_provenance(
     }
     assert metadata["segments"][0]["timestamp"] == {
         "source": "device",
-        "clock": "rp2040_timer",
+        "clock": "rp2350_timer",
         "unit": "us",
         "origin": "segment_start",
         "source_origin_us": 1_000,
@@ -306,6 +310,31 @@ def test_load_metadata_reads_metadata_json(tmp_path: Path) -> None:
     assert metadata["command"] == "capture"
 
 
+def test_summarize_session_reads_legacy_rp2040_identity_and_timer(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="capture",
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+    )
+    metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
+    metadata["segments"][0]["timestamp"] = {
+        "source": "device",
+        "clock": "rp2040_timer",
+        "unit": "us",
+        "origin": "segment_start",
+        "source_origin_us": 1_000,
+        "observation_point": "debug_helper_uart_receive",
+        "event_granularity": "uart_event",
+    }
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    summary = store.summarize_session(handle.session_id)
+
+    assert summary.device == "dutchmate-rp2040"
+    assert summary.segment_contexts[0].timestamp.clock == "rp2040_timer"
+
+
 def test_record_segment_context_sets_unknown_provenance_once(tmp_path: Path) -> None:
     store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
@@ -313,7 +342,7 @@ def test_record_segment_context_sets_unknown_provenance_once(tmp_path: Path) -> 
         segment_id=0,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=8_500,
@@ -332,7 +361,7 @@ def test_record_segment_context_sets_unknown_provenance_once(tmp_path: Path) -> 
         segment_id=0,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=9_000,
@@ -349,7 +378,7 @@ def test_summarize_session_returns_compact_metadata_summary(tmp_path: Path) -> N
     handle = store.create_session(
         command="boot-test --seconds 15",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         baseline=True,
     )
 
@@ -365,7 +394,7 @@ def test_summarize_session_returns_compact_metadata_summary(tmp_path: Path) -> N
         overflow=False,
         baseline=True,
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         segment_count=1,
     )
 

@@ -125,7 +125,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     )
     hello = HelloMessage(
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=("uart_receive", "gpio_control"),
     )
     app = create_app(
@@ -148,7 +148,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                     segment_id=0,
                     timestamp=SegmentTimestamp(
                         source="device",
-                        clock="rp2040_timer",
+                        clock="rp2350_timer",
                         unit="us",
                         origin="segment_start",
                         source_origin_us=100,
@@ -173,13 +173,13 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     payload = response.json()
     assert payload["connected"] is True
     assert payload["firmware"] == "0.1.0"
-    assert payload["device"] == "dutchmate-rp2040"
+    assert payload["device"] == "dutchmate-rp2350"
     assert payload["capabilities"] == ["uart_receive", "gpio_control"]
     assert payload["backend_mode"] == "enhanced"
     assert payload["backend_capabilities"] == ["gpio_control", "uart_receive"]
     assert payload["capability_policy"]["uart_send"]["tx_policy_enabled"] is False
     assert payload["timestamp_provenance"]["segment_id"] == 0
-    assert payload["timestamp_provenance"]["timestamp"]["clock"] == "rp2040_timer"
+    assert payload["timestamp_provenance"]["timestamp"]["clock"] == "rp2350_timer"
     assert payload["integrity"]["loss_status"] == "none_reported"
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
     assert payload["connection_state"] == "connected"

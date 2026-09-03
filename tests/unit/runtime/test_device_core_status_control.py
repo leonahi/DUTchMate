@@ -46,7 +46,7 @@ def test_record_backend_connection_updates_status(tmp_path: Path) -> None:
     assert status.connected is True
     assert status.port == "/dev/tty.usbmodem2040"
     assert status.firmware == "0.1.0"
-    assert status.device == "dutchmate-rp2040"
+    assert status.device == "dutchmate-rp2350"
     assert status.backend_mode == "enhanced"
     assert status.backend_capabilities == ("gpio_control", "uart_receive", "uart_send")
     assert status.capabilities == ("gpio_control", "uart_receive")

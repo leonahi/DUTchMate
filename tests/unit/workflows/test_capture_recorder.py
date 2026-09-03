@@ -23,14 +23,14 @@ def test_start_creates_session_with_metadata(tmp_path: Path) -> None:
         session_store=store,
         command="boot-test --seconds 15",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
     )
 
     assert recorder.session_id == "20260714T123045Z-capture01"
     metadata = json.loads(recorder.session_handle.paths.metadata.read_text(encoding="utf-8"))
     assert metadata["command"] == "boot-test --seconds 15"
     assert metadata["firmware"] == "0.1.0"
-    assert metadata["device"] == "dutchmate-rp2040"
+    assert metadata["device"] == "dutchmate-rp2350"
 
 
 def test_record_uart_event_processes_lines_patterns_and_session_files(tmp_path: Path) -> None:

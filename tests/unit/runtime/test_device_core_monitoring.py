@@ -30,7 +30,7 @@ class MutableHealthSource:
             segment_id=0,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=0,
@@ -84,7 +84,7 @@ def replacement_snapshot(
             segment_id=segment_id,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=segment_id * 10_000,

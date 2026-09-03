@@ -456,7 +456,7 @@ def test_append_buffer_status_updates_backend_integrity_loss(tmp_path: Path) -> 
     handle = store.create_session(
         command="capture",
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         backend_snapshot=enhanced_snapshot(),
     )
 

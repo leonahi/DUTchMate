@@ -28,7 +28,7 @@ def _hello(capability: str) -> dict[str, object]:
         "type": "hello",
         "v": 1,
         "firmware": "0.1.0",
-        "device": "dutchmate-rp2040",
+        "device": "dutchmate-rp2350",
         "capabilities": [capability],
     }
 

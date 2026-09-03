@@ -106,7 +106,7 @@ class FakeCaptureSource:
             segment_id=0,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=0,
@@ -144,6 +144,6 @@ def enhanced_info(
         mode="enhanced",
         port=port,
         firmware="0.1.0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         capabilities=capabilities,
     )

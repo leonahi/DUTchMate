@@ -78,7 +78,7 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
 
     assert summary.command == "capture --seconds 0.4"
     assert summary.firmware == "0.1.0"
-    assert summary.device == "dutchmate-rp2040"
+    assert summary.device == "dutchmate-rp2350"
     assert summary.backend_mode == "enhanced"
     assert summary.port == "/dev/ttyACM0"
     assert summary.backend_capabilities == (
@@ -856,7 +856,7 @@ def _replacement_snapshot(segment_id: int) -> BackendSnapshot:
             segment_id=segment_id,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=10_000,

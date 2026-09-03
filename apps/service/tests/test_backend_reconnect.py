@@ -1240,7 +1240,7 @@ def _snapshot(segment_id: int) -> BackendSnapshot:
         info=BackendInfo(
             mode="enhanced",
             port="/dev/ttyACM0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             firmware="0.1.0",
             capabilities=frozenset({"uart_receive"}),
         ),
@@ -1250,7 +1250,7 @@ def _snapshot(segment_id: int) -> BackendSnapshot:
             segment_id=segment_id,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=1_000,
@@ -1271,7 +1271,7 @@ def _segment(segment_id: int, *, source_origin_us: int = 1_000) -> SegmentContex
         segment_id=segment_id,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=source_origin_us,
@@ -1283,7 +1283,7 @@ def _segment(segment_id: int, *, source_origin_us: int = 1_000) -> SegmentContex
 
 def _enhanced_info(
     *,
-    device: str = "dutchmate-rp2040",
+    device: str = "dutchmate-rp2350",
     firmware: str = "0.1.0",
     capabilities: frozenset[BackendCapability] | None = None,
 ) -> BackendInfo:

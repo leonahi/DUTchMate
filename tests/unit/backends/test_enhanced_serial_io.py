@@ -19,7 +19,7 @@ from dutchmate_core.device_connection.transport import (
 
 HELLO_FRAME = (
     b'{"type":"hello","v":1,"firmware":"0.1.0",'
-    b'"device":"dutchmate-rp2040","capabilities":["uart_receive"]}\n'
+    b'"device":"dutchmate-rp2350","capabilities":["uart_receive"]}\n'
 )
 
 
@@ -203,7 +203,7 @@ async def test_factory_returns_started_adapter_and_writes_on_stream_serial() -> 
     assert adapter.info == BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         firmware="0.1.0",
         capabilities=frozenset({"uart_receive"}),
     )

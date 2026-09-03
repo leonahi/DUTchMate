@@ -660,6 +660,7 @@ def _segment_contexts(segments: list[object]) -> tuple[SegmentContext, ...]:
         if source not in {"host", "device"} or clock not in {
             "monotonic",
             "rp2040_timer",
+            "rp2350_timer",
         }:
             raise ValueError("session metadata timestamp source or clock is invalid")
         if unit != "us" or origin != "segment_start":

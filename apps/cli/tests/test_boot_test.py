@@ -24,7 +24,7 @@ def test_format_boot_test_result_renders_session_summary() -> None:
                         "segment_id": 0,
                         "timestamp": {
                             "source": "device",
-                            "clock": "rp2040_timer",
+                            "clock": "rp2350_timer",
                             "observation_point": "debug_helper_uart_receive",
                             "event_granularity": "uart_event",
                         },
@@ -43,7 +43,7 @@ def test_format_boot_test_result_renders_session_summary() -> None:
         )
         == "Boot test complete: 20260729T100000Z-boot01 "
         "(backend=enhanced, state=completed, end=duration_elapsed, loss=none_reported, "
-        "timestamp=device/rp2040_timer:debug_helper_uart_receive/uart_event, "
+        "timestamp=device/rp2350_timer:debug_helper_uart_receive/uart_event, "
         "first_error=none, lines=limit_exceeded/oversized:2, segments=2, "
         "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
     )

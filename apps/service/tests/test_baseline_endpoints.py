@@ -64,7 +64,7 @@ def _capture(store: SessionStore) -> SessionHandle:
     info = BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
-        device="dutchmate-rp2040",
+        device="dutchmate-rp2350",
         firmware="0.1.0",
         capabilities=frozenset({"gpio_control", "uart_receive", "uart_send"}),
     )

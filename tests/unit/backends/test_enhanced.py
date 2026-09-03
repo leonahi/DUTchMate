@@ -15,6 +15,7 @@ from dutchmate_core.backends.enhanced import (
     AsyncEnhancedDeviceControl,
     AsyncEnhancedUartSender,
     EnhancedNdjsonEventStream,
+    enhanced_segment_context,
     normalize_enhanced_message,
 )
 from dutchmate_core.device_connection.errors import (
@@ -47,6 +48,12 @@ class FakeAsyncCommandTransport:
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
+
+
+def test_enhanced_segment_context_uses_rp2350_timer() -> None:
+    context = enhanced_segment_context(segment_id=2, source_origin_us=8_500)
+
+    assert context.timestamp.clock == "rp2350_timer"
 
 
 async def test_async_enhanced_control_uses_same_command_and_timestamp() -> None:
@@ -85,7 +92,7 @@ async def test_async_enhanced_uart_sender_uses_same_acknowledgement_rules() -> N
         CommandSuccessMessage(timestamp_us=500, bytes_accepted=2),
         HelloMessage(
             firmware="0.1.0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             capabilities=("uart_send",),
         ),
     ],
@@ -109,7 +116,7 @@ async def test_async_uart_sender_rejects_invalid_acknowledgements(
         CommandErrorMessage(error="hardware_fault", detail="firmware busy"),
         HelloMessage(
             firmware="0.1.0",
-            device="dutchmate-rp2040",
+            device="dutchmate-rp2350",
             capabilities=("uart_send",),
         ),
         TransportTimeoutError("quiet"),
@@ -306,7 +313,7 @@ def test_normalizes_buffer_telemetry() -> None:
 
 def test_ignores_non_evidence_wire_messages() -> None:
     event = normalize_enhanced_message(
-        HelloMessage(firmware="0.1.0", device="dutchmate-rp2040", capabilities=()),
+        HelloMessage(firmware="0.1.0", device="dutchmate-rp2350", capabilities=()),
         segment_id=0,
         source_origin_us=0,
     )
@@ -328,7 +335,7 @@ def test_ndjson_stream_emits_only_normalized_evidence_events() -> None:
 
     events = stream.feed(
         b'{"type":"hello","v":1,"firmware":"0.1.0",'
-        b'"device":"dutchmate-rp2040","capabilities":[]}\n'
+        b'"device":"dutchmate-rp2350","capabilities":[]}\n'
         b'{"type":"uart","channel":0,"timestamp_us":125,"data_b64":"WAo="}\n'
     )
 
@@ -373,4 +380,3 @@ def test_ndjson_stream_preserves_bounded_frame_size_context() -> None:
     assert raised.value.input_error == "frame_too_large"
     assert raised.value.observed_frame_bytes == 65536
     assert raised.value.max_frame_bytes == 65536
-

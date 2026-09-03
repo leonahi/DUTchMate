@@ -39,7 +39,7 @@ class SegmentTimestamp:
     """Immutable timestamp provenance for one continuous connection segment."""
 
     source: Literal["host", "device"]
-    clock: Literal["monotonic", "rp2040_timer"]
+    clock: Literal["monotonic", "rp2040_timer", "rp2350_timer"]
     unit: Literal["us"]
     origin: Literal["segment_start"]
     source_origin_us: int

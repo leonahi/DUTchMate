@@ -163,7 +163,7 @@ def test_wait_pattern_never_joins_requested_literal_across_reconnect(tmp_path: P
         segment_id=1,
         timestamp=SegmentTimestamp(
             source="device",
-            clock="rp2040_timer",
+            clock="rp2350_timer",
             unit="us",
             origin="segment_start",
             source_origin_us=100,
@@ -291,7 +291,7 @@ def test_wait_pattern_reconciles_idle_reconnect_before_capability_admission(
             segment_id=1,
             timestamp=SegmentTimestamp(
                 source="device",
-                clock="rp2040_timer",
+                clock="rp2350_timer",
                 unit="us",
                 origin="segment_start",
                 source_origin_us=100,
