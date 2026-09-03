@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `6129759b1652bc703b6c3baeeacb9ee17002ee0b` on 2026-09-03
+> Code baseline reviewed: `aadefb0e279242a606bc405388b28019cec6322d` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -80,7 +80,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 ordered UART event output working tree, reviewed 2026-09-03:
+RP2350 ordered UART event output commit
+`aadefb0e279242a606bc405388b28019cec6322d`, reviewed 2026-09-03:
 
 - TDD red gate failed in eight UART-event scenarios because the encoder was
   absent; green covers canonical output, binary data, base64 padding, maximum
