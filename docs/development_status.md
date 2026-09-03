@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `6bbee39b37ed35d41fa4d3b01372303038dcfb46` on 2026-09-03
+> Code baseline reviewed: `285323983e1c4a35e6248c5c90bbe98553f73956` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -72,7 +72,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 portable UART RX ring working tree, reviewed 2026-09-03:
+RP2350 portable UART RX ring commit
+`285323983e1c4a35e6248c5c90bbe98553f73956`, reviewed 2026-09-03:
 
 - TDD red gate failed in all seven scenarios because the ring implementation
   was absent.
