@@ -9,6 +9,8 @@ KNOWN_CAPABILITIES = frozenset(
         "uart_receive",
         "gpio_control",
         "uart_send",
+        "device_timestamp",
+        "overflow_telemetry",
         "gpio_events",
         "power_sense",
         "msgpack",

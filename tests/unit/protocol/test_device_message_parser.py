@@ -80,6 +80,17 @@ def test_parse_hello_from_bytes() -> None:
     )
 
 
+@pytest.mark.parametrize("capability", ["device_timestamp", "overflow_telemetry"])
+def test_parse_hello_accepts_phase1_telemetry_capabilities(capability: str) -> None:
+    message = parse_device_message(_hello_line(capabilities=[capability]))
+
+    assert message == HelloMessage(
+        firmware="0.1.0",
+        device="dutchmate-rp2040",
+        capabilities=(capability,),
+    )
+
+
 @pytest.mark.parametrize("field", ["firmware", "device"])
 @pytest.mark.parametrize("value", ["x", "a" * 64, "é" * 32, "e\u0301"])
 def test_hello_identity_accepts_and_preserves_exact_utf8_value(

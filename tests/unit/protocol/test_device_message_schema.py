@@ -33,8 +33,12 @@ def _hello(capability: str) -> dict[str, object]:
     }
 
 
-def test_schema_accepts_uart_receive_capability() -> None:
-    _validator().validate(_hello("uart_receive"))
+@pytest.mark.parametrize(
+    "capability",
+    ["uart_receive", "device_timestamp", "overflow_telemetry"],
+)
+def test_schema_accepts_phase1_enhanced_capability(capability: str) -> None:
+    _validator().validate(_hello(capability))
 
 
 def test_schema_rejects_legacy_uart_capture_capability() -> None:

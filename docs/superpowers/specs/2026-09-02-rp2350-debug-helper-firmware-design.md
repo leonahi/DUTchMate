@@ -63,10 +63,10 @@ device_timestamp
 overflow_telemetry
 ```
 
-The current device-to-host schema and host `KNOWN_CAPABILITIES` omit the final
-two values. The first implementation slice must add both values atomically to
-schemas, canonical examples, host parser fixtures, and tests before firmware
-advertises them. This is contract alignment, not a new host architecture.
+The device-to-host schema, canonical `hello`, host `KNOWN_CAPABILITIES`, parser
+fixtures, and tests must include all five values before firmware advertises
+them. Keeping these artifacts aligned is contract maintenance, not a new host
+architecture.
 
 Host-to-device frames remain limited to 2,048 bytes including LF.
 Device-to-host frames remain limited to 65,536 bytes including LF. One complete
