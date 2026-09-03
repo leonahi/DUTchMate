@@ -1,0 +1,6 @@
+CompileFlags:
+  CompilationDatabase: build/dutchmate-rp2350-debug-helper
+  Remove:
+    # Apple clangd does not recognize these Zephyr GCC-only flags.
+    - -mfp16-format=*
+    - -fno-reorder-functions

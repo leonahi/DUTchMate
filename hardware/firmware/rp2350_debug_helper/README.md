@@ -39,15 +39,20 @@ Use the pinned Zephyr 4.4.0 workspace and SDK 1.0.1:
 west build \
   -b rpi_pico2/rp2350a/m33 \
   -s /path/to/DUTchMate/hardware/firmware/rp2350_debug_helper \
-  -d build/dutchmate-rp2350-debug-helper \
+  -d /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper \
   --pristine
 ```
 
 The UF2 image is written to:
 
 ```text
-build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
+/path/to/DUTchMate/build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
 ```
+
+Keeping the build at this repository-relative path also supplies the
+`compile_commands.json` used by the root `.clangd` configuration. After the
+first build, restart the clangd language server in VS Code so Zephyr headers,
+generated devicetree macros, and target compiler flags are recognized.
 
 This build proves compilation and devicetree mapping only. Startup voltage,
 translator-disable, and EVENT input state require the Revision A prototype HIL
