@@ -79,6 +79,11 @@ int dutchmate_platform_io_force_safe(void)
 	return first_error;
 }
 
+int dutchmate_platform_uart_interface_set(bool active)
+{
+	return gpio_pin_set_dt(&uart_interface_enable, active ? 1 : 0);
+}
+
 int dutchmate_platform_io_initialize_safe(void)
 {
 	int result;

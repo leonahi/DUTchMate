@@ -2,6 +2,12 @@ mainmenu "DUTchMate RP2350 Debug Helper"
 
 source "Kconfig.zephyr"
 
+config DUTCHMATE_RP2350_DEBUG_HELPER
+	bool
+	default y
+	select PICOSDK_USE_CLAIM
+	select PICOSDK_USE_TIMER
+
 menu "DUTchMate identity"
 
 config DUTCHMATE_FIRMWARE_VERSION

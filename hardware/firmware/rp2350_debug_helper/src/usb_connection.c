@@ -3,6 +3,7 @@
 #include "connection_epoch.h"
 #include "hello.h"
 #include "platform_io.h"
+#include "uart_rx.h"
 
 #include <errno.h>
 #include <stddef.h>
@@ -71,8 +72,19 @@ int dutchmate_usb_connection_run(void)
 		);
 		if (transition == DMH_EPOCH_STARTED) {
 			write_complete_frame(hello_frame, hello_length);
+			result = dutchmate_uart_rx_start();
+			if (result != 0) {
+				(void)dutchmate_platform_io_force_safe();
+				return result;
+			}
 		} else if (transition == DMH_EPOCH_ENDED) {
+			dutchmate_uart_rx_stop();
 			(void)dutchmate_platform_io_force_safe();
+		}
+		if (epoch.active && dutchmate_uart_rx_faulted()) {
+			dutchmate_uart_rx_stop();
+			(void)dutchmate_platform_io_force_safe();
+			return -EIO;
 		}
 		k_sleep(DTR_POLL_INTERVAL);
 	}

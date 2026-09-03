@@ -23,12 +23,18 @@ states, and exposes its initial USB CDC identity:
   descriptors, preserves FIFO ordering across wrap, and drops oldest data on
   byte or descriptor exhaustion;
 - boot-cumulative high-water and loss counters plus bounded overflow-episode
-  state are available for the later telemetry adapter.
+  state are available for the later telemetry adapter;
+- UART0 uses GP0/GP1 at fixed 460800 baud, 8-N-1 with no flow control;
+- one RP2350 64-bit microsecond timer value is sampled for every UART RX
+  interrupt callback, and all bytes drained by that callback retain it;
+- UART RX and its bidirectional translator start only after the connection
+  epoch's `hello`; DTR loss or a UART driver fault stops RX, disables the
+  translator, and discards retained bytes while preserving boot counters.
 
-The ring is not yet connected to an RP2350 UART callback or USB transmission.
-USB command parsing, UART transfer, control commands, device-timer sampling,
-and telemetry encoding remain later vertical slices. This application is
-therefore not yet usable as a complete Enhanced Debug Helper.
+UART data is captured into the ring but not yet encoded or transmitted over
+USB. USB command parsing, UART TX, control commands, and telemetry encoding
+remain later vertical slices. This application is therefore not yet usable as
+a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
