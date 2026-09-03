@@ -1,0 +1,29 @@
+description: DUTchMate Revision A Debug Helper GPIO assignment
+
+compatible: "dutchmate,debug-helper-io"
+
+properties:
+  uart-interface-enable-gpios:
+    type: phandle-array
+    required: true
+    description: Active-high TXU0202 interface enable
+
+  event-interface-enable-gpios:
+    type: phandle-array
+    required: true
+    description: Active-high TXU0104 event interface enable
+
+  ctrl-enable-gpios:
+    type: phandle-array
+    required: true
+    description: Active-high CTRL0 through CTRL3 output enables
+
+  ctrl-data-gpios:
+    type: phandle-array
+    required: true
+    description: CTRL0 through CTRL3 data outputs
+
+  event-input-gpios:
+    type: phandle-array
+    required: true
+    description: EVENT0 through EVENT3 inputs

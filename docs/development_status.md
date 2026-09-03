@@ -13,16 +13,18 @@ Read this document first whenever development resumes.
   Helper. The firmware architecture is approved. Its host prerequisites now
   align required capabilities, canonical `dutchmate-rp2350` identity fixtures,
   and new `rp2350_timer` provenance while retaining read compatibility for
-  legacy RP2040 session evidence. Both selected backends reconnect while idle
+  legacy RP2040 session evidence. The initial RP2350 application now builds for
+  the required target and owns the Revision A mapping, startup safe outputs,
+  and input-only EVENT reservation. Both selected backends reconnect while idle
   and during active finite workflows through one service
   coordinator. Production Enhanced startup and each replacement use exactly one
   async host. The obsolete synchronous Enhanced command/source, hello, startup,
   and reconnect compatibility path is removed; shared runtime/workflow tests now
   use backend-neutral semantic fakes, while wire behavior remains covered at the
   async adapter boundary.
-- **Next step:** Continue Step 5 with the first Zephyr RP2350 application slice
-  for `rpi_pico2/rp2350a/m33`. Keep implementation in small vertical slices;
-  do not create a large implementation plan.
+- **Next step:** Continue Step 5 with build-configurable USB identity and the
+  CDC connection-epoch `hello` slice. Keep implementation in small vertical
+  slices; do not create a large implementation plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -42,8 +44,9 @@ using the deterministic Raspberry Pi Pico 1 DUT fixture and a generic FTDI
 adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
-and active reconnect are complete. The Enhanced host stack is async-only;
-RP2350 firmware plus prototype/ring-buffer/HIL validation have not run.
+and active reconnect are complete. The Enhanced host stack is async-only. The
+RP2350 firmware scaffold cross-builds; functional USB/UART/control firmware plus
+prototype, ring-buffer, and HIL validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -53,7 +56,7 @@ RP2350 firmware plus prototype/ring-buffer/HIL validation have not run.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Not started | The target is a non-wireless Raspberry Pi Pico 2 (RP2350A). The Pico 1 DUT fixture is intentionally separate; Enhanced Debug Helper firmware remains absent. |
+| RP2350 Debug Helper firmware | Scaffold target-build verified; functional firmware and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map, starts CTRL/UART/EVENT translator enables inactive, and reserves EVENT0–EVENT3 as inputs without pulls. USB, UART, protocol, control, ring, telemetry, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -62,6 +65,23 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 application and safe-I/O scaffold working tree, reviewed 2026-09-03:
+
+- Zephyr 4.4.0 with SDK 1.0.1 cross-built the application for
+  `rpi_pico2/rp2350a/m33` and generated a 27,648-byte UF2 image.
+- Generated devicetree evidence preserves the exact Revision A UART enable,
+  CTRL0–CTRL3 enable/data, EVENT enable, and EVENT0–EVENT3 GPIO ordering.
+- Source inspection confirms EVENT channels have no interrupt registration or
+  event-capture path; their translator remains disabled.
+- No TDD test was manufactured for this straightforward peripheral-
+  initialization slice, matching the approved firmware test boundary.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,179 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- Physical startup voltage and translator-state HIL checks were not run because
+  the Revision A prototype is not available in this workspace.
 
 RP2350 identity and timestamp-provenance migration commit
 `c8a9aba8278283421df79b8033f27b58aa44dd44`, reviewed 2026-09-03:
@@ -260,7 +280,7 @@ queues; no production workflow imports Enhanced wire DTOs.
   ring invariants, safe states, failure semantics, and test boundaries.
 - [x] Align `device_timestamp` and `overflow_telemetry` atomically across the
   device schema, host capability parser, canonical examples, and tests.
-- [ ] Add the Zephyr RP2350 application for a non-wireless Raspberry Pi Pico 2
+- [x] Add the Zephyr RP2350 application for a non-wireless Raspberry Pi Pico 2
   using the normative Revision A pin map and the
   `rpi_pico2/rp2350a/m33` board target.
 - [x] Update Enhanced identity fixtures and normalized timer provenance from

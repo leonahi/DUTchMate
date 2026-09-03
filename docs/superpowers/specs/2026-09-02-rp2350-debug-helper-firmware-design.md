@@ -1,6 +1,6 @@
 # RP2350 Debug Helper Firmware Design
 
-> Status: approved architecture; implementation not started
+> Status: approved architecture
 > Target: non-wireless Raspberry Pi Pico 2, RP2350A Cortex-M33,
 > `rpi_pico2/rp2350a/m33`
 

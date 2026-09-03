@@ -1,0 +1,3 @@
+mainmenu "DUTchMate RP2350 Debug Helper"
+
+source "Kconfig.zephyr"
