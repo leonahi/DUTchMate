@@ -1,6 +1,7 @@
 #include "uart_rx_ring.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,25 +89,34 @@ static void test_byte_overflow_drops_oldest(void)
 	assert(snapshot.high_water_bytes == DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES);
 	assert(snapshot.dropped_bytes_total == 8U);
 	assert(snapshot.overflow_events == 1U);
-	assert(dmh_uart_rx_ring_claim_overflow(&ring, &overflow));
-	assert(overflow.first_drop_timestamp_us == 200U);
-	assert(overflow.dropped_bytes == 8U);
-	assert(!dmh_uart_rx_ring_claim_overflow(&ring, &overflow));
+	assert(dmh_uart_rx_ring_next_observation(&ring) == DMH_UART_RX_OBSERVATION_CHUNK);
 
 	assert(dmh_uart_rx_ring_take(&ring, output, sizeof(output), &chunk) == 0);
 	assert(chunk.length == DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES - 16U);
 	assert(chunk.timestamp_us == 100U);
+	assert(chunk.observation_sequence == 1U);
 	assert(output[0] == 'A');
 	assert(output[chunk.length - 1U] == 'A');
+	assert(dmh_uart_rx_ring_next_observation(&ring) ==
+	       DMH_UART_RX_OBSERVATION_OVERFLOW);
+	assert(dmh_uart_rx_ring_claim_overflow(&ring, &overflow));
+	assert(overflow.first_drop_timestamp_us == 200U);
+	assert(overflow.dropped_bytes == 8U);
+	assert(overflow.observation_sequence == 2U);
+	assert(!dmh_uart_rx_ring_claim_overflow(&ring, &overflow));
+	assert(dmh_uart_rx_ring_next_observation(&ring) == DMH_UART_RX_OBSERVATION_CHUNK);
 	assert(dmh_uart_rx_ring_take(&ring, output, sizeof(output), &chunk) == 0);
 	assert(chunk.length == 16U);
 	assert(chunk.timestamp_us == 200U);
+	assert(chunk.observation_sequence == 3U);
 	assert(memcmp(output, "BBBBBBBBBBBBBBBB", 16U) == 0);
+	assert(dmh_uart_rx_ring_next_observation(&ring) == DMH_UART_RX_OBSERVATION_NONE);
 }
 
 static void test_oversized_callback_preserves_newest(void)
 {
 	struct dmh_uart_rx_chunk chunk;
+	struct dmh_uart_rx_overflow overflow;
 	struct dmh_uart_rx_snapshot snapshot;
 
 	dmh_uart_rx_ring_init(&ring);
@@ -115,6 +125,8 @@ static void test_oversized_callback_preserves_newest(void)
 	dmh_uart_rx_ring_snapshot(&ring, &snapshot);
 	assert(snapshot.used_bytes == DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES);
 	assert(snapshot.dropped_bytes_total == 8U);
+	assert(dmh_uart_rx_ring_take(&ring, output, sizeof(output), &chunk) == -EAGAIN);
+	assert(dmh_uart_rx_ring_claim_overflow(&ring, &overflow));
 	assert(dmh_uart_rx_ring_take(&ring, output, sizeof(output), &chunk) == 0);
 	assert(chunk.length == DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES);
 	assert(chunk.channel == 1U);

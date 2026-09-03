@@ -29,12 +29,18 @@ states, and exposes its initial USB CDC identity:
   interrupt callback, and all bytes drained by that callback retain it;
 - UART RX and its bidirectional translator start only after the connection
   epoch's `hello`; DTR loss or a UART driver fault stops RX, disables the
-  translator, and discards retained bytes while preserving boot counters.
+  translator, and discards retained bytes while preserving boot counters;
+- the sole CDC writer drains at most 1,024 raw bytes per v1 `uart` event,
+  preserves each callback timestamp, and emits exact compact JSON with base64
+  payloads;
+- internal 64-bit observation sequences keep retained UART chunks and overflow
+  episodes ordered without changing the v1 wire format.
 
-UART data is captured into the ring but not yet encoded or transmitted over
-USB. USB command parsing, UART TX, control commands, and telemetry encoding
-remain later vertical slices. This application is therefore not yet usable as
-a complete Enhanced Debug Helper.
+When overflow becomes the next observation, UART draining pauses until the
+next telemetry slice can emit that loss record first. USB command parsing,
+UART TX, control commands, and telemetry encoding remain later vertical
+slices. This application is therefore not yet usable as a complete Enhanced
+Debug Helper.
 
 ## Revision A mapping
 

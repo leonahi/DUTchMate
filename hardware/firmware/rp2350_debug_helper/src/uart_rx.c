@@ -189,3 +189,13 @@ bool dutchmate_uart_rx_claim_overflow(struct dmh_uart_rx_overflow *overflow)
 	}
 	return claimed;
 }
+
+enum dmh_uart_rx_observation_kind dutchmate_uart_rx_next_observation(void)
+{
+	enum dmh_uart_rx_observation_kind kind;
+
+	K_SPINLOCK(&rx_ring_lock) {
+		kind = dmh_uart_rx_ring_next_observation(&rx_ring);
+	}
+	return kind;
+}

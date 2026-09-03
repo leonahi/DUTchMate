@@ -22,16 +22,19 @@ Read this document first whenever development resumes.
   GP1 RX at fixed 460800 8-N-1 into that ring, sampling the RP2350 64-bit
   microsecond timer once per interrupt callback. Epoch start enables the shared
   UART translator only after `hello`; disconnect or driver fault stops RX and
-  returns it to safe state. Both selected backends reconnect while idle and
-  during active finite workflows through one service coordinator. Production
-  Enhanced startup and each replacement use exactly one async host. The
-  obsolete synchronous Enhanced command/source, hello, startup, and reconnect
-  compatibility path is removed; shared runtime/workflow tests use
-  backend-neutral semantic fakes, while wire behavior remains covered at the
-  async adapter boundary.
-- **Next step:** Continue Step 5 with a TDD-built exact v1 UART event/base64
-  encoder and bounded ring-to-USB drain owned by the sole CDC writer. Keep EVENT
-  pins reserved without capture. Keep
+  returns it to safe state. The sole CDC writer now drains bounded 1,024-byte
+  chunks as exact v1 base64 UART events. Internal observation sequences prevent
+  UART data from crossing a pending overflow record. Both selected backends
+  reconnect while idle and during active finite workflows through one service
+  coordinator. Production Enhanced startup and each replacement use exactly
+  one async host. The obsolete synchronous Enhanced command/source, hello,
+  startup, and reconnect compatibility path is removed; shared runtime/workflow
+  tests use backend-neutral semantic fakes, while wire behavior remains covered
+  at the async adapter boundary.
+- **Next step:** Continue Step 5 with TDD-built `buffer_overflow` and
+  `buffer_status` encoders, then add ordered overflow emission and coalesced
+  periodic status scheduling to the sole CDC writer. Keep EVENT pins reserved
+  without capture. Keep
   implementation in small vertical slices; do not create a large implementation
   plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -56,8 +59,8 @@ coordinator, continuous connection/integrity monitoring, and coordinated idle
 and active reconnect are complete. The Enhanced host stack is async-only. The
 RP2350 firmware cross-builds with its USB identity, connection-epoch hello,
 portable 32 KiB RX ring, and interrupt-driven UART RX/timestamp adapter. USB
-event/command handling, UART TX, control, telemetry, prototype, and HIL
-validation remain incomplete.
+UART event output is implemented; USB command handling, UART TX, control,
+telemetry, prototype, and HIL validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -67,7 +70,7 @@ validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | UART RX/timestamp target-build verified; complete protocol and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the 32 KiB ring, and interrupt-driven GP1 UART RX with RP2350 microsecond timestamps are integrated. UART event transmission, USB commands, UART TX, control, telemetry encoding, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | UART receive path target-build verified; complete protocol and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, and bounded exact v1 UART event output are integrated. USB commands, UART TX, control, telemetry encoding, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -76,6 +79,32 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 ordered UART event output working tree, reviewed 2026-09-03:
+
+- TDD red gate failed in eight UART-event scenarios because the encoder was
+  absent; green covers canonical output, binary data, base64 padding, maximum
+  1,024-byte staging, 64-bit timestamps, channel bounds, and invalid sizes.
+- A second ring TDD red gate proved observation ordering was absent, then green
+  added internal 64-bit sequences and prevents a consumer from taking UART data
+  ahead of an earlier overflow episode.
+- The sole CDC writer emits one bounded UART event per scheduling pass. A
+  pending overflow intentionally pauses later UART output until the next slice
+  adds loss telemetry, avoiding evidence reordering.
+- The 512 descriptors are now 24 bytes each (12 KiB) because they retain the
+  internal observation sequence; this remains within the committed 8-16 KiB
+  metadata budget and still requires HIL acceptance.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 41,484 bytes flash, 62,824 bytes RAM, and an
+  83,456-byte UF2 image. RAM includes the 1,024-byte UART staging buffer,
+  1,536-byte encoded-frame buffer, and expanded descriptor metadata.
+- All 26 portable firmware tests passed.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,205 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- Real CDC throughput, overflow ordering, and reconnect behavior remain HIL
+  gates because the Revision A prototype is unavailable in this workspace.
 
 RP2350 UART RX and hardware timestamp adapter commit
 `6129759b1652bc703b6c3baeeacb9ee17002ee0b`, reviewed 2026-09-03:

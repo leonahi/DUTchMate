@@ -16,5 +16,6 @@ int dutchmate_uart_rx_take(
 );
 void dutchmate_uart_rx_snapshot(struct dmh_uart_rx_snapshot *snapshot);
 bool dutchmate_uart_rx_claim_overflow(struct dmh_uart_rx_overflow *overflow);
+enum dmh_uart_rx_observation_kind dutchmate_uart_rx_next_observation(void);
 
 #endif

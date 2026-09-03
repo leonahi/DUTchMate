@@ -5,13 +5,19 @@
 #include <string.h>
 
 _Static_assert(
-	sizeof(struct dmh_uart_rx_descriptor) == 16U,
+	sizeof(struct dmh_uart_rx_descriptor) == 24U,
 	"Unexpected UART RX descriptor size"
 );
 
 static uint64_t saturating_add_u64(uint64_t value, uint64_t increment)
 {
 	return increment > UINT64_MAX - value ? UINT64_MAX : value + increment;
+}
+
+static uint64_t next_observation_sequence(struct dmh_uart_rx_ring *ring)
+{
+	ring->next_observation_sequence++;
+	return ring->next_observation_sequence;
 }
 
 static struct dmh_uart_rx_descriptor *oldest_descriptor(
@@ -63,6 +69,7 @@ static void record_drop(
 		ring->episode_active = true;
 		ring->episode_first_drop_timestamp_us = timestamp_us;
 		ring->episode_dropped_bytes = 0U;
+		ring->episode_observation_sequence = next_observation_sequence(ring);
 		ring->overflow_events = saturating_add_u64(ring->overflow_events, 1U);
 	}
 	ring->episode_dropped_bytes = saturating_add_u64(
@@ -101,6 +108,7 @@ static void append_descriptor(
 		DMH_UART_RX_DESCRIPTOR_CAPACITY;
 
 	ring->descriptors[index].timestamp_us = timestamp_us;
+	ring->descriptors[index].observation_sequence = next_observation_sequence(ring);
 	ring->descriptors[index].length = (uint32_t)length;
 	ring->descriptors[index].channel = channel;
 	ring->descriptor_count++;
@@ -180,6 +188,10 @@ int dmh_uart_rx_ring_take(
 	if (output_capacity == 0U || ring->descriptor_count == 0U) {
 		return 0;
 	}
+	if (dmh_uart_rx_ring_next_observation(ring) ==
+	    DMH_UART_RX_OBSERVATION_OVERFLOW) {
+		return -EAGAIN;
+	}
 
 	descriptor = oldest_descriptor(ring);
 	length = output_capacity < descriptor->length ?
@@ -192,6 +204,7 @@ int dmh_uart_rx_ring_take(
 	memcpy(output + first_length, ring->bytes, length - first_length);
 
 	chunk->timestamp_us = descriptor->timestamp_us;
+	chunk->observation_sequence = descriptor->observation_sequence;
 	chunk->channel = descriptor->channel;
 	chunk->length = length;
 	drop_oldest_bytes(ring, length);
@@ -221,9 +234,26 @@ bool dmh_uart_rx_ring_claim_overflow(
 
 	overflow->first_drop_timestamp_us = ring->episode_first_drop_timestamp_us;
 	overflow->dropped_bytes = ring->episode_dropped_bytes;
+	overflow->observation_sequence = ring->episode_observation_sequence;
 	ring->episode_active = false;
 	ring->episode_dropped_bytes = 0U;
 	return true;
+}
+
+enum dmh_uart_rx_observation_kind dmh_uart_rx_ring_next_observation(
+	const struct dmh_uart_rx_ring *ring
+)
+{
+	if (ring->descriptor_count == 0U) {
+		return ring->episode_active ?
+			DMH_UART_RX_OBSERVATION_OVERFLOW : DMH_UART_RX_OBSERVATION_NONE;
+	}
+	if (!ring->episode_active ||
+	    ring->descriptors[ring->descriptor_head].observation_sequence <
+		    ring->episode_observation_sequence) {
+		return DMH_UART_RX_OBSERVATION_CHUNK;
+	}
+	return DMH_UART_RX_OBSERVATION_OVERFLOW;
 }
 
 void dmh_uart_rx_ring_discard_retained(struct dmh_uart_rx_ring *ring)
