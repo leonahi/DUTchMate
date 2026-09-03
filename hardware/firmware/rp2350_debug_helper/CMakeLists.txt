@@ -8,5 +8,6 @@ target_sources(app PRIVATE
     src/hello.c
     src/main.c
     src/platform_io.c
+    src/uart_rx_ring.c
     src/usb_connection.c
 )

@@ -18,10 +18,16 @@ states, and exposes its initial USB CDC identity:
 - the USB serial descriptor uses the stable board identifier supplied by
   Zephyr hardware information when available;
 - each DTR assertion starts one connection epoch and emits the exact v1
-  `hello` first and once; DTR loss forces the GPIO safe state.
+  `hello` first and once; DTR loss forces the GPIO safe state;
+- the portable UART RX core defines exactly 32,768 raw bytes and 512 timestamp
+  descriptors, preserves FIFO ordering across wrap, and drops oldest data on
+  byte or descriptor exhaustion;
+- boot-cumulative high-water and loss counters plus bounded overflow-episode
+  state are available for the later telemetry adapter.
 
-USB command parsing, UART transfer, control commands, timestamps, ring
-buffering, and telemetry remain later vertical slices. This application is
+The ring is not yet connected to an RP2350 UART callback or USB transmission.
+USB command parsing, UART transfer, control commands, device-timer sampling,
+and telemetry encoding remain later vertical slices. This application is
 therefore not yet usable as a complete Enhanced Debug Helper.
 
 ## Revision A mapping

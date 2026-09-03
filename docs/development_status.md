@@ -16,15 +16,18 @@ Read this document first whenever development resumes.
   legacy RP2040 session evidence. The initial RP2350 application now builds for
   the required target, owns the Revision A mapping and safe GPIO states, and
   now exposes its build-configurable USB CDC identity. Each DTR assertion emits
-  one exact v1 `hello`; DTR loss forces safe GPIO state. Both selected backends
-  reconnect while idle and during active finite workflows through one service
-  coordinator. Production Enhanced startup and each replacement use exactly
-  one async host. The obsolete synchronous Enhanced command/source, hello,
-  startup, and reconnect compatibility path is removed; shared runtime/workflow
-  tests now use backend-neutral semantic fakes, while wire behavior remains
-  covered at the async adapter boundary.
-- **Next step:** Continue Step 5 with the hardware-independent 32 KiB RX ring,
-  timestamp-descriptor, and drop-oldest invariant slice using TDD. Keep
+  one exact v1 `hello`; DTR loss forces safe GPIO state. Its portable UART RX
+  core now enforces the 32 KiB byte-ring, bounded timestamp descriptors,
+  drop-oldest, high-water, and overflow-episode invariants. Both selected
+  backends reconnect while idle and during active finite workflows through one
+  service coordinator. Production Enhanced startup and each replacement use
+  exactly one async host. The obsolete synchronous Enhanced command/source,
+  hello, startup, and reconnect compatibility path is removed; shared
+  runtime/workflow tests now use backend-neutral semantic fakes, while wire
+  behavior remains covered at the async adapter boundary.
+- **Next step:** Continue Step 5 by connecting the fixed 460800 8-N-1 RP2350
+  UART RX callback and one sampled 64-bit microsecond timestamp per callback to
+  the portable ring. Keep EVENT pins reserved without capture. Keep
   implementation in small vertical slices; do not create a large implementation
   plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -47,9 +50,9 @@ adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
 and active reconnect are complete. The Enhanced host stack is async-only. The
-RP2350 firmware cross-builds with its USB identity and connection-epoch hello;
-USB command handling, UART, control, ring, telemetry, prototype, and HIL
-validation remain incomplete.
+RP2350 firmware cross-builds with its USB identity, connection-epoch hello, and
+portable 32 KiB RX ring. USB command handling, hardware UART integration,
+control, telemetry, prototype, and HIL validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -59,7 +62,7 @@ validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | USB identity/hello target-build verified; functional firmware and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Its build-configurable CDC identity, production VID/PID guard, exact v1 hello encoder, and DTR connection-epoch transitions are covered. USB commands, UART, control, ring, telemetry, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | USB identity/hello and portable RX ring target-build verified; functional firmware and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, and the 32 KiB byte ring with 512 timestamp descriptors, drop-oldest loss accounting, and bounded drain staging are covered. USB commands, hardware UART integration, control, telemetry encoding, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -68,6 +71,30 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 portable UART RX ring working tree, reviewed 2026-09-03:
+
+- TDD red gate failed in all seven scenarios because the ring implementation
+  was absent.
+- Focused green gate covers initialization, FIFO wrap, bounded descriptor
+  staging, callback timestamp preservation across split drains, byte-space and
+  descriptor-space drop-oldest behavior, oversized callback handling,
+  overflow-episode coalescing, and disconnect discard with boot-cumulative
+  counters preserved.
+- The descriptor ring is fixed at 512 16-byte metadata entries (8 KiB); this
+  remains subject to the committed RAM and HIL acceptance gates.
+- All 18 portable firmware tests passed after integration with the prior hello
+  and connection-epoch suites.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 39,212 bytes flash, 15,120 bytes RAM, and a
+  78,848-byte UF2 image. The ring source is target-compiled but its storage is
+  not allocated until the hardware UART adapter owns an instance next slice.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,197 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- Hardware UART integration and ring load HIL were not run in this portable
+  logic slice.
 
 RP2350 USB identity and connection-epoch hello commit
 `6bbee39b37ed35d41fa4d3b01372303038dcfb46`, reviewed 2026-09-03:
