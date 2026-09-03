@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `285323983e1c4a35e6248c5c90bbe98553f73956` on 2026-09-03
+> Code baseline reviewed: `6129759b1652bc703b6c3baeeacb9ee17002ee0b` on 2026-09-03
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -77,8 +77,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 UART RX and hardware timestamp adapter working tree, reviewed
-2026-09-03:
+RP2350 UART RX and hardware timestamp adapter commit
+`6129759b1652bc703b6c3baeeacb9ee17002ee0b`, reviewed 2026-09-03:
 
 - Straightforward Zephyr peripheral initialization was target-build verified;
   no artificial TDD test was added, matching the approved test boundary.
