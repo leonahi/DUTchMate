@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `1bf616c5ac1b28096b2a1ceefc214793f988af89` on 2026-09-04
+> Code baseline reviewed: `c3ce6aa58d26f3531c4b735261ec8ecf4e87dcdf` on 2026-09-04
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -88,7 +88,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 bounded host-command framing implementation, reviewed 2026-09-04:
+RP2350 bounded host-command framing implementation commit
+`c3ce6aa58d26f3531c4b735261ec8ecf4e87dcdf`, reviewed 2026-09-04:
 
 - TDD red failed in all seven scenarios because the framer was absent. Green
   covers fragmented frames, multiple frames in one input chunk, CRLF handling,
