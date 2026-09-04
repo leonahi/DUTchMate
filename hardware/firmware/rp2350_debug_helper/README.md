@@ -44,10 +44,15 @@ states, and exposes its initial USB CDC identity:
 - the hardware-independent host-command framer retains at most 2,047 bytes,
   accepts exact 2,048-byte LF or CRLF frames, removes only one final CR, returns
   one frame at a time, and discards oversized input through LF before resuming.
+- the portable v1 decoder validates all four command shapes, rejects extra or
+  duplicate fields, enforces CTRL, pulse, and base64 bounds, and produces typed
+  command values without hardware side effects;
+- exact compact success, timestamp, UART-acceptance, and bounded error response
+  encoders validate wire limits, UTF-8 details, and JSON escaping.
 
-The framer is target-compiled but does not consume CDC input until command
-decoding and response handling exist, so no command can disappear without its
-required response. USB command parsing, UART TX, and control commands remain
+The portable command protocol is target-compiled but does not consume CDC input
+until command execution and ordered response handling exist, so no command can
+disappear without its required response. UART TX and control commands remain
 later vertical slices. This application is therefore not yet usable as a
 complete Enhanced Debug Helper.
 

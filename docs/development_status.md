@@ -29,21 +29,23 @@ Read this document first whenever development resumes.
   second; one pending status snapshot coalesces to the newest sample while UART,
   overflow, and status evidence retain sequence order. The portable host-command
   NDJSON framer now enforces the exact 2,048-byte LF/CRLF boundary, returns one
-  frame at a time, and resynchronizes after
-  oversized input. It is target-compiled but intentionally not connected to
-  CDC until command decoding and response handling prevent silent command loss.
-  Both selected backends
-  reconnect while idle and during active finite workflows through one service
-  coordinator. Production Enhanced startup and each replacement use exactly
+  frame at a time, and resynchronizes after oversized input. The portable v1
+  decoder now validates every committed command shape into typed values, and
+  exact success/error encoders enforce response bounds and escaping. These
+  components are target-compiled but intentionally not connected to CDC until
+  execution and ordered response handling prevent silent command loss. Both
+  selected backends reconnect while idle and during active finite workflows
+  through one service coordinator. Production Enhanced startup and each
+  replacement use exactly
   one async host. The obsolete synchronous Enhanced command/source, hello,
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
   at the async adapter boundary.
-- **Next step:** Continue Step 5 with a TDD-built complete v1 command decoder
-  and exact success/error response encoders. Keep them hardware-independent and
-  do not connect CDC RX until every complete command frame can produce exactly
-  one response. Keep EVENT pins reserved without capture. Keep implementation
-  in small vertical slices; do not create a large implementation plan.
+- **Next step:** Continue Step 5 with a TDD-built generic `CTRL0`–`CTRL3` electrical
+  state machine covering accepted configuration, active/idle application,
+  pulses, cancellation, and disconnect/fault high impedance. Then adapt it to
+  the Revision A GPIOs without enabling EVENT capture. Keep implementation in
+  small vertical slices; do not create a large implementation plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -67,8 +69,8 @@ and active reconnect are complete. The Enhanced host stack is async-only. The
 RP2350 firmware cross-builds with its USB identity, connection-epoch hello,
 portable 32 KiB RX ring, interrupt-driven UART RX/timestamp adapter, ordered
 UART/overflow output, periodic buffer telemetry, and a bounded host-command
-framer. USB command decoding/handling, UART TX, control, prototype, and HIL
-validation remain incomplete.
+framer plus typed decoder/response encoder. CDC command execution/response
+routing, UART TX, control, prototype, and HIL validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -78,7 +80,7 @@ validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | UART receive/telemetry and portable USB framing target-build verified; complete protocol and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 UART/overflow output, periodic buffer status, and the 2,048-byte host-command framer are integrated. CDC command decoding/handling, UART TX, control, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | UART receive/telemetry and portable USB protocol core target-build verified; command execution and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, and response encoding are implemented. CDC execution/routing, UART TX, control, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -87,6 +89,38 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 typed command protocol implementation, reviewed 2026-09-04:
+
+- TDD red first proved response encoding absent, then green covered exact plain,
+  timestamped, UART-acceptance, and error frames plus limits, JSON escaping,
+  UTF-8 validity, and Unicode control rejection. A focused red-green regression
+  closed invalid multibyte continuation acceptance.
+- A second TDD red proved command decoding absent. Green validates all
+  four committed command types independent of field order, including escaped
+  ASCII values, `CTRL0`–`CTRL3`, open-drain/push-pull electrical invariants,
+  1..10000 ms pulses, active/idle states, and 1..1024 decoded UART bytes.
+- Invalid/missing/unknown commands and malformed objects classify as
+  `invalid_command`; missing, extra, duplicate, wrong-type, out-of-range, and
+  invalid-base64 fields classify as `invalid_argument`. Failed decoding clears
+  the typed output, so it cannot carry partial state into a hardware action.
+- Systematic debugging isolated one wrong-type `data_b64` classification to a
+  missing value-token check; the narrow fix preserves malformed-string
+  classification and the focused decoder/response gate passes.
+- The modules are target-compiled but CDC RX remains disconnected until command
+  execution and ordered response routing exist. EVENT pins remain input-only
+  and the EVENT translator remains disabled.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 43,036 bytes flash, 62,824 bytes RAM, and an
+  86,528-byte UF2 image. No decoder/response instance is allocated yet.
+- All 53 portable firmware tests passed.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,232 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- CDC command execution, response ordering, disconnect cancellation, and
+  recovery remain HIL gates because the Revision A prototype is unavailable in
+  this workspace.
 
 RP2350 bounded host-command framing implementation commit
 `c3ce6aa58d26f3531c4b735261ec8ecf4e87dcdf`, reviewed 2026-09-04:
