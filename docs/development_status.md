@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `f6fbae41150783ef4206ec7288a5d969fb801f58` on 2026-09-04
+> Code baseline reviewed: `81491bb222a05f0b90fae0e1e0849b38dab6f305` on 2026-09-04
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -97,7 +97,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 generic control implementation, reviewed 2026-09-04:
+RP2350 generic control implementation commit
+`81491bb222a05f0b90fae0e1e0849b38dab6f305`, reviewed 2026-09-04:
 
 - TDD red failed all seven initial scenarios because the portable control module
   was absent. Green coverage now exercises accepted open-drain and push-pull
