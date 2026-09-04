@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `aadefb0e279242a606bc405388b28019cec6322d` on 2026-09-04
+> Code baseline reviewed: `1bf616c5ac1b28096b2a1ceefc214793f988af89` on 2026-09-04
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -82,7 +82,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 buffer telemetry implementation, reviewed 2026-09-04:
+RP2350 buffer telemetry implementation commit
+`1bf616c5ac1b28096b2a1ceefc214793f988af89`, reviewed 2026-09-04:
 
 - TDD red gates first proved both telemetry encoders and the periodic scheduler
   were absent, then proved status snapshots lacked ring observation ordering
