@@ -41,10 +41,15 @@ states, and exposes its initial USB CDC identity:
   most one pending snapshot coalesced to the newest sample;
 - UART, overflow, and status evidence share one sequence-ordered CDC writer;
   encoding and USB output remain outside the RX ring spinlock.
+- the hardware-independent host-command framer retains at most 2,047 bytes,
+  accepts exact 2,048-byte LF or CRLF frames, removes only one final CR, returns
+  one frame at a time, and discards oversized input through LF before resuming.
 
-USB command parsing, UART TX, and control commands remain later vertical
-slices. This application is therefore not yet usable as a complete Enhanced
-Debug Helper.
+The framer is target-compiled but does not consume CDC input until command
+decoding and response handling exist, so no command can disappear without its
+required response. USB command parsing, UART TX, and control commands remain
+later vertical slices. This application is therefore not yet usable as a
+complete Enhanced Debug Helper.
 
 ## Revision A mapping
 

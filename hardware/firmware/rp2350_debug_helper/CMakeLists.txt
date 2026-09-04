@@ -7,6 +7,7 @@ target_sources(app PRIVATE
     src/connection_epoch.c
     src/hello.c
     src/main.c
+    src/ndjson_framer.c
     src/platform_io.c
     src/telemetry.c
     src/uart_event.c
