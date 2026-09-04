@@ -80,9 +80,24 @@ int dmh_uart_rx_ring_take(
 	size_t output_capacity,
 	struct dmh_uart_rx_chunk *chunk
 );
+int dmh_uart_rx_ring_take_before(
+	struct dmh_uart_rx_ring *ring,
+	bool sequence_limit_active,
+	uint64_t sequence_limit,
+	uint8_t *output,
+	size_t output_capacity,
+	enum dmh_uart_rx_observation_kind *kind,
+	struct dmh_uart_rx_chunk *chunk,
+	struct dmh_uart_rx_overflow *overflow
+);
 void dmh_uart_rx_ring_snapshot(
 	const struct dmh_uart_rx_ring *ring,
 	struct dmh_uart_rx_snapshot *snapshot
+);
+void dmh_uart_rx_ring_snapshot_observation(
+	struct dmh_uart_rx_ring *ring,
+	struct dmh_uart_rx_snapshot *snapshot,
+	uint64_t *observation_sequence
 );
 bool dmh_uart_rx_ring_claim_overflow(
 	struct dmh_uart_rx_ring *ring,
@@ -90,6 +105,11 @@ bool dmh_uart_rx_ring_claim_overflow(
 );
 enum dmh_uart_rx_observation_kind dmh_uart_rx_ring_next_observation(
 	const struct dmh_uart_rx_ring *ring
+);
+bool dmh_uart_rx_ring_peek_observation(
+	const struct dmh_uart_rx_ring *ring,
+	enum dmh_uart_rx_observation_kind *kind,
+	uint64_t *observation_sequence
 );
 void dmh_uart_rx_ring_discard_retained(struct dmh_uart_rx_ring *ring);
 

@@ -50,6 +50,8 @@ def ring_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "descriptor-overflow",
         "episode",
         "discard",
+        "status-order",
+        "overflow-status-order",
     ],
 )
 def test_uart_rx_ring_invariants(ring_harness: Path, scenario: str) -> None:

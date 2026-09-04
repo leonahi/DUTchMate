@@ -9,13 +9,18 @@ int dutchmate_uart_rx_initialize(void);
 int dutchmate_uart_rx_start(void);
 void dutchmate_uart_rx_stop(void);
 bool dutchmate_uart_rx_faulted(void);
-int dutchmate_uart_rx_take(
+int dutchmate_uart_rx_take_before(
+	bool sequence_limit_active,
+	uint64_t sequence_limit,
 	uint8_t *output,
 	size_t output_capacity,
-	struct dmh_uart_rx_chunk *chunk
+	enum dmh_uart_rx_observation_kind *kind,
+	struct dmh_uart_rx_chunk *chunk,
+	struct dmh_uart_rx_overflow *overflow
 );
-void dutchmate_uart_rx_snapshot(struct dmh_uart_rx_snapshot *snapshot);
-bool dutchmate_uart_rx_claim_overflow(struct dmh_uart_rx_overflow *overflow);
-enum dmh_uart_rx_observation_kind dutchmate_uart_rx_next_observation(void);
+void dutchmate_uart_rx_snapshot_observation(
+	struct dmh_uart_rx_snapshot *snapshot,
+	uint64_t *observation_sequence
+);
 
 #endif

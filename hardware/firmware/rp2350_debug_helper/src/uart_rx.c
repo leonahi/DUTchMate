@@ -154,48 +154,43 @@ bool dutchmate_uart_rx_faulted(void)
 	return faulted;
 }
 
-int dutchmate_uart_rx_take(
+int dutchmate_uart_rx_take_before(
+	bool sequence_limit_active,
+	uint64_t sequence_limit,
 	uint8_t *output,
 	size_t output_capacity,
-	struct dmh_uart_rx_chunk *chunk
+	enum dmh_uart_rx_observation_kind *kind,
+	struct dmh_uart_rx_chunk *chunk,
+	struct dmh_uart_rx_overflow *overflow
 )
 {
 	int result;
 
 	K_SPINLOCK(&rx_ring_lock) {
-		result = dmh_uart_rx_ring_take(
+		result = dmh_uart_rx_ring_take_before(
 			&rx_ring,
+			sequence_limit_active,
+			sequence_limit,
 			output,
 			output_capacity,
-			chunk
+			kind,
+			chunk,
+			overflow
 		);
 	}
 	return result;
 }
 
-void dutchmate_uart_rx_snapshot(struct dmh_uart_rx_snapshot *snapshot)
+void dutchmate_uart_rx_snapshot_observation(
+	struct dmh_uart_rx_snapshot *snapshot,
+	uint64_t *observation_sequence
+)
 {
 	K_SPINLOCK(&rx_ring_lock) {
-		dmh_uart_rx_ring_snapshot(&rx_ring, snapshot);
+		dmh_uart_rx_ring_snapshot_observation(
+			&rx_ring,
+			snapshot,
+			observation_sequence
+		);
 	}
-}
-
-bool dutchmate_uart_rx_claim_overflow(struct dmh_uart_rx_overflow *overflow)
-{
-	bool claimed;
-
-	K_SPINLOCK(&rx_ring_lock) {
-		claimed = dmh_uart_rx_ring_claim_overflow(&rx_ring, overflow);
-	}
-	return claimed;
-}
-
-enum dmh_uart_rx_observation_kind dutchmate_uart_rx_next_observation(void)
-{
-	enum dmh_uart_rx_observation_kind kind;
-
-	K_SPINLOCK(&rx_ring_lock) {
-		kind = dmh_uart_rx_ring_next_observation(&rx_ring);
-	}
-	return kind;
 }

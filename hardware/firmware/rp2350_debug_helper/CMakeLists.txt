@@ -8,6 +8,7 @@ target_sources(app PRIVATE
     src/hello.c
     src/main.c
     src/platform_io.c
+    src/telemetry.c
     src/uart_event.c
     src/uart_rx.c
     src/uart_rx_ring.c

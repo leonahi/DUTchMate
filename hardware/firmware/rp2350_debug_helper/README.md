@@ -35,10 +35,14 @@ states, and exposes its initial USB CDC identity:
   payloads;
 - internal 64-bit observation sequences keep retained UART chunks and overflow
   episodes ordered without changing the v1 wire format.
+- each closed overflow episode emits one exact v1 `buffer_overflow` record
+  before any later UART data;
+- a boot-cumulative `buffer_status` snapshot is scheduled every second, with at
+  most one pending snapshot coalesced to the newest sample;
+- UART, overflow, and status evidence share one sequence-ordered CDC writer;
+  encoding and USB output remain outside the RX ring spinlock.
 
-When overflow becomes the next observation, UART draining pauses until the
-next telemetry slice can emit that loss record first. USB command parsing,
-UART TX, control commands, and telemetry encoding remain later vertical
+USB command parsing, UART TX, and control commands remain later vertical
 slices. This application is therefore not yet usable as a complete Enhanced
 Debug Helper.
 

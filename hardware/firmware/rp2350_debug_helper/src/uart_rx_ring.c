@@ -211,6 +211,38 @@ int dmh_uart_rx_ring_take(
 	return 0;
 }
 
+int dmh_uart_rx_ring_take_before(
+	struct dmh_uart_rx_ring *ring,
+	bool sequence_limit_active,
+	uint64_t sequence_limit,
+	uint8_t *output,
+	size_t output_capacity,
+	enum dmh_uart_rx_observation_kind *kind,
+	struct dmh_uart_rx_chunk *chunk,
+	struct dmh_uart_rx_overflow *overflow
+)
+{
+	uint64_t sequence;
+
+	if (ring == NULL || output == NULL || kind == NULL || chunk == NULL ||
+	    overflow == NULL) {
+		return -EINVAL;
+	}
+	*kind = DMH_UART_RX_OBSERVATION_NONE;
+	if (!dmh_uart_rx_ring_peek_observation(ring, kind, &sequence)) {
+		return 0;
+	}
+	if (sequence_limit_active && sequence >= sequence_limit) {
+		*kind = DMH_UART_RX_OBSERVATION_NONE;
+		return 0;
+	}
+	if (*kind == DMH_UART_RX_OBSERVATION_OVERFLOW) {
+		(void)dmh_uart_rx_ring_claim_overflow(ring, overflow);
+		return 0;
+	}
+	return dmh_uart_rx_ring_take(ring, output, output_capacity, chunk);
+}
+
 void dmh_uart_rx_ring_snapshot(
 	const struct dmh_uart_rx_ring *ring,
 	struct dmh_uart_rx_snapshot *snapshot
@@ -221,6 +253,16 @@ void dmh_uart_rx_ring_snapshot(
 	snapshot->high_water_bytes = ring->high_water_bytes;
 	snapshot->dropped_bytes_total = ring->dropped_bytes_total;
 	snapshot->overflow_events = ring->overflow_events;
+}
+
+void dmh_uart_rx_ring_snapshot_observation(
+	struct dmh_uart_rx_ring *ring,
+	struct dmh_uart_rx_snapshot *snapshot,
+	uint64_t *observation_sequence
+)
+{
+	dmh_uart_rx_ring_snapshot(ring, snapshot);
+	*observation_sequence = next_observation_sequence(ring);
 }
 
 bool dmh_uart_rx_ring_claim_overflow(
@@ -254,6 +296,25 @@ enum dmh_uart_rx_observation_kind dmh_uart_rx_ring_next_observation(
 		return DMH_UART_RX_OBSERVATION_CHUNK;
 	}
 	return DMH_UART_RX_OBSERVATION_OVERFLOW;
+}
+
+bool dmh_uart_rx_ring_peek_observation(
+	const struct dmh_uart_rx_ring *ring,
+	enum dmh_uart_rx_observation_kind *kind,
+	uint64_t *observation_sequence
+)
+{
+	*kind = dmh_uart_rx_ring_next_observation(ring);
+	if (*kind == DMH_UART_RX_OBSERVATION_NONE) {
+		return false;
+	}
+	if (*kind == DMH_UART_RX_OBSERVATION_CHUNK) {
+		*observation_sequence =
+			ring->descriptors[ring->descriptor_head].observation_sequence;
+	} else {
+		*observation_sequence = ring->episode_observation_sequence;
+	}
+	return true;
 }
 
 void dmh_uart_rx_ring_discard_retained(struct dmh_uart_rx_ring *ring)

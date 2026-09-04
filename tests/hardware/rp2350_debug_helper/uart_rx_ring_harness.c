@@ -211,6 +211,103 @@ static void test_disconnect_discard_preserves_boot_counters(void)
 	assert(snapshot.overflow_events == 1U);
 }
 
+static void test_status_snapshot_joins_observation_order(void)
+{
+	struct dmh_uart_rx_snapshot snapshot;
+	struct dmh_uart_rx_chunk chunk;
+	struct dmh_uart_rx_overflow overflow;
+	enum dmh_uart_rx_observation_kind kind;
+	uint64_t sequence;
+	uint64_t status_sequence;
+
+	dmh_uart_rx_ring_init(&ring);
+	input[0] = 'A';
+	assert(dmh_uart_rx_ring_push(&ring, 0U, 10U, input, 1U) == 0);
+	dmh_uart_rx_ring_snapshot_observation(&ring, &snapshot, &status_sequence);
+	assert(status_sequence == 2U);
+	assert(snapshot.used_bytes == 1U);
+	input[0] = 'B';
+	assert(dmh_uart_rx_ring_push(&ring, 0U, 20U, input, 1U) == 0);
+
+	assert(dmh_uart_rx_ring_peek_observation(&ring, &kind, &sequence));
+	assert(kind == DMH_UART_RX_OBSERVATION_CHUNK);
+	assert(sequence == 1U);
+	assert(dmh_uart_rx_ring_take_before(
+		&ring,
+		true,
+		status_sequence,
+		output,
+		sizeof(output),
+		&kind,
+		&chunk,
+		&overflow
+	) == 0);
+	assert(kind == DMH_UART_RX_OBSERVATION_CHUNK);
+	assert(output[0] == 'A');
+	assert(dmh_uart_rx_ring_take_before(
+		&ring,
+		true,
+		status_sequence,
+		output,
+		sizeof(output),
+		&kind,
+		&chunk,
+		&overflow
+	) == 0);
+	assert(kind == DMH_UART_RX_OBSERVATION_NONE);
+	assert(dmh_uart_rx_ring_peek_observation(&ring, &kind, &sequence));
+	assert(kind == DMH_UART_RX_OBSERVATION_CHUNK);
+	assert(sequence == 3U);
+}
+
+static void test_overflow_is_staged_before_later_status(void)
+{
+	struct dmh_uart_rx_snapshot snapshot;
+	struct dmh_uart_rx_chunk chunk;
+	struct dmh_uart_rx_overflow overflow;
+	enum dmh_uart_rx_observation_kind kind;
+	uint64_t status_sequence;
+
+	dmh_uart_rx_ring_init(&ring);
+	memset(input, 'A', DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES);
+	assert(dmh_uart_rx_ring_push(
+		&ring,
+		0U,
+		10U,
+		input,
+		DUTCHMATE_UART_RING_BUFFER_SIZE_BYTES
+	) == 0);
+	input[0] = 'B';
+	assert(dmh_uart_rx_ring_push(&ring, 0U, 20U, input, 1U) == 0);
+	dmh_uart_rx_ring_snapshot_observation(&ring, &snapshot, &status_sequence);
+	assert(status_sequence == 4U);
+	assert(dmh_uart_rx_ring_take_before(
+		&ring,
+		true,
+		status_sequence,
+		output,
+		sizeof(output),
+		&kind,
+		&chunk,
+		&overflow
+	) == 0);
+	assert(kind == DMH_UART_RX_OBSERVATION_CHUNK);
+	assert(dmh_uart_rx_ring_take_before(
+		&ring,
+		true,
+		status_sequence,
+		output,
+		sizeof(output),
+		&kind,
+		&chunk,
+		&overflow
+	) == 0);
+	assert(kind == DMH_UART_RX_OBSERVATION_OVERFLOW);
+	assert(overflow.first_drop_timestamp_us == 20U);
+	assert(overflow.dropped_bytes == 1U);
+	assert(overflow.observation_sequence == 2U);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 2) {
@@ -230,6 +327,10 @@ int main(int argc, char **argv)
 		test_overflow_episode_coalescing();
 	} else if (strcmp(argv[1], "discard") == 0) {
 		test_disconnect_discard_preserves_boot_counters();
+	} else if (strcmp(argv[1], "status-order") == 0) {
+		test_status_snapshot_joins_observation_order();
+	} else if (strcmp(argv[1], "overflow-status-order") == 0) {
+		test_overflow_is_staged_before_later_status();
 	} else {
 		return EXIT_FAILURE;
 	}

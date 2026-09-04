@@ -3,6 +3,7 @@
 #include "connection_epoch.h"
 #include "hello.h"
 #include "platform_io.h"
+#include "telemetry.h"
 #include "uart_event.h"
 #include "uart_rx.h"
 
@@ -10,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <hardware/timer.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/uart.h>
@@ -32,7 +34,7 @@ BUILD_ASSERT(
 
 static const struct device *const cdc = DEVICE_DT_GET(DUTCHMATE_CDC_NODE);
 static uint8_t uart_staging[DMH_UART_EVENT_MAX_DATA_BYTES];
-static char uart_event_frame[DMH_UART_EVENT_FRAME_CAPACITY];
+static char evidence_frame[DMH_UART_EVENT_FRAME_CAPACITY];
 
 static void write_complete_frame(const char *frame, size_t frame_length)
 {
@@ -43,42 +45,88 @@ static void write_complete_frame(const char *frame, size_t frame_length)
 	}
 }
 
-static int drain_one_uart_event(void)
+static void stage_status_if_due(struct dmh_telemetry_schedule *schedule)
 {
+	struct dmh_buffer_status_observation observation;
+	uint64_t now_us = time_us_64();
+
+	if (!dmh_telemetry_status_due(schedule, now_us)) {
+		return;
+	}
+	observation.timestamp_us = now_us;
+	dutchmate_uart_rx_snapshot_observation(
+		&observation.snapshot,
+		&observation.observation_sequence
+	);
+	dmh_telemetry_schedule_stage_status(schedule, &observation);
+}
+
+static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
+{
+	const struct dmh_buffer_status_observation *status =
+		dmh_telemetry_pending_status(schedule);
 	struct dmh_uart_rx_chunk chunk;
+	struct dmh_uart_rx_overflow overflow;
+	enum dmh_uart_rx_observation_kind kind;
 	size_t frame_length;
 	int result;
 
-	result = dutchmate_uart_rx_take(
+	result = dutchmate_uart_rx_take_before(
+		status != NULL,
+		status != NULL ? status->observation_sequence : 0U,
 		uart_staging,
 		sizeof(uart_staging),
-		&chunk
-	);
-	if (result == -EAGAIN) {
-		return 0;
-	}
-	if (result != 0 || chunk.length == 0U) {
-		return result;
-	}
-	result = dmh_uart_event_encode(
-		chunk.channel,
-		chunk.timestamp_us,
-		uart_staging,
-		chunk.length,
-		uart_event_frame,
-		sizeof(uart_event_frame),
-		&frame_length
+		&kind,
+		&chunk,
+		&overflow
 	);
 	if (result != 0) {
 		return result;
 	}
-	write_complete_frame(uart_event_frame, frame_length);
+	if (kind == DMH_UART_RX_OBSERVATION_CHUNK) {
+		result = dmh_uart_event_encode(
+			chunk.channel,
+			chunk.timestamp_us,
+			uart_staging,
+			chunk.length,
+			evidence_frame,
+			sizeof(evidence_frame),
+			&frame_length
+		);
+	} else if (kind == DMH_UART_RX_OBSERVATION_OVERFLOW) {
+		result = dmh_buffer_overflow_encode(
+			0U,
+			overflow.first_drop_timestamp_us,
+			overflow.dropped_bytes,
+			evidence_frame,
+			sizeof(evidence_frame),
+			&frame_length
+		);
+	} else if (status != NULL) {
+		result = dmh_buffer_status_encode(
+			status->timestamp_us,
+			&status->snapshot,
+			evidence_frame,
+			sizeof(evidence_frame),
+			&frame_length
+		);
+	} else {
+		return 0;
+	}
+	if (result != 0) {
+		return result;
+	}
+	write_complete_frame(evidence_frame, frame_length);
+	if (kind == DMH_UART_RX_OBSERVATION_NONE) {
+		dmh_telemetry_schedule_status_sent(schedule);
+	}
 	return 0;
 }
 
 int dutchmate_usb_connection_run(void)
 {
 	struct dmh_connection_epoch epoch;
+	struct dmh_telemetry_schedule telemetry_schedule;
 	char hello_frame[DMH_HELLO_FRAME_CAPACITY];
 	size_t hello_length;
 	int result;
@@ -97,6 +145,7 @@ int dutchmate_usb_connection_run(void)
 	}
 
 	dmh_connection_epoch_init(&epoch);
+	dmh_telemetry_schedule_init(&telemetry_schedule);
 	for (;;) {
 		enum dmh_epoch_transition transition;
 		uint32_t dtr = 0U;
@@ -113,7 +162,12 @@ int dutchmate_usb_connection_run(void)
 				(void)dutchmate_platform_io_force_safe();
 				return result;
 			}
+			dmh_telemetry_schedule_start(
+				&telemetry_schedule,
+				time_us_64()
+			);
 		} else if (transition == DMH_EPOCH_ENDED) {
+			dmh_telemetry_schedule_stop(&telemetry_schedule);
 			dutchmate_uart_rx_stop();
 			(void)dutchmate_platform_io_force_safe();
 		}
@@ -123,7 +177,8 @@ int dutchmate_usb_connection_run(void)
 			return -EIO;
 		}
 		if (epoch.active) {
-			result = drain_one_uart_event();
+			stage_status_if_due(&telemetry_schedule);
+			result = drain_one_evidence(&telemetry_schedule);
 			if (result != 0) {
 				dutchmate_uart_rx_stop();
 				(void)dutchmate_platform_io_force_safe();
