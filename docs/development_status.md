@@ -33,19 +33,24 @@ Read this document first whenever development resumes.
   decoder now validates every committed command shape into typed values, and
   exact success/error encoders enforce response bounds and escaping. These
   components are target-compiled but intentionally not connected to CDC until
-  execution and ordered response handling prevent silent command loss. Both
+  execution and ordered response handling prevent silent command loss. A
+  hardware-independent control owner now stores accepted `CTRL0`–`CTRL3`
+  electrical modes, applies active/idle behavior with disable-before-data
+  sequencing, runs bounded wrap-safe pulses, and returns channels to high
+  impedance on recoverable faults or epoch end. Its Revision A adapter maps
+  those ordered operations to the fixed enable/data GPIO arrays. Both
   selected backends reconnect while idle and during active finite workflows
   through one service coordinator. Production Enhanced startup and each
-  replacement use exactly
-  one async host. The obsolete synchronous Enhanced command/source, hello,
+  replacement use exactly one async host. The obsolete synchronous Enhanced
+  command/source, hello,
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
   at the async adapter boundary.
-- **Next step:** Continue Step 5 with a TDD-built generic `CTRL0`–`CTRL3` electrical
-  state machine covering accepted configuration, active/idle application,
-  pulses, cancellation, and disconnect/fault high impedance. Then adapt it to
-  the Revision A GPIOs without enabling EVENT capture. Keep implementation in
-  small vertical slices; do not create a large implementation plan.
+- **Next step:** Continue Step 5 with a TDD-built UART TX completion state
+  machine and its RP2350 UART0 adapter. Cover exact 1..1024-byte acceptance,
+  completion, partial/fault outcomes, timeout, and epoch cancellation without
+  retrying an ambiguous transmission. Keep EVENT pins reserved without capture.
+  Keep implementation in small vertical slices; do not create a large plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -70,7 +75,9 @@ RP2350 firmware cross-builds with its USB identity, connection-epoch hello,
 portable 32 KiB RX ring, interrupt-driven UART RX/timestamp adapter, ordered
 UART/overflow output, periodic buffer telemetry, and a bounded host-command
 framer plus typed decoder/response encoder. CDC command execution/response
-routing, UART TX, control, prototype, and HIL validation remain incomplete.
+routing and UART TX remain incomplete. The generic control core and Revision A
+GPIO adapter are target-build verified but not yet connected to CDC commands;
+prototype and HIL validation remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -80,7 +87,7 @@ routing, UART TX, control, prototype, and HIL validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | UART receive/telemetry and portable USB protocol core target-build verified; command execution and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, and response encoding are implemented. CDC execution/routing, UART TX, control, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | UART receive/telemetry, portable USB protocol core, and generic control core target-build verified; command execution and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, and generic control state transitions are implemented. The Revision A CTRL adapter preserves disable-before-data sequencing. CDC execution/routing, UART TX, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -89,6 +96,36 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 generic control implementation, reviewed 2026-09-04:
+
+- TDD red failed all seven initial scenarios because the portable control module
+  was absent. Green coverage now exercises accepted open-drain and push-pull
+  mappings, active/idle application, invalid and failed reconfiguration,
+  unconfigured actions, and all four physical channels.
+- Pulse coverage proves active drive, exact 1..10000 ms bounds, deadline restore,
+  64-bit timer wrap, cancellation without late completion, and no successful
+  completion when idle restoration faults.
+- Every transition disables output before changing data and enables only a
+  requested driven state. Enable failure performs a best-effort disable;
+  channel faults retain accepted configuration for retry, while epoch end
+  cancels the pulse, drives every channel high impedance, and discards mappings.
+- The Revision A adapter binds the portable enable/data port to fixed
+  `CTRL0`–`CTRL3` GPIO arrays. The target compiles it, but command execution does
+  not instantiate the control owner yet. EVENT pins remain input-only and the
+  EVENT translator remains disabled.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 43,036 bytes flash, 62,824 bytes RAM, and an
+  86,528-byte UF2 image. Linker allocation is unchanged before command-path
+  integration.
+- Focused control/decoder gate: 16 tests passed.
+- All 62 portable firmware tests passed.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,241 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- CTRL electrical sequencing and disconnect/fault behavior remain HIL gates
+  because the Revision A prototype is unavailable in this workspace.
 
 RP2350 typed command protocol implementation commit
 `f6fbae41150783ef4206ec7288a5d969fb801f58`, reviewed 2026-09-04:
@@ -496,7 +533,7 @@ queues; no production workflow imports Enhanced wire DTOs.
 - [ ] Implement USB protocol handling, UART receive/send, device timestamps,
   the 32 KiB drop-oldest RX ring, and buffer telemetry.
 - [ ] Implement generic `CTRLn` configuration, pulse, and active/idle actions
-  with safe startup/disconnect states.
+  with safe startup/disconnect states and connect them to command execution.
 - [ ] Enforce the final protocol limits and complete-write acknowledgements.
 - [ ] Add build instructions and automated firmware-level tests where hardware
   is not required.

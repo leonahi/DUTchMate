@@ -7,6 +7,7 @@ target_sources(app PRIVATE
     src/command_decode.c
     src/command_response.c
     src/connection_epoch.c
+    src/control_state.c
     src/hello.c
     src/main.c
     src/ndjson_framer.c

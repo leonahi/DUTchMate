@@ -49,12 +49,18 @@ states, and exposes its initial USB CDC identity:
   command values without hardware side effects;
 - exact compact success, timestamp, UART-acceptance, and bounded error response
   encoders validate wire limits, UTF-8 details, and JSON escaping.
+- the hardware-independent control owner stores accepted electrical modes for
+  `CTRL0` through `CTRL3`, applies active/idle behavior, runs wrap-safe bounded
+  pulses, and cancels to high impedance on channel faults or epoch end;
+- every driven transition disables output before changing data, then enables
+  only the requested low/high drive; the Revision A adapter maps those ordered
+  operations onto the fixed CTRL enable/data GPIO arrays.
 
 The portable command protocol is target-compiled but does not consume CDC input
 until command execution and ordered response handling exist, so no command can
-disappear without its required response. UART TX and control commands remain
-later vertical slices. This application is therefore not yet usable as a
-complete Enhanced Debug Helper.
+disappear without its required response. Control logic is not yet connected to
+the command path, and UART TX remains a later vertical slice. This application
+is therefore not yet usable as a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -99,7 +105,7 @@ set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 pair. A production build that retains `2E8A:000A` fails at compile time.
 
 This build proves compilation, identity configuration, protocol-independent
-epoch logic, and devicetree mapping only. USB enumeration/descriptor behavior,
-CDC reconnect behavior, startup voltage, translator-disable, and EVENT input
-state require the Revision A prototype HIL checks defined by the approved
-firmware architecture.
+epoch/control logic, and devicetree mapping only. USB enumeration/descriptor
+behavior, CDC reconnect behavior, CTRL electrical sequencing, startup voltage,
+translator-disable, and EVENT input state require the Revision A prototype HIL
+checks defined by the approved firmware architecture.

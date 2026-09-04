@@ -1,0 +1,19 @@
+#ifndef DUTCHMATE_CONTROL_TYPES_H
+#define DUTCHMATE_CONTROL_TYPES_H
+
+enum dmh_control_mode {
+	DMH_CONTROL_MODE_OPEN_DRAIN = 0,
+	DMH_CONTROL_MODE_PUSH_PULL,
+};
+
+enum dmh_control_level {
+	DMH_CONTROL_LEVEL_LOW = 0,
+	DMH_CONTROL_LEVEL_HIGH,
+};
+
+enum dmh_control_state {
+	DMH_CONTROL_STATE_ACTIVE = 0,
+	DMH_CONTROL_STATE_IDLE,
+};
+
+#endif

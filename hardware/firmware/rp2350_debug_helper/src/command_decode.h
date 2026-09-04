@@ -1,6 +1,8 @@
 #ifndef DUTCHMATE_COMMAND_DECODE_H
 #define DUTCHMATE_COMMAND_DECODE_H
 
+#include "control_types.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,21 +15,6 @@ enum dmh_command_kind {
 	DMH_COMMAND_PULSE_CONTROL,
 	DMH_COMMAND_SET_CONTROL_STATE,
 	DMH_COMMAND_UART_SEND,
-};
-
-enum dmh_control_mode {
-	DMH_CONTROL_MODE_OPEN_DRAIN = 0,
-	DMH_CONTROL_MODE_PUSH_PULL,
-};
-
-enum dmh_control_level {
-	DMH_CONTROL_LEVEL_LOW = 0,
-	DMH_CONTROL_LEVEL_HIGH,
-};
-
-enum dmh_control_state {
-	DMH_CONTROL_STATE_ACTIVE = 0,
-	DMH_CONTROL_STATE_IDLE,
 };
 
 enum dmh_command_decode_failure {
