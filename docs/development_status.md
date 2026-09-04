@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `c3ce6aa58d26f3531c4b735261ec8ecf4e87dcdf` on 2026-09-04
+> Code baseline reviewed: `f6fbae41150783ef4206ec7288a5d969fb801f58` on 2026-09-04
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -90,7 +90,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 typed command protocol implementation, reviewed 2026-09-04:
+RP2350 typed command protocol implementation commit
+`f6fbae41150783ef4206ec7288a5d969fb801f58`, reviewed 2026-09-04:
 
 - TDD red first proved response encoding absent, then green covered exact plain,
   timestamped, UART-acceptance, and error frames plus limits, JSON escaping,
