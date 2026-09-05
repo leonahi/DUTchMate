@@ -60,6 +60,13 @@ def executor_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
             b'{"ok":false,"error":"invalid_command",'
             b'"detail":"Command is invalid"}\n',
         ),
+        (
+            "rejections",
+            b'{"ok":false,"error":"invalid_command",'
+            b'"detail":"Command is invalid"}\n'
+            b'{"ok":false,"error":"invalid_argument",'
+            b'"detail":"Command argument is invalid"}\n',
+        ),
         ("pulse", b'{"ok":true,"timestamp_us":1000}\n'),
         (
             "pulse-fault",

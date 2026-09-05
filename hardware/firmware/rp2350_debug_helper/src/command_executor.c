@@ -267,6 +267,28 @@ enum dmh_command_executor_result dmh_command_executor_submit(
 	);
 }
 
+enum dmh_command_executor_result dmh_command_executor_reject(
+	struct dmh_command_executor *executor,
+	enum dmh_command_decode_failure failure
+)
+{
+	if (executor->state != DMH_COMMAND_EXECUTOR_STATE_IDLE) {
+		return DMH_COMMAND_EXECUTOR_BUSY;
+	}
+	if (failure == DMH_COMMAND_DECODE_INVALID_ARGUMENT) {
+		return stage_literal_error(
+			executor,
+			DMH_COMMAND_ERROR_INVALID_ARGUMENT,
+			invalid_argument_detail
+		);
+	}
+	return stage_literal_error(
+		executor,
+		DMH_COMMAND_ERROR_INVALID_COMMAND,
+		invalid_command_detail
+	);
+}
+
 enum dmh_command_executor_result dmh_command_executor_poll(
 	struct dmh_command_executor *executor,
 	uint64_t now_us

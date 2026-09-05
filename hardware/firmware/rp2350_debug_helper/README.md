@@ -67,12 +67,23 @@ states, and exposes its initial USB CDC identity:
   the requested operation reaches its defined completion point;
 - epoch cancellation discards pending work and staged responses, cancels UART
   TX without retry, returns every CTRL channel to high impedance, and forgets
-  accepted CTRL configuration.
+  accepted CTRL configuration;
+- a dedicated CDC RX thread feeds bounded chunks into the framer and decoder,
+  then applies backpressure through one statically allocated command slot;
+- a higher-priority command/control thread owns the executor, CTRL state, pulse
+  expiry, and UART TX completion while the main USB TX owner serializes complete
+  responses with ordered evidence;
+- command responses take the response lane before the next evidence frame;
+  evidence observation ordering remains unchanged, and every epoch starts with
+  `hello` before command ingress becomes active;
+- malformed, schema-invalid, and oversized frames produce one bounded existing
+  v1 error; epoch end discards partial input, queued commands, and unsent
+  responses.
 
-The portable command path is target-compiled and its execution invariants are
-host-tested, but it does not yet consume CDC input or share the live CDC output
-lane with evidence. This application is therefore not yet usable as a complete
-Enhanced Debug Helper.
+The command path now consumes live CDC input and shares the sole output owner
+with evidence. Complete CDC-driver acceptance and mid-frame failure semantics
+still require the next firmware slice and real-hardware validation, so the
+application is not yet accepted as a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -116,9 +127,10 @@ set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 `CONFIG_CDC_ACM_SERIAL_VID` and `CONFIG_CDC_ACM_SERIAL_PID` with an assigned
 pair. A production build that retains `2E8A:000A` fails at compile time.
 
-This build proves compilation, identity configuration, protocol-independent
-epoch/control/UART TX logic, and devicetree mapping only. USB
-enumeration/descriptor behavior, CDC reconnect behavior, UART TX completion,
-CTRL electrical sequencing, startup voltage, translator-disable, and EVENT
-input state require the Revision A prototype HIL checks defined by the approved
-firmware architecture.
+This build proves compilation, identity configuration, bounded command ingress,
+command/control and USB-writer ownership, epoch/control/UART TX logic, and
+devicetree mapping only. USB enumeration/descriptor behavior, complete CDC
+write acceptance, reconnect behavior, UART TX completion, CTRL electrical
+sequencing, startup voltage, translator-disable, and EVENT input state require
+the Revision A prototype HIL checks defined by the approved firmware
+architecture.

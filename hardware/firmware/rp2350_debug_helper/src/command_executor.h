@@ -58,6 +58,10 @@ enum dmh_command_executor_result dmh_command_executor_submit(
 	const struct dmh_command *command,
 	uint64_t now_us
 );
+enum dmh_command_executor_result dmh_command_executor_reject(
+	struct dmh_command_executor *executor,
+	enum dmh_command_decode_failure failure
+);
 enum dmh_command_executor_result dmh_command_executor_poll(
 	struct dmh_command_executor *executor,
 	uint64_t now_us

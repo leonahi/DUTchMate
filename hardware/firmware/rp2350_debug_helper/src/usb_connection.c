@@ -1,5 +1,6 @@
 #include "usb_connection.h"
 
+#include "command_runtime.h"
 #include "connection_epoch.h"
 #include "hello.h"
 #include "platform_io.h"
@@ -123,6 +124,34 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 	return 0;
 }
 
+static int drain_one_output(struct dmh_telemetry_schedule *schedule)
+{
+	const char *response;
+	size_t response_length;
+
+	if (dutchmate_command_runtime_take_response(
+		&response, &response_length
+	)) {
+		write_complete_frame(response, response_length);
+		dutchmate_command_runtime_response_sent();
+		return 0;
+	}
+	return drain_one_evidence(schedule);
+}
+
+static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
+{
+	int result;
+
+	dmh_telemetry_schedule_stop(schedule);
+	result = dutchmate_command_runtime_end_epoch();
+	dutchmate_uart_rx_stop();
+	if (dutchmate_platform_io_force_safe() != 0 && result == 0) {
+		result = -EIO;
+	}
+	return result;
+}
+
 int dutchmate_usb_connection_run(void)
 {
 	struct dmh_connection_epoch epoch;
@@ -133,6 +162,10 @@ int dutchmate_usb_connection_run(void)
 
 	if (!device_is_ready(cdc)) {
 		return -ENODEV;
+	}
+	result = dutchmate_command_runtime_initialize(cdc);
+	if (result != 0) {
+		return result;
 	}
 	result = dmh_hello_encode(
 		CONFIG_DUTCHMATE_FIRMWARE_VERSION,
@@ -156,9 +189,16 @@ int dutchmate_usb_connection_run(void)
 			result == 0 && dtr != 0U
 		);
 		if (transition == DMH_EPOCH_STARTED) {
+			dutchmate_command_runtime_discard_input();
 			write_complete_frame(hello_frame, hello_length);
 			result = dutchmate_uart_rx_start();
 			if (result != 0) {
+				(void)dutchmate_platform_io_force_safe();
+				return result;
+			}
+			result = dutchmate_command_runtime_start_epoch();
+			if (result != 0) {
+				dutchmate_uart_rx_stop();
 				(void)dutchmate_platform_io_force_safe();
 				return result;
 			}
@@ -167,21 +207,21 @@ int dutchmate_usb_connection_run(void)
 				time_us_64()
 			);
 		} else if (transition == DMH_EPOCH_ENDED) {
-			dmh_telemetry_schedule_stop(&telemetry_schedule);
-			dutchmate_uart_rx_stop();
-			(void)dutchmate_platform_io_force_safe();
+			result = end_active_epoch(&telemetry_schedule);
+			if (result != 0) {
+				return result;
+			}
 		}
-		if (epoch.active && dutchmate_uart_rx_faulted()) {
-			dutchmate_uart_rx_stop();
-			(void)dutchmate_platform_io_force_safe();
+		if (epoch.active && (dutchmate_uart_rx_faulted() ||
+				     dutchmate_command_runtime_faulted())) {
+			(void)end_active_epoch(&telemetry_schedule);
 			return -EIO;
 		}
 		if (epoch.active) {
 			stage_status_if_due(&telemetry_schedule);
-			result = drain_one_evidence(&telemetry_schedule);
+			result = drain_one_output(&telemetry_schedule);
 			if (result != 0) {
-				dutchmate_uart_rx_stop();
-				(void)dutchmate_platform_io_force_safe();
+				(void)end_active_epoch(&telemetry_schedule);
 				return result;
 			}
 		}

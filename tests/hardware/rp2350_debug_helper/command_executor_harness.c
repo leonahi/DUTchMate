@@ -262,6 +262,27 @@ static void test_typed_command_errors_map_exactly(void)
 	assert(harness.gpio.count == 0U && harness.uart.length == 0U);
 }
 
+static void test_ingress_rejections_use_the_owned_response_lane(void)
+{
+	struct harness harness;
+	struct dmh_command command = push_pull_command(0U);
+
+	harness_init(&harness);
+	assert(dmh_command_executor_reject(
+		&harness.executor, DMH_COMMAND_DECODE_INVALID_COMMAND
+	) == DMH_COMMAND_EXECUTOR_RESPONSE_READY);
+	assert(dmh_command_executor_reject(
+		&harness.executor, DMH_COMMAND_DECODE_INVALID_ARGUMENT
+	) == DMH_COMMAND_EXECUTOR_BUSY);
+	assert(dmh_command_executor_submit(&harness.executor, &command, 1U) ==
+	       DMH_COMMAND_EXECUTOR_BUSY);
+	consume_response(&harness, true);
+	assert(dmh_command_executor_reject(
+		&harness.executor, DMH_COMMAND_DECODE_INVALID_ARGUMENT
+	) == DMH_COMMAND_EXECUTOR_RESPONSE_READY);
+	consume_response(&harness, true);
+}
+
 static void test_pulse_waits_for_idle_restore(void)
 {
 	struct harness harness;
@@ -408,6 +429,8 @@ int main(int argc, char **argv)
 		test_immediate_control_responses_and_lane_ownership();
 	} else if (strcmp(argv[1], "errors") == 0) {
 		test_typed_command_errors_map_exactly();
+	} else if (strcmp(argv[1], "rejections") == 0) {
+		test_ingress_rejections_use_the_owned_response_lane();
 	} else if (strcmp(argv[1], "pulse") == 0) {
 		test_pulse_waits_for_idle_restore();
 	} else if (strcmp(argv[1], "pulse-fault") == 0) {
