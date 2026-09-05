@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `197d9b56a04ee1fccffa9dd5b2d0c55cc8f506b7` on 2026-09-05
+> Code baseline reviewed: `97f5c0b13480c128bf8d839995efe760e37be68a` on 2026-09-05
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -108,7 +108,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 command executor implementation, reviewed 2026-09-05:
+RP2350 command executor implementation commit
+`97f5c0b13480c128bf8d839995efe760e37be68a`, reviewed 2026-09-05:
 
 - TDD red failed all seven scenarios because the command executor was absent.
   Green covers exact control success/error responses, one owned response lane,
