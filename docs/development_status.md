@@ -50,8 +50,11 @@ Read this document first whenever development resumes.
   backpressure slot. The main USB TX owner prioritizes the executor's response
   lane without disturbing UART/overflow/status observation order. Command
   ingress starts only after `hello`; epoch end discards partial input, queued
-  commands, and unsent responses. Complete CDC-driver write acceptance remains
-  unfinished. Both
+  commands, and unsent responses. One bounded portable CDC TX owner now copies
+  complete frames and advances only through exact Zephyr FIFO acceptance.
+  Response/evidence acknowledgements follow full acceptance; invalid progress,
+  250 ms without progress, driver faults, or DTR loss cancel the staged suffix
+  and end the epoch without application-level replay. Both
   selected backends reconnect while idle and during active finite workflows
   through one service coordinator. Production Enhanced startup and each
   replacement use exactly one async host. The obsolete synchronous Enhanced
@@ -59,12 +62,11 @@ Read this document first whenever development resumes.
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
   at the async adapter boundary.
-- **Next step:** Continue Step 5 with a bounded complete-frame CDC TX adapter.
-  Replace byte-at-a-time `uart_poll_out` completion assumptions with explicit
-  driver-acceptance progress shared by hello, responses, and evidence. Apply
-  backpressure without silent byte loss; terminate the epoch on DTR loss,
-  invalid/no progress, or partial-frame failure, and never replay a partial
-  frame. Keep EVENT pins reserved without capture and avoid a large plan.
+- **Next step:** Complete Step 5 with a focused firmware test/build audit.
+  Confirm every hardware-independent protocol and lifecycle boundary has
+  automated coverage, make the documented Pico 2 build reproducible without
+  duplicating HIL claims, and close only the remaining firmware-level checklist
+  item. Keep EVENT pins reserved without capture and avoid a large plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -91,8 +93,9 @@ UART/overflow output, periodic buffer telemetry, and a bounded host-command
 framer plus typed decoder/response encoder. Generic control and UART TX cores
 plus their Revision A adapters and the portable one-command executor are
 target-build verified. Live bounded CDC ingress and shared evidence/response
-scheduling are connected with explicit thread ownership. Complete CDC-driver
-write acceptance, prototype validation, and HIL remain incomplete.
+scheduling are connected with explicit thread ownership. Bounded complete-frame
+CDC driver acceptance is target-build verified; prototype validation and HIL
+remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -102,7 +105,7 @@ write acceptance, prototype validation, and HIL remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Live command ingress/execution and ordered response/evidence scheduling target-build verified; complete CDC writes and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Complete CDC-driver write acceptance and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | Complete CDC write acceptance target-build verified; firmware test/build audit and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Complete frames use owned staging, exact FIFO progress, bounded no-progress failure, and acknowledgement only after driver acceptance. Real-hardware behavior remains incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -111,6 +114,38 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 complete CDC write implementation, reviewed 2026-09-05:
+
+- TDD red first failed six scenarios because the CDC TX state module was absent;
+  a second red failed seven scenarios when bounded no-progress timing was added.
+  Green covers exact 1..1,536-byte bounds, owned frame copying, busy rejection,
+  partial FIFO progress, exact-once completion, invalid progress, driver faults,
+  timer wrap, cancellation, and no replay of a staged suffix.
+- One Zephyr CDC callback is the only context that calls `uart_fifo_fill`; the
+  main USB TX owner starts, polls, and cancels frames. Hello, responses, UART
+  events, overflow records, and status records all use the same adapter.
+- The approved ownership description now records the Zephyr constraint: the
+  main USB TX thread remains sole output scheduler/frame owner, while the CDC
+  workqueue callback may advance only its already armed immutable frame.
+- Responses and status snapshots are acknowledged only after the complete frame
+  reaches the CDC driver FIFO. A 250 ms no-progress deadline resets after every
+  accepted chunk. DTR loss cancels pending output and ends the active epoch;
+  invalid progress or a driver fault ends it as a fatal transport failure.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 51,476 bytes flash, 76,904 bytes RAM, and a
+  103,424-byte UF2 image.
+- Focused CDC TX gate: 7 tests passed; all 90 portable firmware tests passed.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,269 passed with zero failures.
+- Graphify updated the structural graph to 4,563 nodes and 12,157 edges. Its
+  parser still reports the existing macro-heavy Zephyr fixture header as a
+  partial syntax extraction; target compilation remains authoritative there.
+- `git diff --check`: passed with no whitespace errors.
+- USB FIFO timing, driver-buffer behavior across physical reset, reconnect
+  behavior, command load, and electrical behavior remain HIL gates because the
+  Revision A prototype is unavailable.
 
 RP2350 live CDC command integration commit
 `a8ac38362144fbd05fdbb69be515371ad07166e7`, reviewed 2026-09-05:
@@ -653,7 +688,7 @@ queues; no production workflow imports Enhanced wire DTOs.
   implemented protocol, UART, and control owners.
 - [x] Implement generic `CTRLn` configuration, pulse, and active/idle actions
   with safe startup/disconnect states and portable command routing.
-- [ ] Enforce the final protocol limits and complete-write acknowledgements.
+- [x] Enforce the final protocol limits and complete-write acknowledgements.
 - [ ] Add build instructions and automated firmware-level tests where hardware
   is not required.
 

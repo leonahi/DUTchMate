@@ -76,14 +76,23 @@ states, and exposes its initial USB CDC identity:
 - command responses take the response lane before the next evidence frame;
   evidence observation ordering remains unchanged, and every epoch starts with
   `hello` before command ingress becomes active;
+- one portable CDC TX owner copies each complete frame into a bounded
+  1,536-byte staging buffer, advances only by exact driver FIFO acceptance,
+  and acknowledges responses or evidence only after the full frame is
+  accepted;
+- the Zephyr CDC callback performs FIFO writes while the main USB TX owner
+  starts, polls, and cancels frames; zero, negative, or over-reported progress
+  and 250 ms without progress end the epoch, while DTR loss discards staged
+  suffix bytes without application-level replay;
 - malformed, schema-invalid, and oversized frames produce one bounded existing
   v1 error; epoch end discards partial input, queued commands, and unsent
   responses.
 
 The command path now consumes live CDC input and shares the sole output owner
 with evidence. Complete CDC-driver acceptance and mid-frame failure semantics
-still require the next firmware slice and real-hardware validation, so the
-application is not yet accepted as a complete Enhanced Debug Helper.
+are target-build verified. Real USB timing and disconnect behavior still
+require hardware validation, so the application is not yet accepted as a
+complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -128,9 +137,9 @@ set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 pair. A production build that retains `2E8A:000A` fails at compile time.
 
 This build proves compilation, identity configuration, bounded command ingress,
-command/control and USB-writer ownership, epoch/control/UART TX logic, and
-devicetree mapping only. USB enumeration/descriptor behavior, complete CDC
-write acceptance, reconnect behavior, UART TX completion, CTRL electrical
-sequencing, startup voltage, translator-disable, and EVENT input state require
-the Revision A prototype HIL checks defined by the approved firmware
-architecture.
+command/control and USB-writer ownership, explicit CDC FIFO-acceptance logic,
+epoch/control/UART TX logic, and devicetree mapping only. USB enumeration,
+complete-write timing during disconnect, reconnect behavior, UART TX
+completion, CTRL electrical sequencing, startup voltage, translator-disable,
+and EVENT input state require the Revision A prototype HIL checks defined by
+the approved firmware architecture.

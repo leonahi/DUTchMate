@@ -1,6 +1,8 @@
 #include "usb_connection.h"
 
+#include "cdc_tx.h"
 #include "command_runtime.h"
+#include "command_response.h"
 #include "connection_epoch.h"
 #include "hello.h"
 #include "platform_io.h"
@@ -22,6 +24,7 @@
 #define DUTCHMATE_CDC_NODE DT_NODELABEL(cdc_acm_uart0)
 #define DUTCHMATE_DEVELOPMENT_VID 0x2E8A
 #define DUTCHMATE_DEVELOPMENT_PID 0x000A
+#define CDC_TX_POLL_INTERVAL K_MSEC(1)
 #define DTR_POLL_INTERVAL K_MSEC(10)
 
 BUILD_ASSERT(sizeof(CONFIG_DUTCHMATE_FIRMWARE_VERSION) > 1U);
@@ -32,17 +35,46 @@ BUILD_ASSERT(
 	CONFIG_CDC_ACM_SERIAL_PID != DUTCHMATE_DEVELOPMENT_PID,
 	"Production builds must override development USB VID/PID"
 );
+BUILD_ASSERT(DMH_HELLO_FRAME_CAPACITY <= DMH_CDC_TX_MAX_FRAME_BYTES);
+BUILD_ASSERT(DMH_COMMAND_RESPONSE_FRAME_CAPACITY <= DMH_CDC_TX_MAX_FRAME_BYTES);
+BUILD_ASSERT(DMH_TELEMETRY_FRAME_CAPACITY <= DMH_CDC_TX_MAX_FRAME_BYTES);
+BUILD_ASSERT(DMH_UART_EVENT_FRAME_CAPACITY <= DMH_CDC_TX_MAX_FRAME_BYTES);
 
 static const struct device *const cdc = DEVICE_DT_GET(DUTCHMATE_CDC_NODE);
 static uint8_t uart_staging[DMH_UART_EVENT_MAX_DATA_BYTES];
 static char evidence_frame[DMH_UART_EVENT_FRAME_CAPACITY];
 
-static void write_complete_frame(const char *frame, size_t frame_length)
+static int write_complete_frame(const char *frame, size_t frame_length)
 {
-	size_t index;
+	enum dmh_cdc_tx_result tx_result;
 
-	for (index = 0U; index < frame_length; index++) {
-		uart_poll_out(cdc, frame[index]);
+	tx_result = dutchmate_cdc_tx_start(
+		(const uint8_t *)frame,
+		frame_length
+	);
+	if (tx_result != DMH_CDC_TX_PENDING) {
+		return tx_result == DMH_CDC_TX_INVALID_ARGUMENT ? -EINVAL : -EIO;
+	}
+	for (;;) {
+		uint32_t dtr = 0U;
+		int result = uart_line_ctrl_get(cdc, UART_LINE_CTRL_DTR, &dtr);
+
+		if (result != 0) {
+			dutchmate_cdc_tx_cancel();
+			return result;
+		}
+		if (dtr == 0U) {
+			dutchmate_cdc_tx_cancel();
+			return -ENOTCONN;
+		}
+		tx_result = dutchmate_cdc_tx_poll();
+		if (tx_result == DMH_CDC_TX_COMPLETED) {
+			return 0;
+		}
+		if (tx_result != DMH_CDC_TX_PENDING) {
+			return -EIO;
+		}
+		k_sleep(CDC_TX_POLL_INTERVAL);
 	}
 }
 
@@ -117,7 +149,10 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 	if (result != 0) {
 		return result;
 	}
-	write_complete_frame(evidence_frame, frame_length);
+	result = write_complete_frame(evidence_frame, frame_length);
+	if (result != 0) {
+		return result;
+	}
 	if (kind == DMH_UART_RX_OBSERVATION_NONE) {
 		dmh_telemetry_schedule_status_sent(schedule);
 	}
@@ -132,7 +167,11 @@ static int drain_one_output(struct dmh_telemetry_schedule *schedule)
 	if (dutchmate_command_runtime_take_response(
 		&response, &response_length
 	)) {
-		write_complete_frame(response, response_length);
+		int result = write_complete_frame(response, response_length);
+
+		if (result != 0) {
+			return result;
+		}
 		dutchmate_command_runtime_response_sent();
 		return 0;
 	}
@@ -144,6 +183,7 @@ static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
 	int result;
 
 	dmh_telemetry_schedule_stop(schedule);
+	dutchmate_cdc_tx_cancel();
 	result = dutchmate_command_runtime_end_epoch();
 	dutchmate_uart_rx_stop();
 	if (dutchmate_platform_io_force_safe() != 0 && result == 0) {
@@ -162,6 +202,10 @@ int dutchmate_usb_connection_run(void)
 
 	if (!device_is_ready(cdc)) {
 		return -ENODEV;
+	}
+	result = dutchmate_cdc_tx_initialize(cdc);
+	if (result != 0) {
+		return result;
 	}
 	result = dutchmate_command_runtime_initialize(cdc);
 	if (result != 0) {
@@ -190,7 +234,18 @@ int dutchmate_usb_connection_run(void)
 		);
 		if (transition == DMH_EPOCH_STARTED) {
 			dutchmate_command_runtime_discard_input();
-			write_complete_frame(hello_frame, hello_length);
+			result = write_complete_frame(hello_frame, hello_length);
+			if (result == -ENOTCONN) {
+				(void)dmh_connection_epoch_update(&epoch, false);
+				if (dutchmate_platform_io_force_safe() != 0) {
+					return -EIO;
+				}
+				continue;
+			}
+			if (result != 0) {
+				(void)dutchmate_platform_io_force_safe();
+				return result;
+			}
 			result = dutchmate_uart_rx_start();
 			if (result != 0) {
 				(void)dutchmate_platform_io_force_safe();
@@ -220,6 +275,14 @@ int dutchmate_usb_connection_run(void)
 		if (epoch.active) {
 			stage_status_if_due(&telemetry_schedule);
 			result = drain_one_output(&telemetry_schedule);
+			if (result == -ENOTCONN) {
+				(void)dmh_connection_epoch_update(&epoch, false);
+				result = end_active_epoch(&telemetry_schedule);
+				if (result != 0) {
+					return result;
+				}
+				continue;
+			}
 			if (result != 0) {
 				(void)end_active_epoch(&telemetry_schedule);
 				return result;

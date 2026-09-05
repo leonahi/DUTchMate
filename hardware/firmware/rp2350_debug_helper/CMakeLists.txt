@@ -4,6 +4,8 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(dutchmate_rp2350_debug_helper)
 
 target_sources(app PRIVATE
+    src/cdc_tx.c
+    src/cdc_tx_state.c
     src/command_decode.c
     src/command_executor.c
     src/command_ingress.c

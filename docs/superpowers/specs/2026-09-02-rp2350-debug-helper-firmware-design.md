@@ -83,16 +83,20 @@ Ownership is strict:
 | UART RX ISR/callback | Sample one 64-bit RP2350 microsecond timestamp per received callback; admit its bytes and descriptor; update ring-loss state. |
 | USB RX thread | Read CDC bytes, enforce bounded framing, decode one typed command, and submit it to the command queue. |
 | Command/control thread | Validate and execute commands serially; own every CTRL configuration/state transition and UART TX request. |
-| USB TX thread | Be the only CDC writer; emit `hello`, responses, UART events, and telemetry as complete NDJSON frames. |
-| Driver/timer callbacks | Timestamp or enqueue compact completion records only; never encode JSON, block, or change control state. |
+| USB TX thread | Be the sole output scheduler and complete-frame owner; select and encode `hello`, responses, UART events, and telemetry. |
+| Driver/timer callbacks | Advance only an already armed frame through a driver-required FIFO callback or timestamp/enqueue compact completion records; never select output, encode JSON, block, or change control state. |
 
 The command/control thread polls normal commands, pulse deadlines, UART TX
 completion, and connection-fault signals. Disconnect and fault signals preempt
 normal work. Pulse expiry returns to idle in this owner context; no timer
 callback mutates GPIO.
 
-The USB TX thread has a response lane and one logical evidence lane. Responses
-may interleave with evidence but cannot reorder UART and telemetry observations.
+The USB TX thread has a response lane and one logical evidence lane. It is the
+only context that selects or arms a frame. The Zephyr CDC ACM interrupt API
+requires `uart_fifo_fill` to run in its workqueue callback, so that callback may
+advance only the immutable frame already owned by the USB TX thread and report
+exact acceptance or failure. Responses may interleave with evidence but cannot
+reorder UART and telemetry observations.
 Every UART descriptor, overflow episode, and telemetry snapshot receives an
 internal monotonic observation sequence. The TX scheduler uses that sequence
 to preserve evidence FIFO order; it is not added to the v1 wire format.
@@ -128,7 +132,9 @@ Short spinlocked sections protect byte, descriptor, and counter mutation. USB
 TX copies a bounded event into statically allocated staging storage, transfers
 ownership out of the ring, releases the lock, then encodes and writes it. The
 staging buffer owns those bytes until the complete frame is accepted by the CDC
-driver or the connection epoch fails.
+driver or the connection epoch fails. Zero, negative, or over-reported FIFO
+progress is a CDC fault. A 250 ms interval with no accepted bytes is also a CDC
+fault; every positive partial acceptance restarts that interval.
 
 Consecutive drops form one overflow episode. Firmware retains the first-drop
 timestamp and exact cumulative byte count in bounded state. Claiming the
