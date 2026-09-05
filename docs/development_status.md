@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `a8ac38362144fbd05fdbb69be515371ad07166e7` on 2026-09-05
+> Code baseline reviewed: `cf5325b5b3c8b132c2a07bb02a087b8c18ccfd0b` on 2026-09-05
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -115,7 +115,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 complete CDC write implementation, reviewed 2026-09-05:
+RP2350 complete CDC write implementation commit
+`cf5325b5b3c8b132c2a07bb02a087b8c18ccfd0b`, reviewed 2026-09-05:
 
 - TDD red first failed six scenarios because the CDC TX state module was absent;
   a second red failed seven scenarios when bounded no-progress timing was added.
