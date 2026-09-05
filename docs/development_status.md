@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `97f5c0b13480c128bf8d839995efe760e37be68a` on 2026-09-05
+> Code baseline reviewed: `a8ac38362144fbd05fdbb69be515371ad07166e7` on 2026-09-05
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -112,7 +112,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 live CDC command integration, reviewed 2026-09-05:
+RP2350 live CDC command integration commit
+`a8ac38362144fbd05fdbb69be515371ad07166e7`, reviewed 2026-09-05:
 
 - TDD red failed six ingress scenarios because the bounded ingress module was
   absent and failed executor rejection routing because that API was absent.
