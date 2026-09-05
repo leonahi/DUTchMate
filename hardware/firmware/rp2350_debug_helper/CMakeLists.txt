@@ -16,5 +16,7 @@ target_sources(app PRIVATE
     src/uart_event.c
     src/uart_rx.c
     src/uart_rx_ring.c
+    src/uart_tx.c
+    src/uart_tx_state.c
     src/usb_connection.c
 )

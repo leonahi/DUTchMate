@@ -1,6 +1,7 @@
 #include "uart_rx.h"
 
 #include "platform_io.h"
+#include "uart_tx.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -28,6 +29,7 @@ static void mark_driver_fault(void)
 
 	driver_faulted = true;
 	k_spin_unlock(&rx_ring_lock, key);
+	dutchmate_uart_tx_driver_fault();
 	uart_irq_rx_disable(dut_uart);
 	uart_irq_err_disable(dut_uart);
 }
@@ -78,6 +80,7 @@ static void dut_uart_callback(const struct device *device, void *user_data)
 			}
 		}
 	}
+	dutchmate_uart_tx_handle_interrupt();
 }
 
 int dutchmate_uart_rx_initialize(void)
@@ -135,6 +138,7 @@ int dutchmate_uart_rx_start(void)
 
 void dutchmate_uart_rx_stop(void)
 {
+	dutchmate_uart_tx_cancel();
 	uart_irq_rx_disable(dut_uart);
 	uart_irq_err_disable(dut_uart);
 	(void)dutchmate_platform_uart_interface_set(false);

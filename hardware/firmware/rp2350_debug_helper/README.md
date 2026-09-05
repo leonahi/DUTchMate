@@ -54,13 +54,19 @@ states, and exposes its initial USB CDC identity:
   pulses, and cancels to high impedance on channel faults or epoch end;
 - every driven transition disables output before changing data, then enables
   only the requested low/high drive; the Revision A adapter maps those ordered
-  operations onto the fixed CTRL enable/data GPIO arrays.
+  operations onto the fixed CTRL enable/data GPIO arrays;
+- the portable UART TX owner copies exactly 1..1024 bytes, advances through
+  partial FIFO fills, waits for physical completion, and terminalizes timeout,
+  cancellation, or driver faults without retrying an ambiguous transmission;
+- the RP2350 UART0 adapter shares the existing interrupt callback, protects TX
+  state from ISR/thread races, and uses a work item to keep the PL011 software
+  kick from blocking the future command/control owner.
 
 The portable command protocol is target-compiled but does not consume CDC input
 until command execution and ordered response handling exist, so no command can
-disappear without its required response. Control logic is not yet connected to
-the command path, and UART TX remains a later vertical slice. This application
-is therefore not yet usable as a complete Enhanced Debug Helper.
+disappear without its required response. Control and UART TX logic are not yet
+connected to the command path. This application is therefore not yet usable as
+a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -105,7 +111,8 @@ set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 pair. A production build that retains `2E8A:000A` fails at compile time.
 
 This build proves compilation, identity configuration, protocol-independent
-epoch/control logic, and devicetree mapping only. USB enumeration/descriptor
-behavior, CDC reconnect behavior, CTRL electrical sequencing, startup voltage,
-translator-disable, and EVENT input state require the Revision A prototype HIL
-checks defined by the approved firmware architecture.
+epoch/control/UART TX logic, and devicetree mapping only. USB
+enumeration/descriptor behavior, CDC reconnect behavior, UART TX completion,
+CTRL electrical sequencing, startup voltage, translator-disable, and EVENT
+input state require the Revision A prototype HIL checks defined by the approved
+firmware architecture.

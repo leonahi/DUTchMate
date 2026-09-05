@@ -1,5 +1,6 @@
 #include "platform_io.h"
 #include "uart_rx.h"
+#include "uart_tx.h"
 #include "usb_connection.h"
 
 int main(void)
@@ -10,6 +11,11 @@ int main(void)
 		return result;
 	}
 	result = dutchmate_uart_rx_initialize();
+	if (result != 0) {
+		(void)dutchmate_platform_io_force_safe();
+		return result;
+	}
+	result = dutchmate_uart_tx_initialize();
 	if (result != 0) {
 		(void)dutchmate_platform_io_force_safe();
 		return result;

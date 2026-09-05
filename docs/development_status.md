@@ -38,7 +38,12 @@ Read this document first whenever development resumes.
   electrical modes, applies active/idle behavior with disable-before-data
   sequencing, runs bounded wrap-safe pulses, and returns channels to high
   impedance on recoverable faults or epoch end. Its Revision A adapter maps
-  those ordered operations to the fixed enable/data GPIO arrays. Both
+  those ordered operations to the fixed enable/data GPIO arrays. A portable
+  UART TX owner now copies bounded payloads, advances partial FIFO fills, waits
+  for physical completion, and terminalizes timeout, cancellation, and driver
+  faults without retry. Its RP2350 UART0 adapter shares the RX interrupt,
+  protects ISR/thread state, and moves the PL011 software kick off the command
+  caller. Both
   selected backends reconnect while idle and during active finite workflows
   through one service coordinator. Production Enhanced startup and each
   replacement use exactly one async host. The obsolete synchronous Enhanced
@@ -46,11 +51,11 @@ Read this document first whenever development resumes.
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
   at the async adapter boundary.
-- **Next step:** Continue Step 5 with a TDD-built UART TX completion state
-  machine and its RP2350 UART0 adapter. Cover exact 1..1024-byte acceptance,
-  completion, partial/fault outcomes, timeout, and epoch cancellation without
-  retrying an ambiguous transmission. Keep EVENT pins reserved without capture.
-  Keep implementation in small vertical slices; do not create a large plan.
+- **Next step:** Continue Step 5 with a TDD-built hardware-independent command
+  executor. Route typed configure, set-state, pulse, and UART-send commands to
+  their existing owners; enforce one in-flight command, exact response mapping,
+  and epoch cancellation. Keep it disconnected from CDC until those invariants
+  pass. Keep EVENT pins reserved without capture and avoid a large plan.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -74,10 +79,10 @@ and active reconnect are complete. The Enhanced host stack is async-only. The
 RP2350 firmware cross-builds with its USB identity, connection-epoch hello,
 portable 32 KiB RX ring, interrupt-driven UART RX/timestamp adapter, ordered
 UART/overflow output, periodic buffer telemetry, and a bounded host-command
-framer plus typed decoder/response encoder. CDC command execution/response
-routing and UART TX remain incomplete. The generic control core and Revision A
-GPIO adapter are target-build verified but not yet connected to CDC commands;
-prototype and HIL validation remain incomplete.
+framer plus typed decoder/response encoder. Generic control and UART TX cores
+plus their Revision A adapters are target-build verified. CDC command
+execution/response routing remains incomplete; prototype and HIL validation
+remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -87,7 +92,7 @@ prototype and HIL validation remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | UART receive/telemetry, portable USB protocol core, and generic control core target-build verified; command execution and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, and generic control state transitions are implemented. The Revision A CTRL adapter preserves disable-before-data sequencing. CDC execution/routing, UART TX, and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | UART receive/telemetry/TX, portable USB protocol core, and generic control core target-build verified; command execution and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, and bounded UART TX completion are implemented. Revision A CTRL and UART0 adapters are compiled. CDC execution/routing and real-hardware behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -96,6 +101,39 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 UART TX implementation, reviewed 2026-09-05:
+
+- TDD red failed all seven scenarios because the portable TX state machine was
+  absent. Green covers null/zero/1,024/1,025-byte bounds, owned payload copying,
+  busy rejection, partial FIFO progress, physical completion, and one exact
+  `bytes_accepted` result.
+- Zero, negative, and over-reported FIFO progress plus completion-check and
+  mid-transmission driver faults terminate as `hardware_fault`. Later callbacks
+  cannot retry or complete a terminal transmission.
+- Timeout uses unsigned 64-bit elapsed time across timer wrap. A timed-out or
+  epoch-cancelled partial transmission stops without retry and cannot report
+  success.
+- The RP2350 adapter uses the existing UART0 interrupt callback and a spinlock
+  around portable state. A Zephyr work item contains the PL011 driver's
+  synchronous initial TX kick so the future command/control caller can poll the
+  100 ms internal deadline and preempt it on disconnect or fault.
+- UART RX stop now cancels TX before disabling the bidirectional translator;
+  UART driver faults terminate both directions. CDC commands still cannot start
+  TX until the command executor and ordered response lane exist. EVENT pins
+  remain input-only and the EVENT translator remains disabled.
+- Zephyr 4.4.0 with SDK 1.0.1 target-built warning-free for
+  `rpi_pico2/rp2350a/m33`: 43,580 bytes flash, 63,912 bytes RAM, and an
+  87,552-byte UF2 image.
+- Focused TX/decoder gate: 14 tests passed.
+- All 69 portable firmware tests passed.
+- Ruff: `uv run ruff check .` passed with `All checks passed!`.
+- Mypy: `uv run mypy` passed with no issues in 73 source files.
+- Full Pytest: `uv run pytest -q` passed: 1,248 passed with zero failures.
+- `git diff --check`: passed with no whitespace errors.
+- Real partial writes, physical-drain completion, timeout, disconnect, and UART
+  signal integrity remain HIL gates because the prototype is unavailable.
+
 
 RP2350 generic control implementation commit
 `81491bb222a05f0b90fae0e1e0849b38dab6f305`, reviewed 2026-09-04:
@@ -531,8 +569,10 @@ queues; no production workflow imports Enhanced wire DTOs.
 - [x] Implement build-configurable Enhanced USB identity with development
   VID/PID `2E8A:000A`, `device = "dutchmate-rp2350"`, and a required production
   VID/PID override.
-- [ ] Implement USB protocol handling, UART receive/send, device timestamps,
+- [x] Implement UART receive/send cores and RP2350 adapters, device timestamps,
   the 32 KiB drop-oldest RX ring, and buffer telemetry.
+- [ ] Connect bounded USB command execution and ordered responses to the
+  implemented protocol, UART, and control owners.
 - [ ] Implement generic `CTRLn` configuration, pulse, and active/idle actions
   with safe startup/disconnect states and connect them to command execution.
 - [ ] Enforce the final protocol limits and complete-write acknowledgements.

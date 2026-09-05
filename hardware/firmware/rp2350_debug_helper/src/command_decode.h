@@ -2,12 +2,11 @@
 #define DUTCHMATE_COMMAND_DECODE_H
 
 #include "control_types.h"
+#include "uart_limits.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#define DMH_UART_SEND_MAX_BYTES 1024U
 
 enum dmh_command_kind {
 	DMH_COMMAND_NONE = 0,
