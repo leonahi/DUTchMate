@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `81491bb222a05f0b90fae0e1e0849b38dab6f305` on 2026-09-04
+> Code baseline reviewed: `197d9b56a04ee1fccffa9dd5b2d0c55cc8f506b7` on 2026-09-05
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -102,7 +102,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 UART TX implementation, reviewed 2026-09-05:
+RP2350 UART TX implementation commit
+`197d9b56a04ee1fccffa9dd5b2d0c55cc8f506b7`, reviewed 2026-09-05:
 
 - TDD red failed all seven scenarios because the portable TX state machine was
   absent. Green covers null/zero/1,024/1,025-byte bounds, owned payload copying,
