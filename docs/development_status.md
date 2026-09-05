@@ -61,12 +61,15 @@ Read this document first whenever development resumes.
   command/source, hello,
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
-  at the async adapter boundary.
-- **Next step:** Complete Step 5 with a focused firmware test/build audit.
-  Confirm every hardware-independent protocol and lifecycle boundary has
-  automated coverage, make the documented Pico 2 build reproducible without
-  duplicating HIL claims, and close only the remaining firmware-level checklist
-  item. Keep EVENT pins reserved without capture and avoid a large plan.
+  at the async adapter boundary. The Step 5 audit confirms automated host-
+  compiled coverage for every portable firmware boundary and records a
+  reproducible Pico 2 target build. Firmware implementation is complete;
+  electrical and load acceptance remain pending.
+- **Next step:** Begin Step 6 hardware validation on the Revision A prototype.
+  Record the prototype identity, then execute the electrical checklist in
+  `hardware/schematics/revision_a.md` section 14 and the RAM/load measurements
+  in `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved;
+  do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -87,14 +90,17 @@ adapter. Phase 1B is partial: its atomic host wire migration, initial async
 semantic/lifecycle/startup-selection slice, service-owned continuous ingestion
 coordinator, continuous connection/integrity monitoring, and coordinated idle
 and active reconnect are complete. The Enhanced host stack is async-only. The
-RP2350 firmware cross-builds with its USB identity, connection-epoch hello,
+RP2350 firmware cross-builds reproducibly with its USB identity,
+connection-epoch hello,
 portable 32 KiB RX ring, interrupt-driven UART RX/timestamp adapter, ordered
 UART/overflow output, periodic buffer telemetry, and a bounded host-command
 framer plus typed decoder/response encoder. Generic control and UART TX cores
 plus their Revision A adapters and the portable one-command executor are
 target-build verified. Live bounded CDC ingress and shared evidence/response
 scheduling are connected with explicit thread ownership. Bounded complete-frame
-CDC driver acceptance is target-build verified; prototype validation and HIL
+CDC driver acceptance is target-build verified. All portable protocol,
+lifecycle, ring-buffer, control, UART TX, telemetry, command, and CDC TX
+boundaries have automated host-compiled tests; prototype validation and HIL
 remain incomplete.
 
 | Delivery area | Status | Evidence or remaining gate |
@@ -105,7 +111,7 @@ remain incomplete.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Complete CDC write acceptance target-build verified; firmware test/build audit and HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Complete frames use owned staging, exact FIFO progress, bounded no-progress failure, and acknowledgement only after driver acceptance. Real-hardware behavior remains incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Complete frames use owned staging, exact FIFO progress, bounded no-progress failure, and acknowledgement only after driver acceptance. Portable boundaries have automated host-compiled coverage and the Pico 2 target build is documented and reproduced. Real-hardware behavior remains incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
@@ -114,6 +120,28 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+RP2350 firmware test/build audit, reviewed 2026-09-05:
+
+- The audit maps every portable boundary to host-compiled tests: exact protocol
+  identity/output, NDJSON framing and command validation, the RX ring and loss
+  telemetry, CTRL/UART command state machines, epoch cancellation, and exact
+  CDC FIFO-acceptance semantics. No uncovered hardware-independent behavior was
+  found, so no artificial source-text tests or production behavior were added.
+- The firmware README now gives a reproducible build command from the pinned
+  Zephyr west workspace and one focused command for all portable firmware
+  tests. It explicitly separates host tests, target-build evidence, and HIL
+  claims.
+- EVENT0 through EVENT3 remain input-only and reserved. The EVENT translator
+  remains disabled; neither capture behavior nor `gpio_events` was added.
+- Zephyr 4.4.0 with SDK 1.0.1 built warning-free for
+  `rpi_pico2/rp2350a/m33`: 51,476 bytes flash, 76,904 bytes RAM, and a
+  103,424-byte UF2 image.
+- All 90 portable firmware tests passed. Ruff passed; mypy reported no issues
+  in 73 source files; full pytest passed with 1,269 tests; and
+  `git diff --check` found no whitespace errors.
+- Graphify was queried for the firmware/build/test boundary. No structural
+  graph update was required because this audit changed documentation only.
 
 RP2350 complete CDC write implementation commit
 `cf5325b5b3c8b132c2a07bb02a087b8c18ccfd0b`, reviewed 2026-09-05:
@@ -690,7 +718,7 @@ queues; no production workflow imports Enhanced wire DTOs.
 - [x] Implement generic `CTRLn` configuration, pulse, and active/idle actions
   with safe startup/disconnect states and portable command routing.
 - [x] Enforce the final protocol limits and complete-write acknowledgements.
-- [ ] Add build instructions and automated firmware-level tests where hardware
+- [x] Add build instructions and automated firmware-level tests where hardware
   is not required.
 
 Exit gate: a reproducible firmware build implements the exact committed v1

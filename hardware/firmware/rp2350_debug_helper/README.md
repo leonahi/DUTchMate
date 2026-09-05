@@ -109,13 +109,17 @@ The devicetree overlay preserves the normative mapping from
 
 ## Build
 
-Use the pinned Zephyr 4.4.0 workspace and SDK 1.0.1:
+Run the build from a west workspace pinned to Zephyr 4.4.0 with SDK 1.0.1.
+`west build` is unavailable from the DUTchMate repository itself unless that
+repository is also inside a west workspace.
 
 ```bash
-west build \
+repo_root=/absolute/path/to/DUTchMate
+cd /absolute/path/to/zephyrproject
+.venv/bin/west build \
   -b rpi_pico2/rp2350a/m33 \
-  -s /path/to/DUTchMate/hardware/firmware/rp2350_debug_helper \
-  -d /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper \
+  -s "$repo_root/hardware/firmware/rp2350_debug_helper" \
+  -d "$repo_root/build/dutchmate-rp2350-debug-helper" \
   --pristine
 ```
 
@@ -143,3 +147,29 @@ complete-write timing during disconnect, reconnect behavior, UART TX
 completion, CTRL electrical sequencing, startup voltage, translator-disable,
 and EVENT input state require the Revision A prototype HIL checks defined by
 the approved firmware architecture.
+
+## Hardware-independent verification
+
+From the DUTchMate repository root, run:
+
+```bash
+uv run pytest -q tests/hardware/rp2350_debug_helper
+```
+
+The suite compiles the portable C modules with strict host-compiler warnings
+and exercises these boundaries without Zephyr or a connected board:
+
+| Boundary | Test coverage |
+|---|---|
+| Device identity and exact protocol output | `test_hello.py`, `test_uart_event.py`, `test_telemetry.py`, `test_command_response.py` |
+| NDJSON framing, command validation, and bounded ingress | `test_ndjson_framer.py`, `test_command_decode.py`, `test_command_ingress.py` |
+| RX ring ordering, loss accounting, and telemetry scheduling | `test_uart_rx_ring.py`, `test_telemetry.py` |
+| CTRL transitions, pulses, command execution, and UART TX state | `test_control_state.py`, `test_command_executor.py`, `test_uart_tx_state.py` |
+| Connection epochs and complete CDC frame acceptance | `test_connection_epoch.py`, `test_cdc_tx_state.py` |
+
+The target build verifies Zephyr adapter integration, compile-time devicetree
+mapping checks, and static allocation. It does not prove USB/UART timing, GPIO
+voltage or sequencing, disconnect behavior, stack margins, or load behavior;
+those remain Step 6 hardware-validation gates. EVENT pins remain safely
+initialized and reserved, with no capture implementation or advertised
+capability.
