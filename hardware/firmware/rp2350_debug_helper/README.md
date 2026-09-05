@@ -60,13 +60,19 @@ states, and exposes its initial USB CDC identity:
   cancellation, or driver faults without retrying an ambiguous transmission;
 - the RP2350 UART0 adapter shares the existing interrupt callback, protects TX
   state from ISR/thread races, and uses a work item to keep the PL011 software
-  kick from blocking the future command/control owner.
+  kick from blocking the command/control owner;
+- the hardware-independent command executor routes typed configure, state,
+  pulse, and UART-send commands through the existing owners, permits exactly
+  one command or response at a time, and emits the exact v1 response only after
+  the requested operation reaches its defined completion point;
+- epoch cancellation discards pending work and staged responses, cancels UART
+  TX without retry, returns every CTRL channel to high impedance, and forgets
+  accepted CTRL configuration.
 
-The portable command protocol is target-compiled but does not consume CDC input
-until command execution and ordered response handling exist, so no command can
-disappear without its required response. Control and UART TX logic are not yet
-connected to the command path. This application is therefore not yet usable as
-a complete Enhanced Debug Helper.
+The portable command path is target-compiled and its execution invariants are
+host-tested, but it does not yet consume CDC input or share the live CDC output
+lane with evidence. This application is therefore not yet usable as a complete
+Enhanced Debug Helper.
 
 ## Revision A mapping
 

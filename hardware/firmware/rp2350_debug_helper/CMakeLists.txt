@@ -5,6 +5,7 @@ project(dutchmate_rp2350_debug_helper)
 
 target_sources(app PRIVATE
     src/command_decode.c
+    src/command_executor.c
     src/command_response.c
     src/connection_epoch.c
     src/control_state.c
