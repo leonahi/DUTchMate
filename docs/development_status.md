@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `cf5325b5b3c8b132c2a07bb02a087b8c18ccfd0b` on 2026-09-05
+> Code baseline reviewed: `1409522dcdbc69b5b4e16be2576b2869bccbef21` on 2026-09-05
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -121,7 +121,8 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-RP2350 firmware test/build audit, reviewed 2026-09-05:
+RP2350 firmware test/build audit commit
+`1409522dcdbc69b5b4e16be2576b2869bccbef21`, reviewed 2026-09-05:
 
 - The audit maps every portable boundary to host-compiled tests: exact protocol
   identity/output, NDJSON framing and command validation, the RX ring and loss
