@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `1409522dcdbc69b5b4e16be2576b2869bccbef21` on 2026-09-05
+> Code baseline reviewed: `c9adc83dbcd76626bdd3b92a764966f55a49dca3` on 2026-09-09
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -57,7 +57,21 @@ Read this document first whenever development resumes.
   and end the epoch without application-level replay. Both
   selected backends reconnect while idle and during active finite workflows
   through one service coordinator. Production Enhanced startup and each
-  replacement use exactly one async host. The obsolete synchronous Enhanced
+  replacement use exactly one async host. Its concrete serial opener now holds
+  DTR low through port configuration, input flushing, and async-reader
+  attachment, then asserts DTR exactly once. This prevents pyserial's normal
+  open-time input flush from discarding the firmware's one-shot epoch `hello`.
+  The host applies portable 115200 line coding to the independent USB CDC port;
+  the Enhanced setting remains the firmware-owned 460800 DUT UART rate.
+  Pico 2 HIL now verifies the complementary firmware lifecycle: DTR must remain
+  asserted for 100 ms, DCD/DSR publish device readiness, and a 64-byte CDC TX
+  FIFO packet-paces multi-packet frames. Two consecutive epochs delivered the
+  complete 175-byte `hello`. Sustained-runtime diagnosis then isolated a Zephyr
+  4.4.0 PL011 error-interrupt storm; the application now enforces Zephyr 4.4.2,
+  whose corrected driver acknowledges those interrupts. The patched build
+  emits periodic telemetry, closes immediately, and passes consecutive real CLI
+  start/status/stop cycles with all five capabilities.
+  The obsolete synchronous Enhanced
   command/source, hello,
   startup, and reconnect compatibility path is removed; shared runtime/workflow
   tests use backend-neutral semantic fakes, while wire behavior remains covered
@@ -65,8 +79,8 @@ Read this document first whenever development resumes.
   compiled coverage for every portable firmware boundary and records a
   reproducible Pico 2 target build. Firmware implementation is complete;
   electrical and load acceptance remain pending.
-- **Next step:** Begin Step 6 hardware validation on the Revision A prototype.
-  Record the prototype identity, then execute the electrical checklist in
+- **Next step:** Continue Step 6 hardware validation by recording the prototype
+  identity and executing the electrical checklist in
   `hardware/schematics/revision_a.md` section 14 and the RAM/load measurements
   in `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved;
   do not add event capture.
@@ -101,7 +115,10 @@ scheduling are connected with explicit thread ownership. Bounded complete-frame
 CDC driver acceptance is target-build verified. All portable protocol,
 lifecycle, ring-buffer, control, UART TX, telemetry, command, and CDC TX
 boundaries have automated host-compiled tests; prototype validation and HIL
-remain incomplete.
+remain incomplete. The production host serial opener deterministically sequences
+DTR after its final input flush and async-reader attachment. Pico 2 HIL verifies
+USB enumeration, two complete idle connection epochs, and real Enhanced CLI
+startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 
 | Delivery area | Status | Evidence or remaining gate |
 |---|---|---|
@@ -109,17 +126,82 @@ remain incomplete.
 | Phase 1A Basic host adapter | Accepted | Mocked coverage plus sessions `20260826T211103Z-2649d369` and `20260826T211203Z-f541c8fb` prove real receive/send, storage, and retrieval through the generic adapter. |
 | Shared sessions and evidence access | Implemented | Lifecycle, quotas, recovery, reconnect segments, retention, logs, wait-pattern, baseline designation/comparison, and UART send are tested. |
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
-| Phase 1B Enhanced host adapter | Host implementation complete; hardware acceptance pending | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. |
+| Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; HIL pending | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Complete frames use owned staging, exact FIFO progress, bounded no-progress failure, and acknowledgement only after driver acceptance. Portable boundaries have automated host-compiled coverage and the Pico 2 target build is documented and reproduced. Real-hardware behavior remains incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; USB startup HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, and consecutive CLI startup HIL are reproduced. Electrical, UART/load, and active-workflow behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
-| Basic and Enhanced HIL acceptance | Basic passed; Enhanced not run | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run; the Debug Helper path remains unavailable. |
+| Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello and real CLI startup pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
+
+- Hardware diagnosis isolated pyserial's default open sequence: it asserted DTR
+  before its final input flush, while the RP2350 firmware emits its one-shot
+  epoch `hello` immediately on DTR assertion. The flush could therefore discard
+  the frame before the async reader received it.
+- The concrete Enhanced opener now creates the serial resource closed, holds
+  DTR low while opening and flushing, attaches the resource to the asyncio
+  reader, and asserts DTR exactly once afterward. Partial-open failures close
+  the serial resource.
+- The next hardware run reached async transport attachment and exposed a second
+  issue: `serial_asyncio` reapplied the configured 460800 rate through macOS
+  `IOSSIOSPEED`, which the CDC device rejected with errno 83. That value belongs
+  to the firmware-owned DUT UART; the Phase 1 contract explicitly keeps it off
+  the independent host USB CDC port. The host now uses portable 115200 CDC line
+  coding without changing the 460800 DUT UART.
+- TDD red proved the old production opener still used the unsafe
+  `open_serial_connection` path. A second red proved that the DUT UART rate was
+  still passed to the CDC opener. The focused Enhanced serial I/O suite now
+  passes all 13 tests, including exact DTR ordering, separation of CDC line
+  coding from DUT UART rate, and attachment-failure cleanup.
+- Pico 2 diagnosis then isolated two firmware-side requirements. DTR must remain
+  asserted for 100 ms before an epoch starts, and the CDC device publishes DCD
+  and DSR readiness without clearing carrier during DTR-low gaps. This makes
+  macOS port open deterministic while DTR alone continues to own epochs.
+- With Zephyr's default 1,024-byte CDC TX FIFO, the firmware accepted the whole
+  175-byte `hello`, disabled TX interrupts, delivered exactly two 64-byte
+  packets, and wedged before the final 47 bytes. The board overlay now fixes the
+  FIFO at one 64-byte full-speed packet so each completion advances the next
+  chunk through the existing partial-acceptance state machine.
+- The first Zephyr 4.4.0 HIL result was not stable: `hello` could arrive, but
+  periodic `buffer_status` stopped and DTR-low/close blocked for about 6.5
+  seconds. Controlled diagnostic images showed hello-only healthy, UART-only
+  broken, UART with interrupts masked healthy, RX interrupt only healthy, and
+  error interrupt only broken. This isolates the failure to the PL011 error
+  interrupt path rather than CDC, protocol, telemetry, or UART RX.
+- Zephyr advisory
+  [GHSA-36rp-2hcp-f5hv](https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-36rp-2hcp-f5hv)
+  confirms releases before 4.4.2 enable PL011 error interrupts without
+  acknowledging them in the ISR. The application now rejects Zephyr before
+  4.4.2 at configure time and keeps UART error interrupts enabled.
+- The full production build with Zephyr 4.4.2/SDK 1.0.1 confirms
+  `tx-fifo-size = <0x40>`: 51,772 bytes flash, 75,944 bytes RAM, and a
+  103,936-byte UF2 with SHA-256
+  `db5ba9dfcbcc6d6bbfd83149dd9d5c1b8f206478ad2d7d6ef68f18b57dc16afe`.
+- Patched Pico 2 HIL delivered the complete valid 175-byte `hello`, then six
+  complete 172-byte periodic `buffer_status` frames over 6.5 seconds. DTR-low
+  and close completed immediately. A fresh epoch again delivered `hello` and
+  status before closing normally.
+- The exact CLI sequence `start`, `status`, `stop`, immediate `start`, `status`,
+  `stop` passed twice against `/dev/cu.usbmodem11401`. Both status checks
+  reported `connected`, device `dutchmate-rp2350`, firmware `development`, and
+  all five required capabilities.
+- Retain the independently validated USB/host corrections alongside the Zephyr
+  4.4.2 minimum: portable 115200 CDC line coding, deterministic DTR
+  open/flush/attach/close sequencing, the DTR-low restart dwell, and the
+  one-packet CDC TX FIFO each addressed a separate observed failure. Do not
+  blanket-revert them as part of the PL011 correction. The firmware's 100 ms
+  DTR-high qualification and DCD/DSR publication are optional future cleanup
+  candidates only; remove either one only after an isolated Zephyr 4.4.2 A/B
+  run passes sustained telemetry and consecutive CLI start/status/stop cycles.
+- All 91 portable firmware tests and all 14 focused Enhanced serial I/O tests
+  passed. Ruff passed; mypy reported no issues in 73 source files; full pytest
+  passed with 1,274 tests; and `git diff --check` found no whitespace errors.
 
 RP2350 firmware test/build audit commit
 `1409522dcdbc69b5b4e16be2576b2869bccbef21`, reviewed 2026-09-05:

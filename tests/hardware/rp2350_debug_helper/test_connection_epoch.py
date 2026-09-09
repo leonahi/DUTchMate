@@ -47,13 +47,23 @@ def _run_states(tmp_path: Path, states: str) -> bytes:
     return result.stdout
 
 
-def test_epoch_starts_once_per_dtr_assertion_and_ends_on_loss(tmp_path: Path) -> None:
-    assert _run_states(tmp_path, "011100") == b"-S--E-"
+def test_epoch_ignores_a_transient_dtr_assertion(tmp_path: Path) -> None:
+    assert _run_states(tmp_path, "010") == b"---"
 
 
-def test_epoch_restarts_after_each_completed_disconnect(tmp_path: Path) -> None:
-    assert _run_states(tmp_path, "01010") == b"-SESE"
+def test_epoch_starts_after_stable_dtr_and_ends_immediately_on_loss(
+    tmp_path: Path,
+) -> None:
+    assert _run_states(tmp_path, "01111111111100") == b"-----------SE-"
 
 
-def test_epoch_can_start_when_first_observation_is_asserted(tmp_path: Path) -> None:
-    assert _run_states(tmp_path, "11") == b"S-"
+def test_epoch_restarts_after_each_stable_assertion(tmp_path: Path) -> None:
+    assert _run_states(tmp_path, "11111111111011111111111") == (
+        b"----------SE----------S"
+    )
+
+
+def test_epoch_can_stabilize_when_first_observation_is_asserted(
+    tmp_path: Path,
+) -> None:
+    assert _run_states(tmp_path, "11111111111") == b"----------S"

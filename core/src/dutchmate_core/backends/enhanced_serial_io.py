@@ -19,6 +19,8 @@ from dutchmate_core.device_connection.serial_transport import (
 from dutchmate_core.device_connection.stream import MAX_DEVICE_FRAME_BYTES
 
 DEFAULT_ASYNC_HELLO_TIMEOUT_SECONDS = 1.0
+DEFAULT_USB_CDC_LINE_BAUDRATE = 115200
+USB_CDC_DTR_RESET_SECONDS = 0.1
 
 
 class _StreamReader(Protocol):
@@ -41,6 +43,16 @@ class _StreamWriter(Protocol):
         """Wait until the stream transport is closed."""
 
 
+class _DtrControl(Protocol):
+    @property
+    def dtr(self) -> bool:
+        """Return the current DTR state."""
+
+    @dtr.setter
+    def dtr(self, value: bool) -> None:
+        """Set the DTR state."""
+
+
 class OpenSerialConnection(Protocol):
     def __call__(
         self,
@@ -53,9 +65,16 @@ class OpenSerialConnection(Protocol):
 
 
 class _OwnedStreamReader:
-    def __init__(self, reader: _StreamReader, writer: _StreamWriter) -> None:
+    def __init__(
+        self,
+        reader: _StreamReader,
+        writer: _StreamWriter,
+        *,
+        serial_port: _DtrControl | None = None,
+    ) -> None:
         self._reader = reader
         self._writer = writer
+        self._serial_port = serial_port
         self._close_task: asyncio.Task[None] | None = None
 
     async def read(self, size: int) -> bytes:
@@ -69,6 +88,13 @@ class _OwnedStreamReader:
         await asyncio.shield(task)
 
     async def _run_close(self) -> None:
+        if self._serial_port is not None:
+            try:
+                self._serial_port.dtr = False
+            except Exception:
+                pass
+            else:
+                await asyncio.sleep(USB_CDC_DTR_RESET_SECONDS)
         self._writer.close()
         await self._writer.wait_closed()
 
@@ -82,8 +108,52 @@ class _ThreadedSerialFrameWriter:
 
 
 def _serial_asyncio_opener() -> OpenSerialConnection:
-    module = importlib.import_module("serial_asyncio")
-    return cast(OpenSerialConnection, module.open_serial_connection)
+    async def open_connection(
+        *,
+        url: str,
+        baudrate: int,
+        limit: int,
+    ) -> tuple[_StreamReader, _StreamWriter]:
+        serial_module = importlib.import_module("serial")
+        serial_asyncio_module = importlib.import_module("serial_asyncio")
+        serial_port = serial_module.serial_for_url(
+            url,
+            baudrate=baudrate,
+            do_not_open=True,
+        )
+
+        # The firmware treats DTR rising as the start of a connection epoch and
+        # immediately emits its one-shot hello.  pyserial's normal open path
+        # asserts DTR before its final input flush, which can discard that hello.
+        # Hold DTR low until the serial port is configured, flushed, and attached
+        # to the asyncio reader, then assert it exactly once.
+        serial_port.dtr = False
+        try:
+            serial_port.open()
+            loop = asyncio.get_running_loop()
+            stream_reader = asyncio.StreamReader(limit=limit)
+            protocol = asyncio.StreamReaderProtocol(stream_reader)
+            transport, _ = await serial_asyncio_module.connection_for_serial(
+                loop,
+                lambda: protocol,
+                serial_port,
+            )
+            stream_writer = asyncio.StreamWriter(
+                transport,
+                protocol,
+                stream_reader,
+                loop,
+            )
+            serial_port.reset_input_buffer()
+            await asyncio.sleep(USB_CDC_DTR_RESET_SECONDS)
+            serial_port.dtr = True
+        except BaseException:
+            serial_port.close()
+            raise
+
+        return stream_reader, cast(_StreamWriter, stream_writer)
+
+    return open_connection
 
 
 async def _run_cleanup(close: Callable[[], Awaitable[None]]) -> None:
@@ -119,13 +189,23 @@ async def open_async_enhanced_serial_adapter(
     opener = open_connection if open_connection is not None else _serial_asyncio_opener()
     stream_reader, stream_writer = await opener(
         url=port,
-        baudrate=baudrate,
+        # Enhanced baudrate config belongs to the firmware-owned DUT UART. USB
+        # CDC line coding is independent and uses a portable host-side value.
+        baudrate=DEFAULT_USB_CDC_LINE_BAUDRATE,
         limit=MAX_DEVICE_FRAME_BYTES,
     )
-    owned_reader = _OwnedStreamReader(stream_reader, stream_writer)
+    serial_resource = stream_writer.transport.get_extra_info("serial")
+    owned_reader = _OwnedStreamReader(
+        stream_reader,
+        stream_writer,
+        serial_port=(
+            cast(_DtrControl, serial_resource)
+            if open_connection is None and serial_resource is not None
+            else None
+        ),
+    )
     adapter: AsyncEnhancedSerialAdapter | None = None
     try:
-        serial_resource = stream_writer.transport.get_extra_info("serial")
         if serial_resource is None:
             raise RuntimeError("pyserial-asyncio transport omitted serial resource")
         writer = _ThreadedSerialFrameWriter(cast(SerialFrameSink, serial_resource))

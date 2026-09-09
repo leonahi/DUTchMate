@@ -22,7 +22,11 @@ int main(int argc, char **argv)
 		if (states[index] != '0' && states[index] != '1') {
 			return EXIT_FAILURE;
 		}
-		transition = dmh_connection_epoch_update(&epoch, states[index] == '1');
+		transition = dmh_connection_epoch_update(
+			&epoch,
+			states[index] == '1',
+			(uint64_t)index * 10000U
+		);
 		if (transition == DMH_EPOCH_STARTED) {
 			(void)fputc('S', stdout);
 		} else if (transition == DMH_EPOCH_ENDED) {

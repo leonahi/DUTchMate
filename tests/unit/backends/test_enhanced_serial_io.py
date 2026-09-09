@@ -1,13 +1,17 @@
 """Concrete Enhanced async serial I/O boundary tests."""
 
 import asyncio
+import importlib
 import threading
+from collections.abc import Callable
+from types import SimpleNamespace
 
 import pytest
 
 from dutchmate_core.backends import BackendInfo, BackendInputError
 from dutchmate_core.backends.enhanced_serial_io import (
     _OwnedStreamReader,
+    _serial_asyncio_opener,
     _ThreadedSerialFrameWriter,
     open_async_enhanced_serial_adapter,
 )
@@ -120,6 +124,145 @@ class ThreadTrackingSerial:
         self.flush_threads.append(threading.get_ident())
 
 
+class DtrControlledSerial:
+    def __init__(self, events: list[object]) -> None:
+        self.events = events
+
+    @property
+    def dtr(self) -> bool:
+        raise AssertionError("DTR is write-only in this test")
+
+    @dtr.setter
+    def dtr(self, value: bool) -> None:
+        self.events.append(("dtr", value))
+
+    def open(self) -> None:
+        self.events.append("open")
+
+    def reset_input_buffer(self) -> None:
+        self.events.append("reset_input_buffer")
+
+    def close(self) -> None:
+        self.events.append("close")
+
+
+class AttachedSerialTransport:
+    def __init__(self, serial_port: DtrControlledSerial) -> None:
+        self.serial_port = serial_port
+        self.closed = False
+
+    def is_closing(self) -> bool:
+        return self.closed
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class OrderedCloseStreamWriter(BlockingCloseStreamWriter):
+    def __init__(self, events: list[object]) -> None:
+        super().__init__()
+        self.events = events
+        self.release_close.set()
+
+    def close(self) -> None:
+        self.events.append("writer_close")
+        super().close()
+
+
+async def test_production_opener_holds_dtr_low_before_starting_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fails if restart can hide DTR low from the firmware epoch poller."""
+
+    events: list[object] = []
+    serial_port = DtrControlledSerial(events)
+
+    def serial_for_url(url: str, **kwargs: object) -> DtrControlledSerial:
+        events.append(("serial_for_url", url, kwargs))
+        return serial_port
+
+    async def connection_for_serial(
+        loop: asyncio.AbstractEventLoop,
+        protocol_factory: Callable[[], asyncio.Protocol],
+        attached_serial: DtrControlledSerial,
+    ) -> tuple[AttachedSerialTransport, object]:
+        del loop
+        events.append(("attach_reader", attached_serial))
+        protocol = protocol_factory()
+        return AttachedSerialTransport(attached_serial), protocol
+
+    async def legacy_open_serial_connection(**kwargs: object) -> object:
+        events.append(("legacy_open_serial_connection", kwargs))
+        return object()
+
+    async def record_sleep(delay: float) -> None:
+        events.append(("sleep", delay))
+
+    modules = {
+        "serial": SimpleNamespace(serial_for_url=serial_for_url),
+        "serial_asyncio": SimpleNamespace(
+            connection_for_serial=connection_for_serial,
+            open_serial_connection=legacy_open_serial_connection,
+        ),
+    }
+    monkeypatch.setattr(
+        importlib,
+        "import_module",
+        lambda name: modules[name],
+    )
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+
+    await _serial_asyncio_opener()(
+        url="/dev/ttyACM0",
+        baudrate=460800,
+        limit=65536,
+    )
+
+    assert events == [
+        (
+            "serial_for_url",
+            "/dev/ttyACM0",
+            {"baudrate": 460800, "do_not_open": True},
+        ),
+        ("dtr", False),
+        "open",
+        ("attach_reader", serial_port),
+        "reset_input_buffer",
+        ("sleep", 0.1),
+        ("dtr", True),
+    ]
+
+
+async def test_production_opener_closes_serial_if_reader_attachment_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[object] = []
+    serial_port = DtrControlledSerial(events)
+
+    async def connection_for_serial(*args: object) -> object:
+        del args
+        raise OSError("reader attachment failed")
+
+    modules = {
+        "serial": SimpleNamespace(serial_for_url=lambda *args, **kwargs: serial_port),
+        "serial_asyncio": SimpleNamespace(connection_for_serial=connection_for_serial),
+    }
+    monkeypatch.setattr(
+        importlib,
+        "import_module",
+        lambda name: modules[name],
+    )
+
+    with pytest.raises(OSError, match="reader attachment failed"):
+        await _serial_asyncio_opener()(
+            url="/dev/ttyACM0",
+            baudrate=460800,
+            limit=65536,
+        )
+
+    assert events == [("dtr", False), "open", "close"]
+
+
 async def test_owned_stream_reader_delegates_reads_and_shares_close_completion() -> None:
     """Fails if paired stream closure is duplicated or not awaited by all callers."""
 
@@ -141,6 +284,30 @@ async def test_owned_stream_reader_delegates_reads_and_shares_close_completion()
 
     assert writer.close_count == 1
     assert writer.close_completed.is_set()
+
+
+async def test_owned_stream_reader_holds_dtr_low_before_closing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fails if graceful shutdown can leave the firmware epoch active."""
+
+    events: list[object] = []
+    serial_port = DtrControlledSerial(events)
+    writer = OrderedCloseStreamWriter(events)
+
+    async def record_sleep(delay: float) -> None:
+        events.append(("sleep", delay))
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    owned = _OwnedStreamReader(
+        FakeStreamReader(),
+        writer,
+        serial_port=serial_port,
+    )
+
+    await owned.close()
+
+    assert events == [("dtr", False), ("sleep", 0.1), "writer_close"]
 
 
 async def test_threaded_writer_uses_shared_exact_loop_off_event_loop() -> None:
@@ -214,6 +381,32 @@ async def test_factory_returns_started_adapter_and_writes_on_stream_serial() -> 
     await adapter.close()
     await adapter.close()
     assert stream_writer.close_count == 1
+
+
+async def test_factory_does_not_apply_dut_uart_rate_to_usb_cdc() -> None:
+    """Fails if the Enhanced UART setting reaches the host CDC line coding."""
+
+    reader = FakeStreamReader()
+    reader.chunks.put_nowait(HELLO_FRAME)
+    stream_writer = FakeStreamWriter(ThreadTrackingSerial([]))
+    opener = RecordingOpener(reader, stream_writer)
+
+    adapter = await open_async_enhanced_serial_adapter(
+        port="/dev/ttyACM0",
+        segment_id=0,
+        baudrate=460800,
+        open_connection=opener,
+    )
+
+    assert opener.calls == [
+        {
+            "url": "/dev/ttyACM0",
+            "baudrate": 115200,
+            "limit": 65536,
+        }
+    ]
+
+    await adapter.close()
 
 
 async def test_open_failure_is_preserved_before_any_stream_exists() -> None:

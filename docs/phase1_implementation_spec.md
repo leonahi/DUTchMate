@@ -90,7 +90,9 @@ next implementation step live only in `docs/development_status.md`.
     Zephyr `rpi_pico2/rp2350a/m33` board target for UART receive/send, device
     timestamps, buffer telemetry, and `CTRLn` control. Start with the 32 KiB
     UART RX ring-buffer baseline and close its measurement gate as defined in
-    `docs/ring_buffer_sizing_plan.md`.
+    `docs/ring_buffer_sizing_plan.md`. Require Zephyr 4.4.2 or newer so the
+    RP2350 PL011 driver acknowledges UART error interrupts; affected earlier
+    releases can remain trapped in an interrupt storm.
 12. Define the Enhanced backend as the sole future owner of `EVENTn` input, but
     defer the `gpio_events` implementation and HIL criteria to Phase 5.
 13. Pass mocked Enhanced-backend tests and a real RP2350 Debug Helper + the
@@ -1349,12 +1351,16 @@ effective default is backend-specific: Basic defaults to 115200 and opens the
 DUT-facing adapter at the configured supported rate; Enhanced Phase 1B defaults
 to and is fixed at 460800. Enhanced rejects another configured rate until a
 reviewed firmware protocol supports runtime UART-rate configuration. The host
-USB CDC protocol port is not the DUT UART and does not reinterpret this setting.
+USB CDC protocol port is not the DUT UART and does not reinterpret this setting;
+the host opens CDC with portable 115200 line coding while the firmware retains
+the fixed 460800 DUT UART configuration.
 `tx_enabled` defaults to false and determines whether either backend exposes
 effective `uart_send`. Basic derives pre-policy send support from its writable
 serial implementation; this is not proof that adapter TX is connected or
 electrically compatible. Enhanced must both advertise `uart_send` in `hello`
-and have `tx_enabled = true`. DTR, RTS, and serial flow control are not used.
+and have `tx_enabled = true`. DTR defines Enhanced firmware connection epochs;
+the firmware publishes DCD and DSR to report the configured USB device ready,
+while RTS and serial flow control are not used.
 
 `tx_enabled` does not promise an electrically disabled or high-impedance TX
 line. A Basic adapter may drive idle whenever its TX wire is connected. Users

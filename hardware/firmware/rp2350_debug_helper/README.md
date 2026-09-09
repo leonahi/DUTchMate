@@ -17,8 +17,9 @@ states, and exposes its initial USB CDC identity:
   `DUTchMate`, and product `Debug Helper`;
 - the USB serial descriptor uses the stable board identifier supplied by
   Zephyr hardware information when available;
-- each DTR assertion starts one connection epoch and emits the exact v1
-  `hello` first and once; DTR loss forces the GPIO safe state;
+- DTR must remain asserted for 100 ms before one connection epoch starts; the
+  firmware publishes USB carrier-ready state and emits the exact v1 `hello`
+  first and once, while DTR loss forces the GPIO safe state;
 - the portable UART RX core defines exactly 32,768 raw bytes and 512 timestamp
   descriptors, preserves FIFO ordering across wrap, and drops oldest data on
   byte or descriptor exhaustion;
@@ -80,6 +81,9 @@ states, and exposes its initial USB CDC identity:
   1,536-byte staging buffer, advances only by exact driver FIFO acceptance,
   and acknowledges responses or evidence only after the full frame is
   accepted;
+- the CDC driver's TX FIFO is one 64-byte full-speed USB packet, keeping TX
+  interrupt ownership active across multi-packet frames instead of accepting a
+  complete frame before its packet chain can advance;
 - the Zephyr CDC callback performs FIFO writes while the main USB TX owner
   starts, polls, and cancels frames; zero, negative, or over-reported progress
   and 250 ms without progress end the epoch, while DTR loss discards staged
@@ -90,9 +94,11 @@ states, and exposes its initial USB CDC identity:
 
 The command path now consumes live CDC input and shares the sole output owner
 with evidence. Complete CDC-driver acceptance and mid-frame failure semantics
-are target-build verified. Real USB timing and disconnect behavior still
-require hardware validation, so the application is not yet accepted as a
-complete Enhanced Debug Helper.
+are target-build verified. On the Pico 2, macOS accepted two consecutive DTR
+epochs and received the complete 175-byte `hello` in 98 ms and 104 ms; the real
+CLI then started and reported the Enhanced backend connected. Remaining UART,
+electrical, load, and active-workflow reconnect behavior still requires HIL, so
+the application is not yet accepted as a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
@@ -109,9 +115,15 @@ The devicetree overlay preserves the normative mapping from
 
 ## Build
 
-Run the build from a west workspace pinned to Zephyr 4.4.0 with SDK 1.0.1.
+Run the build from a west workspace pinned to Zephyr 4.4.2 with SDK 1.0.1.
 `west build` is unavailable from the DUTchMate repository itself unless that
 repository is also inside a west workspace.
+
+Zephyr 4.4.2 is the enforced minimum. Earlier releases leave RP2350 PL011 UART
+error interrupts latched and can trap the MCU in an interrupt storm
+([GHSA-36rp-2hcp-f5hv](https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-36rp-2hcp-f5hv)).
+The firmware therefore retains UART error interrupt reporting and rejects an
+affected Zephyr version at configure time.
 
 ```bash
 repo_root=/absolute/path/to/DUTchMate
@@ -142,11 +154,12 @@ pair. A production build that retains `2E8A:000A` fails at compile time.
 
 This build proves compilation, identity configuration, bounded command ingress,
 command/control and USB-writer ownership, explicit CDC FIFO-acceptance logic,
-epoch/control/UART TX logic, and devicetree mapping only. USB enumeration,
-complete-write timing during disconnect, reconnect behavior, UART TX
-completion, CTRL electrical sequencing, startup voltage, translator-disable,
-and EVENT input state require the Revision A prototype HIL checks defined by
-the approved firmware architecture.
+epoch/control/UART TX logic, and devicetree mapping. USB enumeration, complete
+multi-packet `hello` delivery, consecutive idle connection epochs, and real CLI
+startup are verified on the Pico 2. Complete-write timing during physical
+disconnect, active-workflow reconnect, UART TX completion, CTRL electrical
+sequencing, startup voltage, translator-disable, and EVENT input state remain
+Revision A prototype HIL checks defined by the approved firmware architecture.
 
 ## Hardware-independent verification
 
@@ -168,8 +181,9 @@ and exercises these boundaries without Zephyr or a connected board:
 | Connection epochs and complete CDC frame acceptance | `test_connection_epoch.py`, `test_cdc_tx_state.py` |
 
 The target build verifies Zephyr adapter integration, compile-time devicetree
-mapping checks, and static allocation. It does not prove USB/UART timing, GPIO
-voltage or sequencing, disconnect behavior, stack margins, or load behavior;
-those remain Step 6 hardware-validation gates. EVENT pins remain safely
-initialized and reserved, with no capture implementation or advertised
-capability.
+mapping checks, and static allocation. Focused Pico 2 HIL verifies USB startup,
+packet-paced `hello`, and consecutive idle epochs; it does not prove UART
+timing, GPIO voltage or sequencing, physical-disconnect behavior, stack margins,
+or load behavior. Those remain Step 6 hardware-validation gates. EVENT pins
+remain safely initialized and reserved, with no capture implementation or
+advertised capability.

@@ -44,6 +44,22 @@ static const struct device *const cdc = DEVICE_DT_GET(DUTCHMATE_CDC_NODE);
 static uint8_t uart_staging[DMH_UART_EVENT_MAX_DATA_BYTES];
 static char evidence_frame[DMH_UART_EVENT_FRAME_CAPACITY];
 
+static int publish_host_ready(void)
+{
+	int dcd_result = uart_line_ctrl_set(
+		cdc,
+		UART_LINE_CTRL_DCD,
+		1U
+	);
+	int dsr_result = uart_line_ctrl_set(
+		cdc,
+		UART_LINE_CTRL_DSR,
+		1U
+	);
+
+	return dcd_result != 0 ? dcd_result : dsr_result;
+}
+
 static int write_complete_frame(const char *frame, size_t frame_length)
 {
 	enum dmh_cdc_tx_result tx_result;
@@ -230,13 +246,23 @@ int dutchmate_usb_connection_run(void)
 		result = uart_line_ctrl_get(cdc, UART_LINE_CTRL_DTR, &dtr);
 		transition = dmh_connection_epoch_update(
 			&epoch,
-			result == 0 && dtr != 0U
+			result == 0 && dtr != 0U,
+			time_us_64()
 		);
 		if (transition == DMH_EPOCH_STARTED) {
 			dutchmate_command_runtime_discard_input();
+			result = publish_host_ready();
+			if (result != 0) {
+				(void)dutchmate_platform_io_force_safe();
+				return result;
+			}
 			result = write_complete_frame(hello_frame, hello_length);
 			if (result == -ENOTCONN) {
-				(void)dmh_connection_epoch_update(&epoch, false);
+				(void)dmh_connection_epoch_update(
+					&epoch,
+					false,
+					time_us_64()
+				);
 				if (dutchmate_platform_io_force_safe() != 0) {
 					return -EIO;
 				}
@@ -276,7 +302,11 @@ int dutchmate_usb_connection_run(void)
 			stage_status_if_due(&telemetry_schedule);
 			result = drain_one_output(&telemetry_schedule);
 			if (result == -ENOTCONN) {
-				(void)dmh_connection_epoch_update(&epoch, false);
+				(void)dmh_connection_epoch_update(
+					&epoch,
+					false,
+					time_us_64()
+				);
 				result = end_active_epoch(&telemetry_schedule);
 				if (result != 0) {
 					return result;

@@ -134,7 +134,9 @@ ownership out of the ring, releases the lock, then encodes and writes it. The
 staging buffer owns those bytes until the complete frame is accepted by the CDC
 driver or the connection epoch fails. Zero, negative, or over-reported FIFO
 progress is a CDC fault. A 250 ms interval with no accepted bytes is also a CDC
-fault; every positive partial acceptance restarts that interval.
+fault; every positive partial acceptance restarts that interval. The Zephyr CDC
+TX FIFO is one 64-byte full-speed USB packet so a multi-packet frame advances
+through driver-ready callbacks instead of being accepted before packet progress.
 
 Consecutive drops form one overflow episode. Firmware retains the first-drop
 timestamp and exact cumulative byte count in bounded state. Claiming the
@@ -159,10 +161,13 @@ higher-level services:
 - EVENT MCU pins configured as inputs without pulls;
 - EVENT translator disabled.
 
-A CDC connection with DTR asserted starts one firmware connection epoch. The
-firmware emits `hello` as its first frame, then enables the initialized UART
-interface. CTRL channels remain high impedance until individually configured;
-an accepted configuration enters its defined idle state.
+A CDC connection with DTR continuously asserted for 100 ms starts one firmware
+connection epoch. The firmware publishes DCD and DSR carrier-ready state, emits
+`hello` as its first frame, then enables the initialized UART interface. Carrier
+ready remains asserted across DTR-low gaps while the USB device remains
+configured; DTR alone owns epoch start and end. CTRL channels remain high
+impedance until individually configured; an accepted configuration enters its
+defined idle state.
 
 USB reset, DTR loss, watchdog reset, or fatal internal fault ends the epoch.
 Firmware preempts commands, cancels pulse and UART TX activity, disables UART
@@ -170,6 +175,12 @@ and EVENT translators, and forces every CTRL channel high impedance. Partial
 protocol input, staged output, ring contents, and accepted CTRL configurations
 are discarded. Buffer counters remain boot-cumulative. A later connection
 starts with a new `hello`, and the host reapplies its CTRL configuration.
+
+The target build requires Zephyr 4.4.2 or newer. Earlier Zephyr PL011 drivers
+do not acknowledge UART error interrupts and can trap RP2350 in an interrupt
+storm. Firmware keeps error interrupts enabled so UART faults retain the
+defined epoch-failure semantics; the affected driver versions are rejected at
+configure time rather than weakening fault detection.
 
 Clearing undelivered data on physical disconnect is transport interruption, not
 ring overflow. Device Core already records the interrupted connection and does
