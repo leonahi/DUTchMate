@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `9bd2ba4e036536924182e4080c8c5db5f1b0b7da` on 2026-09-09
+> Code baseline reviewed: `e0e75cad5a660b771ca6c5e18dad4c0183f2a4f5` on 2026-09-10
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -78,12 +78,20 @@ Read this document first whenever development resumes.
   at the async adapter boundary. The Step 5 audit confirms automated host-
   compiled coverage for every portable firmware boundary and records a
   reproducible Pico 2 target build. Firmware implementation is complete;
-  electrical and load acceptance remain pending.
-- **Next step:** Continue Step 6 hardware validation by recording the prototype
-  identity and executing the electrical checklist in
-  `hardware/schematics/revision_a.md` section 14 and the RAM/load measurements
-  in `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved;
-  do not add event capture.
+  electrical and load acceptance remain pending. Step 6 has now started on the
+  assembled Revision A prototype. USB identity, preliminary missing-`DUT_VIO`
+  safe-state behavior, and 1.8 V debugger-unpowered leakage are recorded. The
+  25.2 uA idle result is within budget; a 0.13 V `3V3(OUT)` observation remains
+  inconclusive because the DMM was uncalibrated and the loaded leakage check was
+  deferred.
+- **Next step:** Continue Step 6 at 1.8 V with the remaining independent
+  voltage-level and safe-state measurements in
+  `hardware/schematics/revision_a.md` section 14. Resume the deferred 10 kOhm
+  loaded `3V3(OUT)` check in
+  `hardware/validation/phase1_revision_a.md` before accepting power isolation.
+  Then run the RAM/load measurements in
+  `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved; do
+  not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -129,7 +137,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; USB startup HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, and consecutive CLI startup HIL are reproduced. Electrical, UART/load, and active-workflow behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | Not run | Electrical design is documented; physical validation evidence is absent. |
+| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing 25.2 uA idle current at 1.8 V, and the deferred inconclusive `3V3(OUT)` back-power check. No electrical checklist item is accepted yet. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello and real CLI startup pass; full Enhanced workflow acceptance remains pending. |
 
@@ -137,6 +145,33 @@ The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+Revision A initial electrical validation record, reviewed 2026-09-10:
+
+- The user confirmed that the connected hardware is a fully assembled Revision
+  A translator prototype. macOS enumerated DUTchMate Debug Helper
+  `2E8A:000A`, serial `FA63A4D787572B33`, at
+  `/dev/cu.usbmodem11401`.
+- With the DUT and `DUT_VIO` absent, pre-epoch, active-epoch, and post-epoch
+  enable/output measurements were qualitatively as expected. Device Core
+  reported the Enhanced backend connected with all control channels
+  unconfigured, UART TX policy disabled, and zero reported loss. Exact numeric
+  readings and calibrated instrument identity were not recorded, so those
+  checklist items remain open.
+- One initial direct adapter epoch received `hello` and then observed a USB
+  re-enumeration through pyserial errno 6. A 4.119-second raw epoch and three
+  further consecutive epochs did not reproduce it; all delivered complete
+  `hello` and zero-loss `buffer_status` frames. The transient remains recorded
+  for later reconnect/load correlation.
+- With USB disconnected and `DUT_VIO` supplied at 1.80 V with a 1 mA current
+  limit, idle current was 25.2 uA, below the documented 50 uA target. Pico
+  `VSYS` and `VBUS` measured 0 V. Pico `3V3(OUT)` measured 0.13 V on an old,
+  uncalibrated DMM.
+- The 0.13 V observation is deferred and explicitly not waived. Resume with the
+  documented 10 kOhm loaded source-impedance test before accepting
+  debugger-unpowered isolation. The detailed setup, evidence limitations, and
+  continuation procedure are in
+  `hardware/validation/phase1_revision_a.md`.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
