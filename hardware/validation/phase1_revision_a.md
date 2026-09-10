@@ -25,7 +25,7 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 | Device protocol identity | `device = "dutchmate-rp2350"`, `firmware = "development"` |
 | Advertised capabilities | `uart_receive`, `gpio_control`, `uart_send`, `device_timestamp`, `overflow_telemetry` |
 | DUTchMate commit during run | `e0e75cad5a660b771ca6c5e18dad4c0183f2a4f5` |
-| Flashed firmware commit/image | Corrected command-ingress working tree; UF2 SHA-256 `c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc` |
+| Flashed firmware commit/image | Commit `8bf0a03783c31232095dc00a14b783889f6efa57`; UF2 SHA-256 `c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc` |
 | Reference Zephyr target | `rpi_pico2/rp2350a/m33` |
 | Reference Zephyr version/SDK | Zephyr 4.4.2, SDK 1.0.1 |
 | Reproduced reference UF2 SHA-256 | `db5ba9dfcbcc6d6bbfd83149dd9d5c1b8f206478ad2d7d6ef68f18b57dc16afe` |
