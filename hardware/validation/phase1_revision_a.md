@@ -371,6 +371,54 @@ This passes one functional transmit/receive integrity check at 5.0 V and
 loopback passes at all four supported `DUT_VIO` points. Electrical margins,
 cable-length limits, and other required baud rates remain unvalidated.
 
+## Push-Pull Control Sweep At 1.8 V
+
+With `DUT_VIO` supplied at 1.80 V with a 1 mA current limit, the DUT-side UART
+loopback installed, and UART TX policy disabled, each physical control channel
+was configured in turn as push-pull, active-high, and idle-low. For every
+channel, Device Core successfully configured idle-low, asserted active-high,
+returned to idle-low, and ended the Enhanced epoch. Target-channel measurements
+were:
+
+| Channel | State | Supply current | `DBG_CTRL_ENn` | `DBG_CTRL_nOEn` | `DBG_CTRL_DATAn` | `DUT_CTRLn` |
+|---|---|---:|---:|---:|---:|---:|
+| `CTRL0` | Idle-low | 68.44 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL0` | Active-high | 68.44 uA | 3.3 V | 0.0 V | 3.3 V | 1.8 V |
+| `CTRL0` | Returned idle-low | 68.69 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL0` | Epoch ended | 28.93 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL1` | Idle-low | 68.59 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL1` | Active-high | 68.72 uA | 3.3 V | 0.0 V | 3.3 V | 1.8 V |
+| `CTRL1` | Returned idle-low | 68.60 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL1` | Epoch ended | 28.95 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL2` | Idle-low | 68.66 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL2` | Active-high | 68.60 uA | 3.3 V | 0.0 V | 3.3 V | 1.8 V |
+| `CTRL2` | Returned idle-low | 68.76 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL2` | Epoch ended | 28.95 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL3` | Idle-low | 68.59 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL3` | Active-high | 68 uA | 3.3 V | 0.0 V | 3.3 V | 1.8 V |
+| `CTRL3` | Returned idle-low | 68.54 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| `CTRL3` | Epoch ended | 28.90 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+
+Unrelated control enables were measured at 0.0 V during representative checks
+of `CTRL1`, `CTRL2`, and `CTRL3`, confirming the expected physical channel
+selection. During the controlled `CTRL0` rerun, `DUT_UART_TX` measured 1.8 V
+through the installed loopback, Device Core reported zero loss, and the
+configured idle-low state remained connected for a five-minute hold.
+
+Two earlier `CTRL0` attempts ended with the firmware in its safe-disabled state
+and a raw command-ingress probe receiving no `hello` until USB power was
+cycled. The operator later reported removing the UART loopback during the
+measurement. That action leaves the enabled `DUT_UART_TX` receiver floating and
+can produce a UART error that deliberately ends the firmware epoch. The
+successful five-minute run with the loopback continuously installed supports
+this explanation, but the exact firmware fault source was not telemetered, so
+the correlation is recorded as likely rather than conclusive. In both cases,
+all observed control signals returned safely to 0.0 V.
+
+This completes the 1.8 V push-pull low/high and epoch-disable sweep across all
+four physical control channels. Push-pull levels at 2.5 V, 3.3 V, and 5.0 V,
+open-drain behavior, and loaded high-impedance verification remain open.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -414,6 +462,14 @@ power-isolation checklist item.
   zero reported loss or overflow; 54.47 uA idle current was within budget.
 - The same loopback passed an exact 33-byte check at 5.0 V and 460800 baud with
   zero reported loss or overflow; 79.66 uA idle current was within budget.
+- All four control channels passed configured push-pull idle-low, active-high,
+  return-to-idle, and epoch-disable checks at 1.8 V. Representative unrelated
+  enables remained at 0.0 V, and the controlled `CTRL0` run stayed connected
+  with zero reported loss for five minutes.
+- Two safe-disabled `CTRL0` interruptions correlate with removing the UART
+  loopback during an active epoch. The continuously installed-loopback rerun
+  did not reproduce the interruption; the exact firmware fault source was not
+  telemetered.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
