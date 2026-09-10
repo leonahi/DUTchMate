@@ -209,6 +209,49 @@ debugger-first VIO power-down sequence. It does not prove output high
 impedance, quantify leakage under load, or cover every power ordering, so the
 broader checklist items remain open.
 
+## Active Enhanced UART Idle Path At 1.8 V
+
+Setup:
+
+- DUT disconnected;
+- Pico USB connected at `/dev/cu.usbmodem11201`;
+- `DUT_VIO` supplied at 1.80 V with a 1 mA current limit;
+- Enhanced Device Core epoch active at 460800 baud;
+- UART TX policy disabled and all control channels unconfigured.
+
+During the active epoch, Device Core reported the expected RP2350 identity and
+capabilities, no workflow or session, and
+`none_reported` UART loss with zero dropped bytes. The following steady-state
+measurements were recorded:
+
+| Measurement | Result | Assessment |
+|---|---:|---|
+| `DUT_VIO` | 1.8 V | Expected |
+| `DUT_VIO` supply current | 28.93 uA | Below the documented 50 uA idle target |
+| Pico `3V3(OUT)` | 3.3 V | Expected |
+| `DBG_UART_IF_EN` | 3.3 V | UART translator enabled during the epoch |
+| `DBG_INPUT_IF_EN` | 0.0 V | Event translator remained disabled |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | 0.0 V each | Controls remained disabled |
+| Connector-side `DUT_UART_RX` | 1.8 V | UART idle-high translated to the VIO domain |
+
+The service was then shut down cleanly while both rails remained powered. After
+a settling interval, the following post-epoch measurements were recorded:
+
+| Measurement | Result | Assessment |
+|---|---:|---|
+| `DUT_VIO` | 1.8 V | Expected |
+| `DUT_VIO` supply current | 28.96 uA | Below the documented 50 uA idle target |
+| Pico `3V3(OUT)` | 3.3 V | Expected |
+| `DBG_UART_IF_EN` | 0.0 V | UART translator disabled after epoch end |
+| `DBG_INPUT_IF_EN` | 0.0 V | Event translator remained disabled |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | 0.0 V each | Controls remained disabled |
+| Connector-side `DUT_UART_RX` | 0.0 V | No static driven voltage observed after epoch end |
+
+This passes the static UART-enable, VIO-domain idle-level, unrelated-enable,
+and post-epoch voltage expectations at 1.8 V. It does not prove post-epoch high
+impedance or validate UART data integrity at 460800 baud; those checks remain
+open.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -240,6 +283,9 @@ power-isolation checklist item.
   enable states and remained within the 1.8 V idle-current budget.
 - The paired `DUT_VIO` power-down left the VIO rail at 0.0 V and retained the
   expected disabled enable states while debugger power remained present.
+- An active Enhanced epoch enabled only the UART interface, produced the
+  expected 1.8 V DUT-side idle-high level with zero reported loss, and returned
+  all measured enable/output voltages to 0.0 V after clean shutdown.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.

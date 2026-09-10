@@ -84,14 +84,17 @@ Read this document first whenever development resumes.
   debugger power-up safe-enable state are recorded. Its paired power-down was
   qualitatively as expected. The reverse debugger-first power-up also retained
   safe enable states, and its paired `DUT_VIO` power-down left VIO at 0.0 V
-  while all enables stayed low. The 25.2 uA unpowered, 28.93 uA VIO-first, and
-  28.96 uA debugger-first idle results are within budget; a 0.13 V
-  debugger-unpowered `3V3(OUT)` observation remains inconclusive because the
-  DMM was uncalibrated and the loaded leakage check was deferred.
-- **Next step:** Restore `DUT_VIO` to 1.8 V and run an active Enhanced epoch to
-  measure the enabled UART path and idle DUT-side UART voltage, then continue
-  the remaining independent voltage-level and safe-state measurements in
-  `hardware/schematics/revision_a.md` section 14.
+  while all enables stayed low. An active Enhanced epoch at 1.8 V enabled only
+  the UART translator, produced the expected 1.8 V DUT-side UART idle level,
+  reported zero loss, and returned the measured UART enable and output voltage
+  to 0.0 V after shutdown. The 25.2 uA unpowered and 28.93–28.96 uA powered
+  idle results are within budget; a 0.13 V debugger-unpowered `3V3(OUT)`
+  observation remains inconclusive because the DMM was uncalibrated and the
+  loaded leakage check was deferred.
+- **Next step:** With both rails off, add a DUT-side UART loopback, restore the
+  1.8 V supplies, and run an Enhanced 460800-baud transmit/receive integrity
+  check. Then continue the remaining independent voltage-level and safe-state
+  measurements in `hardware/schematics/revision_a.md` section 14.
   Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
   Then run the RAM/load measurements in
@@ -195,6 +198,14 @@ Revision A initial electrical validation record, reviewed 2026-09-10:
   and control enable measured 0.0 V. This passes the measured rail and enable
   expectations for that debugger-first VIO power-down sequence without proving
   high impedance or loaded leakage.
+- With both rails powered and `DUT_VIO` at 1.80 V, an Enhanced 460800-baud epoch
+  with UART TX policy disabled and controls unconfigured measured 28.93 uA,
+  `DBG_UART_IF_EN = 3.3 V`, `DUT_UART_RX = 1.8 V`, and every unrelated enable at
+  0.0 V. Device Core remained connected with zero reported loss. After clean
+  shutdown, current measured 28.96 uA and both `DBG_UART_IF_EN` and
+  `DUT_UART_RX` measured 0.0 V while all other enables remained 0.0 V. This
+  passes the recorded static active/post-epoch voltage expectations, not UART
+  data integrity or output high impedance.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and
