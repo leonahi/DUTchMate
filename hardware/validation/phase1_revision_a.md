@@ -161,6 +161,34 @@ disabled after debugger power-down while VIO stayed present. The sequence is
 not accepted as a reproducible numeric result, and it does not close the
 all-orderings, `/OE`, output-high-impedance, or back-power checklist items.
 
+## Debugger-Powered-First DUT_VIO Power-Up At 1.8 V
+
+Setup:
+
+- DUT disconnected;
+- Device Core stopped and no serial client connected;
+- `DUT_VIO` initially off;
+- Pico USB connected first;
+- bench supply set to 1.80 V with a 1 mA current limit, then enabled after the
+  debugger was powered.
+
+The following steady-state measurements were recorded after `DUT_VIO` was
+applied:
+
+| Measurement | Result | Assessment |
+|---|---:|---|
+| `DUT_VIO` | 1.8 V | Expected |
+| `DUT_VIO` supply current | 28.96 uA | Below the documented 50 uA idle target |
+| Pico `3V3(OUT)` | 3.3 V | Expected with debugger USB powered |
+| `DBG_UART_IF_EN` | 0.0 V | Disabled as required |
+| `DBG_INPUT_IF_EN` | 0.0 V | Disabled as required |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | 0.0 V each | Disabled as required |
+
+This passes the measured enable-state expectations for this one debugger-first
+power-up sequence. It closely reproduces the 28.93 uA VIO-first powered result.
+The broader `/OE`, output-high-impedance, and all-orderings checklist items
+remain open.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -188,6 +216,8 @@ power-isolation checklist item.
   interface and control enable states.
 - The paired debugger power-down retained the expected enable states, but only
   qualitative results were recorded.
+- The debugger-first `DUT_VIO` power-up sequence retained the expected disabled
+  enable states and remained within the 1.8 V idle-current budget.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
