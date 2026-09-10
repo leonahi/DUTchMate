@@ -305,6 +305,29 @@ This passes one functional transmit/receive integrity check at 1.8 V and
 460800 baud. It does not validate electrical margins, cable-length limits,
 other baud rates, or the remaining 2.5 V, 3.3 V, and 5.0 V operating points.
 
+## UART Loopback At 2.5 V And 460800 Baud
+
+With the service stopped and the UART loopback unchanged, the bench supply was
+turned off, set to 2.50 V with its 1 mA current limit retained, and turned back
+on. `DUT_VIO` measured 2.5 V and the settled idle current measured 39.96 uA,
+below the documented 60 uA target.
+
+A fresh command-ingress probe passed before the active run. A TX-enabled
+Enhanced epoch then sent the 33-byte payload
+`DUTCHMATE_LOOPBACK_2V5_460800_A5\n`. The device reported success with all 33
+bytes accepted and device completion timestamp 979438617 us. Capture
+`20260910T193944Z-07bc3bc9` stored an exact 33-byte match, including the final
+LF, and completed with:
+
+- `loss_status = none_reported` and zero dropped bytes;
+- no overflow, interruption, resume, or truncation;
+- one Enhanced segment with RP2350 device-timer provenance; and
+- a 33-byte RX high-water mark that returned to zero occupancy.
+
+This passes one functional transmit/receive integrity check at 2.5 V and
+460800 baud. It does not validate electrical margins, cable-length limits,
+other baud rates, or the remaining 3.3 V and 5.0 V operating points.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -342,6 +365,8 @@ power-isolation checklist item.
 - Corrected command ingress and the DUT-side UART loopback passed an exact
   33-byte transmit/receive check at 1.8 V and 460800 baud with zero reported
   loss or overflow.
+- The same loopback passed an exact 33-byte check at 2.5 V and 460800 baud with
+  zero reported loss or overflow; 39.96 uA idle current was within budget.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
