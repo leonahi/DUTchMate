@@ -112,6 +112,35 @@ The current-budget result passes its numeric target. The 0.13 V reading on
 leakage without a source-impedance check. It is therefore deferred rather than
 passed or failed.
 
+## DUT-Powered-First Debugger Power-Up At 1.8 V
+
+Setup:
+
+- DUT disconnected;
+- Device Core stopped and no serial client connected;
+- USB initially disconnected;
+- bench supply connected from `DUT_VIO` to common ground and set to 1.80 V
+  with a 1 mA current limit;
+- `DUT_VIO` applied before Pico USB was connected.
+
+After USB enumeration, without starting the service, the following steady-state
+measurements were recorded:
+
+| Measurement | Result | Assessment |
+|---|---:|---|
+| `DUT_VIO` | 1.8 V | Expected |
+| `DUT_VIO` supply current | 28.93 uA | Below the documented 50 uA idle target |
+| Pico `3V3(OUT)` | 3.3 V | Expected with debugger USB powered |
+| `DBG_UART_IF_EN` | 0.0 V | Disabled as required |
+| `DBG_INPUT_IF_EN` | 0.0 V | Disabled as required |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | 0.0 V each | Disabled as required |
+
+This passes the measured enable-state expectations for this one VIO-first
+power-up sequence. It does not by itself prove that the translator outputs are
+high impedance, verify the `SN74LV4T125PWR` `/OE` levels, or cover every
+power-up and power-down ordering, so the corresponding checklist items remain
+open.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -135,6 +164,8 @@ power-isolation checklist item.
 
 - The prototype identity and initial safe-state observations are recorded.
 - The 1.8 V idle current is within budget.
+- The VIO-first debugger power-up sequence retained the expected disabled
+  interface and control enable states.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.

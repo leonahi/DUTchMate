@@ -80,14 +80,15 @@ Read this document first whenever development resumes.
   reproducible Pico 2 target build. Firmware implementation is complete;
   electrical and load acceptance remain pending. Step 6 has now started on the
   assembled Revision A prototype. USB identity, preliminary missing-`DUT_VIO`
-  safe-state behavior, and 1.8 V debugger-unpowered leakage are recorded. The
-  25.2 uA idle result is within budget; a 0.13 V `3V3(OUT)` observation remains
-  inconclusive because the DMM was uncalibrated and the loaded leakage check was
-  deferred.
-- **Next step:** Continue Step 6 at 1.8 V with the remaining independent
-  voltage-level and safe-state measurements in
-  `hardware/schematics/revision_a.md` section 14. Resume the deferred 10 kOhm
-  loaded `3V3(OUT)` check in
+  safe-state behavior, 1.8 V debugger-unpowered leakage, and the VIO-first
+  debugger power-up safe-enable state are recorded. The 25.2 uA unpowered and
+  28.93 uA debugger-powered idle results are within budget; a 0.13 V
+  debugger-unpowered `3V3(OUT)` observation remains inconclusive because the
+  DMM was uncalibrated and the loaded leakage check was deferred.
+- **Next step:** Complete the paired 1.8 V VIO-first debugger power-down
+  observation, then continue the remaining independent voltage-level and
+  safe-state measurements in `hardware/schematics/revision_a.md` section 14.
+  Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
   Then run the RAM/load measurements in
   `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved; do
@@ -167,6 +168,12 @@ Revision A initial electrical validation record, reviewed 2026-09-10:
   limit, idle current was 25.2 uA, below the documented 50 uA target. Pico
   `VSYS` and `VBUS` measured 0 V. Pico `3V3(OUT)` measured 0.13 V on an old,
   uncalibrated DMM.
+- With `DUT_VIO` still at 1.80 V, connecting Pico USB while Device Core remained
+  stopped produced a 28.93 uA steady-state `DUT_VIO` current. `DUT_VIO` remained
+  1.8 V, Pico `3V3(OUT)` reached 3.3 V, and `DBG_UART_IF_EN`,
+  `DBG_INPUT_IF_EN`, and all four `DBG_CTRL_ENn` signals measured 0.0 V. This
+  passes the safe enable-state expectations for that VIO-first power-up
+  sequence but does not prove output high impedance or cover every ordering.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and
