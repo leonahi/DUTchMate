@@ -1,5 +1,7 @@
 #include "cdc_tx.h"
 
+#include "command_runtime.h"
+
 #include <errno.h>
 
 #include <hardware/timer.h>
@@ -38,11 +40,22 @@ static void cdc_callback(
 
 	ARG_UNUSED(user_data);
 	key = k_spin_lock(&tx_lock);
-	if (device != cdc || uart_irq_update(device) <= 0 ||
-	    uart_irq_tx_ready(device) <= 0) {
+	if (device != cdc || uart_irq_update(device) <= 0) {
 		dmh_cdc_tx_driver_fault(&tx);
 	} else {
-		dmh_cdc_tx_on_writable(&tx, time_us_64());
+		while (uart_irq_is_pending(device) > 0) {
+			if (uart_irq_rx_ready(device) > 0 &&
+			    !dutchmate_command_runtime_on_cdc_rx_ready(device)) {
+				break;
+			}
+			if (uart_irq_tx_ready(device) > 0) {
+				dmh_cdc_tx_on_writable(&tx, time_us_64());
+			}
+			if (uart_irq_update(device) <= 0) {
+				dmh_cdc_tx_driver_fault(&tx);
+				break;
+			}
+		}
 	}
 	k_spin_unlock(&tx_lock, key);
 }

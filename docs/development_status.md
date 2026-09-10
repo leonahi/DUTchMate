@@ -87,14 +87,23 @@ Read this document first whenever development resumes.
   while all enables stayed low. An active Enhanced epoch at 1.8 V enabled only
   the UART translator, produced the expected 1.8 V DUT-side UART idle level,
   reported zero loss, and returned the measured UART enable and output voltage
-  to 0.0 V after shutdown. The 25.2 uA unpowered and 28.93–28.96 uA powered
-  idle results are within budget; a 0.13 V debugger-unpowered `3V3(OUT)`
-  observation remains inconclusive because the DMM was uncalibrated and the
-  loaded leakage check was deferred.
-- **Next step:** With both rails off, add a DUT-side UART loopback, restore the
-  1.8 V supplies, and run an Enhanced 460800-baud transmit/receive integrity
-  check. Then continue the remaining independent voltage-level and safe-state
-  measurements in `hardware/schematics/revision_a.md` section 14.
+  to 0.0 V after shutdown. The first loopback attempt then exposed a live CDC
+  command-ingress defect: telemetry flowed but every host command timed out.
+  The firmware now services RX and TX readiness in its shared CDC interrupt
+  callback, drains RX through the Zephyr FIFO API, and transfers bounded bytes
+  to the existing command thread. A repeatable invalid-command probe failed on
+  the old and enable-only images and passed after the corrected image was
+  flashed. The 1.8 V, 460800-baud loopback then returned an exact 33-byte
+  payload with zero reported loss or overflow. The 25.2 uA unpowered and
+  28.93–28.96 uA powered idle results are within budget; a 0.13 V
+  debugger-unpowered `3V3(OUT)` observation remains inconclusive because the
+  DMM was uncalibrated and the loaded leakage check was deferred.
+- **Next step:** Keep the DUT-side UART loopback installed and repeat the exact
+  460800-baud transmit/receive check at `DUT_VIO = 2.5 V`, 3.3 V, and 5.0 V,
+  recording settled current at each point. Then power both rails off before
+  removing the loopback and continue the remaining independent voltage-level
+  and safe-state measurements in `hardware/schematics/revision_a.md` section
+  14.
   Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
   Then run the RAM/load measurements in
@@ -144,10 +153,10 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; USB startup HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. Dedicated RX, command/control, and sole-writer contexts enforce ownership and bounded backpressure. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, and consecutive CLI startup HIL are reproduced. Electrical, UART/load, and active-workflow behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing 25.2 uA idle current at 1.8 V, and the deferred inconclusive `3V3(OUT)` back-power check. No electrical checklist item is accepted yet. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; command and initial UART HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, and exact 1.8 V loopback HIL are reproduced. Remaining voltage points, electrical margins, and load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing 25.2 uA idle current and exact 460800-baud UART loopback at 1.8 V, plus the deferred inconclusive `3V3(OUT)` back-power check. No broad electrical checklist item is accepted yet. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
-| Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello and real CLI startup pass; full Enhanced workflow acceptance remains pending. |
+| Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopback passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and one exact 1.8 V 460800-baud loopback pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
@@ -205,7 +214,19 @@ Revision A initial electrical validation record, reviewed 2026-09-10:
   shutdown, current measured 28.96 uA and both `DBG_UART_IF_EN` and
   `DUT_UART_RX` measured 0.0 V while all other enables remained 0.0 V. This
   passes the recorded static active/post-epoch voltage expectations, not UART
-  data integrity or output high impedance.
+  output high impedance.
+- The first DUT-side loopback attempt exposed a firmware CDC ingress defect:
+  device-to-host telemetry continued, but `uart_send` and a raw invalid command
+  both timed out. The registered CDC callback now drains RX readiness with the
+  Zephyr FIFO API and queues bounded bytes to the command thread. The reusable
+  command-ingress probe failed before the correction and passed after flashing
+  the corrected 104,448-byte UF2 with SHA-256
+  `c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc`.
+- With the loopback installed, `DUT_VIO = 1.8 V`, and idle current at 28.94 uA,
+  capture `20260910T192926Z-033765ed` received the exact 33-byte
+  `DUTCHMATE_LOOPBACK_1V8_460800_A5\n` payload at 460800 baud. The device
+  accepted all 33 bytes; the session completed with zero reported loss, no
+  overflow, one segment, and RP2350 timer provenance.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and

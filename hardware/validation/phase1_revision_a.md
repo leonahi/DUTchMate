@@ -25,7 +25,7 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 | Device protocol identity | `device = "dutchmate-rp2350"`, `firmware = "development"` |
 | Advertised capabilities | `uart_receive`, `gpio_control`, `uart_send`, `device_timestamp`, `overflow_telemetry` |
 | DUTchMate commit during run | `e0e75cad5a660b771ca6c5e18dad4c0183f2a4f5` |
-| Flashed firmware commit/image | Not established; protocol build identifier alone is insufficient provenance |
+| Flashed firmware commit/image | Corrected command-ingress working tree; UF2 SHA-256 `c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc` |
 | Reference Zephyr target | `rpi_pico2/rp2350a/m33` |
 | Reference Zephyr version/SDK | Zephyr 4.4.2, SDK 1.0.1 |
 | Reproduced reference UF2 SHA-256 | `db5ba9dfcbcc6d6bbfd83149dd9d5c1b8f206478ad2d7d6ef68f18b57dc16afe` |
@@ -249,8 +249,61 @@ a settling interval, the following post-epoch measurements were recorded:
 
 This passes the static UART-enable, VIO-domain idle-level, unrelated-enable,
 and post-epoch voltage expectations at 1.8 V. It does not prove post-epoch high
-impedance or validate UART data integrity at 460800 baud; those checks remain
-open.
+impedance.
+
+## CDC Command-Ingress Diagnosis And Corrected Image
+
+With both rails off, the DUT-side UART pins were looped from J3 pin 4
+`DUT_UART_RX` to J1 pin 4 `DUT_UART_TX`. After restoring USB and 1.80 V
+`DUT_VIO`, the first TX-enabled Enhanced run failed before UART signaling:
+
+- `uart_send` timed out;
+- capture `20260910T184808Z-21b9fe4e` contained no UART bytes;
+- a raw invalid-command write also received no response while `hello` and
+  periodic `buffer_status` frames continued normally.
+
+The repeatable asymmetry isolated the failure to host-to-device CDC command
+ingress. The firmware had installed a CDC interrupt callback for TX while its
+command thread tried to receive with `uart_poll_in`. The Zephyr 4.4.2
+next-generation CDC sample instead drains RX readiness with `uart_fifo_read`
+inside the registered callback. Merely enabling CDC RX per epoch did not fix
+the hardware result. The corrected implementation now:
+
+- enables CDC RX only during an active connection epoch;
+- handles RX and TX readiness in the shared CDC callback;
+- drains RX with `uart_fifo_read` in the USB workqueue context;
+- transfers those bytes through a bounded static queue to the existing command
+  framing thread; and
+- disables RX and purges queued bytes at epoch end.
+
+`probe_rp2350_command_ingress.py` reproduces the original failure by requiring
+one `invalid_command` response after `hello`. It failed against both the
+original image and the enable-only attempt, then passed against the corrected
+image. The corrected `rpi_pico2/rp2350a/m33` Zephyr 4.4.2 build used 52,012
+bytes of flash and 78,032 bytes of RAM. Its 104,448-byte UF2 has SHA-256
+`c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc`.
+
+## UART Loopback At 1.8 V And 460800 Baud
+
+After the corrected image passed command ingress, the UART loopback remained
+installed and `DUT_VIO` was restored at 1.80 V with a 1 mA current limit.
+Before the active run, `DUT_VIO` measured 1.8 V and steady current measured
+28.94 uA.
+
+A TX-enabled Enhanced epoch sent the 33-byte payload
+`DUTCHMATE_LOOPBACK_1V8_460800_A5\n`. The device reported success with all 33
+bytes accepted and device completion timestamp 363127095 us. Capture
+`20260910T192926Z-033765ed` stored an exact 33-byte match in `uart_raw.log`,
+including the final LF. Its completed metadata reports:
+
+- `loss_status = none_reported` and zero dropped bytes;
+- no overflow, interruption, resume, or truncation;
+- one Enhanced segment with RP2350 device-timer provenance; and
+- a 33-byte RX high-water mark that returned to zero occupancy.
+
+This passes one functional transmit/receive integrity check at 1.8 V and
+460800 baud. It does not validate electrical margins, cable-length limits,
+other baud rates, or the remaining 2.5 V, 3.3 V, and 5.0 V operating points.
 
 ## Deferred 3V3 Back-Power Check
 
@@ -286,6 +339,9 @@ power-isolation checklist item.
 - An active Enhanced epoch enabled only the UART interface, produced the
   expected 1.8 V DUT-side idle-high level with zero reported loss, and returned
   all measured enable/output voltages to 0.0 V after clean shutdown.
+- Corrected command ingress and the DUT-side UART loopback passed an exact
+  33-byte transmit/receive check at 1.8 V and 460800 baud with zero reported
+  loss or overflow.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.

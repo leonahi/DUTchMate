@@ -35,6 +35,12 @@ K_MSGQ_DEFINE(
 	DUTCHMATE_COMMAND_QUEUE_CAPACITY,
 	4
 );
+K_MSGQ_DEFINE(
+	cdc_rx_queue,
+	sizeof(uint8_t),
+	DMH_HOST_FRAME_MAX_BYTES,
+	1
+);
 K_SEM_DEFINE(rx_start, 0, 1);
 K_SEM_DEFINE(rx_stopped, 0, 1);
 K_SEM_DEFINE(command_start, 0, 1);
@@ -120,7 +126,11 @@ static void run_rx_epoch(atomic_val_t epoch)
 		size_t offset = 0U;
 
 		while (input_length < sizeof(input) &&
-		       uart_poll_in(cdc, &input[input_length]) == 0) {
+		       k_msgq_get(
+			       &cdc_rx_queue,
+			       &input[input_length],
+			       K_NO_WAIT
+		       ) == 0) {
 			input_length++;
 		}
 		if (input_length == 0U) {
@@ -310,6 +320,31 @@ int dutchmate_command_runtime_initialize(const struct device *cdc_device)
 	return 0;
 }
 
+bool dutchmate_command_runtime_on_cdc_rx_ready(
+	const struct device *cdc_device
+)
+{
+	uint8_t input[DUTCHMATE_CDC_RX_CHUNK_BYTES];
+	int input_length;
+	int index;
+
+	if (cdc_device != cdc || atomic_get(&epoch_active) == 0) {
+		return false;
+	}
+	input_length = uart_fifo_read(cdc_device, input, sizeof(input));
+	if (input_length <= 0) {
+		mark_runtime_fault();
+		return false;
+	}
+	for (index = 0; index < input_length; index++) {
+		if (k_msgq_put(&cdc_rx_queue, &input[index], K_NO_WAIT) != 0) {
+			mark_runtime_fault();
+			return false;
+		}
+	}
+	return true;
+}
+
 void dutchmate_command_runtime_discard_input(void)
 {
 	uint8_t byte;
@@ -317,6 +352,7 @@ void dutchmate_command_runtime_discard_input(void)
 	if (atomic_get(&epoch_active) != 0) {
 		return;
 	}
+	k_msgq_purge(&cdc_rx_queue);
 	while (uart_poll_in(cdc, &byte) == 0) {
 		continue;
 	}
@@ -333,10 +369,12 @@ int dutchmate_command_runtime_start_epoch(void)
 	atomic_set(&epoch_end_result, DMH_CONTROL_OK);
 	atomic_set(&response_outstanding, 0);
 	k_msgq_purge(&command_queue);
+	k_msgq_purge(&cdc_rx_queue);
 	k_sem_reset(&rx_stopped);
 	k_sem_reset(&command_stopped);
 	k_sem_reset(&response_ready);
 	k_sem_reset(&response_consumed);
+	uart_irq_rx_enable(cdc);
 	k_sem_give(&rx_start);
 	k_sem_give(&command_start);
 	return 0;
@@ -352,12 +390,14 @@ int dutchmate_command_runtime_end_epoch(void)
 	if (!atomic_cas(&epoch_active, 1, 0)) {
 		return 0;
 	}
+	uart_irq_rx_disable(cdc);
 	if (k_sem_take(&rx_stopped, DUTCHMATE_EPOCH_STOP_TIMEOUT) != 0) {
 		result = -ETIMEDOUT;
 	}
 	if (k_sem_take(&command_stopped, DUTCHMATE_EPOCH_STOP_TIMEOUT) != 0) {
 		result = -ETIMEDOUT;
 	}
+	k_msgq_purge(&cdc_rx_queue);
 	if (atomic_get(&epoch_end_result) != DMH_CONTROL_OK && result == 0) {
 		result = -EIO;
 	}
