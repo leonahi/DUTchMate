@@ -81,13 +81,15 @@ Read this document first whenever development resumes.
   electrical and load acceptance remain pending. Step 6 has now started on the
   assembled Revision A prototype. USB identity, preliminary missing-`DUT_VIO`
   safe-state behavior, 1.8 V debugger-unpowered leakage, and the VIO-first
-  debugger power-up safe-enable state are recorded. The 25.2 uA unpowered and
-  28.93 uA debugger-powered idle results are within budget; a 0.13 V
-  debugger-unpowered `3V3(OUT)` observation remains inconclusive because the
-  DMM was uncalibrated and the loaded leakage check was deferred.
-- **Next step:** Complete the paired 1.8 V VIO-first debugger power-down
-  observation, then continue the remaining independent voltage-level and
-  safe-state measurements in `hardware/schematics/revision_a.md` section 14.
+  debugger power-up safe-enable state are recorded. Its paired power-down was
+  qualitatively as expected. The 25.2 uA unpowered and 28.93 uA
+  debugger-powered idle results are within budget; a 0.13 V debugger-unpowered
+  `3V3(OUT)` observation remains inconclusive because the DMM was uncalibrated
+  and the loaded leakage check was deferred.
+- **Next step:** Run the reverse 1.8 V ordering with debugger USB powered first
+  and `DUT_VIO` applied second, then continue the remaining independent
+  voltage-level and safe-state measurements in
+  `hardware/schematics/revision_a.md` section 14.
   Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
   Then run the RAM/load measurements in
@@ -174,6 +176,11 @@ Revision A initial electrical validation record, reviewed 2026-09-10:
   `DBG_INPUT_IF_EN`, and all four `DBG_CTRL_ENn` signals measured 0.0 V. This
   passes the safe enable-state expectations for that VIO-first power-up
   sequence but does not prove output high impedance or cover every ordering.
+- With `DUT_VIO` kept at 1.80 V and Device Core stopped, Pico USB was then
+  disconnected. The operator reported that settled current, `DUT_VIO`, and all
+  interface/control enable voltages were as expected. Exact values were not
+  recorded, so this is preliminary power-down evidence rather than an accepted
+  reproducible checklist result.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and

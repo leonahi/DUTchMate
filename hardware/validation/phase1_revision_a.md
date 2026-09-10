@@ -141,6 +141,26 @@ high impedance, verify the `SN74LV4T125PWR` `/OE` levels, or cover every
 power-up and power-down ordering, so the corresponding checklist items remain
 open.
 
+## VIO-First Debugger Power-Down At 1.8 V
+
+Starting from the preceding powered state, Device Core remained stopped,
+`DUT_VIO` remained supplied at 1.80 V with a 1 mA current limit, and Pico USB
+was disconnected. After a settling interval, the operator reported that the
+following measurements were as expected:
+
+| Measurement | Result |
+|---|---|
+| Settled `DUT_VIO` supply current | Reported near the preceding debugger-unpowered state; exact value not recorded |
+| `DUT_VIO` | Reported approximately 1.8 V; exact value not recorded |
+| `DBG_UART_IF_EN` | Reported approximately 0 V; exact value not recorded |
+| `DBG_INPUT_IF_EN` | Reported approximately 0 V; exact value not recorded |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | Reported approximately 0 V; exact values not recorded |
+
+This is qualitative evidence that the interface and control enables remained
+disabled after debugger power-down while VIO stayed present. The sequence is
+not accepted as a reproducible numeric result, and it does not close the
+all-orderings, `/OE`, output-high-impedance, or back-power checklist items.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -166,6 +186,8 @@ power-isolation checklist item.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
+- The paired debugger power-down retained the expected enable states, but only
+  qualitative results were recorded.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
