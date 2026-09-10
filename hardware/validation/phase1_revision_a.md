@@ -349,6 +349,28 @@ This passes one functional transmit/receive integrity check at 3.3 V and
 460800 baud. It does not validate electrical margins, cable-length limits,
 other baud rates, or the remaining 5.0 V operating point.
 
+## UART Loopback At 5.0 V And 460800 Baud
+
+With the service stopped and the UART loopback unchanged, the bench supply was
+turned off, set to 5.00 V with its 1 mA current limit retained, and turned back
+on. `DUT_VIO` measured 5.0 V and the settled idle current measured 79.66 uA,
+below the documented 100 uA target.
+
+A TX-enabled Enhanced epoch sent the 33-byte payload
+`DUTCHMATE_LOOPBACK_5V0_460800_A5\n`. The device reported success with all 33
+bytes accepted and device completion timestamp 1728627013 us. Capture
+`20260910T195209Z-b9518e95` stored an exact 33-byte match, including the final
+LF, and completed with:
+
+- `loss_status = none_reported` and zero dropped bytes;
+- no overflow, interruption, resume, or truncation; and
+- one Enhanced segment with RP2350 device-timer provenance.
+
+This passes one functional transmit/receive integrity check at 5.0 V and
+460800 baud. Together with the preceding runs, the short-jumper functional
+loopback passes at all four supported `DUT_VIO` points. Electrical margins,
+cable-length limits, and other required baud rates remain unvalidated.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -390,6 +412,8 @@ power-isolation checklist item.
   zero reported loss or overflow; 39.96 uA idle current was within budget.
 - The same loopback passed an exact 33-byte check at 3.3 V and 460800 baud with
   zero reported loss or overflow; 54.47 uA idle current was within budget.
+- The same loopback passed an exact 33-byte check at 5.0 V and 460800 baud with
+  zero reported loss or overflow; 79.66 uA idle current was within budget.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
