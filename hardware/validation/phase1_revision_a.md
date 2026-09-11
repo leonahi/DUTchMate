@@ -506,8 +506,54 @@ unrelated enable measured 0.0 V.
 This passes the representative push-pull low/high and epoch-disable check at
 5.0 V. Together with the four-channel 1.8 V sweep and representative 2.5 V and
 3.3 V checks, push-pull control levels now pass across all supported
-`DUT_VIO` points. Open-drain assertion/release and loaded high-impedance
-verification remain open.
+`DUT_VIO` points.
+
+## Open-Drain Reset With A Representative Pull-Up
+
+With the Enhanced service stopped, the Nordic PPK2 supplied `DUT_VIO` at
+1.80 V with a 1 mA current limit. The UART loopback remained installed, and an
+external 10 kOhm resistor connected `DUT_CTRL0` to `DUT_VIO` to represent a DUT
+reset pull-up. A Saleae logic analyzer observed `DUT_CTRL0` during the dynamic
+checks.
+
+The initial disabled baseline measured 28.95 uA, `DUT_VIO = 1.8 V`, and
+`DUT_CTRL0 = 1.8 V`. All unrelated enables measured 0.0 V. The first reported
+`DBG_CTRL_nOE0 = 0.0 V` was inconsistent with both the pulled-up DUT output and
+the later repeatable `/OE` measurements, so that isolated reading is not used
+as acceptance evidence.
+
+`CTRL0` was configured as active-low `open_drain` through a TX-disabled
+Enhanced epoch. Configuration entered the released state without a transient
+assertion:
+
+| State | Supply current | `DBG_CTRL_EN0` | `DBG_CTRL_nOE0` | `DBG_CTRL_DATA0` | `DUT_CTRL0` | `DBG_UART_IF_EN` |
+|---|---:|---:|---:|---:|---:|---:|
+| Configured release | 29.34 uA | 0.0 V | 1.8 V | 0.0 V | 1.8 V | 3.3 V |
+| Held assertion | 239.44 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V | 3.3 V |
+| Returned release | 30 uA | 0.0 V | 1.8 V | 0.0 V | 1.8 V | 3.3 V |
+| Epoch ended | 29.87 uA | 0.0 V | 1.8 V | 0.0 V | 1.8 V | 0.0 V |
+
+Every unrelated enable measured 0.0 V in each representative state. A
+temporary `boot` role mapping held the identical open-drain electrical states
+long enough for static measurement. The Saleae showed both assertion and
+release transitions as qualitatively clean; rise time was not available.
+
+After restoring the `reset` role, a commanded 250 ms reset pulse measured
+250.853 ms on the Saleae, transitioned cleanly from 1.8 V to 0.0 V and back,
+averaged 240 uA while asserted, and returned to 30 uA after release. The host
+received the successful response with a device completion timestamp.
+
+An earlier 10,000 ms reset attempt did not provide pulse evidence. The public
+validation and service schema accept 1 through 10,000 ms, but the Enhanced
+control adapter uses a fixed 1.0-second response timeout. The host returned
+HTTP 502 `timeout`, terminated that transport epoch, and reconnected in the
+released state before a manual reading was obtained. Treat the 10-second
+attempt as inconclusive electrical evidence and as a reproducible host timeout
+defect; it does not detract from the passing 250 ms reset pulse.
+
+This passes representative 1.8 V open-drain reset assertion, release, and
+loaded high-impedance behavior against a 10 kOhm DUT-side pull-up. Broader
+high-impedance, power-isolation, and voltage-margin checks remain open.
 
 ## Deferred 3V3 Back-Power Check
 
@@ -575,8 +621,17 @@ power-isolation checklist item.
   channel. The high output measured 5.0 V, and the final clean shutdown returned
   current to 79.79 uA with all measured control and unrelated enable signals at
   0.0 V.
+- At 1.8 V, `CTRL0` passed representative open-drain assertion and release
+  against an external 10 kOhm DUT-side pull-up. Released current measured
+  29.34–30 uA with `DUT_CTRL0 = 1.8 V`; asserted current measured
+  239.44–240 uA with `DUT_CTRL0 = 0.0 V`. A 250 ms reset command measured
+  250.853 ms with clean edges, and final shutdown returned to 29.87 uA with all
+  enables low. A separate 10-second attempt exposed the fixed 1-second Enhanced
+  command-response timeout and remains inconclusive rather than electrical
+  evidence.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - This record now supports the section 14 push-pull high/low-level item across
-  every supported `DUT_VIO`; the remaining Revision A prototype checklist items
-  remain open.
+  every supported `DUT_VIO` and representative open-drain reset assertion and
+  release against a DUT-side pull-up. The remaining Revision A prototype
+  checklist items remain open.
