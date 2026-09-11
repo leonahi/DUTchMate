@@ -568,6 +568,35 @@ This passes representative 1.8 V open-drain reset assertion, release, and
 loaded high-impedance behavior against a 10 kOhm DUT-side pull-up. Broader
 high-impedance, power-isolation, and voltage-margin checks remain open.
 
+## Control High Impedance During Debugger Reset
+
+With the Enhanced service stopped, the Nordic PPK2 continued to supply
+`DUT_VIO = 1.8 V` with a 1 mA current limit. Pico USB and the UART loopback
+remained connected. The external 10 kOhm pull-up and Saleae input were moved
+across `DUT_CTRL0` through `DUT_CTRL3` one channel at a time. For each channel,
+the Pico 2 `RUN` input was held at ground for approximately one second and then
+released.
+
+| Channel | DUT output during reset | Target enable/data | Other enables | Supply current | USB after release |
+|---|---:|---:|---:|---:|---|
+| `CTRL0` | 1.8 V, no low glitch | 0.0 V | 0.0 V | 30 uA | Reappeared |
+| `CTRL1` | 1.8 V, no low glitch | 0.0 V | 0.0 V | 30 uA | Reappeared |
+| `CTRL2` | Same passing behavior | 0.0 V | 0.0 V | 30 uA | Reappeared |
+| `CTRL3` | Same passing behavior | 0.0 V | 0.0 V | 30 uA | Reappeared |
+
+For `CTRL0`, the target measurements explicitly covered `DBG_CTRL_EN0` and
+`DBG_CTRL_DATA0`; `CTRL1` explicitly covered the corresponding two target
+signals. For `CTRL2` and `CTRL3`, the operator reported the same behavior as
+the preceding explicitly enumerated check. The externally pulled-up DUT output
+remaining continuously at 1.8 V without pull-up current appearing in the PPK2
+reading demonstrates that the corresponding translator output did not pull the
+line low during debugger reset.
+
+This passes the section 14 requirement that every control output remain
+high-impedance during debugger reset at the representative 1.8 V operating
+point and 10 kOhm load. It does not replace the remaining missing-supply,
+hot-plug, or cross-voltage isolation checks.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -644,9 +673,16 @@ power-isolation checklist item.
   2.000-second and maximum 10.00-second pulses completed successfully with
   clean edges, approximately 240 uA asserted current, return to approximately
   30 uA, and no Enhanced transport disconnect.
+- All four DUT control outputs remained at the externally pulled-up 1.8 V level
+  without a low glitch while the Pico 2 was held in reset through `RUN`.
+  Target enable/data signals and every unrelated enable remained 0.0 V, PPK2
+  current stayed near 30 uA, and the RP2350 USB device reappeared after each
+  release. This passes the every-control-output debugger-reset high-impedance
+  item at the representative 1.8 V operating point and 10 kOhm load.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - This record now supports the section 14 push-pull high/low-level item across
   every supported `DUT_VIO` and representative open-drain reset assertion and
-  release against a DUT-side pull-up. The remaining Revision A prototype
-  checklist items remain open.
+  release against a DUT-side pull-up. It also supports every control output
+  remaining high-impedance during debugger reset at the representative 1.8 V
+  point. The remaining Revision A prototype checklist items remain open.
