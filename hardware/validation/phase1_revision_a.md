@@ -104,14 +104,14 @@ Setup:
 |---|---:|---|
 | `DUT_VIO` | 1.8 V | Expected |
 | `DUT_VIO` supply current | 25.2 uA | Below the documented 50 uA idle target |
-| Pico `3V3(OUT)` | 0.13 V | Inconclusive due to uncalibrated DMM and missing load test |
+| Pico `3V3(OUT)` | 0.13 V | Initially inconclusive; resolved by the later loaded check |
 | Pico `VSYS` | 0 V | No observed back-powering |
 | Pico `VBUS` | 0 V | No observed back-powering |
 
 The current-budget result passes its numeric target. The 0.13 V reading on
-`3V3(OUT)` must not be dismissed as meter error or accepted as harmless
-leakage without a source-impedance check. It is therefore deferred rather than
-passed or failed.
+`3V3(OUT)` was initially deferred rather than dismissed as meter error. The
+later 10 kOhm source-impedance check resolves this specific observation while
+retaining the instrument limitations.
 
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
@@ -597,22 +597,33 @@ high-impedance during debugger reset at the representative 1.8 V operating
 point and 10 kOhm load. It does not replace the remaining missing-supply,
 hot-plug, or cross-voltage isolation checks.
 
-## Deferred 3V3 Back-Power Check
+## Loaded 3V3 Back-Power Check At 1.8 V
 
-Resume this exact check with USB disconnected and `DUT_VIO` supplied at
-1.80 V:
+The deferred source-impedance check was repeated with Pico USB disconnected,
+the Saleae signal leads disconnected, common ground retained, and the Nordic
+PPK2 supplying `DUT_VIO = 1.8 V` with a 1 mA current limit. Pico `VSYS` and
+`VBUS` were first verified at 0.0 V. The DMM remained the older, uncalibrated
+unit whose make/model, accuracy, and input impedance are unknown.
 
-1. Record the DMM or oscilloscope make/model, calibration status, input
-   impedance, and the unloaded `3V3(OUT)` voltage.
-2. Connect 10 kOhm from Pico `3V3(OUT)` physical pin 36 to ground. The resistor
-   limits current to at most 0.33 mA at 3.3 V.
-3. Record loaded `3V3(OUT)`, `DUT_VIO`, and supply current.
-4. Remove the resistor and turn off `DUT_VIO`.
+| Measurement | Unloaded | 10 kOhm from Pico pin 36 to ground | Assessment |
+|---|---:|---:|---|
+| `DUT_VIO` | Not re-recorded | 1.8 V | Supply remained stable under load |
+| PPK2 average current | 75 uA | 75 uA | No material load-correlated increase |
+| PPK2 maximum current | 85 uA | 82 uA | No material load-correlated increase |
+| Pico `3V3(OUT)` | 0.13 V | 0.02 V | Collapsed below the 0.10 V investigation threshold |
+| Pico `VSYS` | 0.0 V | 0.0 V | No observed back-powering |
+| Pico `VBUS` | 0.0 V | 0.0 V | No observed back-powering |
 
-If the voltage collapses toward zero without a material supply-current
-increase, record the result as high-impedance leakage or instrument offset. If
-it remains above 0.10 V, investigate the back-power path before accepting the
-power-isolation checklist item.
+The loaded voltage corresponds to approximately 2 uA through 10 kOhm. Its
+collapse from 0.13 V to 0.02 V without a material change in PPK2 current passes
+this debugger-unpowered back-power check as high-impedance leakage or instrument
+offset. The result is explicitly instrument-limited because the DMM identity,
+calibration, accuracy, and input impedance remain unknown.
+
+The absolute 75 uA current did not reproduce the earlier 25.2 uA idle result.
+That difference was not isolated during this source-impedance check. It does
+not change the no-load versus loaded conclusion, but it remains evidence to
+correlate during later controlled idle/load measurements.
 
 ## Current Decision
 
@@ -679,8 +690,10 @@ power-isolation checklist item.
   current stayed near 30 uA, and the RP2350 USB device reappeared after each
   release. This passes the every-control-output debugger-reset high-impedance
   item at the representative 1.8 V operating point and 10 kOhm load.
-- Power isolation is not accepted while the loaded `3V3(OUT)` check is
-  deferred.
+- The debugger-unpowered `3V3(OUT)` source-impedance check passed at 1.8 V:
+  loading the 0.13 V observation through 10 kOhm collapsed it to 0.02 V while
+  average PPK2 current remained 75 uA. This result remains instrument-limited,
+  and broader power-isolation checks remain open.
 - This record now supports the section 14 push-pull high/low-level item across
   every supported `DUT_VIO` and representative open-drain reset assertion and
   release against a DUT-side pull-up. It also supports every control output

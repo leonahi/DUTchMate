@@ -97,9 +97,14 @@ Read this document first whenever development resumes.
   returned an exact 33-byte payload with zero reported loss or overflow. The
   25.2 uA
   unpowered, 28.93–28.96 uA powered 1.8 V, 39.96 uA powered 2.5 V, and 54.47 uA
-  powered 3.3 V, and 79.66 uA powered 5.0 V idle results are within budget; a 0.13 V
-  debugger-unpowered `3V3(OUT)` observation remains inconclusive because the
-  DMM was uncalibrated and the loaded leakage check was deferred. At 1.8 V,
+  powered 3.3 V, and 79.66 uA powered 5.0 V idle results are within budget. The
+  debugger-unpowered `3V3(OUT)` observation at 1.8 V collapsed from 0.13 V to
+  0.02 V under a 10 kOhm load while average PPK2 current remained 75 uA and
+  `VSYS`/`VBUS` remained at 0.0 V. This passes the specific loaded back-power
+  check as high-impedance leakage or instrument offset, with the result kept
+  instrument-limited because the DMM identity and calibration are unknown. The
+  75 uA absolute current did not reproduce the earlier 25.2 uA idle reading and
+  remains flagged for later controlled-load correlation. At 1.8 V,
   all four control channels now pass configured push-pull idle-low,
   active-high, return-to-idle, and epoch-disable measurements. Representative
   unrelated enables remained low. A controlled `CTRL0` run with the UART
@@ -124,17 +129,12 @@ Read this document first whenever development resumes.
   high-impedance through a Pico 2 `RUN` reset at 1.8 V against the external
   10 kOhm pull-up: each DUT line stayed at 1.8 V without a low glitch, all
   enables stayed low, current remained near 30 uA, and USB reappeared.
-- **Next step:** Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
-  `hardware/validation/phase1_revision_a.md` before accepting power isolation.
-  With PPK2 output off, remove the control-output pull-up, disconnect Pico USB,
-  retain common ground, and then restore `DUT_VIO = 1.8 V` with the 1 mA limit.
-  Record unloaded `3V3(OUT)`, then load Pico physical pin 36 to ground through
-  10 kOhm and record loaded `3V3(OUT)`, `DUT_VIO`, and supply current. Keep the
-  result explicitly instrument-limited if the DMM make/model, calibration, or
-  input impedance remains unknown.
-  Then run the RAM/load measurements in
-  `hardware/validation/phase1_ring_buffer.md`. EVENT pins remain reserved; do
-  not add event capture.
+- **Next step:** Start the RAM/load measurements in
+  `hardware/validation/phase1_ring_buffer.md`. First record the exact current
+  build identity and Zephyr RAM/stack report, then run the required normal,
+  dense-burst, host-backpressure, and deliberate-overflow profiles. Correlate
+  the unexplained 75 uA debugger-unpowered reading during controlled idle/load
+  setup. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -180,7 +180,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, supported-voltage push-pull, and representative open-drain reset HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and 250 ms through maximum 10,000 ms open-drain reset pulses are reproduced. Duration-aware Enhanced-adapter and CLI timeouts cover the full accepted pulse range without changing the short-command minima. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, and debugger-reset control high impedance passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, and all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, plus the deferred inconclusive `3V3(OUT)` back-power check. Broader power-isolation and other section 14 items remain open. |
+| Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
@@ -337,11 +337,16 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   enables remained 0.0 V, PPK2 current stayed near 30 uA, and the RP2350 USB
   device reappeared after release. This passes the every-control-output
   debugger-reset high-impedance item at the representative 1.8 V point.
-- The 0.13 V observation is deferred and explicitly not waived. Resume with the
-  documented 10 kOhm loaded source-impedance test before accepting
-  debugger-unpowered isolation. The detailed setup, evidence limitations, and
-  continuation procedure are in
-  `hardware/validation/phase1_revision_a.md`.
+- With Pico USB and Saleae signal leads disconnected, the PPK2 supplied
+  `DUT_VIO = 1.8 V` at a 1 mA limit. Pico `VSYS` and `VBUS` remained 0.0 V.
+  Loading Pico physical pin 36 from `3V3(OUT)` to ground through 10 kOhm
+  collapsed the unloaded 0.13 V reading to 0.02 V; average PPK2 current stayed
+  at 75 uA and maximum current changed from 85 uA to 82 uA. This passes the
+  specific debugger-unpowered source-impedance check as high-impedance leakage
+  or instrument offset. It remains instrument-limited because the DMM identity,
+  calibration, accuracy, and input impedance are unknown. The 75 uA absolute
+  reading did not reproduce the earlier 25.2 uA idle measurement and remains
+  flagged for controlled-load correlation.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
@@ -1018,6 +1023,8 @@ schema and exposes the required identity/capabilities.
   and exact Pico mapping.
 - [ ] Record leakage, sequencing, isolation, voltage-level, UART signal
   integrity, and safe-state results.
+  - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
+    10 kOhm loaded source-impedance check, retaining instrument limitations.
 - [ ] Record Zephyr RAM/stack usage and every load profile required by
   `docs/ring_buffer_sizing_plan.md`.
 - [ ] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
