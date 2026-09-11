@@ -438,8 +438,29 @@ loss. Measurements were:
 
 This passes the representative push-pull low/high and epoch-disable check at
 2.5 V. The four-channel 1.8 V sweep already established physical channel
-mapping; no result here indicated a channel-specific problem. Push-pull levels
-at 3.3 V and 5.0 V remain open.
+mapping; no result here indicated a channel-specific problem.
+
+## Push-Pull Control At 3.3 V
+
+With the service stopped and the UART loopback retained, `DUT_VIO` was changed
+to 3.30 V with the 1 mA current limit retained. The disabled baseline measured
+54.43 uA, and all four `DBG_CTRL_ENn` signals measured 0.0 V.
+
+`CTRL0` was then configured as push-pull, active-high, and idle-low through a
+TX-disabled Enhanced epoch. The RP2350 remained connected and reported zero
+loss. Measurements were:
+
+| State | Supply current | `DBG_CTRL_EN0` | `DBG_CTRL_nOE0` | `DBG_CTRL_DATA0` | `DUT_CTRL0` |
+|---|---:|---:|---:|---:|---:|
+| Idle-low | 122.60 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| Active-high | 122.62 uA | 3.3 V | 0.0 V | 3.3 V | 3.3 V |
+| Returned idle-low | 122.70 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| Epoch ended | 54.60 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+
+This passes the representative push-pull low/high and epoch-disable check at
+3.3 V. The enabled current is consistent with the expected 47 kOhm `/OE`
+pull-up load within component and instrument tolerance. Push-pull levels at
+5.0 V remain open.
 
 ## Deferred 3V3 Back-Power Check
 
@@ -496,6 +517,10 @@ power-isolation checklist item.
   epoch-disable checks passed at 2.5 V. The high output measured 2.5 V, enabled
   current remained at 93.71–94 uA, and the disabled current returned to
   39.98 uA.
+- Representative `CTRL0` push-pull idle-low, active-high, return-to-idle, and
+  epoch-disable checks passed at 3.3 V. The high output measured 3.3 V, enabled
+  current remained at 122.60–122.70 uA, and the disabled current returned to
+  54.60 uA.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
