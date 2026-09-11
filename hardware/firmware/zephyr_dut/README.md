@@ -26,6 +26,10 @@ fixture therefore disables Zephyr console, `printk`, and logging and owns UART0 
 - UART: 115200 baud, 8 data bits, no parity, 1 stop bit, no flow control
 - Fixture protocol: `DMF/1`
 
+The 115200-baud default remains the Phase 1A Basic baseline. Enhanced
+ring-buffer validation uses the opt-in `boards/rpi_pico_460800.overlay`; do not
+assume that the Basic acceptance image runs at the Enhanced rate.
+
 The HIL report must record the exact Zephyr revision actually used. A newer Zephyr release is
 not accepted implicitly merely because the application builds.
 
@@ -119,6 +123,24 @@ build/dutchmate-zephyr-dut/zephyr/zephyr.uf2
 ```
 
 Do not use the default `development` build ID for an acceptance run.
+
+For the Phase 1B Enhanced and ring-buffer runs, keep the same fixture source and
+select its 460800-baud overlay explicitly:
+
+```bash
+west build \
+  -b rpi_pico \
+  -s /path/to/DUTchMate/hardware/firmware/zephyr_dut \
+  -d build/dutchmate-zephyr-dut-460800 \
+  --pristine \
+  -- \
+  -DDTC_OVERLAY_FILE=boards/rpi_pico_460800.overlay \
+  -DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID=\"phase1-enhanced-460800-001\"
+```
+
+Before flashing, verify that generated `zephyr.dts` records
+`current-speed = < 0x70800 >` for UART0, record the immutable build ID and UF2
+digest, and keep the 115200-baud Basic image separately identifiable.
 
 ## Flash
 

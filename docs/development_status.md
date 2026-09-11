@@ -133,14 +133,19 @@ Read this document first whenever development resumes.
   an exact static memory baseline: 52,012 bytes flash and 78,032 bytes RAM,
   leaving 454,448 bytes of RP2350 SRAM. The fixed stacks total 14,144 bytes and
   the system heap is disabled; runtime stack high-water and load evidence are
-  still pending.
-- **Next step:** Run the first HIL profile in
-  `hardware/validation/phase1_ring_buffer.md`: record a representative normal
-  460800-baud boot capture, its byte count, ring high-water mark, overflow/loss
-  state, host conditions, and current. Repeat for ten consecutive boots before
-  moving to dense burst and host-backpressure profiles. Correlate the unexplained
-  75 uA debugger-unpowered reading during controlled idle/load setup. EVENT pins
-  remain reserved; do not add event capture.
+  still pending. The existing Pico 1 DUT fixture's 115200-baud Basic default did
+  not meet the ring-buffer gate's 460800-baud requirement, so an opt-in
+  devicetree overlay now selects 460800 without changing the accepted Basic
+  image. Its Zephyr 4.4.0/SDK 1.0.1 candidate target-build passes with immutable
+  build ID `phase1-enhanced-460800-001`.
+- **Next step:** Flash the prepared 460800-baud Pico 1 fixture candidate whose
+  UF2 and provenance are recorded in
+  `hardware/validation/phase1_ring_buffer.md`, then run the first representative
+  normal-boot capture. Record its byte count, ring high-water mark,
+  overflow/loss state, host conditions, and current. Repeat for ten consecutive
+  boots before moving to dense burst and host-backpressure profiles. Correlate
+  the unexplained 75 uA debugger-unpowered reading during controlled idle/load
+  setup. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -365,6 +370,14 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   readback was performed. Runtime stack high-water and HIL load profiles remain
   open; detailed ignored-tree artifacts and hashes are recorded in
   `hardware/validation/phase1_ring_buffer.md`.
+- The accepted Pico 1 Basic fixture defaults to 115200 baud, which cannot drive
+  the fixed 460800-baud Debug Helper ring-buffer profile. A new opt-in
+  `rpi_pico_460800.overlay` preserves that Basic default while setting UART0
+  `current-speed` to 460800 for Enhanced HIL. A pristine Zephyr 4.4.0/SDK 1.0.1
+  target build confirmed generated `current-speed = < 0x70800 >` and immutable
+  build ID `phase1-enhanced-460800-001`. The 34,304-byte candidate UF2 SHA-256
+  is `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6`.
+  It has not been flashed, so no HIL result is claimed.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
@@ -1057,6 +1070,8 @@ reproducible measured evidence.
 
 - [ ] Run the RP2350 Debug Helper against the same Zephyr DUT fixture used for
   Phase 1A.
+  - [x] Prepare and target-build an explicitly selected 460800-baud variant of
+    the same Pico 1 fixture without changing its accepted 115200-baud default.
 - [ ] Demonstrate configured reset, boot-test, UART receive/send, device
   timestamps, overflow telemetry, reconnect behavior, and session retrieval.
 - [ ] Confirm Basic and Enhanced runs produce the same downstream evidence

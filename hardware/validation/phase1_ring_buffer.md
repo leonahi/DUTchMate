@@ -26,7 +26,7 @@ This record must finish in exactly one state:
 | Operator | Not run |
 | Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
 | Debug Helper board revision | User-confirmed fully assembled Revision A translator prototype; not connected for this build-only step |
-| DUT/fixture | None for static build; HIL fixture pending |
+| DUT/fixture | None for static Debug Helper build; 460800-baud Pico 1 HIL candidate prepared below |
 | Host OS | macOS 26.2, build 25C56 |
 | Zephyr version | 4.4.2 with SDK 1.0.1 |
 | Zephyr board target | `rpi_pico2/rp2350a/m33` |
@@ -73,6 +73,29 @@ Zephyr's symbol-attributed `ram_report` accounts for 76,583 bytes. The linker
 region total of 78,032 bytes is authoritative for the static footprint because
 it also includes allocation alignment and padding. Do not estimate the still
 missing runtime measurements from these static values.
+
+## 460800-Baud HIL Fixture Candidate
+
+The existing Pico 1 Zephyr DUT fixture remains unchanged at its 115200-baud
+default for the accepted Basic path. An opt-in
+`boards/rpi_pico_460800.overlay` now supplies the Enhanced ring-buffer rate
+without changing that default.
+
+| Field | Candidate result |
+|---|---|
+| Board/target | Raspberry Pi Pico 1, `rpi_pico/rp2040` |
+| Zephyr/toolchain | Zephyr 4.4.0, SDK 1.0.1 |
+| Fixture source baseline | Reconcile after the fixture-preparation commit |
+| Fixture build ID | `phase1-enhanced-460800-001` |
+| UART | 460800 baud, 8-N-1; generated UART0 `current-speed = < 0x70800 >` |
+| Build footprint | 16,840 bytes flash; 4,952 bytes RAM |
+| Generated `.config` SHA-256 | `4e472f3f0ea19c89611b2d9f05ef2f08b0fcfca198fc573a0b074b7de3441595` |
+| UF2 | 34,304 bytes; SHA-256 `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6` |
+| Flash/HIL state | Not flashed; no result claimed |
+
+The ignored candidate image is retained at
+`build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2`. Flashing and a captured
+boot marker are required before this becomes HIL fixture provenance.
 
 ## Load Results
 
