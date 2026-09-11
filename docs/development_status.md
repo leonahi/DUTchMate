@@ -128,13 +128,19 @@ Read this document first whenever development resumes.
   and no Enhanced transport disconnect. Every control output also remained
   high-impedance through a Pico 2 `RUN` reset at 1.8 V against the external
   10 kOhm pull-up: each DUT line stayed at 1.8 V without a low glitch, all
-  enables stayed low, current remained near 30 uA, and USB reappeared.
-- **Next step:** Start the RAM/load measurements in
-  `hardware/validation/phase1_ring_buffer.md`. First record the exact current
-  build identity and Zephyr RAM/stack report, then run the required normal,
-  dense-burst, host-backpressure, and deliberate-overflow profiles. Correlate
-  the unexplained 75 uA debugger-unpowered reading during controlled idle/load
-  setup. EVENT pins remain reserved; do not add event capture.
+  enables stayed low, current remained near 30 uA, and USB reappeared. A fresh
+  pristine Zephyr 4.4.2/SDK 1.0.1 build now starts ring-buffer acceptance with
+  an exact static memory baseline: 52,012 bytes flash and 78,032 bytes RAM,
+  leaving 454,448 bytes of RP2350 SRAM. The fixed stacks total 14,144 bytes and
+  the system heap is disabled; runtime stack high-water and load evidence are
+  still pending.
+- **Next step:** Run the first HIL profile in
+  `hardware/validation/phase1_ring_buffer.md`: record a representative normal
+  460800-baud boot capture, its byte count, ring high-water mark, overflow/loss
+  state, host conditions, and current. Repeat for ten consecutive boots before
+  moving to dense burst and host-backpressure profiles. Correlate the unexplained
+  75 uA debugger-unpowered reading during controlled idle/load setup. EVENT pins
+  remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -181,7 +187,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, supported-voltage push-pull, and representative open-drain reset HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and 250 ms through maximum 10,000 ms open-drain reset pulses are reproduced. Duration-aware Enhanced-adapter and CLI timeouts cover the full accepted pulse range without changing the short-command minima. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | Static RAM baseline recorded; HIL load profiles not run | The pristine Zephyr 4.4.2/SDK 1.0.1 build uses 78,032 of 532,480 RAM bytes, including 14,144 bytes of configured stacks and no system heap. Runtime stack high-water and every required HIL load profile remain open, so the decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -347,6 +353,18 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   calibration, accuracy, and input impedance are unknown. The 75 uA absolute
   reading did not reproduce the earlier 25.2 uA idle measurement and remains
   flagged for controlled-load correlation.
+- A pristine `rpi_pico2/rp2350a/m33` build at application commit
+  `3e149a530bfa6fd2b29682874f2942d619d7a30c` reproduced under Zephyr 4.4.2 and
+  SDK 1.0.1. It used 52,012 bytes flash and 78,032 of 532,480 RAM bytes. The
+  complete 45,136-byte RX-ring object contains the selected 32,768 raw bytes,
+  512 timestamp descriptors, and accounting state. Configured stacks total
+  14,144 bytes, the system heap is zero, and 454,448 bytes of static RAM margin
+  remain. The 104,448-byte UF2 SHA-256 is
+  `c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc`,
+  matching the digest of the file previously reported as flashed; no Pico
+  readback was performed. Runtime stack high-water and HIL load profiles remain
+  open; detailed ignored-tree artifacts and hashes are recorded in
+  `hardware/validation/phase1_ring_buffer.md`.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
@@ -1027,6 +1045,8 @@ schema and exposes the required identity/capabilities.
     10 kOhm loaded source-impedance check, retaining instrument limitations.
 - [ ] Record Zephyr RAM/stack usage and every load profile required by
   `docs/ring_buffer_sizing_plan.md`.
+  - [x] Record the reproducible static RAM, configured stack/heap, remaining
+    margin, build identity, and artifact hashes.
 - [ ] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
   `revised_with_evidence`; do not waive failed criteria.
 
