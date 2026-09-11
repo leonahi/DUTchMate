@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `32213cc9d7a7fdfc425d2b577793c1dcaef50cc6` on 2026-09-11
+> Code baseline reviewed: `eedc38d28dc1c28d93fe4601546700c10a033e63` on 2026-09-11
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -106,15 +106,19 @@ Read this document first whenever development resumes.
   loopback continuously installed also remained connected with zero reported
   loss for five minutes. Representative `CTRL0` push-pull low/high,
   return-to-idle, and epoch-disable measurements now also pass at 2.5 V and
-  3.3 V.
-- **Next step:** With the service stopped and the DUT-side UART loopback retained
-  to define the enabled UART input, change `DUT_VIO` to 5.0 V and validate
-  representative configured push-pull low/high plus disabled behavior. The
-  1.8 V sweep already established correct mapping across all four
-  physical control channels; use one representative channel for the remaining
-  voltage points unless a result indicates a channel-specific problem.
-  Continue the remaining independent voltage-level and safe-state measurements
-  in `hardware/schematics/revision_a.md` section 14.
+  3.3 V and 5.0 V. At 5.0 V, a second-channel discriminator also confirmed
+  that the approximately 59 uA active-high current increase follows U3's
+  expected state-dependent supply current rather than the DMM or one control
+  path. Final shutdown returned to the disabled baseline with all measured
+  enables and target signals low.
+- **Next step:** With the service stopped, return `DUT_VIO` to 1.8 V and install
+  a representative 10 kOhm DUT-side pull-up from `DUT_CTRL0` to `DUT_VIO`.
+  Retain the 1 mA current limit and UART loopback, then configure `CTRL0` as the
+  active-low `reset` role in `open_drain` mode. Validate released/high-
+  impedance, asserted-low, returned-release, and post-epoch disabled behavior,
+  including the expected pull-up current while asserted. Continue the remaining
+  independent safe-state measurements in `hardware/schematics/revision_a.md`
+  section 14.
   Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
   Then run the RAM/load measurements in
@@ -164,8 +168,8 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, and 1.8/2.5/3.3 V control HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, and representative 2.5/3.3 V control levels are reproduced. Electrical margins, remaining baud rates, remaining 5.0 V control levels, events, and load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, and representative 2.5/3.3 V control levels, plus the deferred inconclusive `3V3(OUT)` back-power check. No broad electrical checklist item is accepted yet. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, and supported-voltage push-pull control HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, and representative 2.5/3.3/5.0 V control levels are reproduced. Electrical margins, remaining baud rates, open-drain behavior, events, and load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| Revision A prototype validation | In progress; supported-voltage push-pull levels passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, and representative 2.5/3.3/5.0 V control levels, plus the deferred inconclusive `3V3(OUT)` back-power check. Open-drain, high-impedance, power-isolation, and other section 14 items remain open. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
@@ -279,6 +283,18 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   Enabled current measured 122.60–122.70 uA, the active-high DUT output measured
   3.3 V, and post-epoch current returned to 54.60 uA with all target control
   signals at 0.0 V.
+- At `DUT_VIO = 5.0 V`, representative `CTRL0` push-pull idle-low,
+  active-high, return-to-idle, and post-epoch disabled measurements passed.
+  Idle-low current measured 184.12 uA, the active-high DUT output measured
+  5.0 V at 243.26 uA, and returned idle-low measured 183.96 uA. The active-high
+  increase remained with the DMM disconnected and reproduced on `CTRL1`
+  (183.44 uA idle-low, 243.13 uA active-high), identifying expected U3
+  state-dependent input supply current rather than channel-specific leakage.
+  After returning `CTRL1` idle-low at 183.78 uA, clean epoch shutdown returned
+  current to 79.79 uA with all measured control and unrelated enable signals at
+  0.0 V. This completes representative push-pull level validation across all
+  four supported VIO points; open-drain and loaded high-impedance behavior
+  remain open.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and

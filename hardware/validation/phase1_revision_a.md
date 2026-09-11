@@ -30,6 +30,7 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 | Reference Zephyr version/SDK | Zephyr 4.4.2, SDK 1.0.1 |
 | Reproduced reference UF2 SHA-256 | `db5ba9dfcbcc6d6bbfd83149dd9d5c1b8f206478ad2d7d6ef68f18b57dc16afe` |
 | DMM | Older, uncalibrated unit; make/model and accuracy not recorded |
+| 5.0 V source/current monitor | Nordic PPK2; calibration status not recorded |
 | Bench supply | Make/model and calibration not recorded |
 
 The reference UF2 digest was reproduced from the tracked source before this
@@ -459,8 +460,54 @@ loss. Measurements were:
 
 This passes the representative push-pull low/high and epoch-disable check at
 3.3 V. The enabled current is consistent with the expected 47 kOhm `/OE`
-pull-up load within component and instrument tolerance. Push-pull levels at
-5.0 V remain open.
+pull-up load within component and instrument tolerance.
+
+## Push-Pull Control At 5.0 V
+
+The Nordic PPK2 supplied `DUT_VIO` at 5.0 V, measured its current, and retained
+the 1 mA current limit. With the service stopped and the UART loopback retained,
+the disabled baseline measured 79.75 uA and all interface/control enables
+measured 0.0 V.
+
+`CTRL0` was then configured as push-pull, active-high, and idle-low through a
+TX-disabled Enhanced epoch. Measurements were:
+
+| State | Supply current | `DBG_CTRL_EN0` | `DBG_CTRL_nOE0` | `DBG_CTRL_DATA0` | `DUT_CTRL0` |
+|---|---:|---:|---:|---:|---:|
+| Idle-low | 184.12 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| Active-high | 243.26 uA | 3.3 V | 0.0 V | 3.3 V | 5.0 V |
+| Returned idle-low | 183.96 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+
+The approximately 59 uA active-high increase remained at 243 uA with the DMM
+completely disconnected. To distinguish a `CTRL0` path fault from translator
+input behavior, `CTRL1` was configured identically in a fresh epoch. Its
+idle-low current measured 183.44 uA and active-high current measured 243.13 uA.
+The repeat therefore reproduced the state-dependent increase on a second U3
+channel rather than following the DMM or `CTRL0` ESD/output path. This is
+consistent with the
+[TI `SN74LV4T125` datasheet](https://www.ti.com/lit/ds/symlink/sn74lv4t125.pdf)
+additional-static-supply-current behavior when a 3.3 V input drives high while
+U3 is supplied at 5 V; TI specifies up to 1.5 mA per input at the nearby 3.4 V
+input/5.5 V supply test point.
+
+During the `CTRL1` discriminator, one return-to-normal command was issued from
+a sandbox that could not reach the already running local service and therefore
+did not reach the device. The measured state correctly remained active-high at
+243.10 uA, 3.3 V on `DBG_CTRL_DATA1`, and 5.0 V on `DUT_CTRL1`. Reconnecting
+through the service and reapplying the mapping restored idle-low: current
+measured 183.78 uA, `DBG_CTRL_EN1` remained 3.3 V, and both
+`DBG_CTRL_DATA1` and `DUT_CTRL1` measured 0.0 V. This was a host test-control
+mistake, not a firmware rejection or unexplained electrical transition.
+
+After the final clean epoch shutdown, current returned to 79.79 uA and
+`DBG_CTRL_EN1`, `DBG_CTRL_nOE1`, `DBG_CTRL_DATA1`, `DUT_CTRL1`, and every
+unrelated enable measured 0.0 V.
+
+This passes the representative push-pull low/high and epoch-disable check at
+5.0 V. Together with the four-channel 1.8 V sweep and representative 2.5 V and
+3.3 V checks, push-pull control levels now pass across all supported
+`DUT_VIO` points. Open-drain assertion/release and loaded high-impedance
+verification remain open.
 
 ## Deferred 3V3 Back-Power Check
 
@@ -521,6 +568,15 @@ power-isolation checklist item.
   epoch-disable checks passed at 3.3 V. The high output measured 3.3 V, enabled
   current remained at 122.60–122.70 uA, and the disabled current returned to
   54.60 uA.
+- Representative `CTRL0` push-pull idle-low, active-high, and return-to-idle
+  checks passed at 5.0 V. A second-channel discriminator confirmed that the
+  roughly 59 uA increase when the 3.3 V translator input was high followed U3's
+  expected state-dependent supply current rather than the DMM or one physical
+  channel. The high output measured 5.0 V, and the final clean shutdown returned
+  current to 79.79 uA with all measured control and unrelated enable signals at
+  0.0 V.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
-- No item in the Revision A prototype checklist is closed by this record yet.
+- This record now supports the section 14 push-pull high/low-level item across
+  every supported `DUT_VIO`; the remaining Revision A prototype checklist items
+  remain open.
