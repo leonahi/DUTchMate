@@ -543,13 +543,26 @@ After restoring the `reset` role, a commanded 250 ms reset pulse measured
 averaged 240 uA while asserted, and returned to 30 uA after release. The host
 received the successful response with a device completion timestamp.
 
-An earlier 10,000 ms reset attempt did not provide pulse evidence. The public
-validation and service schema accept 1 through 10,000 ms, but the Enhanced
-control adapter uses a fixed 1.0-second response timeout. The host returned
-HTTP 502 `timeout`, terminated that transport epoch, and reconnected in the
-released state before a manual reading was obtained. Treat the 10-second
-attempt as inconclusive electrical evidence and as a reproducible host timeout
-defect; it does not detract from the passing 250 ms reset pulse.
+An earlier pre-fix 10,000 ms reset attempt did not provide pulse evidence. The
+public validation and service schema accepted 1 through 10,000 ms, but the
+Enhanced control adapter used a fixed 1.0-second response timeout. The host
+returned HTTP 502 `timeout`, terminated that transport epoch, and reconnected
+in the released state before a manual reading was obtained. The first host-side
+correction made the Enhanced adapter wait for the pulse duration plus a bounded
+0.5-second completion margin. A 2,000 ms HIL retry then exposed the independent
+fixed 2.0-second CLI-to-service HTTP timeout while the service and Enhanced
+transport correctly remained connected.
+
+The CLI correction now waits for the pulse duration plus a bounded 1.0-second
+margin, retaining its existing 2.0-second minimum. With both timeout layers
+corrected, a 2,000 ms command completed successfully, measured 2.000 seconds on
+the Saleae, held `DUT_CTRL0` at 0.0 V with approximately 240 uA asserted
+current, returned to 1.8 V and approximately 30 uA, and retained the same
+connected Enhanced epoch. The maximum 10,000 ms command then also completed
+successfully: the Saleae measured 10.00 seconds with clean 1.8 V-to-0.0 V-to-
+1.8 V transitions, PPK2 current measured approximately 240 uA asserted and
+30 uA released, and a following status request confirmed the transport remained
+connected with `CTRL0` still configured.
 
 This passes representative 1.8 V open-drain reset assertion, release, and
 loaded high-impedance behavior against a 10 kOhm DUT-side pull-up. Broader
@@ -626,9 +639,11 @@ power-isolation checklist item.
   29.34–30 uA with `DUT_CTRL0 = 1.8 V`; asserted current measured
   239.44–240 uA with `DUT_CTRL0 = 0.0 V`. A 250 ms reset command measured
   250.853 ms with clean edges, and final shutdown returned to 29.87 uA with all
-  enables low. A separate 10-second attempt exposed the fixed 1-second Enhanced
-  command-response timeout and remains inconclusive rather than electrical
-  evidence.
+  enables low. A pre-fix 10-second attempt exposed fixed timeout layers in both
+  the Enhanced adapter and CLI HTTP client. After duration-aware timeout fixes,
+  2.000-second and maximum 10.00-second pulses completed successfully with
+  clean edges, approximately 240 uA asserted current, return to approximately
+  30 uA, and no Enhanced transport disconnect.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - This record now supports the section 14 push-pull high/low-level item across

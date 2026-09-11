@@ -46,6 +46,7 @@ from dutchmate_core.device_connection.transport import (
 )
 
 DEFAULT_ENHANCED_COMMAND_TIMEOUT_S = 1.0
+_ENHANCED_PULSE_COMPLETION_MARGIN_S = 0.5
 
 
 class AsyncEnhancedDeviceControl:
@@ -82,7 +83,15 @@ class AsyncEnhancedDeviceControl:
 
     async def pulse_control(self, *, channel: str, pulse_ms: int) -> int | None:
         command = pulse_control_command(channel=channel, pulse_ms=pulse_ms)
-        return await self._request_success(command.to_ndjson(), operation="reset")
+        timeout_s = max(
+            self._timeout_s,
+            pulse_ms / 1000.0 + _ENHANCED_PULSE_COMPLETION_MARGIN_S,
+        )
+        return await self._request_success(
+            command.to_ndjson(),
+            operation="reset",
+            timeout_s=timeout_s,
+        )
 
     async def set_control_state(
         self,
@@ -102,10 +111,14 @@ class AsyncEnhancedDeviceControl:
         *,
         operation: str,
         response_label: str | None = None,
+        timeout_s: float | None = None,
     ) -> int | None:
         label = response_label or operation
         try:
-            response = await self._transport.request(command, self._timeout_s)
+            response = await self._transport.request(
+                command,
+                self._timeout_s if timeout_s is None else timeout_s,
+            )
         except TransportWriteError as exc:
             raise DeviceControlError(error=exc.error, detail=str(exc)) from exc
         except TransportTimeoutError as exc:

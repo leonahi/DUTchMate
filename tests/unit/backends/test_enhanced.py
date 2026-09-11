@@ -70,6 +70,20 @@ async def test_async_enhanced_control_uses_same_command_and_timestamp() -> None:
     ]
 
 
+async def test_async_enhanced_control_waits_for_long_pulse_completion() -> None:
+    transport = FakeAsyncCommandTransport(CommandSuccessMessage(timestamp_us=123))
+
+    timestamp = await AsyncEnhancedDeviceControl(transport).pulse_control(
+        channel="CTRL0",
+        pulse_ms=2_000,
+    )
+
+    assert timestamp == 123
+    assert transport.requests == [
+        (b'{"cmd":"pulse_control","channel":"CTRL0","pulse_ms":2000}\n', 2.5)
+    ]
+
+
 async def test_async_enhanced_uart_sender_uses_same_acknowledgement_rules() -> None:
     transport = FakeAsyncCommandTransport(
         CommandSuccessMessage(timestamp_us=500, bytes_accepted=3)

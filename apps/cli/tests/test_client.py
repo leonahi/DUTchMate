@@ -292,6 +292,7 @@ def test_reset_dut_posts_pulse_width() -> None:
         assert request.url.path == "/dut/reset"
         assert request.method == "POST"
         assert request.read() == b'{"pulse_ms":250}'
+        assert request.extensions["timeout"]["read"] == 2.0
         return httpx.Response(
             200,
             json={
@@ -310,6 +311,27 @@ def test_reset_dut_posts_pulse_width() -> None:
         "performed_at": "2026-08-21T10:00:00Z",
         "device_timestamp_us": 182334500,
     }
+
+
+def test_reset_dut_uses_duration_aware_timeout_for_long_pulse() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dut/reset"
+        assert request.method == "POST"
+        assert request.read() == b'{"pulse_ms":2000}'
+        assert request.extensions["timeout"]["read"] == 3.0
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "pulse_ms": 2000,
+                "performed_at": "2026-09-11T20:40:00Z",
+                "device_timestamp_us": 1450000000,
+            },
+        )
+
+    payload = reset_dut(pulse_ms=2000, transport=httpx.MockTransport(handler))
+
+    assert payload["pulse_ms"] == 2000
 
 
 def test_set_boot_mode_posts_mode() -> None:

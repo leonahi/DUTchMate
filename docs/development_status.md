@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `ab43626ae2ad321f61a203d9d2fa17681c643461` on 2026-09-11
+> Code baseline reviewed: `7bdcaed7084025866f5f4617f9ba77e4353a6cf5` on 2026-09-11
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -115,13 +115,19 @@ Read this document first whenever development resumes.
   external 10 kOhm DUT-side pull-up. A commanded 250 ms pulse measured
   250.853 ms with clean edges and returned to the released baseline. The test
   also exposed that the public 10,000 ms pulse limit exceeds the Enhanced
-  adapter's fixed 1.0-second response timeout.
-- **Next step:** Correct the Enhanced reset-pulse timeout mismatch with focused
-  TDD. Preserve the 1.0-second default for short control operations, but make a
-  pulse request wait for its validated pulse duration plus a bounded response
-  margin. Verify a pulse longer than one second no longer terminalizes the
-  transport, then repeat that case on the Saleae/PPK2 before resuming the
-  remaining independent safe-state measurements in
+  adapter's fixed 1.0-second response timeout; the first correction then exposed
+  the CLI's independent fixed 2.0-second HTTP timeout. Focused TDD now makes the
+  adapter wait for `max(1.0 s, pulse + 0.5 s)` and the CLI wait for
+  `max(2.0 s, pulse + 1.0 s)`. Real 2,000 ms and maximum 10,000 ms pulses both
+  completed with clean measured edges, correct current, successful responses,
+  and no Enhanced transport disconnect.
+- **Next step:** With the service stopped, retain `DUT_VIO = 1.8 V`, the 1 mA
+  limit, the UART loopback, the Saleae, and the existing 10 kOhm pull-up from
+  `DUT_CTRL0` to `DUT_VIO`. Begin the debugger-reset high-impedance check by
+  resetting the Pico 2 through `RUN` while confirming `DUT_CTRL0` stays at
+  1.8 V without a low glitch and every interface/control enable remains low.
+  If clean, move the pull-up and Saleae input across `DUT_CTRL1` through
+  `DUT_CTRL3` and repeat before accepting the every-control-output reset item in
   `hardware/schematics/revision_a.md` section 14.
   Resume the deferred 10 kOhm loaded `3V3(OUT)` check in
   `hardware/validation/phase1_revision_a.md` before accepting power isolation.
@@ -172,7 +178,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, supported-voltage push-pull, and representative open-drain reset HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and a 250 ms open-drain reset pulse are reproduced. The accepted 10-second pulse range currently exceeds the Enhanced adapter's 1-second response timeout. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, supported-voltage push-pull, and representative open-drain reset HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and 250 ms through maximum 10,000 ms open-drain reset pulses are reproduced. Duration-aware Enhanced-adapter and CLI timeouts cover the full accepted pulse range without changing the short-command minima. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull levels and representative open-drain reset passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, plus the deferred inconclusive `3V3(OUT)` back-power check. Broader high-impedance, power-isolation, and other section 14 items remain open. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
@@ -306,13 +312,23 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   250.853 ms with clean edges and approximately 240 uA asserted current. Final
   shutdown returned to 29.87 uA, the external pull-up restored `DUT_CTRL0` to
   1.8 V, and all measured enables were 0.0 V.
-- A 10,000 ms reset request reproduced a host timeout before a manual pulse
-  reading could be captured. The public validator and service schema accept up
-  to 10,000 ms, while `AsyncEnhancedDeviceControl` waits a fixed 1.0 second for
-  every response. Timeout terminalized the transport and the service
-  reconnected in the safe released state. This is a confirmed host timeout
-  mismatch and inconclusive electrical evidence, not a failed open-drain
-  transition.
+- A pre-fix 10,000 ms reset request reproduced the fixed 1.0-second Enhanced
+  command-response timeout. After correcting that layer, a 2,000 ms retry
+  exposed the CLI's independent fixed 2.0-second HTTP timeout while the service
+  and transport remained connected. Focused regression tests now require the
+  Enhanced adapter to use `max(1.0 s, pulse + 0.5 s)` and the CLI to use
+  `max(2.0 s, pulse + 1.0 s)`, while retaining their existing minima for short
+  operations. Real 2,000 ms and maximum 10,000 ms reset commands then completed
+  successfully. The Saleae measured 2.000 s and 10.00 s with clean 1.8 V/0.0 V
+  edges; PPK2 measured approximately 240 uA asserted and 30 uA released. Status
+  after each command remained connected in the same Enhanced epoch with
+  `CTRL0` configured and zero reported UART loss.
+- TDD red first proved a 2,000 ms pulse still received only the old 1.0-second
+  Enhanced timeout, then separately proved the CLI still assigned its old
+  2.0-second HTTP timeout. The focused Enhanced and CLI suites passed with 77
+  tests after both corrections. Ruff passed; mypy reported no issues in 73
+  source files; full pytest passed with 1,276 tests; and `git diff --check`
+  found no whitespace errors.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and

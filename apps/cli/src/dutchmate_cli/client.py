@@ -20,6 +20,7 @@ from dutchmate_core.validation import (
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 CAPTURE_TIMEOUT_GRACE_SECONDS: Final = 2.0
+RESET_TIMEOUT_GRACE_SECONDS: Final = 1.0
 SERVICE_NOT_RUNNING_MESSAGE: Final = (
     "Device Core Service is not running. Run 'dutchmate start' first."
 )
@@ -264,6 +265,10 @@ def reset_dut(
         service_url=service_url,
         transport=transport,
         json={"pulse_ms": pulse_ms},
+        timeout_s=max(
+            DEFAULT_TIMEOUT_SECONDS,
+            pulse_ms / 1000.0 + RESET_TIMEOUT_GRACE_SECONDS,
+        ),
     )
     return _response_payload(response, description="reset response")
 
