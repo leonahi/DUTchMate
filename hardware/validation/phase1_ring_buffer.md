@@ -85,7 +85,7 @@ without changing that default.
 |---|---|
 | Board/target | Raspberry Pi Pico 1, `rpi_pico/rp2040` |
 | Zephyr/toolchain | Zephyr 4.4.0, SDK 1.0.1 |
-| Fixture source baseline | Reconcile after the fixture-preparation commit |
+| Fixture source baseline | `203649f18ff4c75c505043a921f3183bb35e41f5` |
 | Fixture build ID | `phase1-enhanced-460800-001` |
 | UART | 460800 baud, 8-N-1; generated UART0 `current-speed = < 0x70800 >` |
 | Build footprint | 16,840 bytes flash; 4,952 bytes RAM |
