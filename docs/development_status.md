@@ -104,11 +104,12 @@ Read this document first whenever development resumes.
   active-high, return-to-idle, and epoch-disable measurements. Representative
   unrelated enables remained low. A controlled `CTRL0` run with the UART
   loopback continuously installed also remained connected with zero reported
-  loss for five minutes.
+  loss for five minutes. Representative `CTRL0` push-pull low/high,
+  return-to-idle, and epoch-disable measurements now also pass at 2.5 V.
 - **Next step:** With the service stopped and the DUT-side UART loopback retained
-  to define the enabled UART input, change `DUT_VIO` to 2.5 V and validate
-  configured push-pull low/high plus disabled behavior. Repeat at 3.3 V and
-  5.0 V. The 1.8 V sweep already established correct mapping across all four
+  to define the enabled UART input, change `DUT_VIO` to 3.3 V and validate
+  representative configured push-pull low/high plus disabled behavior. Repeat
+  at 5.0 V. The 1.8 V sweep already established correct mapping across all four
   physical control channels; use one representative channel for the remaining
   voltage points unless a result indicates a channel-specific problem.
   Continue the remaining independent voltage-level and safe-state measurements
@@ -162,8 +163,8 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, and 1.8 V control HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, and the four-channel 1.8 V push-pull control sweep are reproduced. Electrical margins, remaining baud rates, remaining control voltages, events, and load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, and the passing four-channel 1.8 V push-pull control sweep, plus the deferred inconclusive `3V3(OUT)` back-power check. No broad electrical checklist item is accepted yet. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, and 1.8/2.5 V control HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, and representative 2.5 V control levels are reproduced. Electrical margins, remaining baud rates, remaining control voltages, events, and load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| Revision A prototype validation | In progress | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, and representative 2.5 V control levels, plus the deferred inconclusive `3V3(OUT)` back-power check. No broad electrical checklist item is accepted yet. |
 | Ring-buffer acceptance | Not run | The decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
@@ -172,7 +173,7 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Revision A initial electrical validation record, reviewed 2026-09-10:
+Revision A initial electrical validation record, reviewed 2026-09-11:
 
 - The user confirmed that the connected hardware is a fully assembled Revision
   A translator prototype. macOS enumerated DUTchMate Debug Helper
@@ -267,6 +268,11 @@ Revision A initial electrical validation record, reviewed 2026-09-10:
   did not reproduce the interruption. This is recorded as the likely cause,
   not a conclusively identified firmware fault, because no fault-source
   telemetry was available.
+- At `DUT_VIO = 2.5 V`, representative `CTRL0` push-pull idle-low,
+  active-high, return-to-idle, and post-epoch disabled measurements passed.
+  Enabled current measured 93.71–94 uA, the active-high DUT output measured
+  2.5 V, and post-epoch current returned to 39.98 uA with all target control
+  signals at 0.0 V.
 - The 0.13 V observation is deferred and explicitly not waived. Resume with the
   documented 10 kOhm loaded source-impedance test before accepting
   debugger-unpowered isolation. The detailed setup, evidence limitations, and

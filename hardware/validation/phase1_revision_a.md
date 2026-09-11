@@ -13,7 +13,7 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 
 | Field | Result |
 |---|---|
-| Run date/time | 2026-09-10, Europe/Paris |
+| Run date/time | 2026-09-10 through 2026-09-11, Europe/Paris |
 | Operator | Not recorded |
 | Prototype | User-confirmed fully assembled Revision A translator prototype |
 | BOM and exact Pico mapping audit | Not run |
@@ -419,6 +419,28 @@ This completes the 1.8 V push-pull low/high and epoch-disable sweep across all
 four physical control channels. Push-pull levels at 2.5 V, 3.3 V, and 5.0 V,
 open-drain behavior, and loaded high-impedance verification remain open.
 
+## Push-Pull Control At 2.5 V
+
+With the service stopped and the UART loopback retained, `DUT_VIO` was changed
+to 2.50 V with the 1 mA current limit retained. The disabled baseline measured
+39.99 uA, and all four `DBG_CTRL_ENn` signals were approximately 0.0 V.
+
+`CTRL0` was then configured as push-pull, active-high, and idle-low through a
+TX-disabled Enhanced epoch. The RP2350 remained connected and reported zero
+loss. Measurements were:
+
+| State | Supply current | `DBG_CTRL_EN0` | `DBG_CTRL_nOE0` | `DBG_CTRL_DATA0` | `DUT_CTRL0` |
+|---|---:|---:|---:|---:|---:|
+| Idle-low | 93.71 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| Active-high | 94 uA | 3.3 V | 0.0 V | 3.3 V | 2.5 V |
+| Returned idle-low | 93.98 uA | 3.3 V | 0.0 V | 0.0 V | 0.0 V |
+| Epoch ended | 39.98 uA | 0.0 V | 0.0 V | 0.0 V | 0.0 V |
+
+This passes the representative push-pull low/high and epoch-disable check at
+2.5 V. The four-channel 1.8 V sweep already established physical channel
+mapping; no result here indicated a channel-specific problem. Push-pull levels
+at 3.3 V and 5.0 V remain open.
+
 ## Deferred 3V3 Back-Power Check
 
 Resume this exact check with USB disconnected and `DUT_VIO` supplied at
@@ -470,6 +492,10 @@ power-isolation checklist item.
   loopback during an active epoch. The continuously installed-loopback rerun
   did not reproduce the interruption; the exact firmware fault source was not
   telemetered.
+- Representative `CTRL0` push-pull idle-low, active-high, return-to-idle, and
+  epoch-disable checks passed at 2.5 V. The high output measured 2.5 V, enabled
+  current remained at 93.71–94 uA, and the disabled current returned to
+  39.98 uA.
 - Power isolation is not accepted while the loaded `3V3(OUT)` check is
   deferred.
 - No item in the Revision A prototype checklist is closed by this record yet.
