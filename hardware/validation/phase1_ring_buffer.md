@@ -124,13 +124,21 @@ cleared without faulting the epoch while negative driver API results remain
 fatal. The corrected 104,448-byte RP2350 image target-builds successfully under
 Zephyr 4.4.2/SDK 1.0.1 with SHA-256
 `94a633420025ed1564b8066ca48adb1dc5b619df7c17d754ec84939a81f86bc8`,
-but has not yet been flashed or verified on hardware.
+and was flashed on 2026-09-12. Sessions
+`20260912T212549Z-09d805d0` and `20260912T213056Z-dbb8e66c` each completed a
+15 s Enhanced boot test in the same connection epoch. Each received the
+reset-induced `0x00` byte followed by the exact 62-byte fixture marker, reached
+a 62-byte ring high-water mark, and reported zero overflow events and zero
+dropped bytes. The first run's Saleae capture showed a good 100 ms commanded
+`RUN` pulse and clean TX edges; `DBG_UART_IF_EN` remained at 3.3 V afterward.
+During the second run at `DUT_VIO = 3.3 V`, the PPK2 measured 54 uA idle,
+177 uA during reset, 108 uA during the TX burst, and a return to 54 uA idle.
 
 ## Load Results
 
 | Profile | Runs | UART baud | Duration/stall | Max occupancy | Overflow events | Dropped bytes | Result |
 |---|---:|---:|---|---:|---:|---:|---|
-| Representative normal boot | 0 | 460800 | Not run | Not run | Not run | Not run | Not run |
+| Representative normal boot | 2 of 10 | 460800 | 15 s each; 100 ms reset | 62 bytes | 0 | 0 | Passing so far; exact marker in both sessions |
 | Dense synthetic burst | 0 | 460800 | 15 s | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run |
