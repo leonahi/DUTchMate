@@ -42,7 +42,13 @@ static void dut_uart_callback(const struct device *device, void *user_data)
 
 	ARG_UNUSED(user_data);
 	result = uart_irq_update(device);
-	if (result < 0 || uart_err_check(device) != 0) {
+	if (result < 0) {
+		mark_driver_fault();
+		return;
+	}
+	result = uart_err_check(device);
+	/* DUT reset can produce break/framing flags; checking clears them. */
+	if (result < 0) {
 		mark_driver_fault();
 		return;
 	}

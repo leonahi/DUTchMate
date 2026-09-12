@@ -91,11 +91,40 @@ without changing that default.
 | Build footprint | 16,840 bytes flash; 4,952 bytes RAM |
 | Generated `.config` SHA-256 | `4e472f3f0ea19c89611b2d9f05ef2f08b0fcfca198fc573a0b074b7de3441595` |
 | UF2 | 34,304 bytes; SHA-256 `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6` |
-| Flash/HIL state | Not flashed; no result claimed |
+| Flash/HIL state | Flashed on 2026-09-12. A direct 25 MS/s Saleae capture decoded the exact 62-byte build marker at 460800 8-N-1; Debug Helper boot-capture acceptance remains pending the line-error recovery image below. |
 
 The ignored candidate image is retained at
-`build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2`. Flashing and a captured
-boot marker are required before this becomes HIL fixture provenance.
+`build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2`.
+
+The first integrated boot attempts exposed a normal reset-line interaction
+before a representative load result could be claimed. Pico 1 `RUN` assertion
+made its GP0 UART TX line low until firmware initialized it after release. The
+original Debug Helper treated the resulting PL011 break/framing flag as a fatal
+driver fault, returned `DBG_UART_IF_EN` to 0 V, and stopped servicing later CDC
+epochs. Sessions `20260912T201857Z-7d797e80` and
+`20260912T204452Z-1f60f8f1` each retained a single `0x00` observation rather
+than the boot marker; session `20260912T203812Z-41fa19be`, run before the UART
+wires were corrected, retained no UART bytes and is not product evidence.
+
+The direct Saleae transition export measured `RUN` low for 1.214627 s during a
+manual diagnostic, GP0 TX returning idle-high 27.753 ms after release, and the
+UART burst starting 28.647 ms after release. Decoding at 460800 8-N-1 produced
+the exact candidate marker:
+
+```text
+DMF/1 BOOT OK board=rpi_pico build=phase1-enhanced-460800-001\n
+```
+
+The 379-line raw transition export is retained as
+`hardware/validation/phase1_pico1_boot_460800_saleae.csv`, SHA-256
+`dfd247a19730935651791f09c40d7784b3699819a64dd9c78823513815e4de93`.
+
+A focused adapter regression now requires positive UART line-error flags to be
+cleared without faulting the epoch while negative driver API results remain
+fatal. The corrected 104,448-byte RP2350 image target-builds successfully under
+Zephyr 4.4.2/SDK 1.0.1 with SHA-256
+`94a633420025ed1564b8066ca48adb1dc5b619df7c17d754ec84939a81f86bc8`,
+but has not yet been flashed or verified on hardware.
 
 ## Load Results
 
@@ -112,6 +141,8 @@ boot marker are required before this becomes HIL fixture provenance.
 
 - [ ] Ten consecutive representative normal boots produced zero overflow
   events.
+- [x] The 460800-baud Pico 1 fixture emitted its exact build marker in a direct
+  Saleae capture, with the raw transition export retained above.
 - [ ] The 250 ms backpressure test produced zero overflow events.
 - [ ] Deliberate stress produced explicit overflow telemetry with consistent
   dropped-byte and high-water accounting.

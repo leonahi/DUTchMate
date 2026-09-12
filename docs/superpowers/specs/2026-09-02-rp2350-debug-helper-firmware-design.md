@@ -178,9 +178,11 @@ starts with a new `hello`, and the host reapplies its CTRL configuration.
 
 The target build requires Zephyr 4.4.2 or newer. Earlier Zephyr PL011 drivers
 do not acknowledge UART error interrupts and can trap RP2350 in an interrupt
-storm. Firmware keeps error interrupts enabled so UART faults retain the
-defined epoch-failure semantics; the affected driver versions are rejected at
-configure time rather than weakening fault detection.
+storm. Firmware keeps error interrupts enabled. Positive UART line-error flags
+such as break or framing are cleared and capture continues because a DUT reset
+may normally hold TX low before its UART is initialized. Negative UART driver
+API results remain fatal and end the epoch. The affected driver versions are
+rejected at configure time rather than weakening fault detection.
 
 Clearing undelivered data on physical disconnect is transport interruption, not
 ring overflow. Device Core already records the interrupted connection and does

@@ -29,8 +29,10 @@ states, and exposes its initial USB CDC identity:
 - one RP2350 64-bit microsecond timer value is sampled for every UART RX
   interrupt callback, and all bytes drained by that callback retain it;
 - UART RX and its bidirectional translator start only after the connection
-  epoch's `hello`; DTR loss or a UART driver fault stops RX, disables the
+  epoch's `hello`; DTR loss or a UART driver API fault stops RX, disables the
   translator, and discards retained bytes while preserving boot counters;
+  positive line-error flags such as break or framing are cleared without
+  ending the epoch so DUT reset cannot prevent later boot bytes from arriving;
 - the sole CDC writer drains at most 1,024 raw bytes per v1 `uart` event,
   preserves each callback timestamp, and emits exact compact JSON with base64
   payloads;
@@ -176,7 +178,7 @@ and exercises these boundaries without Zephyr or a connected board:
 |---|---|
 | Device identity and exact protocol output | `test_hello.py`, `test_uart_event.py`, `test_telemetry.py`, `test_command_response.py` |
 | NDJSON framing, command validation, and bounded ingress | `test_ndjson_framer.py`, `test_command_decode.py`, `test_command_ingress.py` |
-| RX ring ordering, loss accounting, and telemetry scheduling | `test_uart_rx_ring.py`, `test_telemetry.py` |
+| RX adapter line-error recovery, ring ordering, loss accounting, and telemetry scheduling | `test_uart_rx_adapter.py`, `test_uart_rx_ring.py`, `test_telemetry.py` |
 | CTRL transitions, pulses, command execution, and UART TX state | `test_control_state.py`, `test_command_executor.py`, `test_uart_tx_state.py` |
 | Connection epochs and complete CDC frame acceptance | `test_connection_epoch.py`, `test_cdc_tx_state.py` |
 
