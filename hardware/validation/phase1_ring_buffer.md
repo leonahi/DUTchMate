@@ -134,11 +134,22 @@ dropped bytes. The first run's Saleae capture showed a good 100 ms commanded
 During the second run at `DUT_VIO = 3.3 V`, the PPK2 measured 54 uA idle,
 177 uA during reset, 108 uA during the TX burst, and a return to 54 uA idle.
 
+Eight further consecutive 15 s boot sessions on 2026-09-13 completed the
+required ten-run profile: `20260913T172726Z-f5bd6a28`,
+`20260913T172806Z-17f9e499`, `20260913T172841Z-77f0338e`,
+`20260913T172915Z-a47bcb84`, `20260913T172950Z-61fe0955`,
+`20260913T173025Z-678e82e0`, `20260913T173057Z-6095a8ba`, and
+`20260913T173133Z-e9fd8542`. Every session retained the same reset byte and
+exact marker, reached the same 62-byte high-water mark, reported zero dropped
+bytes and zero overflow events, and completed in one uninterrupted segment.
+Raw session evidence remains under `.dutchmate/sessions/<session-id>/` on the
+validation host.
+
 ## Load Results
 
 | Profile | Runs | UART baud | Duration/stall | Max occupancy | Overflow events | Dropped bytes | Result |
 |---|---:|---:|---|---:|---:|---:|---|
-| Representative normal boot | 2 of 10 | 460800 | 15 s each; 100 ms reset | 62 bytes | 0 | 0 | Passing so far; exact marker in both sessions |
+| Representative normal boot | 10 | 460800 | 15 s each; 100 ms reset | 62 bytes | 0 | 0 | Pass; exact marker in all sessions, no interrupted segments |
 | Dense synthetic burst | 0 | 460800 | 15 s | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run |
@@ -147,7 +158,7 @@ During the second run at `DUT_VIO = 3.3 V`, the PPK2 measured 54 uA idle,
 
 ## Acceptance Checklist
 
-- [ ] Ten consecutive representative normal boots produced zero overflow
+- [x] Ten consecutive representative normal boots produced zero overflow
   events.
 - [x] The 460800-baud Pico 1 fixture emitted its exact build marker in a direct
   Saleae capture, with the raw transition export retained above.
