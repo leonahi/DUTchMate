@@ -35,7 +35,7 @@ This record must finish in exactly one state:
 | Host OS | macOS 26.2, build 25C56 |
 | Zephyr version | 4.4.2 with SDK 1.0.1 |
 | Zephyr board target | `rpi_pico2/rp2350a/m33` |
-| Application commit | Working-tree second throughput candidate based on `58e0433d9f9c6688d2547535b3a54a668ca8d164` |
+| Application commit | `52b27ab8cbd12fddec767e5f4f0ec0916b6acf04` |
 | Build ID/configuration | `development`; pristine `prj.conf` build with recoverable positive UART line errors |
 | Related DUTchMate session IDs | Listed with each HIL profile below |
 
