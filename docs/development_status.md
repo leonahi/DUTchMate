@@ -146,13 +146,19 @@ Read this document first whenever development resumes.
   negative driver API results. The corrected RP2350 image now passes HIL. Ten
   consecutive 15 s Enhanced boot sessions each retained the reset-induced
   `0x00` byte plus the exact 62-byte marker, a 62-byte ring high-water mark,
-  zero overflow/loss, and one uninterrupted connection segment.
-- **Next step:** Run the 15 s dense synthetic profile at 460800 baud under
-  normal host load by starting an Enhanced capture and sending the fixture's
-  deterministic `BURST` command. Record total received bytes, maximum ring
-  occupancy, sequence/count/checksum integrity, overflow/loss state, host
-  conditions, and session provenance. Then run the prescribed 100 ms, 250 ms,
-  and 500 ms host-backpressure profiles. Correlate
+  zero overflow/loss, and one uninterrupted connection segment. The 15 s dense
+  synthetic profile is also recorded. Its 43,081-byte deterministic output
+  produced 8,825 retained bytes and 34,256 explicitly dropped bytes across five
+  overflow episodes, which reconcile exactly. The 7,842-byte high-water mark,
+  retained end checksum, `loss_reported` scope, and uninterrupted CDC epoch
+  document the permitted dense-continuous limitation without silent loss.
+- **Next step:** Run the 100 ms host-backpressure profile at 460800 baud using
+  the fixture's deterministic `SUSTAIN` output in a 15 s Enhanced capture.
+  Start from a Pico 2 power cycle so lifetime counters are zero, reset Pico 1's
+  command parser, pause the host service for exactly 100 ms during output, and
+  record received bytes, sequence/count/checksum integrity, maximum ring
+  occupancy, overflow/loss state, host conditions, and session provenance.
+  Then repeat for 250 ms and 500 ms. Correlate
   the unexplained 75 uA debugger-unpowered reading during controlled idle/load
   setup. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -201,7 +207,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; command, initial UART, supported-voltage push-pull, representative open-drain reset, and reset-line UART recovery HIL passed | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The shared CDC callback now services both RX and TX readiness using the Zephyr FIFO APIs and transfers bounded RX bytes to the dedicated command thread. Stable DTR, persistent carrier-ready state, and a one-packet CDC TX FIFO provide deterministic macOS connection and complete multi-packet hello delivery. The build enforces Zephyr 4.4.2 or newer to exclude the affected PL011 error-interrupt implementation while retaining UART error reporting. A reset-induced break/framing regression now has focused adapter coverage: positive line-error flags are cleared without ending the epoch, while negative driver API failures remain fatal. The corrected image is flashed and two consecutive representative boot sessions captured the exact marker without ending the epoch. Portable boundaries have automated host-compiled coverage; the Pico 2 target build, sustained telemetry, clean close, command response, exact 1.8 V, 2.5 V, 3.3 V, and 5.0 V loopback HIL, the four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, and 250 ms through maximum 10,000 ms open-drain reset pulses are reproduced. Duration-aware Enhanced-adapter and CLI timeouts cover the full accepted pulse range without changing the short-command minima. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Static RAM, fixture provenance, and ten-boot HIL profile recorded | The pristine Zephyr 4.4.2/SDK 1.0.1 build uses 78,032 of 532,480 RAM bytes, including 14,144 bytes of configured stacks and no system heap. The flashed Pico 1 candidate emitted its exact build marker in a direct 25 MS/s Saleae capture. Ten consecutive corrected-firmware boot sessions each recorded the exact marker, a 62-byte high-water mark, and zero loss or overflow in one uninterrupted segment. Runtime stack high-water and the dense/backpressure/deliberate-overflow profiles remain open, so the decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | Static RAM, fixture provenance, ten-boot HIL, and dense synthetic profiles recorded | The pristine Zephyr 4.4.2/SDK 1.0.1 build uses 78,032 of 532,480 RAM bytes, including 14,144 bytes of configured stacks and no system heap. Ten consecutive corrected-firmware boot sessions recorded the exact marker, a 62-byte high-water mark, and zero loss or overflow in one uninterrupted segment. The dense profile explicitly reported 34,256 dropped of 43,081 deterministic bytes across five episodes, retained the end checksum, and stayed connected; this is the sizing plan's permitted dense-continuous limitation. Runtime stack high-water and the backpressure/deliberate-overflow profiles remain open, so the decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -414,6 +420,15 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   run received the exact marker, reached a 62-byte ring high-water mark,
   reported zero dropped bytes and zero overflow events, and completed in one
   uninterrupted segment. The ten-consecutive-boot acceptance criterion passes.
+- Dense profile session `20260913T174455Z-b94d2252` ran a synchronized 15 s
+  capture with `BURST` sent 0.5 s after capture start under normal host load.
+  The fixture emitted 43,081 deterministic bytes; 8,825 were retained and five
+  explicit overflow episodes reported 34,256 dropped bytes, reconciling the
+  output exactly. Final high-water was 7,842 bytes, the final
+  `count=2048 checksum=2096128` marker survived, loss scope was
+  `debug_helper_rx_buffer`, and the one-segment session had no interruption,
+  truncation, CDC failure, or false `first_error`. Diagnostic setup sessions
+  and their exclusion reasons are recorded in the ring-buffer validation file.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
@@ -1102,6 +1117,8 @@ schema and exposes the required identity/capabilities.
     synchronized normal-boot capture through the Debug Helper.
   - [x] Complete ten consecutive representative 460800-baud boot captures with
     the exact marker, zero loss/overflow, and no interrupted segment.
+  - [x] Run and record the 15 s dense synthetic profile with exact byte/loss
+    reconciliation and an uninterrupted Enhanced epoch.
 - [ ] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
   `revised_with_evidence`; do not waive failed criteria.
 

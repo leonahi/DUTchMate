@@ -7,9 +7,10 @@
 ## Decision State
 
 The selected implementation baseline is 32 KiB. The reproducible Zephyr static
-RAM report is recorded below. Runtime stack high-water margins and Revision A
-hardware-in-the-loop load results have not been recorded yet. Phase 1B is not
-accepted while this document remains `selected_unvalidated`.
+RAM report, ten-boot profile, and dense synthetic profile are recorded below.
+Runtime stack high-water margins, host-backpressure profiles, and deliberate
+overflow acceptance remain open. Phase 1B is not accepted while this document
+remains `selected_unvalidated`.
 
 This record must finish in exactly one state:
 
@@ -22,17 +23,17 @@ This record must finish in exactly one state:
 
 | Field | Result |
 |---|---|
-| Date/time | 2026-09-11, Europe/Paris |
-| Operator | Not run |
+| Date/time | 2026-09-11 through 2026-09-13, Europe/Paris |
+| Operator | User-assisted DUTchMate HIL session |
 | Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
-| Debug Helper board revision | User-confirmed fully assembled Revision A translator prototype; not connected for this build-only step |
-| DUT/fixture | None for static Debug Helper build; 460800-baud Pico 1 HIL candidate prepared below |
+| Debug Helper board revision | User-confirmed fully assembled Revision A translator prototype |
+| DUT/fixture | Raspberry Pi Pico 1 running the opt-in 460800-baud Zephyr fixture recorded below |
 | Host OS | macOS 26.2, build 25C56 |
 | Zephyr version | 4.4.2 with SDK 1.0.1 |
 | Zephyr board target | `rpi_pico2/rp2350a/m33` |
-| Application commit | `3e149a530bfa6fd2b29682874f2942d619d7a30c` |
-| Build ID/configuration | `development`; pristine `prj.conf` build; firmware source last changed by `8bf0a03783c31232095dc00a14b783889f6efa57` |
-| Related DUTchMate session IDs | None for static build |
+| Application commit | `c3d1df4b2a33fdba55d25ed6fc254c423c1b9ad1` |
+| Build ID/configuration | `development`; pristine `prj.conf` build with recoverable positive UART line errors |
+| Related DUTchMate session IDs | Listed with each HIL profile below |
 
 ## Firmware RAM Report
 
@@ -55,8 +56,8 @@ The pristine build used Zephyr tag `v4.4.2`, SDK 1.0.1, west 1.3.0, and the
 required CMSIS 6 and Raspberry Pi Pico HAL modules. It completed with 52,012
 bytes of flash and 78,032 bytes of RAM. The generated UF2 is 104,448 bytes and
 has SHA-256
-`c98fe7b19bb86ae7452b9d0aa4a24523e28137882ed92df588971a13e824b2bc`,
-matching the digest of the file previously reported as flashed. The Pico image
+`94a633420025ed1564b8066ca48adb1dc5b619df7c17d754ec84939a81f86bc8`,
+matching the corrected file reported as flashed on 2026-09-12. The Pico image
 was not read back, so this match does not independently prove its contents. The
 ignored build tree retains the exact evidence at:
 
@@ -64,7 +65,7 @@ ignored build tree retains the exact evidence at:
 - `build/dutchmate-rp2350-debug-helper/zephyr/.config`, SHA-256
   `c59e0ce8c51304d00c4bb52cf6da76954cecdbc0ec8bdf72bad22305bc6c3ba0`;
 - `build/dutchmate-rp2350-debug-helper/zephyr/zephyr.elf`, SHA-256
-  `5a3ae5b4170d35010e30b59b1a9af8134a44f786845f5f03ef0210058ee36d91`;
+  `a20f8097f8b416a3dfd8f32937eed0b2e6d61d191e5bfcff0d28ec09ed4f033e`;
 - `build/dutchmate-rp2350-debug-helper/zephyr/zephyr.map`; and
 - `build/dutchmate-rp2350-debug-helper/ram.json`, SHA-256
   `1af223f9c4530bd589c83267dd6a2eecb1271b94539f592572740a7a78a52943`.
@@ -147,14 +148,43 @@ validation host.
 
 ## Load Results
 
-| Profile | Runs | UART baud | Duration/stall | Max occupancy | Overflow events | Dropped bytes | Result |
-|---|---:|---:|---|---:|---:|---:|---|
-| Representative normal boot | 10 | 460800 | 15 s each; 100 ms reset | 62 bytes | 0 | 0 | Pass; exact marker in all sessions, no interrupted segments |
-| Dense synthetic burst | 0 | 460800 | 15 s | Not run | Not run | Not run | Not run |
-| Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run |
-| Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run |
-| Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run |
-| Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run |
+| Profile | Runs | UART baud | Duration/stall | Received bytes | Max occupancy | Overflow events | Dropped bytes | Result |
+|---|---:|---:|---|---:|---:|---:|---:|---|
+| Representative normal boot | 10 | 460800 | 15 s each; 100 ms reset | 63 each | 62 bytes | 0 | 0 | Pass; reset byte plus exact marker in all sessions, no interrupted segments |
+| Dense synthetic burst | 1 | 460800 | 15 s | 8,825 | 7,842 bytes | 5 | 34,256 | Expected dense-continuous limitation; exact byte accounting and explicit loss telemetry |
+| Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
+| Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
+| Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
+| Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run | Not run |
+
+### Dense Synthetic Burst
+
+Session `20260913T174455Z-b94d2252` is the accepted dense-profile run. The
+validation host was under normal, unmodified load; immediately before the
+series, macOS load averages were 2.81, 2.66, and 2.64. A synchronized local API
+call started the 15 s capture and sent `BURST` 0.5 s later. The fixture's exact
+output is 43,081 bytes. The session retained 8,825 bytes and reported 34,256
+dropped bytes across five overflow episodes; those values sum exactly to the
+fixture output. Final telemetry reported a 7,842-byte high-water mark and an
+empty ring.
+
+The retained output includes `BURST BEGIN count=2048`, 376 complete numbered
+lines in ranges 0-6, 1583, and 1680-2047, and the final
+`BURST END count=2048 checksum=2096128`. Missing and fragmented sequence lines
+are therefore explicit and consistent with `loss_reported`, not silent loss.
+The session completed in one segment without interruption, truncation, or a
+CDC failure; `first_error` correctly remained null because the burst contains
+no failure-pattern line. Raw evidence remains at
+`.dutchmate/sessions/20260913T174455Z-b94d2252/` on the validation host.
+
+Three setup sessions are excluded from the profile result. In
+`20260913T173438Z-37fb80c9`, process-launch delay placed the command near the
+capture end and left pending ring data outside the session. Session
+`20260913T173739Z-f90a9a7f` inherited cumulative lifetime counters because a
+DTR-only epoch restart does not reset firmware telemetry. After the required
+Pico 2 power cycle, `20260913T174342Z-ebdcfa44` received the fixture's exact
+`E_COMMAND_001` response because Pico 1's parser had not been reset after the
+asymmetric-power interval. A clean Pico 1 reset preceded the accepted run.
 
 ## Acceptance Checklist
 
