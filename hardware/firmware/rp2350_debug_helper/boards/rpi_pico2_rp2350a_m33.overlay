@@ -31,6 +31,6 @@
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
 		label = "DUTchMate Debug Helper";
-		tx-fifo-size = <64>;
+		tx-fifo-size = <2048>;
 	};
 };

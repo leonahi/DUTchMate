@@ -8,9 +8,12 @@
 
 The selected implementation baseline is 32 KiB. The reproducible Zephyr static
 RAM report and ten-boot profile are recorded below. Initial dense and sustained
-profiles exposed a USB writer pacing defect; the corrected candidate is
-target-built but not yet flashed. Runtime stack high-water margins and final
-dense, host-backpressure, and deliberate-overflow acceptance remain open.
+profiles exposed USB writer pacing defects. The first corrected candidate
+improved retained data but still overflowed because its one-packet CDC TX FIFO
+serialized typical evidence frames across multiple USB completions. A second
+candidate with frame-sized CDC staging is target-built but not yet flashed.
+Runtime stack high-water margins and final dense, host-backpressure, and
+deliberate-overflow acceptance remain open.
 Phase 1B is not accepted while this document remains `selected_unvalidated`.
 
 This record must finish in exactly one state:
@@ -32,7 +35,7 @@ This record must finish in exactly one state:
 | Host OS | macOS 26.2, build 25C56 |
 | Zephyr version | 4.4.2 with SDK 1.0.1 |
 | Zephyr board target | `rpi_pico2/rp2350a/m33` |
-| Application commit | `58e0433d9f9c6688d2547535b3a54a668ca8d164` |
+| Application commit | Working-tree second throughput candidate based on `58e0433d9f9c6688d2547535b3a54a668ca8d164` |
 | Build ID/configuration | `development`; pristine `prj.conf` build with recoverable positive UART line errors |
 | Related DUTchMate session IDs | Listed with each HIL profile below |
 
@@ -40,12 +43,12 @@ This record must finish in exactly one state:
 
 | Measurement | Result |
 |---|---|
-| Static image RAM | 78,032 of 532,480 bytes (14.65%); linker total including alignment/padding |
+| Static image RAM | 80,016 of 532,480 bytes (15.03%); linker total including alignment/padding for the second throughput candidate |
 | UART RX ring buffer | 32,768 raw bytes; 45,136-byte complete ring object including 512 timestamp descriptors and accounting state |
-| USB/protocol buffers | Major named static allocations: CDC TX state 1,584 bytes; command ingress 2,056; command queues 3,088; UART TX state 1,072; evidence frame 1,536; UART staging 1,024; CDC RX/TX rings 1,024/64; UDC endpoint heap 1,024 |
+| USB/protocol buffers | Major named static allocations: CDC TX state 1,584 bytes; command ingress 2,056; command queues 3,088; UART TX state 1,072; evidence frame 1,536; UART staging 1,024; CDC RX/TX rings 1,024/2,048; UDC endpoint heap 1,024 |
 | Thread stacks/heaps | 14,144 statically allocated stack bytes; system heap `CONFIG_HEAP_MEM_POOL_SIZE=0` |
 | Measured stack high-water margins | Not run |
-| Remaining RAM margin | 454,448 bytes (443.8 KiB, 85.35%) after the linked static image |
+| Remaining RAM margin | 452,464 bytes (441.9 KiB, 84.97%) after the linked static image |
 
 The 14,144 stack bytes comprise the 4,096-byte CDC RX thread, 3,072-byte command
 thread, 2,048-byte main stack, 2,048-byte interrupt stack, 1,024-byte system
@@ -154,6 +157,7 @@ validation host.
 | Representative normal boot | 10 | 460800 | 15 s each; 100 ms reset | 63 each | 62 bytes | 0 | 0 | Pass; reset byte plus exact marker in all sessions, no interrupted segments |
 | Dense synthetic burst, pre-fix baseline | 1 | 460800 | 15 s | 8,825 | 7,842 bytes | 5 | 34,256 | Exact accounting, but superseded by the pacing defect; rerun required |
 | Sustained stream, pre-fix no-stall control | 1 | 460800 | 15 s | 13,188 | 5,405 bytes | 17 | 81,111 | Failed before artificial backpressure; blocked the stall profiles |
+| Sustained stream, bounded-drain candidate | 1 | 460800 | 15 s | 52,541 | 4,019 bytes | 22 | 41,758 | Failed before artificial backpressure; improvement exposed the one-packet CDC TX FIFO bottleneck |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
@@ -217,6 +221,31 @@ The 104,448-byte candidate UF2 SHA-256 is
 its ELF SHA-256 is
 `f955cca2a3cf026facc17c81b8fa9fd51353c009404630be90d89764af2b8716`.
 It has not yet been flashed or verified on hardware.
+
+That candidate was flashed on 2026-09-13 and first passed a parser-reset boot
+capture. Session `20260913T180846Z-6de3ee06` retained the expected reset-induced
+`0x00` byte plus the exact 62-byte marker, with a 62-byte high-water mark, zero
+loss/overflow, and one uninterrupted segment. No-stall session
+`20260913T180919Z-df367ab0` then retained 52,541 bytes and explicitly reported
+41,758 dropped bytes across 22 overflow episodes; the values again reconcile
+the fixture's exact 94,299-byte output. The session remained one uninterrupted
+segment with no first error, but only 422 complete sequence records survived.
+Its byte-ring high-water was just 4,019 bytes.
+
+The improvement confirms that removing the unconditional 10 ms descriptor
+delay was necessary, but the low byte occupancy shows descriptor retirement is
+still limiting throughput. The Zephyr CDC node used a 64-byte TX FIFO, exactly
+one full-speed USB packet. Typical callback-timestamped evidence frames exceed
+64 bytes, so each frame was serialized across multiple USB transfer
+completions instead of adjacent frames being packet-packed. A focused
+configuration regression now requires the CDC TX FIFO to hold the maximum
+1,536-byte evidence frame. The second candidate uses a 2,048-byte FIFO. All 97
+Debug Helper host tests pass, and a pristine Zephyr 4.4.2/SDK 1.0.1 target
+build uses 52,100 bytes flash and 80,016 bytes RAM. Its 104,448-byte UF2 SHA-256
+is `a1a3459994b29686b772fbc01f2ee2ecfbd0eb943d1e7e8353fd70077b488ae5`;
+its ELF SHA-256 is
+`784c2fac32b3f851fed0186928bddf3d4cefeef83b7cac1ce71b8da505ca1cff`.
+This second candidate has not yet been flashed or verified on hardware.
 
 ## Acceptance Checklist
 

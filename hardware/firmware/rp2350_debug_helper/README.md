@@ -86,9 +86,10 @@ states, and exposes its initial USB CDC identity:
   1,536-byte staging buffer, advances only by exact driver FIFO acceptance,
   and acknowledges responses or evidence only after the full frame is
   accepted;
-- the CDC driver's TX FIFO is one 64-byte full-speed USB packet, keeping TX
-  interrupt ownership active across multi-packet frames instead of accepting a
-  complete frame before its packet chain can advance;
+- the CDC driver's 2,048-byte TX FIFO holds the largest 1,536-byte encoded
+  evidence frame and lets adjacent frames pack into continuous 64-byte
+  full-speed USB transfers instead of forcing a completion at every frame's
+  first packet boundary;
 - the Zephyr CDC callback performs FIFO writes while the main USB TX owner
   starts, polls, and cancels frames; zero, negative, or over-reported progress
   and 250 ms without progress end the epoch, while DTR loss discards staged
