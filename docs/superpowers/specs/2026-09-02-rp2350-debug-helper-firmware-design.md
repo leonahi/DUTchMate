@@ -150,6 +150,12 @@ truncate retained bytes merely to fit a frame. Periodic status records may
 coalesce to the newest untransmitted snapshot; UART data and overflow records
 do not silently coalesce or reorder.
 
+The sole USB writer drains immediately ready outputs in bounded batches. A
+full batch returns directly to connection-state checking and another batch;
+the 10 ms idle poll delay applies only after the writer catches up. Each frame
+still performs DTR and complete-write checks while it advances, and the batch
+bound prevents output backlog from indefinitely delaying other epoch work.
+
 ## Safe-State Lifecycle
 
 Revision A hardware pull-downs hold UART and EVENT translator enables inactive

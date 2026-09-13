@@ -7,10 +7,11 @@
 ## Decision State
 
 The selected implementation baseline is 32 KiB. The reproducible Zephyr static
-RAM report, ten-boot profile, and dense synthetic profile are recorded below.
-Runtime stack high-water margins, host-backpressure profiles, and deliberate
-overflow acceptance remain open. Phase 1B is not accepted while this document
-remains `selected_unvalidated`.
+RAM report and ten-boot profile are recorded below. Initial dense and sustained
+profiles exposed a USB writer pacing defect; the corrected candidate is
+target-built but not yet flashed. Runtime stack high-water margins and final
+dense, host-backpressure, and deliberate-overflow acceptance remain open.
+Phase 1B is not accepted while this document remains `selected_unvalidated`.
 
 This record must finish in exactly one state:
 
@@ -151,7 +152,8 @@ validation host.
 | Profile | Runs | UART baud | Duration/stall | Received bytes | Max occupancy | Overflow events | Dropped bytes | Result |
 |---|---:|---:|---|---:|---:|---:|---:|---|
 | Representative normal boot | 10 | 460800 | 15 s each; 100 ms reset | 63 each | 62 bytes | 0 | 0 | Pass; reset byte plus exact marker in all sessions, no interrupted segments |
-| Dense synthetic burst | 1 | 460800 | 15 s | 8,825 | 7,842 bytes | 5 | 34,256 | Expected dense-continuous limitation; exact byte accounting and explicit loss telemetry |
+| Dense synthetic burst, pre-fix baseline | 1 | 460800 | 15 s | 8,825 | 7,842 bytes | 5 | 34,256 | Exact accounting, but superseded by the pacing defect; rerun required |
+| Sustained stream, pre-fix no-stall control | 1 | 460800 | 15 s | 13,188 | 5,405 bytes | 17 | 81,111 | Failed before artificial backpressure; blocked the stall profiles |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
@@ -159,7 +161,7 @@ validation host.
 
 ### Dense Synthetic Burst
 
-Session `20260913T174455Z-b94d2252` is the accepted dense-profile run. The
+Session `20260913T174455Z-b94d2252` is the initial dense-profile baseline. The
 validation host was under normal, unmodified load; immediately before the
 series, macOS load averages were 2.81, 2.66, and 2.64. A synchronized local API
 call started the 15 s capture and sent `BURST` 0.5 s later. The fixture's exact
@@ -177,6 +179,10 @@ CDC failure; `first_error` correctly remained null because the burst contains
 no failure-pattern line. Raw evidence remains at
 `.dutchmate/sessions/20260913T174455Z-b94d2252/` on the validation host.
 
+The later no-stall sustained control below proved that this loss was not yet an
+acceptable dense-only limitation. The dense profile must be repeated with the
+corrected writer before its final result can be classified.
+
 Three setup sessions are excluded from the profile result. In
 `20260913T173438Z-37fb80c9`, process-launch delay placed the command near the
 capture end and left pending ring data outside the session. Session
@@ -184,7 +190,33 @@ capture end and left pending ring data outside the session. Session
 DTR-only epoch restart does not reset firmware telemetry. After the required
 Pico 2 power cycle, `20260913T174342Z-ebdcfa44` received the fixture's exact
 `E_COMMAND_001` response because Pico 1's parser had not been reset after the
-asymmetric-power interval. A clean Pico 1 reset preceded the accepted run.
+asymmetric-power interval. A clean Pico 1 reset preceded the recorded dense
+baseline.
+
+### No-Stall Sustained Control And Throughput Candidate
+
+Before injecting host backpressure, session `20260913T175222Z-b278daf8` sent
+`SUSTAIN` 0.5 s into a 15 s capture with no intentional host stall. Its exact
+94,299-byte output ran for approximately 8.2 s. Only 13,188 bytes were retained
+while 17 explicit overflow episodes reported 81,111 dropped bytes; the sum
+reconciles exactly. The end marker and checksum survived, the session remained
+one uninterrupted segment, and the final high-water mark was only 5,405 bytes.
+Because the control overflowed without injected backpressure, the 100 ms,
+250 ms, and 500 ms profiles were not run.
+
+The periodic approximately 0.5 s overflow episodes and low byte occupancy led
+to the 512-descriptor boundary. Source tracing then found that the USB loop
+drained one timestamp descriptor and unconditionally slept 10 ms, limiting it
+to roughly 100 descriptors/s while `SUSTAIN` produces about 500 lines/s. A
+focused host-compiled regression now requires bounded batches to drain until
+idle, continue immediately after a full batch, and preserve fatal error
+propagation. All 96 Debug Helper host tests pass. A pristine Zephyr 4.4.2/SDK
+1.0.1 target build uses 52,100 bytes flash and the unchanged 78,032 bytes RAM.
+The 104,448-byte candidate UF2 SHA-256 is
+`7ac75259f7e11d4ae8b17da2fb49864994b4da6cca524d5e2881bdc3dd975814`;
+its ELF SHA-256 is
+`f955cca2a3cf026facc17c81b8fa9fd51353c009404630be90d89764af2b8716`.
+It has not yet been flashed or verified on hardware.
 
 ## Acceptance Checklist
 

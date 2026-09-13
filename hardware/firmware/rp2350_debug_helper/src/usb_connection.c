@@ -5,6 +5,7 @@
 #include "command_response.h"
 #include "connection_epoch.h"
 #include "hello.h"
+#include "output_drain.h"
 #include "platform_io.h"
 #include "telemetry.h"
 #include "uart_event.h"
@@ -26,6 +27,7 @@
 #define DUTCHMATE_DEVELOPMENT_PID 0x000A
 #define CDC_TX_POLL_INTERVAL K_MSEC(1)
 #define DTR_POLL_INTERVAL K_MSEC(10)
+#define OUTPUT_DRAIN_BATCH_BUDGET 32U
 
 BUILD_ASSERT(sizeof(CONFIG_DUTCHMATE_FIRMWARE_VERSION) > 1U);
 BUILD_ASSERT(sizeof(CONFIG_DUTCHMATE_FIRMWARE_VERSION) <= 65U);
@@ -172,7 +174,7 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 	if (kind == DMH_UART_RX_OBSERVATION_NONE) {
 		dmh_telemetry_schedule_status_sent(schedule);
 	}
-	return 0;
+	return 1;
 }
 
 static int drain_one_output(struct dmh_telemetry_schedule *schedule)
@@ -189,9 +191,14 @@ static int drain_one_output(struct dmh_telemetry_schedule *schedule)
 			return result;
 		}
 		dutchmate_command_runtime_response_sent();
-		return 0;
+		return 1;
 	}
 	return drain_one_evidence(schedule);
+}
+
+static int drain_one_output_adapter(void *context)
+{
+	return drain_one_output(context);
 }
 
 static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
@@ -212,6 +219,7 @@ int dutchmate_usb_connection_run(void)
 {
 	struct dmh_connection_epoch epoch;
 	struct dmh_telemetry_schedule telemetry_schedule;
+	struct dmh_output_drain_result drain_result;
 	char hello_frame[DMH_HELLO_FRAME_CAPACITY];
 	size_t hello_length;
 	int result;
@@ -300,7 +308,12 @@ int dutchmate_usb_connection_run(void)
 		}
 		if (epoch.active) {
 			stage_status_if_due(&telemetry_schedule);
-			result = drain_one_output(&telemetry_schedule);
+			result = dmh_output_drain_batch(
+				drain_one_output_adapter,
+				&telemetry_schedule,
+				OUTPUT_DRAIN_BATCH_BUDGET,
+				&drain_result
+			);
 			if (result == -ENOTCONN) {
 				(void)dmh_connection_epoch_update(
 					&epoch,
@@ -316,6 +329,9 @@ int dutchmate_usb_connection_run(void)
 			if (result != 0) {
 				(void)end_active_epoch(&telemetry_schedule);
 				return result;
+			}
+			if (!drain_result.idle) {
+				continue;
 			}
 		}
 		k_sleep(DTR_POLL_INTERVAL);

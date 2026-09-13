@@ -31,6 +31,7 @@ target_sources(app PRIVATE
     src/hello.c
     src/main.c
     src/ndjson_framer.c
+    src/output_drain.c
     src/platform_io.c
     src/telemetry.c
     src/uart_event.c

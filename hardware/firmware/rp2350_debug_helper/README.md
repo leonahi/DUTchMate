@@ -36,6 +36,9 @@ states, and exposes its initial USB CDC identity:
 - the sole CDC writer drains at most 1,024 raw bytes per v1 `uart` event,
   preserves each callback timestamp, and emits exact compact JSON with base64
   payloads;
+- the writer drains up to 32 immediately ready outputs per bounded batch and
+  skips its 10 ms idle backoff while a full batch shows that output remains;
+  DTR is still checked while every frame advances and again between batches;
 - internal 64-bit observation sequences keep retained UART chunks and overflow
   episodes ordered without changing the v1 wire format.
 - each closed overflow episode emits one exact v1 `buffer_overflow` record
@@ -95,8 +98,9 @@ states, and exposes its initial USB CDC identity:
   responses.
 
 The command path now consumes live CDC input and shares the sole output owner
-with evidence. Complete CDC-driver acceptance and mid-frame failure semantics
-are target-build verified. On the Pico 2, macOS accepted two consecutive DTR
+with evidence. Complete CDC-driver acceptance, mid-frame failure semantics, and
+bounded output-drain pacing are target-build verified. On the Pico 2, macOS
+accepted two consecutive DTR
 epochs and received the complete 175-byte `hello` in 98 ms and 104 ms; the real
 CLI then started and reported the Enhanced backend connected. Remaining UART,
 electrical, load, and active-workflow reconnect behavior still requires HIL, so
@@ -180,7 +184,7 @@ and exercises these boundaries without Zephyr or a connected board:
 | NDJSON framing, command validation, and bounded ingress | `test_ndjson_framer.py`, `test_command_decode.py`, `test_command_ingress.py` |
 | RX adapter line-error recovery, ring ordering, loss accounting, and telemetry scheduling | `test_uart_rx_adapter.py`, `test_uart_rx_ring.py`, `test_telemetry.py` |
 | CTRL transitions, pulses, command execution, and UART TX state | `test_control_state.py`, `test_command_executor.py`, `test_uart_tx_state.py` |
-| Connection epochs and complete CDC frame acceptance | `test_connection_epoch.py`, `test_cdc_tx_state.py` |
+| Connection epochs, bounded output draining, and complete CDC frame acceptance | `test_connection_epoch.py`, `test_output_drain.py`, `test_cdc_tx_state.py` |
 
 The target build verifies Zephyr adapter integration, compile-time devicetree
 mapping checks, and static allocation. Focused Pico 2 HIL verifies USB startup,
