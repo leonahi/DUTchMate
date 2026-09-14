@@ -15,7 +15,8 @@ candidate's frame-sized CDC staging eliminated firmware loss, but its first HIL
 run exposed a separate host persistence ceiling: the firmware ring remained
 nearly empty while the finite workflow persisted only 67,336 of 94,299 bytes.
 The host now batches up to 64 UART events per crash-recoverable transaction;
-repeat HIL remains pending. Runtime stack high-water margins and final dense,
+repeat HIL retained the exact 94,299-byte stream with zero loss/overflow and a
+131-byte high-water mark. Runtime stack high-water margins and final dense,
 host-backpressure, and deliberate-overflow acceptance remain open.
 Phase 1B is not accepted while this document remains `selected_unvalidated`.
 
@@ -162,6 +163,7 @@ validation host.
 | Sustained stream, pre-fix no-stall control | 1 | 460800 | 15 s | 13,188 | 5,405 bytes | 17 | 81,111 | Failed before artificial backpressure; blocked the stall profiles |
 | Sustained stream, bounded-drain candidate | 1 | 460800 | 15 s | 52,541 | 4,019 bytes | 22 | 41,758 | Failed before artificial backpressure; improvement exposed the one-packet CDC TX FIFO bottleneck |
 | Sustained stream, frame-sized FIFO before host batching | 1 | 460800 | 15 s | 67,336 | 160 bytes | 0 | 0 | Firmware path was lossless; finite host workflow persisted only 2,925 of 4,096 sequence lines before its deadline |
+| Sustained stream, frame-sized FIFO with host batching | 1 | 460800 | 15 s | 94,299 | 131 bytes | 0 | 0 | Pass; exact BEGIN, all 4,096 sequence lines, END checksum 8,386,560, and one uninterrupted segment |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
@@ -273,8 +275,21 @@ timestamps, ordering, pattern evidence, metadata, and rollback. Wait-pattern
 capture remains single-event. If a complete batch does not fit the evidence
 quota, the recorder falls back to ordered single-event admission so the exact
 accepted prefix and truncation record remain unchanged. Ruff, mypy, all 1,286
-tests, and the whitespace gate pass. A repeat of this same no-stall HIL profile
-is the next gate.
+tests, and the whitespace gate pass.
+
+The repeat no-stall session `20260914T205443Z-f931321d` passes the gate. It
+retained exactly 94,299 bytes and 4,098 lines: the exact BEGIN record, all 4,096
+ordered `seq=0000` through `seq=4095` records, and
+`DMF/1 SUSTAIN END count=4096 checksum=8386560`. The raw SHA-256 is
+`efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`.
+The session completed after 15 s with one uninterrupted segment, no truncation,
+no first error, complete line processing, zero buffer-overflow records, and
+`none_reported` integrity with zero dropped bytes. Fifteen buffer-status records
+reported a maximum and final UART-ring high-water mark of 131 bytes and final
+occupancy of zero. The session stored 11,987 individually timestamped UART
+events, confirming that evidence batching changes filesystem transaction
+granularity without coalescing the normalized event schema. The 100 ms
+host-backpressure profile is now the next gate.
 
 ## Acceptance Checklist
 
