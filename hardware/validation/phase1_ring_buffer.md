@@ -167,7 +167,7 @@ validation host.
 | Host backpressure | 1 | 460800 | 104.328 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Host backpressure | 1 | 460800 | 250.255 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Host backpressure | 1 | 460800 | 505.137 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
-| Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run | Not run |
+| Deliberate overflow, corrected dense `BURST` | 1 | 460800 | 15 s capture | 15,691 | 5,212 bytes | 8 | 27,390 | Pass; retained plus dropped equals exact 43,081-byte output, END marker survived |
 
 ### Dense Synthetic Burst
 
@@ -329,6 +329,28 @@ Immediately afterward, macOS load averages were 4.91, 4.09, and 3.74. This
 passes the 500 ms profile without allocation failure, stack-overflow symptom,
 watchdog reset, USB CDC failure, or session interruption.
 
+### Corrected Dense Burst And Deliberate Overflow
+
+After resetting the fixture parser, session `20260914T210453Z-104d1c17` sent
+the existing maximum-speed `BURST` command 0.5 s into a 15 s capture. The
+corrected stack retained 15,691 bytes while eight ordered overflow records
+reported 27,390 dropped bytes. Their exact sum is the fixture's deterministic
+43,081-byte output. Maximum ring occupancy was 5,212 bytes and final occupancy
+was zero. Immediately afterward, macOS load averages were 2.22, 3.40, and 3.53.
+
+The retained evidence includes the exact BEGIN record, sequences 0000 onward,
+the final sequences 2045 through 2047, and
+`DMF/1 BURST END count=2048 checksum=2096128`. This proves capture continued
+after reported loss. Metadata records `loss_reported`, scope
+`debug_helper_rx_buffer`, and 27,390 dropped bytes while independently retaining
+`completed`, one uninterrupted segment, no truncation, and complete line
+processing. The public session view also displays `Integrity: loss_reported`
+alongside `First error: none`, rather than hiding the receive loss behind the
+completed lifecycle state. Pico2 remained connected with all capabilities
+afterward; there was no observed allocation failure, stack-overflow symptom,
+watchdog reset, USB CDC failure, or session interruption. This corrected run
+supersedes the pre-fix dense baseline and passes the deliberate-overflow gates.
+
 ## Acceptance Checklist
 
 - [x] Ten consecutive representative normal boots produced zero overflow
@@ -336,11 +358,11 @@ watchdog reset, USB CDC failure, or session interruption.
 - [x] The 460800-baud Pico 1 fixture emitted its exact build marker in a direct
   Saleae capture, with the raw transition export retained above.
 - [x] The 250 ms backpressure test produced zero overflow events.
-- [ ] Deliberate stress produced explicit overflow telemetry with consistent
+- [x] Deliberate stress produced explicit overflow telemetry with consistent
   dropped-byte and high-water accounting.
-- [ ] Sessions exposed `loss_reported` and
+- [x] Sessions exposed `loss_reported` and
   `debug_helper_rx_buffer` when overflow occurred.
-- [ ] No test silently discarded overflow telemetry or represented the receive
+- [x] No test silently discarded overflow telemetry or represented the receive
   path as globally lossless.
 - [ ] Zephyr RAM and stack measurements retained adequate margin for the fixed
   buffers and worst-case protocol encoding.

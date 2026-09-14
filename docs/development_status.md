@@ -177,11 +177,15 @@ Read this document first whenever development resumes.
   identical exact evidence, zero loss/overflow, and 160-byte high-water. A
   measured 505.137 ms pause also retained the identical exact stream with zero
   loss/overflow, 160-byte high-water, and no allocation, stack, watchdog, USB,
-  or session failure.
-- **Next step:** Define and run a reproducible deliberate-overflow profile using
-  the existing Pico 1 fixture. Require explicit overflow telemetry, consistent
-  dropped-byte accounting and `loss_reported` integrity, continued post-loss
-  capture, and no allocation, watchdog, USB, or session-lifecycle failure.
+  or session failure. A corrected dense `BURST` then deliberately overflowed:
+  15,691 retained plus 27,390 explicitly dropped bytes exactly reconcile its
+  43,081-byte output, the END marker survived, and the session remained
+  connected and uninterrupted with visible `loss_reported` integrity.
+- **Next step:** Measure runtime stack high-water margins under the accepted
+  boot, 500 ms backpressure, and deliberate-overflow profiles. Preserve the
+  reproducible static RAM/build evidence and require adequate margin with no
+  allocation, watchdog, USB, or lifecycle failure before selecting the final
+  `accepted_32k` decision.
   Correlate
   the unexplained 75 uA debugger-unpowered reading during controlled idle/load
   setup. EVENT pins remain reserved; do not add event capture.
@@ -231,7 +235,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Ten-boot, no-stall, and 100/250/500 ms backpressure profiles passed; deliberate overflow is next | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial dense and no-stall sustained profiles produced exact explicit-loss accounting. The bounded-drain candidate improved retained data but exposed one-packet CDC serialization. The frame-sized-FIFO candidate eliminated firmware loss but exposed host per-event persistence lag. With host batching, no-stall session `20260914T205443Z-f931321d` retained the exact 94,299-byte stream with zero loss/overflow and 131 bytes of high-water. Measured 104.328, 250.255, and 505.137 ms pauses retained that identical exact stream with zero loss/overflow, one uninterrupted segment, and 160 bytes of high-water. The formal 250 ms criterion and required 500 ms reliability profile pass. Deliberate overflow, runtime stack high-water, and final dense-load evidence remain open, so the decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | All functional/load profiles passed; runtime stack high-water is next | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial throughput failures isolated and corrected firmware descriptor pacing, CDC staging, and host persistence bottlenecks. With host batching, no-stall session `20260914T205443Z-f931321d` retained the exact 94,299-byte stream with zero loss/overflow and 131 bytes of high-water. Measured 104.328, 250.255, and 505.137 ms pauses retained that identical exact stream with zero loss/overflow, one uninterrupted segment, and 160 bytes of high-water. Corrected dense session `20260914T210453Z-104d1c17` retained 15,691 plus 27,390 explicitly dropped bytes, exactly reconciling the 43,081-byte fixture output; it preserved the END marker, visible `loss_reported` integrity, and a healthy connection. Runtime stack high-water remains open, so the decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -517,6 +521,14 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   allocation, stack-overflow, watchdog, USB CDC, or session-lifecycle failure
   was observed. All required backpressure durations now pass; deliberate
   overflow is next.
+- Corrected dense session `20260914T210453Z-104d1c17` deliberately overflowed
+  without a host pause. It retained 15,691 bytes and reported 27,390 dropped
+  bytes across eight overflow records; the exact sum is the fixture's 43,081
+  bytes. The END checksum survived, proving post-loss capture continued.
+  Metadata and the public session view exposed `loss_reported` with
+  `debug_helper_rx_buffer`, while the session remained one uninterrupted,
+  untruncated segment and Pico2 stayed connected. This passes the corrected
+  dense and deliberate-overflow gates; runtime stack high-water is next.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 
