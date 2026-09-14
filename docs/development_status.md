@@ -173,10 +173,11 @@ Read this document first whenever development resumes.
   lines, the exact checksum, zero overflow/loss, a 131-byte ring high-water
   mark, and one uninterrupted segment. A measured 104.328 ms host pause also
   retained that exact stream with zero loss/overflow and a 160-byte high-water
-  mark.
-- **Next step:** Run the 250 ms host-backpressure `SUSTAIN` profile. Require
+  mark. The formal 250 ms criterion now passes with a measured 250.255 ms pause,
+  identical exact evidence, zero loss/overflow, and 160-byte high-water.
+- **Next step:** Run the 500 ms host-backpressure `SUSTAIN` profile. Require
   exact stream evidence, zero overflow/loss, consistent high-water telemetry,
-  and one uninterrupted segment before progressing to 500 ms.
+  and one uninterrupted segment before progressing to deliberate overflow.
   Correlate
   the unexplained 75 uA debugger-unpowered reading during controlled idle/load
   setup. EVENT pins remain reserved; do not add event capture.
@@ -226,7 +227,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Ten-boot, no-stall, and 100 ms backpressure profiles passed; 250 ms is next | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial dense and no-stall sustained profiles produced exact explicit-loss accounting. The bounded-drain candidate improved retained data but exposed one-packet CDC serialization. The frame-sized-FIFO candidate eliminated firmware loss but exposed host per-event persistence lag. With host batching, no-stall session `20260914T205443Z-f931321d` retained the exact 94,299-byte stream with zero loss/overflow and 131 bytes of high-water. A measured 104.328 ms pause in session `20260914T205746Z-79a5348b` retained the same exact stream with zero loss/overflow, one uninterrupted segment, and 160 bytes of high-water. The 250/500 ms backpressure, runtime stack high-water, and final load profiles remain open, so the decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | Ten-boot, no-stall, and 100/250 ms backpressure profiles passed; 500 ms is next | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial dense and no-stall sustained profiles produced exact explicit-loss accounting. The bounded-drain candidate improved retained data but exposed one-packet CDC serialization. The frame-sized-FIFO candidate eliminated firmware loss but exposed host per-event persistence lag. With host batching, no-stall session `20260914T205443Z-f931321d` retained the exact 94,299-byte stream with zero loss/overflow and 131 bytes of high-water. Measured 104.328 ms and 250.255 ms pauses retained that identical exact stream with zero loss/overflow, one uninterrupted segment, and 160 bytes of high-water. The formal 250 ms criterion passes. The 500 ms backpressure, runtime stack high-water, and final load profiles remain open, so the decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -497,6 +498,13 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   checksum. It reported zero loss/overflow, one uninterrupted segment, no
   truncation or first error, a 160-byte maximum/final ring high-water mark, and
   zero final occupancy. This passes the 100 ms profile; 250 ms is next.
+- The formal 250 ms profile paused the same verified service process for a
+  monotonic measured 250.255 ms. Session `20260914T205958Z-ccfb482c` again
+  retained the identical exact 94,299-byte stream and SHA-256, all sequence
+  lines, and the END checksum. It completed with zero loss/overflow, one
+  uninterrupted segment, no truncation or first error, a 160-byte maximum/final
+  high-water mark, and zero final occupancy. The 250 ms acceptance criterion
+  passes; 500 ms is next.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 

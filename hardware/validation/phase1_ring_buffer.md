@@ -165,7 +165,7 @@ validation host.
 | Sustained stream, frame-sized FIFO before host batching | 1 | 460800 | 15 s | 67,336 | 160 bytes | 0 | 0 | Firmware path was lossless; finite host workflow persisted only 2,925 of 4,096 sequence lines before its deadline |
 | Sustained stream, frame-sized FIFO with host batching | 1 | 460800 | 15 s | 94,299 | 131 bytes | 0 | 0 | Pass; exact BEGIN, all 4,096 sequence lines, END checksum 8,386,560, and one uninterrupted segment |
 | Host backpressure | 1 | 460800 | 104.328 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
-| Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
+| Host backpressure | 1 | 460800 | 250.255 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
 | Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run | Not run |
 
@@ -309,13 +309,23 @@ complete line processing, zero buffer-overflow records, and zero reported
 drops. Fifteen status records reported a maximum/final 160-byte high-water mark
 and zero final occupancy. This passes the 100 ms profile; 250 ms is next.
 
+The 250 ms profile used the same procedure with a monotonic measured 250.255 ms
+service pause. Session `20260914T205958Z-ccfb482c` again retained the exact
+94,299-byte stream, all 4,096 sequence records, and checksum 8,386,560. Its raw
+SHA-256 is identical to the no-stall and 100 ms sessions. It completed with one
+uninterrupted segment, no truncation or first error, complete line processing,
+zero overflow records, and zero reported drops. Fifteen status records reported
+a maximum/final 160-byte high-water mark and zero final occupancy. Immediately
+afterward, macOS load averages were 4.10, 3.80, and 3.61. This passes the formal
+250 ms zero-overflow criterion; 500 ms is next.
+
 ## Acceptance Checklist
 
 - [x] Ten consecutive representative normal boots produced zero overflow
   events.
 - [x] The 460800-baud Pico 1 fixture emitted its exact build marker in a direct
   Saleae capture, with the raw transition export retained above.
-- [ ] The 250 ms backpressure test produced zero overflow events.
+- [x] The 250 ms backpressure test produced zero overflow events.
 - [ ] Deliberate stress produced explicit overflow telemetry with consistent
   dropped-byte and high-water accounting.
 - [ ] Sessions exposed `loss_reported` and
