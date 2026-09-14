@@ -164,7 +164,7 @@ validation host.
 | Sustained stream, bounded-drain candidate | 1 | 460800 | 15 s | 52,541 | 4,019 bytes | 22 | 41,758 | Failed before artificial backpressure; improvement exposed the one-packet CDC TX FIFO bottleneck |
 | Sustained stream, frame-sized FIFO before host batching | 1 | 460800 | 15 s | 67,336 | 160 bytes | 0 | 0 | Firmware path was lossless; finite host workflow persisted only 2,925 of 4,096 sequence lines before its deadline |
 | Sustained stream, frame-sized FIFO with host batching | 1 | 460800 | 15 s | 94,299 | 131 bytes | 0 | 0 | Pass; exact BEGIN, all 4,096 sequence lines, END checksum 8,386,560, and one uninterrupted segment |
-| Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
+| Host backpressure | 1 | 460800 | 104.328 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
 | Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run | Not run |
@@ -290,6 +290,24 @@ occupancy of zero. The session stored 11,987 individually timestamped UART
 events, confirming that evidence batching changes filesystem transaction
 granularity without coalescing the normalized event schema. The 100 ms
 host-backpressure profile is now the next gate.
+
+### Host Backpressure Profiles
+
+For the 100 ms profile, the verified Device Core Service process was sent
+`SIGSTOP` about 1.5 s after the `SUSTAIN` command completed, then `SIGCONT`
+after a monotonic measured 104.328 ms. Pico1 and Pico2 remained powered and
+running throughout, so the pause stalled host serial consumption and propagated
+USB/protocol backpressure without creating a disconnect. Immediately after the
+run, macOS load averages were 4.46, 3.73, and 3.57.
+
+Session `20260914T205746Z-79a5348b` retained exactly 94,299 bytes and 4,098
+lines, including the exact BEGIN record, all 4,096 ordered sequence records,
+and the exact END checksum. Its raw SHA-256 matches the no-stall control:
+`efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`.
+It completed with one uninterrupted segment, no truncation, no first error,
+complete line processing, zero buffer-overflow records, and zero reported
+drops. Fifteen status records reported a maximum/final 160-byte high-water mark
+and zero final occupancy. This passes the 100 ms profile; 250 ms is next.
 
 ## Acceptance Checklist
 
