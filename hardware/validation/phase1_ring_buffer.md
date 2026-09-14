@@ -166,7 +166,7 @@ validation host.
 | Sustained stream, frame-sized FIFO with host batching | 1 | 460800 | 15 s | 94,299 | 131 bytes | 0 | 0 | Pass; exact BEGIN, all 4,096 sequence lines, END checksum 8,386,560, and one uninterrupted segment |
 | Host backpressure | 1 | 460800 | 104.328 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Host backpressure | 1 | 460800 | 250.255 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
-| Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
+| Host backpressure | 1 | 460800 | 505.137 ms measured | 94,299 | 160 bytes | 0 | 0 | Pass; exact stream and checksum, one uninterrupted segment |
 | Deliberate overflow | 0 | 460800 | Not run | Not run | Not run | Not run | Not run | Not run |
 
 ### Dense Synthetic Burst
@@ -318,6 +318,16 @@ zero overflow records, and zero reported drops. Fifteen status records reported
 a maximum/final 160-byte high-water mark and zero final occupancy. Immediately
 afterward, macOS load averages were 4.10, 3.80, and 3.61. This passes the formal
 250 ms zero-overflow criterion; 500 ms is next.
+
+The 500 ms profile measured 505.137 ms using the same procedure. Session
+`20260914T210144Z-282b29e0` retained the same exact 94,299 bytes, 4,098 lines,
+all sequence records, END checksum, and raw SHA-256. It completed with one
+uninterrupted segment, no truncation or first error, complete line processing,
+zero overflow records, and zero reported drops. Fifteen status records again
+reported a maximum/final 160-byte high-water mark and zero final occupancy.
+Immediately afterward, macOS load averages were 4.91, 4.09, and 3.74. This
+passes the 500 ms profile without allocation failure, stack-overflow symptom,
+watchdog reset, USB CDC failure, or session interruption.
 
 ## Acceptance Checklist
 
