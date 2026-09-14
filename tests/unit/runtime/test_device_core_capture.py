@@ -592,7 +592,7 @@ def test_capture_uart_records_persistence_failure_and_clears_active_session(
             detail="simulated storage failure",
         )
 
-    monkeypatch.setattr(store, "append_uart_capture", fail_append)
+    monkeypatch.setattr(store, "append_uart_capture_batch", fail_append)
 
     with pytest.raises(SessionPersistenceError, match="simulated storage failure"):
         runtime.capture_uart(duration_s=0.2)
@@ -637,7 +637,7 @@ def test_capture_uart_does_not_terminalize_when_persistence_state_is_unsafe(
             terminalization_safe=False,
         )
 
-    monkeypatch.setattr(store, "append_uart_capture", fail_append)
+    monkeypatch.setattr(store, "append_uart_capture_batch", fail_append)
 
     with pytest.raises(SessionPersistenceError, match="preimage is unavailable"):
         runtime.capture_uart(duration_s=0.2)

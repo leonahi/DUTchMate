@@ -3,7 +3,16 @@ from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dutchmate_core.backends import BackendEvent, SegmentContext
+from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendEvent,
+    BackendInfo,
+    BackendSnapshot,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+)
 from dutchmate_core.backends.enhanced import EnhancedNdjsonEventStream
 from dutchmate_core.session_store.models import SessionHandle, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
@@ -20,6 +29,40 @@ def fixed_clock() -> datetime:
 
 def fixed_id() -> str:
     return "capture01"
+
+
+def enhanced_snapshot() -> BackendSnapshot:
+    policy = BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+    )
+    return BackendSnapshot(
+        info=BackendInfo(
+            mode="enhanced",
+            port="/dev/ttyACM0",
+            device="dutchmate-rp2350",
+            firmware="0.1.0",
+            capabilities=frozenset({"gpio_control", "uart_receive", "uart_send"}),
+        ),
+        capabilities=frozenset({"gpio_control", "uart_receive"}),
+        capability_policy=policy,
+        segment=SegmentContext(
+            segment_id=0,
+            timestamp=SegmentTimestamp(
+                source="device",
+                clock="rp2350_timer",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=1_000,
+                observation_point="debug_helper_uart_receive",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="none_reported",
+            observation_scope="debug_helper_rx_buffer",
+            dropped_bytes=0,
+        ),
+    )
 
 
 class FakeMonotonicClock:

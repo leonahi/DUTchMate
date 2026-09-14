@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `52b27ab8cbd12fddec767e5f4f0ec0916b6acf04` on 2026-09-13
+> Code baseline reviewed: `b6239259973ed2c83c406109bd26b80d44298d24` on 2026-09-14
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -161,14 +161,19 @@ Read this document first whenever development resumes.
   timestamped frames crossed its one-packet boundary and serialized USB
   completions. A focused configuration regression now requires frame-sized CDC
   staging, and a second candidate uses a 2,048-byte TX FIFO. All 97 Debug Helper
-  host tests and a pristine RP2350 target build pass; the second corrected
-  throughput image awaits HIL.
-- **Next step:** Flash the second RP2350 throughput UF2 recorded in
-  `hardware/validation/phase1_ring_buffer.md`, power-cycle Pico 1 to clear its
-  command parser, and repeat the 15 s no-stall `SUSTAIN` control. Require all
-  94,299 bytes, all 4,096 sequence lines, the exact end checksum, zero
-  overflow/loss, and one uninterrupted segment before attempting the 100 ms,
-  250 ms, and 500 ms host-backpressure profiles. Correlate
+  host tests and a pristine RP2350 target build pass. HIL of that image reported
+  zero firmware loss/overflow and only 160 bytes of ring occupancy, but the
+  15 s host session persisted only 67,336 of 94,299 bytes and 2,925 of 4,096
+  sequence lines. Source timestamps cover only about 6.145 s, isolating the
+  remaining ceiling to the host's per-event durable session transactions.
+  Focused TDD now batches up to 64 consecutive UART events into one existing
+  crash-recoverable transaction while preserving exact records, processing,
+  rollback, and quota-prefix behavior; wait-pattern remains single-event.
+- **Next step:** Power-cycle Pico 1 to clear its command parser and repeat the
+  same 15 s no-stall `SUSTAIN` control with host batching. Require all 94,299
+  bytes, all 4,096 sequence lines, the exact end checksum, zero overflow/loss,
+  and one uninterrupted segment before attempting the 100 ms, 250 ms, and
+  500 ms host-backpressure profiles. Correlate
   the unexplained 75 uA debugger-unpowered reading during controlled idle/load
   setup. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -215,9 +220,9 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Shared control/status contract | Implemented | Typed backend-input categories, bounded frame context, and operation/backend projection are covered without persisting offending input. |
 | Phase 1B Enhanced host adapter | Host implementation complete; startup HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup against the Pico 2 now passes. Full workflow HIL remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
-| RP2350 Debug Helper firmware | Firmware implementation complete; second throughput correction target-built and awaiting HIL | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. HIL showed that correction halved no-stall loss but exposed a second bottleneck at the one-packet CDC TX FIFO; the new 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Focused tests cover both pacing invariants. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. The second throughput candidate target-builds but must pass the no-stall sustained control before backpressure testing resumes. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
+| RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy; incomplete session evidence isolated a downstream host persistence limit. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Ten-boot profile passed; second throughput correction awaits HIL | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial dense and no-stall sustained profiles produced exact explicit-loss accounting. The bounded-batch candidate improved sustained retention from 13,188 to 52,541 bytes but still dropped 41,758 bytes at only 4,019-byte high-water, isolating the remaining one-packet CDC staging bottleneck. The frame-sized-FIFO candidate target-builds at 80,016 bytes RAM and must be flashed and retested before backpressure acceptance continues. Runtime stack high-water and final load profiles remain open, so the decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | Ten-boot profile passed; host persistence correction awaits repeat HIL | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial dense and no-stall sustained profiles produced exact explicit-loss accounting. The bounded-drain candidate improved retained data but exposed one-packet CDC serialization. The frame-sized-FIFO candidate eliminated firmware loss at only 160-byte high-water, while its finite host session retained only 67,336 bytes and 2,925 sequence lines. The host now batches up to 64 UART events per durable transaction; the same no-stall profile must prove the exact 94,299-byte stream before backpressure acceptance continues. Runtime stack high-water and final load profiles remain open, so the decision record remains `selected_unvalidated`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -461,7 +466,21 @@ Revision A initial electrical validation record, reviewed 2026-09-11:
   2,048-byte-FIFO candidate passes all 97 firmware host tests and target-builds
   at 52,100 bytes flash and 80,016 bytes RAM. Its UF2 SHA-256 is
   `a1a3459994b29686b772fbc01f2ee2ecfbd0eb943d1e7e8353fd70077b488ae5`;
-  flashing and HIL remain pending.
+  it was flashed on 2026-09-13. Parser-reset session
+  `20260913T182730Z-5ecc6e50` retained the exact expected 63 bytes with zero
+  loss/overflow. No-stall session `20260913T182750Z-85ac6c6f` reported zero
+  firmware loss/overflow, one uninterrupted segment, no error, and only a
+  160-byte ring high-water mark, but persisted just 67,336 raw bytes, 2,926 line
+  feeds, and 2,925 complete sequence lines. The retained device timestamps span
+  about 6.145 s, showing that the 15 s host workflow fell behind the source.
+  Source tracing isolated one crash-recoverable filesystem transaction per UART
+  event, including repeated raw/JSONL `fsync`, metadata replacement, and marker
+  updates. Focused TDD now combines up to 64 consecutive UART events in one
+  existing transaction, preserves exact per-event evidence and rollback, falls
+  back to ordered single admission when the whole batch exceeds quota, and
+  leaves wait-pattern capture single-event. Ruff passes, mypy reports no issues
+  in 73 source files, all 1,286 tests pass, and `git diff --check` is clean.
+  Repeat HIL remains pending.
 
 Enhanced macOS startup and RP2350 PL011 correction working tree, reviewed 2026-09-09:
 

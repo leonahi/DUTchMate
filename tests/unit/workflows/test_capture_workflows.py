@@ -233,6 +233,47 @@ def test_capture_workflow_records_capture_messages_until_deadline(
     ]
 
 
+def test_capture_workflow_batches_at_most_64_consecutive_uart_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeMonotonicClock()
+    events = [
+        UartReceiveEvent(
+            segment_id=0,
+            channel=0,
+            timestamp_us=index,
+            data=f"{index}\n".encode(),
+        )
+        for index in range(65)
+    ]
+    transport = FakeCaptureEventSource([*events, None], clock=clock, read_duration_s=0.001)
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    batch_sizes: list[int] = []
+    real_append_batch = store.append_uart_capture_batch
+
+    def record_batch_size(*args: object, **kwargs: object):
+        captures = kwargs["captures"]
+        assert isinstance(captures, tuple)
+        batch_sizes.append(len(captures))
+        return real_append_batch(*args, **kwargs)
+
+    monkeypatch.setattr(store, "append_uart_capture_batch", record_batch_size)
+
+    summary = CaptureWorkflow(session_store=store).run(
+        source=transport,
+        duration_s=0.2,
+        command="capture",
+        monotonic_clock=clock,
+        backend_snapshot=_native_snapshot(),
+    )
+
+    assert batch_sizes == [64, 1]
+    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"".join(
+        event.data for event in events
+    )
+
+
 def test_transport_capture_persists_source_segment_context_before_event(
     tmp_path: Path,
 ) -> None:

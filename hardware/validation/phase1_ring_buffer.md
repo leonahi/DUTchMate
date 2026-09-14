@@ -10,10 +10,13 @@ The selected implementation baseline is 32 KiB. The reproducible Zephyr static
 RAM report and ten-boot profile are recorded below. Initial dense and sustained
 profiles exposed USB writer pacing defects. The first corrected candidate
 improved retained data but still overflowed because its one-packet CDC TX FIFO
-serialized typical evidence frames across multiple USB completions. A second
-candidate with frame-sized CDC staging is target-built but not yet flashed.
-Runtime stack high-water margins and final dense, host-backpressure, and
-deliberate-overflow acceptance remain open.
+serialized typical evidence frames across multiple USB completions. The second
+candidate's frame-sized CDC staging eliminated firmware loss, but its first HIL
+run exposed a separate host persistence ceiling: the firmware ring remained
+nearly empty while the finite workflow persisted only 67,336 of 94,299 bytes.
+The host now batches up to 64 UART events per crash-recoverable transaction;
+repeat HIL remains pending. Runtime stack high-water margins and final dense,
+host-backpressure, and deliberate-overflow acceptance remain open.
 Phase 1B is not accepted while this document remains `selected_unvalidated`.
 
 This record must finish in exactly one state:
@@ -27,7 +30,7 @@ This record must finish in exactly one state:
 
 | Field | Result |
 |---|---|
-| Date/time | 2026-09-11 through 2026-09-13, Europe/Paris |
+| Date/time | 2026-09-11 through 2026-09-14, Europe/Paris |
 | Operator | User-assisted DUTchMate HIL session |
 | Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
 | Debug Helper board revision | User-confirmed fully assembled Revision A translator prototype |
@@ -158,6 +161,7 @@ validation host.
 | Dense synthetic burst, pre-fix baseline | 1 | 460800 | 15 s | 8,825 | 7,842 bytes | 5 | 34,256 | Exact accounting, but superseded by the pacing defect; rerun required |
 | Sustained stream, pre-fix no-stall control | 1 | 460800 | 15 s | 13,188 | 5,405 bytes | 17 | 81,111 | Failed before artificial backpressure; blocked the stall profiles |
 | Sustained stream, bounded-drain candidate | 1 | 460800 | 15 s | 52,541 | 4,019 bytes | 22 | 41,758 | Failed before artificial backpressure; improvement exposed the one-packet CDC TX FIFO bottleneck |
+| Sustained stream, frame-sized FIFO before host batching | 1 | 460800 | 15 s | 67,336 | 160 bytes | 0 | 0 | Firmware path was lossless; finite host workflow persisted only 2,925 of 4,096 sequence lines before its deadline |
 | Host backpressure | 0 | 460800 | 100 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 250 ms | Not run | Not run | Not run | Not run | Not run |
 | Host backpressure | 0 | 460800 | 500 ms | Not run | Not run | Not run | Not run | Not run |
@@ -216,11 +220,11 @@ focused host-compiled regression now requires bounded batches to drain until
 idle, continue immediately after a full batch, and preserve fatal error
 propagation. All 96 Debug Helper host tests pass. A pristine Zephyr 4.4.2/SDK
 1.0.1 target build uses 52,100 bytes flash and the unchanged 78,032 bytes RAM.
-The 104,448-byte candidate UF2 SHA-256 is
+The 104,448-byte candidate UF2 SHA-256 was
 `7ac75259f7e11d4ae8b17da2fb49864994b4da6cca524d5e2881bdc3dd975814`;
 its ELF SHA-256 is
 `f955cca2a3cf026facc17c81b8fa9fd51353c009404630be90d89764af2b8716`.
-It has not yet been flashed or verified on hardware.
+Its HIL result is recorded below.
 
 That candidate was flashed on 2026-09-13 and first passed a parser-reset boot
 capture. Session `20260913T180846Z-6de3ee06` retained the expected reset-induced
@@ -245,7 +249,32 @@ build uses 52,100 bytes flash and 80,016 bytes RAM. Its 104,448-byte UF2 SHA-256
 is `a1a3459994b29686b772fbc01f2ee2ecfbd0eb943d1e7e8353fd70077b488ae5`;
 its ELF SHA-256 is
 `784c2fac32b3f851fed0186928bddf3d4cefeef83b7cac1ce71b8da505ca1cff`.
-This second candidate has not yet been flashed or verified on hardware.
+This second candidate was flashed on 2026-09-13. Parser-reset boot session
+`20260913T182730Z-5ecc6e50` retained the expected 63 bytes with zero loss,
+zero overflow, a 62-byte high-water mark, and one uninterrupted segment.
+No-stall session `20260913T182750Z-85ac6c6f` then reported zero firmware drops,
+zero overflow episodes, one uninterrupted segment, no error, and only a
+160-byte UART-ring high-water mark. However, the 15 s host workflow persisted
+67,336 raw bytes, 2,926 line feeds, and 2,925 complete `seq=` lines; the tail
+ended partially at sequence 2925 instead of reaching the required sequence
+4095 and END checksum. Source timestamps show that retained UART evidence spans
+only about 6.145 s of the fixture's approximately 8.6 s output, despite the
+15 s wall-clock workflow.
+
+The low firmware occupancy and zero loss isolate the remaining limit downstream
+of the RP2350. Source tracing found that every normalized UART event performed a
+separate crash-recoverable session transaction: raw and JSONL appends were each
+`fsync`ed, metadata was rewritten and directory-synced, and transaction marker
+state was durably advanced for every event. The resulting host ceiling was
+approximately 450 events/s in both the old and corrected firmware sessions.
+A focused host change now combines up to 64 consecutive UART events into one
+existing evidence transaction while preserving individual event records,
+timestamps, ordering, pattern evidence, metadata, and rollback. Wait-pattern
+capture remains single-event. If a complete batch does not fit the evidence
+quota, the recorder falls back to ordered single-event admission so the exact
+accepted prefix and truncation record remain unchanged. Ruff, mypy, all 1,286
+tests, and the whitespace gate pass. A repeat of this same no-stall HIL profile
+is the next gate.
 
 ## Acceptance Checklist
 

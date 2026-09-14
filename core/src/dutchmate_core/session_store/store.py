@@ -1,7 +1,7 @@
 """Filesystem-backed debug session storage."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -873,6 +873,173 @@ class SessionStore:
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
         return detected_pattern_indexes
 
+    def append_uart_capture_batch(
+        self,
+        handle: SessionHandle,
+        *,
+        captures: Sequence[tuple[UartReceiveEvent, UartCaptureResult]],
+    ) -> tuple[tuple[int, ...], ...] | None:
+        """Append ordered UART evidence in one transaction when quota permits."""
+
+        if not captures:
+            raise ValueError("UART capture batch must not be empty")
+        _persistence.require_session_appendable(handle)
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        uart_event_parts: list[bytes] = []
+        pattern_record_groups: list[list[dict[str, object]]] = []
+        hardware_event_parts: list[bytes] = []
+        raw_parts: list[bytes] = []
+
+        for event, result in captures:
+            if event.segment_id != result.segment_id:
+                raise ValueError("UART event and capture result segments must match")
+            if event.channel != result.channel:
+                raise ValueError("UART event and capture result channels must match")
+            if event.timestamp_us != result.timestamp_us:
+                raise ValueError("UART event and capture result timestamps must match")
+            raw_parts.append(event.data)
+            uart_event_parts.append(
+                _persistence.serialize_jsonl(
+                    _session_evidence_record(
+                        _evidence.uart_event_json(event),
+                        metadata=metadata,
+                        segment_id=event.segment_id,
+                    )
+                )
+            )
+            pattern_record_groups.append(
+                [
+                    _session_evidence_record(
+                        record,
+                        metadata=metadata,
+                        segment_id=event.segment_id,
+                    )
+                    for record in _evidence.detected_pattern_records(
+                        result,
+                        segment_id=event.segment_id,
+                    )
+                ]
+            )
+            hardware_event_parts.extend(
+                _persistence.serialize_jsonl(
+                    _session_evidence_record(
+                        _evidence.line_limit_exceeded_event_json(result, oversized_line),
+                        metadata=metadata,
+                        segment_id=result.segment_id,
+                    )
+                )
+                for oversized_line in result.oversized_lines
+            )
+
+        detected_patterns_bytes: bytes | None = None
+        detected_patterns_delta = 0
+        detected_pattern_indexes: list[tuple[int, ...]] = []
+        if any(pattern_record_groups):
+            detected_patterns = _persistence.read_json_list(handle.paths.detected_patterns)
+            for pattern_records in pattern_record_groups:
+                first_index = len(detected_patterns)
+                detected_patterns.extend(pattern_records)
+                detected_pattern_indexes.append(
+                    tuple(range(first_index, first_index + len(pattern_records)))
+                )
+            detected_patterns_bytes = _persistence.serialize_json(detected_patterns)
+            detected_patterns_delta = (
+                len(detected_patterns_bytes) - handle.paths.detected_patterns.stat().st_size
+            )
+        else:
+            detected_pattern_indexes.extend(() for _capture in captures)
+
+        raw_bytes = b"".join(raw_parts)
+        uart_event_bytes = b"".join(uart_event_parts)
+        hardware_event_bytes = b"".join(hardware_event_parts)
+        evidence_bytes = (
+            len(raw_bytes)
+            + len(uart_event_bytes)
+            + detected_patterns_delta
+            + len(hardware_event_bytes)
+        )
+        if not self._evidence_fits(handle, evidence_bytes=evidence_bytes):
+            return None
+
+        for event, result in captures:
+            if result.newly_oversized_line_count:
+                _metadata._record_line_processing(
+                    metadata,
+                    newly_oversized_line_count=result.newly_oversized_line_count,
+                )
+            _metadata._record_metadata_segment_timestamp(
+                metadata,
+                segment_id=event.segment_id,
+                timestamp_us=event.timestamp_us,
+            )
+        append_paths = [handle.paths.uart_raw, handle.paths.uart_events]
+        if hardware_event_bytes:
+            append_paths.append(handle.paths.hardware_events)
+        with _transactions.evidence_transaction(
+            handle.paths,
+            append_paths=append_paths,
+            replace_detected_patterns=detected_patterns_bytes is not None,
+        ) as transaction:
+            _persistence.append_bytes(handle.paths.uart_raw, raw_bytes)
+            _persistence.append_serialized(handle.paths.uart_events, uart_event_bytes)
+            if detected_patterns_bytes is not None:
+                _persistence.write_serialized(
+                    handle.paths.detected_patterns,
+                    detected_patterns_bytes,
+                )
+            if hardware_event_bytes:
+                _persistence.append_serialized(
+                    handle.paths.hardware_events,
+                    hardware_event_bytes,
+                )
+            _persistence.refresh_storage_accounting(metadata, handle.paths)
+            serialized_metadata = _persistence.serialize_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            transaction.prepare_metadata(serialized_metadata)
+            _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        return tuple(detected_pattern_indexes)
+
+    def _evidence_fits(
+        self,
+        handle: SessionHandle,
+        *,
+        evidence_bytes: int,
+        released_uart_tx_reservation: tuple[str, str] | None = None,
+    ) -> bool:
+        projection = self._evidence_projection(
+            handle,
+            evidence_bytes=evidence_bytes,
+            released_uart_tx_reservation=released_uart_tx_reservation,
+        )
+        return projection is None or projection[0] <= projection[1]
+
+    def _evidence_projection(
+        self,
+        handle: SessionHandle,
+        *,
+        evidence_bytes: int,
+        released_uart_tx_reservation: tuple[str, str] | None = None,
+    ) -> tuple[int, int] | None:
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        if metadata.get("schema_version") != 1:
+            return None
+        storage = _metadata._optional_object(metadata.get("storage"), "storage")
+        if storage is None:
+            raise ValueError("native session storage metadata is required")
+        budget = storage.get("evidence_budget_bytes")
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+            raise ValueError("native session evidence budget is invalid")
+        current_bytes = _persistence.evidence_file_bytes(handle.paths)
+        reserved_result_bytes = sum(
+            reserved_bytes
+            for reservation_key, (reserved_bytes, _payload_bytes, _segment_id) in (
+                self._uart_tx_result_reservations.items()
+            )
+            if reservation_key[0] == handle.session_id
+            and reservation_key != released_uart_tx_reservation
+        )
+        return current_bytes + evidence_bytes + reserved_result_bytes, budget
+
     def _preflight_evidence(
         self,
         handle: SessionHandle,
@@ -892,25 +1059,14 @@ class SessionStore:
         rejected_metadata_mutator: Callable[[dict[str, object]], None] | None = None,
         released_uart_tx_reservation: tuple[str, str] | None = None,
     ) -> None:
-        metadata = _persistence.read_json_object(handle.paths.metadata)
-        if metadata.get("schema_version") != 1:
-            return
-        storage = _metadata._optional_object(metadata.get("storage"), "storage")
-        if storage is None:
-            raise ValueError("native session storage metadata is required")
-        budget = storage.get("evidence_budget_bytes")
-        if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
-            raise ValueError("native session evidence budget is invalid")
-        current_bytes = _persistence.evidence_file_bytes(handle.paths)
-        reserved_result_bytes = sum(
-            reserved_bytes
-            for reservation_key, (reserved_bytes, _payload_bytes, _segment_id) in (
-                self._uart_tx_result_reservations.items()
-            )
-            if reservation_key[0] == handle.session_id
-            and reservation_key != released_uart_tx_reservation
+        projection = self._evidence_projection(
+            handle,
+            evidence_bytes=evidence_bytes,
+            released_uart_tx_reservation=released_uart_tx_reservation,
         )
-        projected_bytes = current_bytes + evidence_bytes + reserved_result_bytes
+        if projection is None:
+            return
+        projected_bytes, budget = projection
         if projected_bytes <= budget:
             return
 

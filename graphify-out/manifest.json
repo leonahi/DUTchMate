@@ -30,10 +30,10 @@
     "semantic_hash": "43bde9a5166b220fc61cf58a2b5018bf"
   },
   "apps/cli/src/dutchmate_cli/client.py": {
-    "mtime": 1787313453.8763955,
-    "seen": 1788295136.1991282,
-    "ast_hash": "564916e77a77ffd47159b32aca2f671b",
-    "semantic_hash": "564916e77a77ffd47159b32aca2f671b"
+    "mtime": 1789159516.0670536,
+    "seen": 1789418822.7422311,
+    "ast_hash": "8a84461afc3b20643bebb0c9b147938e",
+    "semantic_hash": ""
   },
   "apps/cli/src/dutchmate_cli/config.py": {
     "mtime": 1787310997.6122777,
@@ -132,10 +132,10 @@
     "semantic_hash": "34d46e005165b505dfc2550b6c72d0bd"
   },
   "apps/cli/tests/test_client.py": {
-    "mtime": 1787322396.3933318,
-    "seen": 1788295136.19914,
-    "ast_hash": "d818a9e97ee6a1aa635d04cd3005b49f",
-    "semantic_hash": "d818a9e97ee6a1aa635d04cd3005b49f"
+    "mtime": 1789159504.2509677,
+    "seen": 1789418822.742246,
+    "ast_hash": "aa68040645363a10a74615c0dbbdb567",
+    "semantic_hash": ""
   },
   "apps/cli/tests/test_devices.py": {
     "mtime": 1786829536.874655,
@@ -402,9 +402,9 @@
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/backends/enhanced.py": {
-    "mtime": 1788424400.6504798,
-    "seen": 1788627277.9091132,
-    "ast_hash": "cf0ecfae0089f9677328a908c2074838",
+    "mtime": 1789159260.03235,
+    "seen": 1789418822.742293,
+    "ast_hash": "203e13a003b90bcb4bcde3b2a2f5f433",
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/backends/settings.py": {
@@ -576,10 +576,10 @@
     "semantic_hash": "c86578a8876f94ac05eb48a70808f1e6"
   },
   "core/src/dutchmate_core/session_store/store.py": {
-    "mtime": 1787332519.0750265,
-    "seen": 1788295136.199199,
-    "ast_hash": "604966f9cf948a4b1863555e685ed3ac",
-    "semantic_hash": "604966f9cf948a4b1863555e685ed3ac"
+    "mtime": 1789418397.3692484,
+    "seen": 1789418822.742319,
+    "ast_hash": "b6f614601ec5a10b12d11536296571b2",
+    "semantic_hash": ""
   },
   "core/src/dutchmate_core/session_store/transactions.py": {
     "mtime": 1786998521.3580039,
@@ -618,9 +618,9 @@
     "semantic_hash": "476de99d7677baf6e362b74fc61e7074"
   },
   "core/src/dutchmate_core/workflows/capture.py": {
-    "mtime": 1788283993.1444411,
-    "seen": 1788295136.1992042,
-    "ast_hash": "a0952ec2533393969d25d628649e1c2e",
+    "mtime": 1789418741.3050778,
+    "seen": 1789418822.7423239,
+    "ast_hash": "97f3db90b4d54c46bca0a02647b77596",
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/workflows/device_actions.py": {
@@ -726,9 +726,9 @@
     "semantic_hash": ""
   },
   "tests/unit/backends/test_enhanced.py": {
-    "mtime": 1788424460.8115952,
-    "seen": 1788627277.909206,
-    "ast_hash": "9b5272f1e2aa666765f1ee8e0fb5495e",
+    "mtime": 1789159236.982004,
+    "seen": 1789418822.74244,
+    "ast_hash": "c0b4ee2e45583b09daf6610a59097913",
     "semantic_hash": ""
   },
   "tests/unit/backends/test_settings.py": {
@@ -810,9 +810,9 @@
     "semantic_hash": ""
   },
   "tests/unit/runtime/test_device_core_capture.py": {
-    "mtime": 1788424460.4781775,
-    "seen": 1788627277.909219,
-    "ast_hash": "669ef129cc51dd56ab229e0b68bcb0b3",
+    "mtime": 1789418554.25146,
+    "seen": 1789418822.742455,
+    "ast_hash": "2a94193deada1183c39e59eb05941618",
     "semantic_hash": ""
   },
   "tests/unit/runtime/test_device_core_status_control.py": {
@@ -900,16 +900,16 @@
     "semantic_hash": "09fa517c38675e2098c82362cc69f6ae"
   },
   "tests/unit/session_store/test_transactions.py": {
-    "mtime": 1786998669.186935,
-    "seen": 1788295136.199245,
-    "ast_hash": "6298416c1fd0296e0a39a4fbcb0d6ab1",
-    "semantic_hash": "6298416c1fd0296e0a39a4fbcb0d6ab1"
+    "mtime": 1789418297.4609423,
+    "seen": 1789418822.7424698,
+    "ast_hash": "4f3f5c6826146ec33b6e9d5b92def554",
+    "semantic_hash": ""
   },
   "tests/unit/session_store/test_uart_evidence.py": {
-    "mtime": 1787332555.6549723,
-    "seen": 1788295136.1992462,
-    "ast_hash": "97c4c7f424f5ab37737b4917f79a88d0",
-    "semantic_hash": "97c4c7f424f5ab37737b4917f79a88d0"
+    "mtime": 1789418488.1640465,
+    "seen": 1789418822.742471,
+    "ast_hash": "31d88b3c7f972ece88abc1312c793f19",
+    "semantic_hash": ""
   },
   "tests/unit/test_validation.py": {
     "mtime": 1787305926.5587318,
@@ -930,9 +930,9 @@
     "semantic_hash": "d8e9bee6d3575bf9851af183e7f2fdda"
   },
   "tests/unit/workflows/capture_test_support.py": {
-    "mtime": 1788076317.5512662,
-    "seen": 1788295136.1992488,
-    "ast_hash": "31c00b1a04083d2bbee46df097d3c206",
+    "mtime": 1789418520.972593,
+    "seen": 1789418822.742474,
+    "ast_hash": "7ea08c609df580eeaa38107ad8ff600a",
     "semantic_hash": ""
   },
   "tests/unit/workflows/test_capture_reconnect.py": {
@@ -942,15 +942,15 @@
     "semantic_hash": ""
   },
   "tests/unit/workflows/test_capture_recorder.py": {
-    "mtime": 1788424460.8596551,
-    "seen": 1788627277.909238,
-    "ast_hash": "67508a5b4a6aae30a5d809cdc929c85e",
+    "mtime": 1789418521.0237362,
+    "seen": 1789418822.742476,
+    "ast_hash": "7d7c19bf755e0185902fa9ccce03ae9c",
     "semantic_hash": ""
   },
   "tests/unit/workflows/test_capture_workflows.py": {
-    "mtime": 1788424460.9102383,
-    "seen": 1788627277.909238,
-    "ast_hash": "759c100dfef877f699592ef2dfe26ce2",
+    "mtime": 1789418741.3653615,
+    "seen": 1789418822.742477,
+    "ast_hash": "c24498b8c177d4f837758ef351354c26",
     "semantic_hash": ""
   },
   "tests/unit/workflows/test_device_actions.py": {
@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "docs/development_status.md": {
-    "mtime": 1788628817.5554821,
-    "seen": 1788640242.030112,
-    "ast_hash": "f74dfa66f784c4df75df4b45c05d5869",
+    "mtime": 1789418798.679565,
+    "seen": 1789418822.742489,
+    "ast_hash": "99ba540bedd3680abc95a679209856f8",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1056,9 +1056,9 @@
     "semantic_hash": ""
   },
   "docs/phase1_implementation_spec.md": {
-    "mtime": 1788381293.1237342,
-    "seen": 1788627277.9092522,
-    "ast_hash": "bb075bf5e3ab167d03e6bc95361b978d",
+    "mtime": 1788900008.3421838,
+    "seen": 1789418822.742492,
+    "ast_hash": "9918db1e167656c4ed45adf366ce5312",
     "semantic_hash": ""
   },
   "docs/project_context.md": {
@@ -1092,9 +1092,9 @@
     "semantic_hash": ""
   },
   "hardware/validation/phase1_ring_buffer.md": {
-    "mtime": 1788381293.2653093,
-    "seen": 1788627277.909292,
-    "ast_hash": "92fc070cf5b0be5b310a61543c992c50",
+    "mtime": 1789418798.6248682,
+    "seen": 1789418822.742541,
+    "ast_hash": "4c63d5e59410eb9ee7ef1005f828b599",
     "semantic_hash": ""
   },
   "hardware/firmware/zephyr_dut/src/fixture_protocol.c": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "hardware/firmware/zephyr_dut/README.md": {
-    "mtime": 1787697028.1404378,
-    "seen": 1788295136.19929,
-    "ast_hash": "399867b803f6789f58a387f79ee8f883",
+    "mtime": 1789162894.8584366,
+    "seen": 1789418822.742538,
+    "ast_hash": "a67145a8cf102b19ccd64d0e0ba6c83d",
     "semantic_hash": ""
   },
   "tests/unit/protocol/test_device_message_schema.py": {
@@ -1188,15 +1188,15 @@
     "semantic_hash": ""
   },
   "core/src/dutchmate_core/backends/enhanced_serial_io.py": {
-    "mtime": 1787940719.2136009,
-    "seen": 1788295136.199179,
-    "ast_hash": "f51d4584d8dc50a476abb86515314d1f",
+    "mtime": 1788896882.7862167,
+    "seen": 1789418822.742295,
+    "ast_hash": "75b99f9e1aeefbd084215886d174ec74",
     "semantic_hash": ""
   },
   "tests/unit/backends/test_enhanced_serial_io.py": {
-    "mtime": 1788424460.7140026,
-    "seen": 1788627277.909208,
-    "ast_hash": "edc49fab9bdf3b85b98709c7a8ab4020",
+    "mtime": 1788896818.624352,
+    "seen": 1789418822.742442,
+    "ast_hash": "5c39759e908f6f49e150c28f9afa891d",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-28-enhanced-async-serial-io.md": {
@@ -1476,27 +1476,27 @@
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/command_runtime.c": {
-    "mtime": 1788627153.1756992,
-    "seen": 1788627277.909153,
-    "ast_hash": "878254d0586e97bcf26818ab7bbb3d08",
+    "mtime": 1789067455.1400476,
+    "seen": 1789418822.7423391,
+    "ast_hash": "7b231d79534a5392d8159ccbc9855348",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/command_runtime.h": {
-    "mtime": 1788626963.5672245,
-    "seen": 1788627277.909154,
-    "ast_hash": "bc35b1df3871a75606442166dbfcabee",
+    "mtime": 1789067455.0545049,
+    "seen": 1789418822.74234,
+    "ast_hash": "c69a2dc22aaaf7f54bfd9dfb38a0710b",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/connection_epoch.c": {
-    "mtime": 1788439474.4151003,
-    "seen": 1788627277.909154,
-    "ast_hash": "528df073bf547aedfdcfecc49166c29d",
+    "mtime": 1788848812.1648555,
+    "seen": 1789418822.74234,
+    "ast_hash": "ec9f0e2688616c5b897481efb03d7637",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/connection_epoch.h": {
-    "mtime": 1788439474.3606172,
-    "seen": 1788627277.9091551,
-    "ast_hash": "bd97d2fd866baf9701c7e4442f54d462",
+    "mtime": 1788848812.1122427,
+    "seen": 1789418822.742341,
+    "ast_hash": "41d1f4e3256ab50a0498dda967738d9d",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/control_state.c": {
@@ -1590,9 +1590,9 @@
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/uart_rx.c": {
-    "mtime": 1788621869.529253,
-    "seen": 1788627277.9091651,
-    "ast_hash": "ff2beae06348897be1644f25a2107c97",
+    "mtime": 1789247464.1493342,
+    "seen": 1789418822.742358,
+    "ast_hash": "8335d963661845619f530f38e8da113d",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/uart_rx.h": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/usb_connection.c": {
-    "mtime": 1788628712.9000988,
-    "seen": 1788628733.949091,
-    "ast_hash": "3216dd40394d2ba270cba0e029aabdc8",
+    "mtime": 1789322178.980158,
+    "seen": 1789418822.742364,
+    "ast_hash": "590c1693eef77060181bdb1be5511c92",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/usb_connection.h": {
@@ -1674,9 +1674,9 @@
     "semantic_hash": ""
   },
   "tests/hardware/rp2350_debug_helper/connection_epoch_harness.c": {
-    "mtime": 1788439454.3000615,
-    "seen": 1788627277.90919,
-    "ast_hash": "00b5e3750c6a2f8544a929279880ea1f",
+    "mtime": 1788848812.2165956,
+    "seen": 1789418822.742387,
+    "ast_hash": "486c4d2db18e4ffc6bcb8dc9bbd3f5c6",
     "semantic_hash": ""
   },
   "tests/hardware/rp2350_debug_helper/control_state_harness.c": {
@@ -1728,9 +1728,9 @@
     "semantic_hash": ""
   },
   "tests/hardware/rp2350_debug_helper/test_connection_epoch.py": {
-    "mtime": 1788439454.3555384,
-    "seen": 1788627277.909195,
-    "ast_hash": "7e9fea5e4410d42d6fca62ea4d239b18",
+    "mtime": 1788819489.596084,
+    "seen": 1789418822.742419,
+    "ast_hash": "4a12b9573eb5ed44afff067f4cc2d8fc",
     "semantic_hash": ""
   },
   "tests/hardware/rp2350_debug_helper/test_control_state.py": {
@@ -1794,9 +1794,9 @@
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-09-02-rp2350-debug-helper-firmware-design.md": {
-    "mtime": 1788640231.803269,
-    "seen": 1788640242.03013,
-    "ast_hash": "5204187d9cb66b3129b1fe03773e8dd8",
+    "mtime": 1789322342.5663714,
+    "seen": 1789418822.742508,
+    "ast_hash": "824316bb926c58c561f9734b094fd8f9",
     "semantic_hash": ""
   },
   "graphify-out/memory/query_20260905_165325_what_code_boundaries_connect_bounded_cdc_command_i.md": {
@@ -1806,15 +1806,15 @@
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/CMakeLists.txt": {
-    "mtime": 1788628370.471644,
-    "seen": 1788628733.949218,
-    "ast_hash": "d37a0cf04c269d7dfefab4195a8cdc85",
+    "mtime": 1789322415.103783,
+    "seen": 1789418822.742534,
+    "ast_hash": "1afb03552960e29a36110c692143e6ca",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/README.md": {
-    "mtime": 1788628712.9575925,
-    "seen": 1788628733.949219,
-    "ast_hash": "977c884af30ff6a69d167bc879977130",
+    "mtime": 1789323424.4760857,
+    "seen": 1789418822.742534,
+    "ast_hash": "580ff4eed0fde9a63c0173f3aa40a6a6",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/dts/bindings/misc/dutchmate,debug-helper-io.yaml": {
@@ -1830,9 +1830,9 @@
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/cdc_tx.c": {
-    "mtime": 1788628616.2627144,
-    "seen": 1788628733.949058,
-    "ast_hash": "2316cdd03cf9c6c9ea63656411e2999f",
+    "mtime": 1789067455.2030094,
+    "seen": 1789418822.742327,
+    "ast_hash": "40894eb9cb292953afd8c4b50467c581",
     "semantic_hash": ""
   },
   "hardware/firmware/rp2350_debug_helper/src/cdc_tx.h": {
@@ -1869,6 +1869,144 @@
     "mtime": 1788628673.910273,
     "seen": 1788628733.949217,
     "ast_hash": "0de25b59cb17cb135fc819ca5a5afb25",
+    "semantic_hash": ""
+  },
+  "hardware/firmware/rp2350_debug_helper/src/output_drain.c": {
+    "mtime": 1789322178.8755279,
+    "seen": 1789418822.7423491,
+    "ast_hash": "656072b961946e1160b2789a837caa67",
+    "semantic_hash": ""
+  },
+  "hardware/firmware/rp2350_debug_helper/src/output_drain.h": {
+    "mtime": 1789322178.8214092,
+    "seen": 1789418822.742351,
+    "ast_hash": "95de33a5b0377ddc0f4ebf8f6018125c",
+    "semantic_hash": ""
+  },
+  "hardware/validation/probe_rp2350_command_ingress.py": {
+    "mtime": 1789066872.3847356,
+    "seen": 1789418822.742379,
+    "ast_hash": "5d28ed7249d73f8802a1c0b33c96aefa",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/output_drain_harness.c": {
+    "mtime": 1789322144.2311819,
+    "seen": 1789418822.742412,
+    "ast_hash": "79aac756a6dbf6c8b2d5cc1ab537a08d",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/test_firmware_configuration.py": {
+    "mtime": 1789323556.171746,
+    "seen": 1789418822.742421,
+    "ast_hash": "b7a870bbc48bbc7e69a6aad5a326e46a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/test_output_drain.py": {
+    "mtime": 1789322144.128586,
+    "seen": 1789418822.742423,
+    "ast_hash": "6e430dff929233cc4c2e6f2b263f6efe",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/test_uart_rx_adapter.py": {
+    "mtime": 1789247210.4588919,
+    "seen": 1789418822.7424262,
+    "ast_hash": "bf8047ae8d4b167d3c02628c175247f1",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_adapter_harness.c": {
+    "mtime": 1789247210.5181358,
+    "seen": 1789418822.742429,
+    "ast_hash": "8596cffe775063b736609336c2821bbf",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/hardware/timer.h": {
+    "mtime": 1789247210.7304893,
+    "seen": 1789418822.742431,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/uart_rx_zephyr_stubs.h": {
+    "mtime": 1789247232.7298095,
+    "seen": 1789418822.742432,
+    "ast_hash": "43722c149bcb81f415622dac7e18516c",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/zephyr/device.h": {
+    "mtime": 1789247210.810498,
+    "seen": 1789418822.742432,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/zephyr/devicetree.h": {
+    "mtime": 1789247210.8573523,
+    "seen": 1789418822.742433,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/zephyr/drivers/uart.h": {
+    "mtime": 1789247210.9356258,
+    "seen": 1789418822.742434,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/zephyr/kernel.h": {
+    "mtime": 1789247210.980959,
+    "seen": 1789418822.742434,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "tests/hardware/rp2350_debug_helper/uart_rx_stubs/zephyr/spinlock.h": {
+    "mtime": 1789247211.027931,
+    "seen": 1789418822.742435,
+    "ast_hash": "3f163166753f932ee65af9a0f1ae886a",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260905_205636_which_rp2350_firmware_boundaries_need_hardware_ind.md": {
+    "mtime": 1788641796.6794806,
+    "seen": 1789418822.742529,
+    "ast_hash": "338ec9d4a70fa0660200f006a2a038e1",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260906_191006_what_is_next.md": {
+    "mtime": 1788721806.993047,
+    "seen": 1789418822.74253,
+    "ast_hash": "f0df971266eac7d8da494e5a02dbfff7",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260906_191303_ok_we_can_do_this__tell_me_what_to_do.md": {
+    "mtime": 1788721983.2906885,
+    "seen": 1789418822.74253,
+    "ast_hash": "520cbb46349d2d40af7088cc5bbe5120",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260906_202120_i_have_the_schematic_and_layout_file_for_eagle_cad.md": {
+    "mtime": 1788726080.0575826,
+    "seen": 1789418822.742531,
+    "ast_hash": "bf1b8c3092da77126fb6426111dd1501",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260907_180603_review_the_supplied_eagle_schematic_only_against_r.md": {
+    "mtime": 1788804363.4139938,
+    "seen": 1789418822.742532,
+    "ast_hash": "9588edb3eeaaee82944f3f238ffa4bee",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260910_181025_ok_lets_move_to_next_step_than.md": {
+    "mtime": 1789063825.2848208,
+    "seen": 1789418822.742532,
+    "ast_hash": "de1750b8fc99e2d31ce0da76ed50c581",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260914_204656_trace_enhanced_rp2350_uart_receive_events_from_asy.md": {
+    "mtime": 1789418816.6755486,
+    "seen": 1789418822.7425332,
+    "ast_hash": "7c370050b9c45f1886d953ec9415b511",
+    "semantic_hash": ""
+  },
+  "hardware/validation/phase1_revision_a.md": {
+    "mtime": 1789162116.1486301,
+    "seen": 1789418822.7425401,
+    "ast_hash": "3612adb5efa3c9cda3d5079786bbcd25",
     "semantic_hash": ""
   }
 }

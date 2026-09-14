@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from capture_test_support import fixed_clock, fixed_id, read_jsonl
+from capture_test_support import enhanced_snapshot, fixed_clock, fixed_id, read_jsonl
 
 from dutchmate_core.backends import (
     BufferOverflowEvent,
@@ -147,6 +147,65 @@ def test_record_uart_event_buffers_split_pattern_across_events(tmp_path: Path) -
         event["timestamp_us"] for event in read_jsonl(recorder.session_handle.paths.uart_events)
     ]
     assert event_timestamps == [100, 200]
+
+
+def test_record_uart_events_falls_back_to_exact_ordered_quota_prefix(tmp_path: Path) -> None:
+    events = (
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"one\n"),
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"two\n"),
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_recorder = CaptureRecorder.start(
+        session_store=reference_store,
+        command="capture",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_recorder.record_event(events[0])
+    first_event_budget = sum(
+        path.stat().st_size
+        for path in (
+            reference_recorder.session_handle.paths.uart_raw,
+            reference_recorder.session_handle.paths.uart_events,
+            reference_recorder.session_handle.paths.hardware_events,
+            reference_recorder.session_handle.paths.detected_patterns,
+        )
+    )
+    reference_result = reference_recorder.record_event(events[1])
+    assert reference_result.event_type == "uart_receive"
+
+    store = SessionStore(
+        root=tmp_path / "batch",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+        evidence_budget_bytes=first_event_budget,
+    )
+    recorder = CaptureRecorder.start(
+        session_store=store,
+        command="capture",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    results = recorder.record_uart_events(events)
+
+    assert [result.event_type for result in results] == ["uart_receive", "size_limit"]
+    assert recorder.terminalized is True
+    assert recorder.session_handle.paths.uart_raw.read_bytes() == b"one\n"
+    uart_events = read_jsonl(recorder.session_handle.paths.uart_events)
+    assert [event["timestamp_us"] for event in uart_events] == [100]
+    summary = store.summarize_session(recorder.session_id)
+    assert summary.truncated is True
+    assert summary.truncation is not None
+    assert summary.truncation["timestamp_us"] == 200
 
 
 def test_record_buffer_overflow_writes_hardware_event(tmp_path: Path) -> None:

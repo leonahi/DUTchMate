@@ -11,6 +11,7 @@ from session_store_support import (
     read_jsonl,
 )
 
+import dutchmate_core.session_store.transactions as transactions
 from dutchmate_core.backends import UartReceiveEvent
 from dutchmate_core.session_store.store import (
     EvidenceQuotaExceeded,
@@ -345,6 +346,71 @@ def test_append_uart_capture_appends_multiple_uart_events(tmp_path: Path) -> Non
 
     assert handle.paths.uart_raw.read_bytes() == b"one\ntwo\n"
     assert [event["timestamp_us"] for event in read_jsonl(handle.paths.uart_events)] == [100, 200]
+
+
+def test_append_uart_capture_batch_matches_sequential_evidence_in_one_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = (
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"BOOT_"),
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"OK\n"),
+        UartReceiveEvent(segment_id=0, channel=1, timestamp_us=300, data=b"ERROR\n"),
+    )
+    reference_store = SessionStore(
+        root=tmp_path / "reference",
+        clock=fixed_clock,
+        id_factory=fixed_id,
+    )
+    reference_handle = reference_store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    reference_processor = UartCaptureProcessor()
+    reference_indexes = tuple(
+        reference_store.append_uart_capture(
+            reference_handle,
+            event=event,
+            result=reference_processor.process_event(event),
+        )
+        for event in events
+    )
+
+    store = SessionStore(root=tmp_path / "batch", clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_session(
+        command="capture --seconds 1",
+        backend_snapshot=enhanced_snapshot(),
+        workflow="capture",
+        duration_s=1.0,
+        reconnect_timeout_s=5.0,
+    )
+    processor = UartCaptureProcessor()
+    captures = tuple((event, processor.process_event(event)) for event in events)
+    transaction_count = 0
+    real_transaction = transactions.evidence_transaction
+
+    def counted_transaction(*args: object, **kwargs: object):
+        nonlocal transaction_count
+        transaction_count += 1
+        return real_transaction(*args, **kwargs)
+
+    monkeypatch.setattr(transactions, "evidence_transaction", counted_transaction)
+
+    indexes = store.append_uart_capture_batch(handle, captures=captures)
+
+    assert indexes == reference_indexes
+    assert transaction_count == 1
+    for reference_path, batch_path in (
+        (reference_handle.paths.metadata, handle.paths.metadata),
+        (reference_handle.paths.uart_raw, handle.paths.uart_raw),
+        (reference_handle.paths.uart_events, handle.paths.uart_events),
+        (reference_handle.paths.hardware_events, handle.paths.hardware_events),
+        (reference_handle.paths.detected_patterns, handle.paths.detected_patterns),
+    ):
+        assert batch_path.read_bytes() == reference_path.read_bytes()
 
 
 def test_append_uart_capture_writes_detected_patterns(tmp_path: Path) -> None:

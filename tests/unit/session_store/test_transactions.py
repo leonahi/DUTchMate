@@ -78,6 +78,56 @@ def test_uart_unit_rolls_back_every_file_when_metadata_write_fails(
     assert _transaction_artifacts(handle.paths.root) == []
 
 
+def test_uart_batch_rolls_back_every_file_when_metadata_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, handle = _create_active_session(tmp_path)
+    before = {
+        path.name: path.read_bytes()
+        for path in (
+            handle.paths.metadata,
+            handle.paths.uart_raw,
+            handle.paths.uart_events,
+            handle.paths.hardware_events,
+            handle.paths.detected_patterns,
+        )
+    }
+    processor = UartCaptureProcessor()
+    events = (
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"BOOT_OK\n"),
+        UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"ERROR\n"),
+    )
+    captures = tuple((event, processor.process_event(event)) for event in events)
+    real_write = persistence.write_serialized
+
+    def fail_metadata(path: Path, data: bytes) -> None:
+        if path == handle.paths.metadata:
+            raise SessionPersistenceError(
+                operation="write",
+                path=path,
+                detail="simulated batch metadata failure",
+            )
+        real_write(path, data)
+
+    monkeypatch.setattr(persistence, "write_serialized", fail_metadata)
+
+    with pytest.raises(SessionPersistenceError, match="simulated batch metadata failure"):
+        store.append_uart_capture_batch(handle, captures=captures)
+
+    assert {
+        path.name: path.read_bytes()
+        for path in (
+            handle.paths.metadata,
+            handle.paths.uart_raw,
+            handle.paths.uart_events,
+            handle.paths.hardware_events,
+            handle.paths.detected_patterns,
+        )
+    } == before
+    assert _transaction_artifacts(handle.paths.root) == []
+
+
 def test_startup_rolls_back_prepared_interrupted_transaction(tmp_path: Path) -> None:
     store, handle = _create_active_session(tmp_path)
     before_raw = handle.paths.uart_raw.read_bytes()

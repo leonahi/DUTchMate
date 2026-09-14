@@ -1,7 +1,7 @@
 """Backend-independent capture workflow coordination."""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -34,6 +34,8 @@ from dutchmate_core.uart_capture.line_buffer import UartLine
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 from dutchmate_core.validation import validate_capture_duration
 from dutchmate_core.workflows.device_actions import DeviceActionResult
+
+UART_CAPTURE_BATCH_SIZE = 64
 
 
 class CaptureEventSource(Protocol):
@@ -150,6 +152,14 @@ class CaptureSessionStorage(Protocol):
     ) -> tuple[int, ...]:
         """Persist one UART evidence unit."""
 
+    def append_uart_capture_batch(
+        self,
+        handle: SessionHandle,
+        *,
+        captures: Sequence[tuple[UartReceiveEvent, UartCaptureResult]],
+    ) -> tuple[tuple[int, ...], ...] | None:
+        """Persist ordered UART evidence atomically, or decline for quota fallback."""
+
     def append_control_action(
         self,
         handle: SessionHandle,
@@ -260,10 +270,16 @@ class TransportCaptureRunner:
         *,
         transport: CaptureEventSource,
         deadline: float,
+        uart_batch_size: int = 1,
         monotonic_clock: Callable[[], float] | None = None,
     ) -> None:
+        if not 1 <= uart_batch_size <= UART_CAPTURE_BATCH_SIZE:
+            raise ValueError(
+                f"UART capture batch size must be 1 to {UART_CAPTURE_BATCH_SIZE}"
+            )
         self._transport = transport
         self._deadline = deadline
+        self._uart_batch_size = uart_batch_size
         self._clock = monotonic_clock or time.monotonic
 
     def run(
@@ -284,10 +300,16 @@ class TransportCaptureRunner:
                 stop_requested is not None and stop_requested()
             ):
                 break
-            if event is not None:
-                segment = getattr(self._transport, "segment", None)
-                if isinstance(segment, SegmentContext):
-                    recorder.record_segment_context(segment)
+            if event is None:
+                continue
+            segment = getattr(self._transport, "segment", None)
+            if isinstance(segment, SegmentContext):
+                recorder.record_segment_context(segment)
+            if (
+                requested_pattern is not None
+                or self._uart_batch_size == 1
+                or not isinstance(event, UartReceiveEvent)
+            ):
                 result = recorder.record_event(event)
                 if result.event_type == "size_limit":
                     return None
@@ -295,6 +317,38 @@ class TransportCaptureRunner:
                     match.pattern == requested_pattern for match in result.matches
                 ):
                     return result
+                continue
+
+            events = [event]
+            pending_event: BackendEvent | None = None
+            read_error: Exception | None = None
+            while len(events) < self._uart_batch_size:
+                try:
+                    next_event = self._transport.read_event()
+                except Exception as exc:
+                    read_error = exc
+                    break
+                if self._clock() >= self._deadline or (
+                    stop_requested is not None and stop_requested()
+                ):
+                    break
+                if next_event is None:
+                    break
+                if isinstance(next_event, UartReceiveEvent):
+                    events.append(next_event)
+                    continue
+                pending_event = next_event
+                break
+
+            results = recorder.record_uart_events(tuple(events))
+            if any(result.event_type == "size_limit" for result in results):
+                return None
+            if read_error is not None:
+                raise read_error
+            if pending_event is not None:
+                result = recorder.record_event(pending_event)
+                if result.event_type == "size_limit":
+                    return None
         return None
 
 
@@ -464,6 +518,53 @@ class CaptureRecorder:
             )
 
         raise TypeError("capture recorder input must be a normalized backend event")
+
+    def record_uart_events(
+        self,
+        events: Sequence[UartReceiveEvent],
+    ) -> tuple[CaptureRecordResult, ...]:
+        """Process and persist one bounded sequence of ordered UART events."""
+
+        if self._terminalized:
+            raise ValueError("capture recorder session is already terminal")
+        if not events or len(events) > UART_CAPTURE_BATCH_SIZE:
+            raise ValueError(
+                f"UART capture batch must contain 1 to {UART_CAPTURE_BATCH_SIZE} events"
+            )
+        candidate_processor = self._uart_processor.clone()
+        captures = tuple(
+            (event, candidate_processor.process_event(event)) for event in events
+        )
+        with self._mutation_lock:
+            detected_pattern_indexes = self._session_store.append_uart_capture_batch(
+                self._session_handle,
+                captures=captures,
+            )
+        if detected_pattern_indexes is None:
+            results: list[CaptureRecordResult] = []
+            for event in events:
+                result = self.record_event(event)
+                results.append(result)
+                if result.event_type == "size_limit":
+                    break
+            return tuple(results)
+        if len(detected_pattern_indexes) != len(captures):
+            raise ValueError("persisted UART batch indexes do not match capture results")
+        self._uart_processor = candidate_processor
+        return tuple(
+            CaptureRecordResult(
+                session_id=self.session_id,
+                event_type="uart_receive",
+                lines=result.lines,
+                matches=result.matches,
+                detected_pattern_indexes=indexes,
+            )
+            for (_event, result), indexes in zip(
+                captures,
+                detected_pattern_indexes,
+                strict=True,
+            )
+        )
 
     def record_segment_context(self, context: SegmentContext) -> None:
         """Persist one immutable segment context before recording its events."""
@@ -682,6 +783,11 @@ class CaptureWorkflow:
                 runner = TransportCaptureRunner(
                     transport=current_source,
                     deadline=workflow_deadline,
+                    uart_batch_size=(
+                        UART_CAPTURE_BATCH_SIZE
+                        if snapshot is not None and snapshot.info.mode == "enhanced"
+                        else 1
+                    ),
                     monotonic_clock=clock,
                 )
                 try:
