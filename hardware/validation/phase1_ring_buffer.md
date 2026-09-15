@@ -1,6 +1,6 @@
 # Phase 1 Ring Buffer Validation Record
 
-> Status: selected_unvalidated
+> Status: accepted_32k
 > Scope: Phase 1B RP2350-based Raspberry Pi Pico 2 Debug Helper 32 KiB UART RX
 > ring-buffer acceptance evidence.
 
@@ -12,11 +12,12 @@ profiles exposed USB writer pacing, CDC staging, and host persistence limits;
 bounded firmware draining, a frame-sized FIFO, and host evidence batching
 corrected them. The no-stall, 100/250/500 ms backpressure, and corrected dense
 deliberate-overflow profiles now pass their functional and accounting gates.
-First runtime stack measurement under boot, 505.093 ms backpressure, deliberate
-overflow, and maximum UART-send input found only 224 bytes free on the 4,096-byte
-CDC RX stack. A 5,120-byte correction target-builds, but repeat HIL and the
-final adequate-margin decision remain open.
-Phase 1B is not accepted while this document remains `selected_unvalidated`.
+First runtime stack measurement found only 224 bytes free on the 4,096-byte CDC
+RX stack. The corrected 5,120-byte stack retained at least 1,248 bytes free in
+repeat boot, 504.049 ms backpressure, and deliberate-overflow HIL. All eight
+thread/ISR stacks retained measured headroom. The 32 KiB ring meets the Phase 1
+acceptance criteria; the remaining Phase 1B electrical and workflow gates are
+tracked in `docs/development_status.md`.
 
 This record must finish in exactly one state:
 
@@ -29,7 +30,7 @@ This record must finish in exactly one state:
 
 | Field | Result |
 |---|---|
-| Date/time | 2026-09-11 through 2026-09-14, Europe/Paris |
+| Date/time | 2026-09-11 through 2026-09-15, Europe/Paris |
 | Operator | User-assisted DUTchMate HIL session |
 | Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
 | Debug Helper board revision | User-confirmed fully assembled Revision A translator prototype |
@@ -102,23 +103,45 @@ builds pass:
 | Normal UF2 | `build/dutchmate-rp2350-normal-v2/zephyr/zephyr.uf2`; SHA-256 `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819` |
 | Normal static RAM | 81,040 of 532,480 bytes, leaving 451,440 bytes |
 
-The revised diagnostic image still needs to be flashed and rerun across all
-three required profiles. If CDC RX retains its measured 3,872-byte peak, the
-new 5,120-byte stack will have 1,248 bytes free; only real HIL can confirm
-that result and close the decision.
+The revised diagnostic image was flashed to the Pico 2 on 2026-09-15. It
+reported `stackprobe-1` and all five Enhanced capabilities. The Pico 1 retained
+the 460800-baud fixture, with UART, common ground, `CTRL0` to `RUN`, and
+`DUT_VIO=3.3 V`. All three required repeat profiles completed on the revised
+image without allocation, stack-overflow, watchdog, USB CDC, or session-lifecycle
+failure:
+
+| Revised-image profile | Session/evidence | Measured result |
+|---|---|---|
+| Representative boot | `20260915T191042Z-7b355b2a`; `build/stack-probe-v2-boot.json`, SHA-256 `ee3c54fb80755c9ebd1f7dc2ad3f4427bd3a27c790a50e48e68170ab7573def1` | Exact 63 raw bytes: reset `0x00` plus 62-byte fixture build marker; 62-byte ring high-water; zero loss/overflow; one uninterrupted segment |
+| 500 ms host backpressure | `20260915T191158Z-a59e0ff6`; stack report `build/stack-probe-v2-500ms.json`, SHA-256 `9f7055934419063bef295d0ec3ff655ccf67a22d813b96a1d0d498e1856a3619`; pause report `build/stack-profile-v2-500ms.json`, SHA-256 `8591ba99afe56840aec87f2c43c7c517a1ea10f25c46748354ac74da94ab31cd` | Monotonic 504.049 ms pause; exact 94,299 raw bytes, 4,096 numbered records, and checksum 8,386,560; raw SHA-256 `efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`; 160-byte ring high-water; zero loss/overflow; one uninterrupted segment; post-run host load 2.65/2.97/3.34 |
+| Deliberate overflow | `20260915T191317Z-172eb838`; stack report `build/stack-probe-v2-overflow.json`, SHA-256 `aae0fe9cd472c410a9000de7d86a78ad93496eb752f0d4963c253b66e756b9d0`; profile report `build/stack-profile-v2-overflow.json`, SHA-256 `2f491e413e069e1e3802ad92488a7775c67d2d5d8a0d41888ba6b0a5ff01ae0a` | 19,418 retained + 23,663 explicitly dropped = exact 43,081-byte fixture output; six overflow records; 6,045-byte ring high-water; BEGIN/END checksum 2,096,128 survived; raw SHA-256 `eac8f5040cf0bb9b123e2e279e0bbf37e7a31719fb7886f583c0e1c14b13ef93`; visible `loss_reported`; one uninterrupted segment; post-run host load 2.51/2.89/3.27 |
+
+The representative boot's host load was not separately recorded. The revised
+stack reports froze all eight thread/ISR high-water readings after each run:
+
+| Stack | Configured bytes | Boot used/free | 500 ms used/free | Overflow used/free |
+|---|---:|---:|---:|---:|
+| CDC RX | 5,120 | 3,868 / 1,252 | 3,872 / 1,248 | 3,872 / 1,248 |
+| Command | 3,072 | 1,312 / 1,760 | 1,312 / 1,760 | 1,312 / 1,760 |
+| Main | 2,048 | 820 / 1,228 | 820 / 1,228 | 820 / 1,228 |
+| ISR0 | 2,048 | 240 / 1,808 | 240 / 1,808 | 240 / 1,808 |
+| `usbd` | 1,024 | 516 / 508 | 516 / 508 | 516 / 508 |
+| `sysworkq` | 1,024 | 360 / 664 | 360 / 664 | 360 / 664 |
+| Pico UDC `usbd_50110000` | 512 | 192 / 320 | 192 / 320 | 192 / 320 |
+| Idle | 320 | 48 / 272 | 48 / 272 | 48 / 272 |
 
 ## Firmware RAM Report
 
 | Measurement | Result |
 |---|---|
-| Static image RAM | 80,016 of 532,480 bytes (15.03%); linker total including alignment/padding for the second throughput candidate |
+| Static image RAM | Final normal image: 81,040 of 532,480 bytes (15.22%); linker total including alignment/padding. The earlier second throughput candidate used 80,016 bytes. |
 | UART RX ring buffer | 32,768 raw bytes; 45,136-byte complete ring object including 512 timestamp descriptors and accounting state |
 | USB/protocol buffers | Major named static allocations: CDC TX state 1,584 bytes; command ingress 2,056; command queues 3,088; UART TX state 1,072; evidence frame 1,536; UART staging 1,024; CDC RX/TX rings 1,024/2,048; UDC endpoint heap 1,024 |
-| Thread stacks/heaps | 14,144 statically allocated stack bytes; system heap `CONFIG_HEAP_MEM_POOL_SIZE=0` |
-| Measured stack high-water margins | First diagnostic HIL measured all eight stacks; CDC RX retained only 224/4,096 bytes free. Revised 5,120-byte stack HIL pending. |
-| Remaining RAM margin | 452,464 bytes (441.9 KiB, 84.97%) after the linked static image |
+| Thread stacks/heaps | 15,168 statically allocated stack bytes; system heap `CONFIG_HEAP_MEM_POOL_SIZE=0` |
+| Measured stack high-water margins | Revised diagnostic HIL measured all eight stacks; CDC RX retained at least 1,248/5,120 bytes free. The other seven retained 272–1,808 bytes free. |
+| Remaining RAM margin | Final normal image: 451,440 bytes (440.9 KiB, 84.78%) after the linked static image |
 
-The 14,144 stack bytes comprise the 4,096-byte CDC RX thread, 3,072-byte command
+The 15,168 stack bytes comprise the 5,120-byte CDC RX thread, 3,072-byte command
 thread, 2,048-byte main stack, 2,048-byte interrupt stack, 1,024-byte system
 workqueue, 1,024-byte USB-device thread, 512-byte RP2350 UDC thread, and
 320-byte idle stack. These are configured/static allocations, not measured
@@ -143,9 +166,9 @@ ignored build tree retains the exact evidence at:
   `1af223f9c4530bd589c83267dd6a2eecb1271b94539f592572740a7a78a52943`.
 
 Zephyr's symbol-attributed `ram_report` accounts for 76,583 bytes. The linker
-region total of 78,032 bytes is authoritative for the static footprint because
-it also includes allocation alignment and padding. Do not estimate the still
-missing runtime measurements from these static values.
+region total of 78,032 bytes is authoritative for that pristine baseline's
+static footprint because it also includes allocation alignment and padding.
+The final runtime measurements are recorded above.
 
 ## 460800-Baud HIL Fixture Candidate
 
@@ -428,13 +451,14 @@ supersedes the pre-fix dense baseline and passes the deliberate-overflow gates.
   `debug_helper_rx_buffer` when overflow occurred.
 - [x] No test silently discarded overflow telemetry or represented the receive
   path as globally lossless.
-- [ ] Zephyr RAM and stack measurements retained adequate margin for the fixed
+- [x] Zephyr RAM and stack measurements retained adequate margin for the fixed
   buffers and worst-case protocol encoding.
 
 ## Final Decision
 
-`selected_unvalidated`
+`accepted_32k`
 
-Replace this value only after recording reproducible measurements above. A
-failed criterion requires `revised_with_evidence`; it must not be waived by
-editing the final state alone.
+The final normal image uses 81,040/532,480 bytes of static RAM and the revised
+diagnostic image measured at least 1,248 bytes free on CDC RX under the required
+profiles. Ten consecutive representative boots, 250/500 ms backpressure, and
+deliberate overflow passed the functional, telemetry, and byte-accounting gates.

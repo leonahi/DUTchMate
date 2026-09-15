@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `5618c591ea91f2fa17b420bdb05e7a05cfeda79b` on 2026-09-15
+> Code baseline reviewed: `ae01ce204993d938f9a4298da6ee40bf4d8e7081` on 2026-09-15
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -78,17 +78,18 @@ Read this document first whenever development resumes.
   at the async adapter boundary. The Step 5 audit confirms automated host-
   compiled coverage for every portable firmware boundary and records a
   reproducible Pico 2 target build. Firmware implementation is complete;
-  electrical and load acceptance remain pending. Step 6 has now started on the
-  assembled Revision A prototype. USB identity, preliminary missing-`DUT_VIO`
-  safe-state behavior, 1.8 V debugger-unpowered leakage, and the VIO-first
-  debugger power-up safe-enable state are recorded. Its paired power-down was
-  qualitatively as expected. The reverse debugger-first power-up also retained
-  safe enable states, and its paired `DUT_VIO` power-down left VIO at 0.0 V
-  while all enables stayed low. An active Enhanced epoch at 1.8 V enabled only
-  the UART translator, produced the expected 1.8 V DUT-side UART idle level,
-  reported zero loss, and returned the measured UART enable and output voltage
-  to 0.0 V after shutdown. The first loopback attempt then exposed a live CDC
-  command-ingress defect: telemetry flowed but every host command timed out.
+  electrical and broader workflow acceptance remain pending. Step 6 has now
+  started on the assembled Revision A prototype. USB identity, preliminary
+  missing-`DUT_VIO` safe-state behavior, 1.8 V debugger-unpowered leakage, and
+  the VIO-first debugger power-up safe-enable state are recorded. Its paired
+  power-down was qualitatively as expected. The reverse debugger-first power-up
+  also retained safe enable states, and its paired `DUT_VIO` power-down left VIO
+  at 0.0 V while all enables stayed low. An active Enhanced epoch at 1.8 V
+  enabled only the UART translator, produced the expected 1.8 V DUT-side UART
+  idle level, reported zero loss, and returned the measured UART enable and
+  output voltage to 0.0 V after shutdown. The first loopback attempt then
+  exposed a live CDC command-ingress defect: telemetry flowed but every host
+  command timed out.
   The firmware now services RX and TX readiness in its shared CDC interrupt
   callback, drains RX through the Zephyr FIFO API, and transfers bounded bytes
   to the existing command thread. A repeatable invalid-command probe failed on
@@ -131,9 +132,11 @@ Read this document first whenever development resumes.
   enables stayed low, current remained near 30 uA, and USB reappeared. A fresh
   pristine Zephyr 4.4.2/SDK 1.0.1 build now starts ring-buffer acceptance with
   an exact static memory baseline: 52,012 bytes flash and 78,032 bytes RAM,
-  leaving 454,448 bytes of RP2350 SRAM. The fixed stacks total 14,144 bytes and
-  the system heap is disabled; runtime stack high-water and load evidence are
-  still pending. The existing Pico 1 DUT fixture's 115200-baud Basic default did
+  leaving 454,448 bytes of RP2350 SRAM. This pristine build is the starting
+  memory baseline; the final normal image uses 81,040 bytes RAM, leaving 451,440
+  bytes, with 15,168 bytes of fixed stacks and no system heap. Runtime stack
+  high-water and load evidence are recorded in the ring-buffer acceptance
+  record. The existing Pico 1 DUT fixture's 115200-baud Basic default did
   not meet the ring-buffer gate's 460800-baud requirement, so an opt-in
   devicetree overlay now selects 460800 without changing the accepted Basic
   image. Its Zephyr 4.4.0/SDK 1.0.1 candidate target-build passes with immutable
@@ -185,16 +188,17 @@ Read this document first whenever development resumes.
   505.093 ms backpressure, deliberate-overflow, and bounded maximum-payload
   HIL probes all returned eight thread/ISR high-water readings. The load and
   overflow evidence passed, but CDC RX used 3,872 of its 4,096-byte stack,
-  leaving only 224 bytes. A 5,120-byte CDC RX-stack correction and both revised
-  RP2350 target builds are prepared; the larger-stack image needs repeat HIL.
-- **Next step:** Flash the revised Pico 2 stack-measurement image and repeat the
-  boot, 500 ms backpressure, and deliberate-overflow profiles. Verify that CDC
-  RX and every other thread/ISR stack retain adequate measured margin, preserve
-  exact fixture byte/loss accounting and uninterrupted epochs, then close the
-  32 KiB ring-buffer decision as `accepted_32k` or `revised_with_evidence`.
-  Correlate
-  the unexplained 75 uA debugger-unpowered reading during controlled idle/load
-  setup. EVENT pins remain reserved; do not add event capture.
+  leaving only 224 bytes. The 5,120-byte correction has now passed repeat Pico 2
+  boot, measured 504.049 ms backpressure, and deliberate-overflow HIL. All eight
+  stacks retained measured headroom; CDC RX kept at least 1,248 bytes free. The
+  32 KiB ring decision is `accepted_32k`.
+- **Next step:** Resume Revision A electrical acceptance. Correlate the
+  unexplained 75 uA debugger-unpowered reading with controlled idle/load
+  measurements, then finish the open missing-supply, power-isolation, signal
+  margin, and safe-state checks in `hardware/schematics/revision_a.md` section
+  14. Complete the broader Enhanced workflow HIL against the same Pico 1
+  fixture before accepting Phase 1B. EVENT pins remain reserved; do not add
+  event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -241,7 +245,7 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | Load profiles pass; first stack probe found narrow CDC RX margin | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial throughput failures isolated and corrected firmware descriptor pacing, CDC staging, and host persistence bottlenecks. With host batching, no-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Corrected dense sessions reconcile retained plus reported dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The new Pico 2 stack probe measured all eight thread/ISR stacks under boot, 505.093 ms backpressure, deliberate overflow, and maximum UART-send input. CDC RX left only 224/4,096 bytes free. Its stack is raised to 5,120 bytes in target-build-verified candidates; repeat HIL is required before `selected_unvalidated` can become `accepted_32k`. |
+| Ring-buffer acceptance | `accepted_32k` | Static RAM and fixture provenance are recorded, and ten consecutive representative boots pass. No-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Deliberate overflow sessions reconcile retained plus explicitly dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The corrected 5,120-byte CDC RX stack passed repeat boot, 504.049 ms backpressure, and deliberate-overflow Pico 2 HIL with at least 1,248 bytes free. All eight stacks retained headroom, and final normal static RAM is 81,040/532,480 bytes. `hardware/validation/phase1_ring_buffer.md` records the decision. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
@@ -249,35 +253,32 @@ for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
 
-Runtime stack measurement preparation and first Pico 2 HIL, reviewed
+Ring-buffer final stack and load HIL, reviewed
 2026-09-15:
 
-- A USB-only diagnostic build reports one frozen thread/ISR high-water reading
-  per later valid `hello.firmware` epoch without modifying workload UART or
-  buffer-status evidence. The first image target-built under Zephyr 4.4.2 and
-  SDK 1.0.1 and was flashed on the Pico 2; Device Core verified
-  `stackprobe-1` and all five Enhanced capabilities. The collector retrieved
-  all eight expected stacks.
-- Boot session `20260915T185218Z-e090a9ff` retained the exact 63-byte reset
-  byte plus fixture build marker, 62-byte ring high-water, zero loss/overflow,
-  and one uninterrupted segment. A measured 505.093 ms backpressure run
-  `20260915T185456Z-2de186ad` retained all 94,299 bytes, all 4,096 sequence
-  lines, the exact checksum, zero loss/overflow, and one uninterrupted segment.
-  Dense session `20260915T185607Z-d8206665` retained 19,694 plus 23,387
-  explicitly dropped bytes, exactly reconciling the 43,081-byte fixture output
-  with six overflow records and visible `loss_reported` integrity. A bounded
-  1,024-byte UART send also completed. No allocation, stack, watchdog, USB, or
-  lifecycle failure was observed.
-- The frozen reports for all four profiles consistently measured CDC RX at
-  3,872/4,096 bytes, leaving only 224 bytes (5.47%). The other seven stacks
-  retained 272–1,808 bytes free. This CDC RX margin does not close the stack
-  acceptance gate. A correction raises it to 5,120 bytes; the revised normal
-  and diagnostic images target-build with 81,040 and 82,136 bytes of static RAM,
-  respectively. Their HIL repeat remains pending.
+- The first USB-only diagnostic image measured CDC RX at 3,872/4,096 bytes,
+  leaving only 224 bytes. The corrected image SHA-256 is
+  `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66`.
+  It reports `stackprobe-1` and all five Enhanced capabilities and froze all
+  eight thread/ISR high-water readings after each revised workload.
+- Revised boot session `20260915T191042Z-7b355b2a` retained the exact 63-byte
+  reset byte plus fixture marker with zero loss/overflow and one segment. The
+  504.049 ms backpressure session `20260915T191158Z-a59e0ff6` retained the
+  exact 94,299-byte stream, all 4,096 numbered records and checksum 8,386,560,
+  zero loss/overflow, and one segment. Dense session
+  `20260915T191317Z-172eb838` reconciled 19,418 retained plus 23,663
+  explicitly dropped bytes to the 43,081-byte fixture output with six overflow
+  records, visible `loss_reported`, and one uninterrupted segment.
+- Revised CDC RX high-water was 3,872/5,120 bytes under backpressure and
+  overflow, leaving 1,248 bytes (24.4%); the other seven stacks kept 272–1,808
+  bytes free. Final normal static RAM is 81,040/532,480 bytes, leaving 451,440
+  bytes; the diagnostic build uses 82,136 bytes. No allocation, stack, watchdog,
+  USB CDC, or lifecycle failure was observed. The ring record is `accepted_32k`.
 - The corrected source passed Ruff, mypy on 73 application files and both HIL
   helper scripts, all 1,286 pytest cases, both Zephyr 4.4.2 RP2350 target
-  builds, and `git diff --check`. The diagnostic image SHA-256 is
-  `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66`.
+  builds, and `git diff --check` before the revised HIL. After the evidence/status
+  update, fresh Ruff passed, mypy found no issues in 75 source files, all 1,286
+  pytest cases passed, and `git diff --check` passed.
 
 Revision A initial electrical validation record, reviewed 2026-09-11:
 
@@ -1243,7 +1244,7 @@ schema and exposes the required identity/capabilities.
   integrity, and safe-state results.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
-- [ ] Record Zephyr RAM/stack usage and every load profile required by
+- [x] Record Zephyr RAM/stack usage and every load profile required by
   `docs/ring_buffer_sizing_plan.md`.
   - [x] Record the reproducible static RAM, configured stack/heap, remaining
     margin, build identity, and artifact hashes.
@@ -1264,10 +1265,10 @@ schema and exposes the required identity/capabilities.
   - [x] Measure all eight runtime thread/ISR stacks under boot, 500 ms
     backpressure, deliberate overflow, and a bounded maximum UART-send input;
     identify the first CDC RX stack's inadequate 224-byte margin.
-  - [ ] Flash the 5,120-byte CDC RX-stack measurement image and repeat the
+  - [x] Flash the 5,120-byte CDC RX-stack measurement image and repeat the
     boot, 500 ms backpressure, and deliberate-overflow profiles with adequate
     measured margin and no allocation, watchdog, USB, or lifecycle failure.
-- [ ] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
+- [x] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
   `revised_with_evidence`; do not waive failed criteria.
 
 Exit gate: the prototype electrical checklist and ring-buffer decision contain
