@@ -62,6 +62,8 @@ class ContinuousIngestionCoordinator:
             backend_snapshot=backend_snapshot,
             connection_generation=self._connection_generation,
         )
+        self._status_baseline: tuple[int, int] | None = None
+        self._explicit_overflow_events = 0
         self._events: deque[BackendEvent] = deque()
         self._queue_capacity = queue_capacity
         self._event_wait_timeout_s = float(event_wait_timeout_s)
@@ -261,6 +263,8 @@ class ContinuousIngestionCoordinator:
                     self._source = replacement
                     self._segment = replacement_segment
                     self._health = health
+                    self._status_baseline = None
+                    self._explicit_overflow_events = 0
                     self._terminal_error = None
                     self._terminal_consumed = False
                     self._replacement_allowed = False
@@ -377,7 +381,22 @@ class ContinuousIngestionCoordinator:
                 if source is self._source and not self._closing:
                     self._segment = source_segment
                     if event is not None:
-                        self._health = _project_event_health(self._health, event)
+                        if isinstance(event, BufferOverflowEvent):
+                            self._explicit_overflow_events += 1
+                        if isinstance(event, BufferStatusEvent) and self._status_baseline is None:
+                            prior_dropped = (
+                                self._health.integrity.dropped_bytes
+                                if self._health.integrity is not None
+                                and self._health.integrity.dropped_bytes is not None
+                                else 0
+                            )
+                            self._status_baseline = (
+                                max(0, event.dropped_bytes_total - prior_dropped),
+                                max(0, event.overflow_events - self._explicit_overflow_events),
+                            )
+                        self._health = _project_event_health(
+                            self._health, event, status_baseline=self._status_baseline
+                        )
                 if self._closing:
                     return
                 if source is not self._source or event is None or not self._workflow_active:
@@ -435,6 +454,8 @@ def _source_segment(source: CaptureEventSource) -> SegmentContext | None:
 def _project_event_health(
     health: CaptureSourceHealth,
     event: BackendEvent,
+    *,
+    status_baseline: tuple[int, int] | None,
 ) -> CaptureSourceHealth:
     integrity = health.integrity
     previous_dropped = (
@@ -452,14 +473,16 @@ def _project_event_health(
             ),
         )
     if isinstance(event, BufferStatusEvent):
-        reported_loss = event.dropped_bytes_total > 0 or event.overflow_events > 0
+        baseline_dropped, baseline_overflows = status_baseline or (0, 0)
+        observed_dropped = max(0, event.dropped_bytes_total - baseline_dropped)
+        reported_loss = observed_dropped > 0 or event.overflow_events > baseline_overflows
         prior_loss = integrity is not None and integrity.loss_status == "loss_reported"
         return replace(
             health,
             integrity=UartIntegrity(
                 "loss_reported" if prior_loss or reported_loss else "none_reported",
                 "debug_helper_rx_buffer",
-                max(previous_dropped, event.dropped_bytes_total),
+                max(previous_dropped, observed_dropped),
             ),
         )
     return health

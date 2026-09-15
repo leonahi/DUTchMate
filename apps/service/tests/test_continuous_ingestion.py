@@ -228,6 +228,19 @@ def test_idle_zero_status_publishes_none_reported_integrity() -> None:
         close_coordinator(coordinator)
 
 
+def test_idle_first_status_treats_prior_mcu_counters_as_baseline() -> None:
+    source = ControlledSource()
+    coordinator = ContinuousIngestionCoordinator(source)
+    try:
+        source.publish(buffer_status_event(dropped_bytes_total=23663, overflow_events=6))
+        assert source.wait_for_reads(2)
+        assert coordinator.capture_source_health().integrity == UartIntegrity(
+            "none_reported", "debug_helper_rx_buffer", 0
+        )
+    finally:
+        close_coordinator(coordinator)
+
+
 def test_idle_incremental_and_cumulative_telemetry_do_not_double_count() -> None:
     source = ControlledSource()
     coordinator = ContinuousIngestionCoordinator(source)

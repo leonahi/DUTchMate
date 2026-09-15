@@ -194,6 +194,8 @@ class CaptureSessionStorage(Protocol):
         handle: SessionHandle,
         *,
         event: BufferStatusEvent,
+        session_dropped_bytes_total: int | None = None,
+        session_overflow_events: int | None = None,
     ) -> None:
         """Persist one buffer-status evidence unit."""
 
@@ -384,6 +386,11 @@ class CaptureRecorder:
         self._terminalized = False
         self._finalized = False
         self._mutation_lock = mutation_lock or RLock()
+        # Firmware status counters survive DTR epochs; each session needs its own baseline.
+        self._status_baselines: dict[int, tuple[int, int]] = {}
+        self._status_latest: dict[int, tuple[int, int]] = {}
+        self._explicit_dropped_before_status: dict[int, int] = {}
+        self._explicit_overflows_before_status: dict[int, int] = {}
 
     @classmethod
     def start(
@@ -496,22 +503,59 @@ class CaptureRecorder:
                     session_id=self.session_id,
                     event_type="size_limit",
                 )
+            if event.segment_id not in self._status_baselines:
+                self._explicit_dropped_before_status[event.segment_id] = (
+                    self._explicit_dropped_before_status.get(event.segment_id, 0)
+                    + event.dropped_bytes
+                )
+                self._explicit_overflows_before_status[event.segment_id] = (
+                    self._explicit_overflows_before_status.get(event.segment_id, 0) + 1
+                )
             return CaptureRecordResult(
                 session_id=self.session_id,
                 event_type="buffer_overflow",
             )
 
         if isinstance(event, BufferStatusEvent):
+            baseline = self._status_baselines.get(event.segment_id)
+            if baseline is None:
+                baseline = (
+                    max(
+                        0,
+                        event.dropped_bytes_total
+                        - self._explicit_dropped_before_status.get(event.segment_id, 0),
+                    ),
+                    max(
+                        0,
+                        event.overflow_events
+                        - self._explicit_overflows_before_status.get(event.segment_id, 0),
+                    ),
+                )
+            latest = (event.dropped_bytes_total, event.overflow_events)
+            status_dropped = sum(
+                max(0, counters[0] - self._status_baselines[segment_id][0])
+                for segment_id, counters in self._status_latest.items()
+                if segment_id != event.segment_id
+            ) + max(0, latest[0] - baseline[0])
+            status_overflows = sum(
+                max(0, counters[1] - self._status_baselines[segment_id][1])
+                for segment_id, counters in self._status_latest.items()
+                if segment_id != event.segment_id
+            ) + max(0, latest[1] - baseline[1])
             if not self._record_with_quota(
                 lambda: self._session_store.append_buffer_status(
                     self._session_handle,
                     event=event,
+                    session_dropped_bytes_total=status_dropped,
+                    session_overflow_events=status_overflows,
                 )
             ):
                 return CaptureRecordResult(
                     session_id=self.session_id,
                     event_type="size_limit",
                 )
+            self._status_baselines.setdefault(event.segment_id, baseline)
+            self._status_latest[event.segment_id] = latest
             return CaptureRecordResult(
                 session_id=self.session_id,
                 event_type="buffer_status",

@@ -1372,8 +1372,10 @@ class SessionStore:
         handle: SessionHandle,
         *,
         event: BufferStatusEvent,
+        session_dropped_bytes_total: int | None = None,
+        session_overflow_events: int | None = None,
     ) -> None:
-        """Append one buffer status telemetry event to a session."""
+        """Retain raw MCU status; optionally project capture-window loss into metadata."""
 
         _persistence.require_session_appendable(handle)
         metadata = _persistence.read_json_object(handle.paths.metadata)
@@ -1385,17 +1387,26 @@ class SessionStore:
             )
         )
 
+        observed_dropped = (
+            event.dropped_bytes_total
+            if session_dropped_bytes_total is None
+            else session_dropped_bytes_total
+        )
+        observed_overflows = (
+            event.overflow_events if session_overflow_events is None else session_overflow_events
+        )
+
         def record_summary(metadata: dict[str, object]) -> None:
             _metadata._record_metadata_segment_timestamp(
                 metadata,
                 segment_id=event.segment_id,
                 timestamp_us=event.timestamp_us,
             )
-            if event.dropped_bytes_total > 0 or event.overflow_events > 0:
+            if observed_dropped > 0 or observed_overflows > 0:
                 metadata["overflow"] = True
                 _metadata._record_integrity_loss(
                     metadata,
-                    dropped_bytes=event.dropped_bytes_total,
+                    dropped_bytes=observed_dropped,
                     cumulative=True,
                 )
 

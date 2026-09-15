@@ -810,6 +810,11 @@ class DeviceCoreRuntime:
                     source_segment if isinstance(source_segment, SegmentContext) else None
                 )
             )
+            if backend_snapshot is not None and backend_snapshot.info.mode == "enhanced":
+                backend_snapshot = replace(
+                    backend_snapshot,
+                    integrity=UartIntegrity("none_reported", "debug_helper_rx_buffer", 0),
+                )
             firmware = self._backend_info.firmware if self._backend_info is not None else None
             device = self._backend_info.device if self._backend_info is not None else None
             self._capture_in_progress = True

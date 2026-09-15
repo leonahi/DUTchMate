@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -272,6 +273,116 @@ def test_record_buffer_status_writes_hardware_event(tmp_path: Path) -> None:
             "overflow_events": 0,
         }
     ]
+
+
+def test_prior_mcu_overflow_counters_do_not_mark_a_new_capture_lost(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    recorder = CaptureRecorder.start(
+        session_store=store,
+        command="boot-test --seconds 15",
+        backend_snapshot=enhanced_snapshot(),
+    )
+
+    for timestamp_us in (100, 200):
+        recorder.record_event(
+            BufferStatusEvent(
+                segment_id=0,
+                timestamp_us=timestamp_us,
+                size_bytes=32768,
+                used_bytes=0,
+                high_water_bytes=6045,
+                dropped_bytes_total=23663,
+                overflow_events=6,
+            )
+        )
+
+    summary = store.summarize_session(recorder.session_id)
+    assert summary.overflow is False
+    assert summary.integrity is not None
+    assert summary.integrity.loss_status == "none_reported"
+    assert summary.integrity.dropped_bytes == 0
+    assert [
+        event["dropped_bytes_total"]
+        for event in read_jsonl(recorder.session_handle.paths.hardware_events)
+    ] == [23663, 23663]
+
+
+def test_status_only_loss_accumulates_across_reconnect_segments(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    snapshot = enhanced_snapshot()
+    recorder = CaptureRecorder.start(
+        session_store=store,
+        command="capture --seconds 5",
+        backend_snapshot=snapshot,
+        workflow="capture",
+        duration_s=5.0,
+        reconnect_timeout_s=5.0,
+    )
+
+    def status(segment_id: int, timestamp_us: int, total: int) -> BufferStatusEvent:
+        return BufferStatusEvent(
+            segment_id=segment_id,
+            timestamp_us=timestamp_us,
+            size_bytes=32768,
+            used_bytes=0,
+            high_water_bytes=6045,
+            dropped_bytes_total=total,
+            overflow_events=(total - 23663) // 100 + 6,
+        )
+
+    recorder.record_event(status(0, 100, 23663))
+    recorder.record_event(status(0, 200, 23763))
+    assert recorder.record_backend_disconnect(0) == 1
+    assert snapshot.segment is not None
+    replacement = replace(
+        snapshot,
+        segment=replace(snapshot.segment, segment_id=1, timestamp=replace(
+            snapshot.segment.timestamp, source_origin_us=2_000
+        )),
+    )
+    assert recorder.resume_session(replacement) == 1
+    recorder.record_event(status(1, 100, 23763))
+    recorder.record_event(status(1, 200, 23863))
+
+    summary = store.summarize_session(recorder.session_id)
+    assert summary.integrity is not None
+    assert summary.integrity.dropped_bytes == 200
+
+
+def test_status_loss_after_first_explicit_overflow_adds_to_session_total(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    recorder = CaptureRecorder.start(
+        session_store=store, command="capture", backend_snapshot=enhanced_snapshot()
+    )
+    recorder.record_event(
+        BufferOverflowEvent(segment_id=0, timestamp_us=100, channel=0, dropped_bytes=100)
+    )
+    recorder.record_event(
+        BufferStatusEvent(
+            segment_id=0,
+            timestamp_us=200,
+            size_bytes=32768,
+            used_bytes=0,
+            high_water_bytes=6045,
+            dropped_bytes_total=23763,
+            overflow_events=7,
+        )
+    )
+    recorder.record_event(
+        BufferStatusEvent(
+            segment_id=0,
+            timestamp_us=300,
+            size_bytes=32768,
+            used_bytes=0,
+            high_water_bytes=6045,
+            dropped_bytes_total=23813,
+            overflow_events=8,
+        )
+    )
+
+    summary = store.summarize_session(recorder.session_id)
+    assert summary.integrity is not None
+    assert summary.integrity.dropped_bytes == 150
 
 
 def test_record_event_rejects_unsupported_value(tmp_path: Path) -> None:

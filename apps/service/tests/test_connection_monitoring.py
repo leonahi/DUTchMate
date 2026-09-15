@@ -217,6 +217,17 @@ def test_idle_enhanced_telemetry_reaches_existing_integrity_response(
         source.publish(
             BufferStatusEvent(
                 segment_id=0,
+                timestamp_us=5,
+                size_bytes=32768,
+                used_bytes=0,
+                high_water_bytes=0,
+                dropped_bytes_total=0,
+                overflow_events=0,
+            )
+        )
+        source.publish(
+            BufferStatusEvent(
+                segment_id=0,
                 timestamp_us=10,
                 size_bytes=32768,
                 used_bytes=32768,
@@ -225,7 +236,7 @@ def test_idle_enhanced_telemetry_reaches_existing_integrity_response(
                 overflow_events=1,
             )
         )
-        assert source.wait_for_reads(2)
+        assert source.wait_for_reads(3)
         response = TestClient(create_app(runtime)).get("/status")
         assert response.status_code == 200
         assert response.json()["integrity"] == {
@@ -321,6 +332,17 @@ def test_first_status_after_idle_replacement_projects_new_telemetry(
         replacement.publish(
             BufferStatusEvent(
                 segment_id=1,
+                timestamp_us=10,
+                size_bytes=32768,
+                used_bytes=0,
+                high_water_bytes=0,
+                dropped_bytes_total=0,
+                overflow_events=0,
+            )
+        )
+        replacement.publish(
+            BufferStatusEvent(
+                segment_id=1,
                 timestamp_us=20,
                 size_bytes=32768,
                 used_bytes=32768,
@@ -329,7 +351,7 @@ def test_first_status_after_idle_replacement_projects_new_telemetry(
                 overflow_events=1,
             )
         )
-        assert replacement.wait_for_reads(2)
+        assert replacement.wait_for_reads(3)
 
         response = TestClient(create_app(runtime)).get("/status")
 

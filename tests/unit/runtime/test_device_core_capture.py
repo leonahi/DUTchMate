@@ -33,7 +33,7 @@ from dutchmate_core.runtime import (
     DeviceCoreStatus,
 )
 from dutchmate_core.session_store.store import SessionPersistenceError, SessionStore
-from dutchmate_core.workflows.capture import ReconnectedCaptureSource
+from dutchmate_core.workflows.capture import CaptureSourceHealth, ReconnectedCaptureSource
 from dutchmate_core.workflows.device_actions import DeviceActionError
 
 
@@ -114,6 +114,44 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         )
     )
     assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes  # type: ignore[index]
+
+
+def test_new_capture_does_not_inherit_prior_connection_loss(tmp_path: Path) -> None:
+    clock = FakeMonotonicClock()
+
+    class HealthCaptureSource(FakeCaptureSource):
+        def capture_source_health(self) -> CaptureSourceHealth:
+            return CaptureSourceHealth(
+                True, UartIntegrity("loss_reported", "debug_helper_rx_buffer", 23663)
+            )
+
+    source = HealthCaptureSource(
+        [
+            BufferStatusEvent(
+                segment_id=0,
+                timestamp_us=100,
+                size_bytes=32768,
+                used_bytes=0,
+                high_water_bytes=6045,
+                dropped_bytes_total=23663,
+                overflow_events=6,
+            )
+        ],
+        clock=clock,
+    )
+    store = SessionStore(root=tmp_path, clock=_fixed_session_time, id_factory=lambda: "new-capture")
+    runtime = DeviceCoreRuntime(
+        device_control=FakeDeviceControl(),
+        message_source=source,
+        capture_clock=clock,
+        session_store=store,
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
+
+    summary = runtime.capture_uart(duration_s=0.2)
+
+    assert summary.overflow is False
+    assert summary.integrity == UartIntegrity("none_reported", "debug_helper_rx_buffer", 0)
 
 
 def test_capture_snapshots_commanded_boot_mode_at_session_start(tmp_path: Path) -> None:
@@ -378,10 +416,10 @@ def test_capture_uart_stops_cleanly_when_hardware_event_exceeds_budget(
     assert summary.state == "completed"
     assert summary.end_reason == "size_limit"
     assert summary.truncated is True
-    assert summary.overflow is True
+    assert summary.overflow is False
     assert summary.integrity is not None
-    assert summary.integrity.loss_status == "loss_reported"
-    assert summary.integrity.dropped_bytes == 37
+    assert summary.integrity.loss_status == "none_reported"
+    assert summary.integrity.dropped_bytes == 0
     assert summary.truncation is not None
     assert summary.truncation["rejected_unit_type"] == "hardware_event"
     assert summary.truncation["rejected_uart_payload_bytes"] is None
@@ -488,6 +526,15 @@ def test_capture_updates_connected_integrity_from_buffer_telemetry(
     clock = FakeMonotonicClock()
     source = FakeCaptureSource(
         [
+            BufferStatusEvent(
+                segment_id=0,
+                timestamp_us=100,
+                size_bytes=32768,
+                used_bytes=0,
+                high_water_bytes=0,
+                dropped_bytes_total=0,
+                overflow_events=0,
+            ),
             BufferStatusEvent(
                 segment_id=0,
                 timestamp_us=200,
