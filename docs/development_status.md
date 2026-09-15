@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `9368c4f227d08c4484667c97c11c14da8c681cae` on 2026-09-14
+> Code baseline reviewed: `5618c591ea91f2fa17b420bdb05e7a05cfeda79b` on 2026-09-15
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -180,12 +180,18 @@ Read this document first whenever development resumes.
   or session failure. A corrected dense `BURST` then deliberately overflowed:
   15,691 retained plus 27,390 explicitly dropped bytes exactly reconcile its
   43,081-byte output, the END marker survived, and the session remained
-  connected and uninterrupted with visible `loss_reported` integrity.
-- **Next step:** Measure runtime stack high-water margins under the accepted
-  boot, 500 ms backpressure, and deliberate-overflow profiles. Preserve the
-  reproducible static RAM/build evidence and require adequate margin with no
-  allocation, watchdog, USB, or lifecycle failure before selecting the final
-  `accepted_32k` decision.
+  connected and uninterrupted with visible `loss_reported` integrity. USB-only
+  runtime stack measurement now works on the Pico 2. Its first boot, measured
+  505.093 ms backpressure, deliberate-overflow, and bounded maximum-payload
+  HIL probes all returned eight thread/ISR high-water readings. The load and
+  overflow evidence passed, but CDC RX used 3,872 of its 4,096-byte stack,
+  leaving only 224 bytes. A 5,120-byte CDC RX-stack correction and both revised
+  RP2350 target builds are prepared; the larger-stack image needs repeat HIL.
+- **Next step:** Flash the revised Pico 2 stack-measurement image and repeat the
+  boot, 500 ms backpressure, and deliberate-overflow profiles. Verify that CDC
+  RX and every other thread/ISR stack retain adequate measured margin, preserve
+  exact fixture byte/loss accounting and uninterrupted epochs, then close the
+  32 KiB ring-buffer decision as `accepted_32k` or `revised_with_evidence`.
   Correlate
   the unexplained 75 uA debugger-unpowered reading during controlled idle/load
   setup. EVENT pins remain reserved; do not add event capture.
@@ -235,13 +241,43 @@ startup; electrical, UART/load, and active-workflow reconnect acceptance remain.
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
-| Ring-buffer acceptance | All functional/load profiles passed; runtime stack high-water is next | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial throughput failures isolated and corrected firmware descriptor pacing, CDC staging, and host persistence bottlenecks. With host batching, no-stall session `20260914T205443Z-f931321d` retained the exact 94,299-byte stream with zero loss/overflow and 131 bytes of high-water. Measured 104.328, 250.255, and 505.137 ms pauses retained that identical exact stream with zero loss/overflow, one uninterrupted segment, and 160 bytes of high-water. Corrected dense session `20260914T210453Z-104d1c17` retained 15,691 plus 27,390 explicitly dropped bytes, exactly reconciling the 43,081-byte fixture output; it preserved the END marker, visible `loss_reported` integrity, and a healthy connection. Runtime stack high-water remains open, so the decision record remains `selected_unvalidated`. |
+| Ring-buffer acceptance | Load profiles pass; first stack probe found narrow CDC RX margin | Static RAM and fixture provenance are recorded, and ten consecutive boot sessions pass. Initial throughput failures isolated and corrected firmware descriptor pacing, CDC staging, and host persistence bottlenecks. With host batching, no-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Corrected dense sessions reconcile retained plus reported dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The new Pico 2 stack probe measured all eight thread/ISR stacks under boot, 505.093 ms backpressure, deliberate overflow, and maximum UART-send input. CDC RX left only 224/4,096 bytes free. Its stack is raised to 5,120 bytes in target-build-verified candidates; repeat HIL is required before `selected_unvalidated` can become `accepted_32k`. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced startup and initial UART loopbacks passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, and exact short-jumper 460800-baud loopbacks at all four supported VIO points pass; full Enhanced workflow acceptance remains pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+Runtime stack measurement preparation and first Pico 2 HIL, reviewed
+2026-09-15:
+
+- A USB-only diagnostic build reports one frozen thread/ISR high-water reading
+  per later valid `hello.firmware` epoch without modifying workload UART or
+  buffer-status evidence. The first image target-built under Zephyr 4.4.2 and
+  SDK 1.0.1 and was flashed on the Pico 2; Device Core verified
+  `stackprobe-1` and all five Enhanced capabilities. The collector retrieved
+  all eight expected stacks.
+- Boot session `20260915T185218Z-e090a9ff` retained the exact 63-byte reset
+  byte plus fixture build marker, 62-byte ring high-water, zero loss/overflow,
+  and one uninterrupted segment. A measured 505.093 ms backpressure run
+  `20260915T185456Z-2de186ad` retained all 94,299 bytes, all 4,096 sequence
+  lines, the exact checksum, zero loss/overflow, and one uninterrupted segment.
+  Dense session `20260915T185607Z-d8206665` retained 19,694 plus 23,387
+  explicitly dropped bytes, exactly reconciling the 43,081-byte fixture output
+  with six overflow records and visible `loss_reported` integrity. A bounded
+  1,024-byte UART send also completed. No allocation, stack, watchdog, USB, or
+  lifecycle failure was observed.
+- The frozen reports for all four profiles consistently measured CDC RX at
+  3,872/4,096 bytes, leaving only 224 bytes (5.47%). The other seven stacks
+  retained 272–1,808 bytes free. This CDC RX margin does not close the stack
+  acceptance gate. A correction raises it to 5,120 bytes; the revised normal
+  and diagnostic images target-build with 81,040 and 82,136 bytes of static RAM,
+  respectively. Their HIL repeat remains pending.
+- The corrected source passed Ruff, mypy on 73 application files and both HIL
+  helper scripts, all 1,286 pytest cases, both Zephyr 4.4.2 RP2350 target
+  builds, and `git diff --check`. The diagnostic image SHA-256 is
+  `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66`.
 
 Revision A initial electrical validation record, reviewed 2026-09-11:
 
@@ -1221,8 +1257,16 @@ schema and exposes the required identity/capabilities.
     reconciliation and an uninterrupted Enhanced epoch.
   - [x] Flash the bounded-drain throughput candidate and record its improved
     but still lossy 94,299-byte no-stall `SUSTAIN` control.
-  - [ ] Flash the frame-sized CDC FIFO candidate and require a lossless
+  - [x] Flash the frame-sized CDC FIFO candidate and require a lossless
     94,299-byte no-stall `SUSTAIN` control before host-backpressure injection.
+  - [x] Record lossless 100 ms, 250 ms, and 500 ms host-backpressure profiles
+    and a corrected deliberate-overflow profile with exact accounting.
+  - [x] Measure all eight runtime thread/ISR stacks under boot, 500 ms
+    backpressure, deliberate overflow, and a bounded maximum UART-send input;
+    identify the first CDC RX stack's inadequate 224-byte margin.
+  - [ ] Flash the 5,120-byte CDC RX-stack measurement image and repeat the
+    boot, 500 ms backpressure, and deliberate-overflow profiles with adequate
+    measured margin and no allocation, watchdog, USB, or lifecycle failure.
 - [ ] Close `hardware/validation/phase1_ring_buffer.md` as `accepted_32k` or
   `revised_with_evidence`; do not waive failed criteria.
 

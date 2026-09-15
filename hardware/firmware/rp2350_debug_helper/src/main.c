@@ -3,8 +3,13 @@
 #include "uart_tx.h"
 #include "usb_connection.h"
 
+#include <zephyr/kernel.h>
+
 int main(void)
 {
+	if (IS_ENABLED(CONFIG_DUTCHMATE_STACK_PROBE)) {
+		(void)k_thread_name_set(k_current_get(), "main");
+	}
 	int result = dutchmate_platform_io_initialize_safe();
 
 	if (result != 0) {

@@ -7,6 +7,9 @@
 #include "hello.h"
 #include "output_drain.h"
 #include "platform_io.h"
+#ifdef CONFIG_DUTCHMATE_STACK_PROBE
+#include "stack_probe.h"
+#endif
 #include "telemetry.h"
 #include "uart_event.h"
 #include "uart_rx.h"
@@ -212,6 +215,9 @@ static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
 	if (dutchmate_platform_io_force_safe() != 0 && result == 0) {
 		result = -EIO;
 	}
+#ifdef CONFIG_DUTCHMATE_STACK_PROBE
+	dutchmate_stack_probe_epoch_ended();
+#endif
 	return result;
 }
 
@@ -258,6 +264,23 @@ int dutchmate_usb_connection_run(void)
 			time_us_64()
 		);
 		if (transition == DMH_EPOCH_STARTED) {
+#ifdef CONFIG_DUTCHMATE_STACK_PROBE
+			char firmware[65];
+
+			if (dutchmate_stack_probe_firmware(
+				    firmware, sizeof(firmware)) != 0) {
+				return -EINVAL;
+			}
+			result = dmh_hello_encode(
+				firmware,
+				hello_frame,
+				sizeof(hello_frame),
+				&hello_length
+			);
+			if (result != 0) {
+				return result;
+			}
+#endif
 			dutchmate_command_runtime_discard_input();
 			result = publish_host_ready();
 			if (result != 0) {
@@ -280,6 +303,9 @@ int dutchmate_usb_connection_run(void)
 				(void)dutchmate_platform_io_force_safe();
 				return result;
 			}
+#ifdef CONFIG_DUTCHMATE_STACK_PROBE
+			dutchmate_stack_probe_hello_sent();
+#endif
 			result = dutchmate_uart_rx_start();
 			if (result != 0) {
 				(void)dutchmate_platform_io_force_safe();

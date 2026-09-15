@@ -41,3 +41,7 @@ target_sources(app PRIVATE
     src/uart_tx_state.c
     src/usb_connection.c
 )
+
+target_sources_ifdef(CONFIG_DUTCHMATE_STACK_PROBE app PRIVATE
+    src/stack_probe.c
+)

@@ -8,16 +8,14 @@
 
 The selected implementation baseline is 32 KiB. The reproducible Zephyr static
 RAM report and ten-boot profile are recorded below. Initial dense and sustained
-profiles exposed USB writer pacing defects. The first corrected candidate
-improved retained data but still overflowed because its one-packet CDC TX FIFO
-serialized typical evidence frames across multiple USB completions. The second
-candidate's frame-sized CDC staging eliminated firmware loss, but its first HIL
-run exposed a separate host persistence ceiling: the firmware ring remained
-nearly empty while the finite workflow persisted only 67,336 of 94,299 bytes.
-The host now batches up to 64 UART events per crash-recoverable transaction;
-repeat HIL retained the exact 94,299-byte stream with zero loss/overflow and a
-131-byte high-water mark. Runtime stack high-water margins and final dense,
-host-backpressure, and deliberate-overflow acceptance remain open.
+profiles exposed USB writer pacing, CDC staging, and host persistence limits;
+bounded firmware draining, a frame-sized FIFO, and host evidence batching
+corrected them. The no-stall, 100/250/500 ms backpressure, and corrected dense
+deliberate-overflow profiles now pass their functional and accounting gates.
+First runtime stack measurement under boot, 505.093 ms backpressure, deliberate
+overflow, and maximum UART-send input found only 224 bytes free on the 4,096-byte
+CDC RX stack. A 5,120-byte correction target-builds, but repeat HIL and the
+final adequate-margin decision remain open.
 Phase 1B is not accepted while this document remains `selected_unvalidated`.
 
 This record must finish in exactly one state:
@@ -43,6 +41,72 @@ This record must finish in exactly one state:
 | Build ID/configuration | `development`; pristine `prj.conf` build with recoverable positive UART line errors |
 | Related DUTchMate session IDs | Listed with each HIL profile below |
 
+## Runtime Stack Measurement Candidate — 2026-09-15
+
+An opt-in USB-only measurement image target-builds under Zephyr 4.4.2 and
+SDK 1.0.1 with `stack_probe.conf`. It enables Zephyr Thread Analyzer, stack
+initialization, and thread names; it does not add a second USB interface or
+change UART/status evidence during a workload epoch. When DTR drops, it freezes
+thread and ISR stack high-water results for retrieval through subsequent valid
+`hello.firmware` identifiers. The collector and procedure are in the Debug
+Helper README. The first 4,096-byte CDC RX-stack image was flashed on 2026-09-15
+and measured in the profiles below. Its source was working-tree code based on
+`5618c591ea91f2fa17b420bdb05e7a05cfeda79b` with uncommitted diagnostic
+instrumentation; the UF2 and configuration hashes identify the exact image.
+
+| Measurement candidate | Result |
+|---|---|
+| UF2 | `build/dutchmate-rp2350-stack-probe/zephyr/zephyr.uf2`; 111,104 bytes; SHA-256 `e82ed2471d22f5af7af792a56c08cab43b40bc0ca0d6920bf098e535103ec138` |
+| Build configuration | `build/dutchmate-rp2350-stack-probe/zephyr/.config`; SHA-256 `309b3ea7b3764f98d98ef57d7705237e0d2eb9ba0a1686ac780d0d0e33a76779` |
+| ELF | `build/dutchmate-rp2350-stack-probe/zephyr/zephyr.elf`; SHA-256 `089ad0b93a7e459a3a0d05fc3757d99bf35faa6ab51cbba1a8ccc17b8176af38` |
+| Static footprint | 55,520 bytes flash and 81,112 of 532,480 bytes RAM; 451,368 bytes RAM remain |
+| Compared with normal image | The normal image target-builds from the same source at 52,100 bytes flash and 80,016 bytes RAM. Its UF2 SHA-256 `a1a3459994b29686b772fbc01f2ee2ecfbd0eb943d1e7e8353fd70077b488ae5` matches the earlier ignored normal build exactly. |
+
+The first measurement image added 1,096 static RAM bytes. The flashed image
+reported `stackprobe-1` and all five required capabilities. A USB CDC smoke
+collection retrieved all eight expected thread/ISR stacks. The real boot,
+500 ms backpressure, deliberate-overflow, and additional bounded 1,024-byte
+UART-send probes then produced the following frozen high-water readings:
+
+| Stack | Configured bytes | Boot used/free | 500 ms used/free | Overflow used/free | Max send used/free |
+|---|---:|---:|---:|---:|---:|
+| CDC RX | 4,096 | 3,872 / 224 | 3,872 / 224 | 3,872 / 224 | 3,872 / 224 |
+| Command | 3,072 | 1,312 / 1,760 | 1,312 / 1,760 | 1,312 / 1,760 | 1,312 / 1,760 |
+| Main | 2,048 | 820 / 1,228 | 820 / 1,228 | 820 / 1,228 | 820 / 1,228 |
+| ISR0 | 2,048 | 240 / 1,808 | 240 / 1,808 | 240 / 1,808 | 240 / 1,808 |
+| `usbd` | 1,024 | 516 / 508 | 516 / 508 | 516 / 508 | 516 / 508 |
+| `sysworkq` | 1,024 | 360 / 664 | 360 / 664 | 360 / 664 | 360 / 664 |
+| Pico UDC `usbd_50110000` | 512 | 192 / 320 | 192 / 320 | 192 / 320 | 192 / 320 |
+| Idle | 320 | 48 / 272 | 48 / 272 | 48 / 272 | 48 / 272 |
+
+| First-image profile | Session/evidence | Measured result |
+|---|---|---|
+| Representative boot | `20260915T185218Z-e090a9ff`; `build/stack-probe-boot.json`, SHA-256 `bdf94d66544748cfe5da316977436b90b6fb8d359898c833c3adf06bd712c936` | 63 raw bytes: reset `0x00` plus exact 62-byte `phase1-enhanced-460800-001` marker; 62-byte ring high-water; zero loss/overflow; one uninterrupted segment |
+| 500 ms host backpressure | `20260915T185456Z-2de186ad`; `build/stack-probe-500ms.json`, SHA-256 `44500f5785348662d5b5c055d3cea2af2b0686d2072a040af448884597d458ac` | Monotonic 505.093 ms pause; exact 94,299 raw bytes and checksum, SHA-256 `efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`; 131-byte ring high-water; zero loss/overflow; one uninterrupted segment; post-run host load 2.83/3.00/3.14 |
+| Deliberate overflow | `20260915T185607Z-d8206665`; `build/stack-probe-overflow.json`, SHA-256 `267f24e6b24ba76e89b7dba4a6fd39946336ea0840a474fa3eefec6fcbe32f5a` | 19,694 retained + 23,387 explicitly dropped = exact 43,081-byte fixture output; six ordered overflow records; 6,084-byte ring high-water; END marker survived; visible `loss_reported`; one uninterrupted segment; post-run host load 4.10/3.35/3.26 |
+| Maximum host payload | `build/stack-probe-max-send.json`, SHA-256 `04e0b5887625a7ef44b57f1da26b9d30fc23439355df42060c0866f17b9dc27d` | One 1,024-byte UART send completed; no capture session; CDC RX high-water unchanged |
+
+The workload profiles reported no allocation failure, stack-overflow symptom,
+watchdog reset, USB CDC failure, or session interruption. Nevertheless, the
+CDC RX stack retained only 224 of 4,096 bytes (5.47%) even after the
+maximum-payload probe. That is too narrow a margin for the final acceptance
+claim. The fixed CDC RX stack has therefore been raised to 5,120 bytes; the
+other ownership and protocol behavior remain unchanged. Both revised target
+builds pass:
+
+| Revised candidate | Result |
+|---|---|
+| Diagnostic UF2 | `build/dutchmate-rp2350-stack-probe-v2/zephyr/zephyr.uf2`; SHA-256 `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66`; 111,104 bytes |
+| Diagnostic ELF and config | ELF SHA-256 `d3a70e0cc1213981476aa7b809243411a2a08df04cc175899fe5168a38a0c569`; `.config` SHA-256 `309b3ea7b3764f98d98ef57d7705237e0d2eb9ba0a1686ac780d0d0e33a76779` |
+| Diagnostic static RAM | 82,136 of 532,480 bytes, leaving 450,344 bytes |
+| Normal UF2 | `build/dutchmate-rp2350-normal-v2/zephyr/zephyr.uf2`; SHA-256 `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819` |
+| Normal static RAM | 81,040 of 532,480 bytes, leaving 451,440 bytes |
+
+The revised diagnostic image still needs to be flashed and rerun across all
+three required profiles. If CDC RX retains its measured 3,872-byte peak, the
+new 5,120-byte stack will have 1,248 bytes free; only real HIL can confirm
+that result and close the decision.
+
 ## Firmware RAM Report
 
 | Measurement | Result |
@@ -51,7 +115,7 @@ This record must finish in exactly one state:
 | UART RX ring buffer | 32,768 raw bytes; 45,136-byte complete ring object including 512 timestamp descriptors and accounting state |
 | USB/protocol buffers | Major named static allocations: CDC TX state 1,584 bytes; command ingress 2,056; command queues 3,088; UART TX state 1,072; evidence frame 1,536; UART staging 1,024; CDC RX/TX rings 1,024/2,048; UDC endpoint heap 1,024 |
 | Thread stacks/heaps | 14,144 statically allocated stack bytes; system heap `CONFIG_HEAP_MEM_POOL_SIZE=0` |
-| Measured stack high-water margins | Not run |
+| Measured stack high-water margins | First diagnostic HIL measured all eight stacks; CDC RX retained only 224/4,096 bytes free. Revised 5,120-byte stack HIL pending. |
 | Remaining RAM margin | 452,464 bytes (441.9 KiB, 84.97%) after the linked static image |
 
 The 14,144 stack bytes comprise the 4,096-byte CDC RX thread, 3,072-byte command
@@ -100,7 +164,7 @@ without changing that default.
 | Build footprint | 16,840 bytes flash; 4,952 bytes RAM |
 | Generated `.config` SHA-256 | `4e472f3f0ea19c89611b2d9f05ef2f08b0fcfca198fc573a0b074b7de3441595` |
 | UF2 | 34,304 bytes; SHA-256 `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6` |
-| Flash/HIL state | Flashed on 2026-09-12. A direct 25 MS/s Saleae capture decoded the exact 62-byte build marker at 460800 8-N-1; Debug Helper boot-capture acceptance remains pending the line-error recovery image below. |
+| Flash/HIL state | Flashed on 2026-09-12. A direct 25 MS/s Saleae capture decoded the exact 62-byte build marker at 460800 8-N-1; subsequent corrected Debug Helper HIL completed ten boot captures below. |
 
 The ignored candidate image is retained at
 `build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2`.

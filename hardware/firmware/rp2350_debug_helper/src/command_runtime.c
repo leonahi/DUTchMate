@@ -18,7 +18,8 @@
 #define DUTCHMATE_CDC_RX_CHUNK_BYTES 128U
 #define DUTCHMATE_COMMAND_QUEUE_CAPACITY 1U
 #define DUTCHMATE_COMMAND_STACK_SIZE 3072U
-#define DUTCHMATE_CDC_RX_STACK_SIZE 4096U
+/* HIL high-water was 3,872 bytes, leaving only 224 bytes in the old 4 KiB stack. */
+#define DUTCHMATE_CDC_RX_STACK_SIZE 5120U
 #define DUTCHMATE_COMMAND_PRIORITY 3
 #define DUTCHMATE_CDC_RX_PRIORITY 4
 #define DUTCHMATE_COMMAND_POLL_INTERVAL K_MSEC(1)
@@ -313,6 +314,10 @@ int dutchmate_command_runtime_initialize(const struct device *cdc_device)
 		return -EINVAL;
 	}
 	cdc = cdc_device;
+	if (IS_ENABLED(CONFIG_DUTCHMATE_STACK_PROBE)) {
+		(void)k_thread_name_set(cdc_rx_thread_id, "cdc_rx");
+		(void)k_thread_name_set(command_thread_id, "command");
+	}
 	control_port = dutchmate_platform_control_port();
 	dmh_command_ingress_init(&ingress);
 	dmh_control_init(&control, &control_port);

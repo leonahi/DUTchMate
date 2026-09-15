@@ -25,3 +25,11 @@ config DUTCHMATE_PRODUCTION_BUILD
 	  CDC_ACM_SERIAL_PID.
 
 endmenu
+
+config DUTCHMATE_STACK_PROBE
+	bool "Expose post-epoch stack high-water measurements in hello"
+	depends on THREAD_ANALYZER && THREAD_NAME
+	help
+	  Diagnostic build only. After an epoch ends, the next hello messages
+	  carry one measured thread or ISR stack each in the firmware identifier.
+	  The production protocol and UART evidence remain unchanged.

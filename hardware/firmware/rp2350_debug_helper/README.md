@@ -148,6 +148,65 @@ The UF2 image is written to:
 /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
 ```
 
+### USB-only stack measurement build
+
+The production image has no console. For Phase 1 ring-buffer acceptance, use
+the opt-in `stack_probe.conf` build with Zephyr 4.4.2, SDK 1.0.1, and only the
+CMSIS 6 and Pico HAL modules. Keep it in a separate build directory:
+
+```bash
+ZEPHYR_BASE=/path/to/zephyrproject/zephyr-4.4.2 west build \
+  -b rpi_pico2/rp2350a/m33 \
+  -s "$repo_root/hardware/firmware/rp2350_debug_helper" \
+  -d "$repo_root/build/dutchmate-rp2350-stack-probe" \
+  --pristine -- \
+  -DEXTRA_CONF_FILE="$repo_root/hardware/firmware/rp2350_debug_helper/stack_probe.conf" \
+  '-DZEPHYR_MODULES=/path/to/zephyrproject/modules/hal/cmsis_6;/path/to/zephyrproject/modules/hal/rpi_pico' \
+  -DUSER_CACHE_DIR="$repo_root/build/zephyr-cache"
+```
+
+Flash the diagnostic UF2 externally. Its first epoch reports firmware
+`stackprobe-1` and runs the normal v1 workload. When DTR drops after that epoch,
+Zephyr's Thread Analyzer freezes all thread and ISR high-water readings. Each
+later CDC epoch reports one reading in the valid `hello.firmware` field as
+`stack-<index>of<count>-<name>-<used>-<size>`; those retrieval epochs do not
+resample or add DUT UART evidence. After the final retrieval epoch closes, the
+next workload epoch again reports `stackprobe-1` and can collect another profile.
+
+Stop Device Core after each boot, 500 ms backpressure, and deliberate-overflow
+profile so DTR drops, then collect the frozen readings before restarting it:
+
+```bash
+"$repo_root/.venv/bin/python" \
+  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/collect_stack_probe.py" \
+  /dev/cu.usbmodem11201 \
+  --uf2 "$repo_root/build/dutchmate-rp2350-stack-probe/zephyr/zephyr.uf2" \
+  --out "$repo_root/build/stack-probe-boot.json"
+```
+
+Use a different output file for each profile. Retain the diagnostic UF2 hash,
+stack sizes and used/free bytes, session IDs, host load, and any reset, USB,
+or session failure in `hardware/validation/phase1_ring_buffer.md`. This image
+enables thread monitoring and adds diagnostic RAM, so record its separate static
+footprint and compare the margins against the normal image before closing the
+32 KiB decision. The collector holds DTR low through port opening and input
+flushing so the one-shot `hello` is not discarded.
+
+For the synthetic profiles, the helper below starts a 15 s capture, sends the
+fixture command after 0.5 s, and (for the backpressure run) pauses the verified
+Device Core Service process 1.5 s after send completion. It always resumes the
+service if interrupted and records the measured monotonic pause and host load:
+
+```bash
+"$repo_root/.venv/bin/python" \
+  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
+  SUSTAIN --stall-ms 500 --out "$repo_root/build/stack-profile-500ms.json"
+
+"$repo_root/.venv/bin/python" \
+  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
+  BURST --out "$repo_root/build/stack-profile-overflow.json"
+```
+
 Keeping the build at this repository-relative path also supplies the
 `compile_commands.json` used by the root `.clangd` configuration. After the
 first build, restart the clangd language server in VS Code so Zephyr headers,
