@@ -155,3 +155,35 @@ and `hardware_events.jsonl`
 `0cd146811f25c6f717ce5f56646c2d84005c5110bad1b247097f087f0be14aeb`.
 The service was stopped and the local reconnect configuration restored to its
 5.0-second default afterward.
+
+## Basic and Enhanced downstream evidence structure
+
+The accepted Basic run in `hardware/validation/phase1_basic_hil.md` used the
+same Pico 1 Zephyr fixture code at its default 115200 baud through an FTDI
+adapter. Sessions `20260826T211103Z-2649d369` and
+`20260826T211203Z-f541c8fb` stored raw UART bytes, normalized UART events,
+metadata, and hardware events; event payloads reconstructed the raw log, and
+both public session and recent-log retrieval succeeded. Basic reported
+`not_observable` integrity and host-monotonic timestamp provenance. The
+Enhanced boot and reconnect sessions recorded above used the same downstream
+artifact names and public retrieval operations while reporting RP2350 device
+timestamps and Enhanced buffer-loss telemetry.
+
+A focused deterministic contract test,
+`tests/unit/runtime/test_device_core_capture.py::test_basic_and_enhanced_capture_share_downstream_evidence_shape`,
+now captures the same `DMF/1 PONG\n` bytes through fake Basic and Enhanced
+event sources and the real shared `CaptureWorkflow`/`SessionStore` path. It
+checks equal artifact filename sets, equal top-level metadata keys, equal
+segment/backend field sets, identical normalized UART-event records, and equal
+session-detail and recent-log field sets. Both modes return the exact PONG
+line. Their explicit distinctions are Basic's null firmware/device, Basic
+`uart_receive`/`uart_send` support, host-monotonic/serial-chunk provenance,
+and `not_observable` integrity versus Enhanced's device/firmware identity,
+GPIO capability, device-timer/UART-event provenance, and `none_reported`
+integrity for the clean test.
+
+The archived August Basic session directories are absent from this checkout,
+so their historical field sets cannot be compared byte-for-byte to the
+September Enhanced files. The committed Basic HIL report supplies the real
+storage/retrieval result; the new contract test supplies a reproducible
+same-source structural comparison on the current code baseline.

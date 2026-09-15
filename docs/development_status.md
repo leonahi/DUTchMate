@@ -211,14 +211,18 @@ Read this document first whenever development resumes.
   discontinuity records, `interrupted` and `resumed` flags, zero reported
   loss, and UART evidence on both sides. The first fixture `PING` produced an
   unexplained generic command error despite the exact logged payload; two
-  post-reconnect `PING` responses were clean. The 75 uA idle-current
+  post-reconnect `PING` responses were clean. A focused current-code Basic/
+  Enhanced capture contract test now passes for the same UART payload,
+  artifact names, metadata/segment fields, normalized events, and public
+  retrieval shapes; the accepted Basic and Enhanced HIL reports each verify
+  real storage and retrieval. The historical Basic session files are absent
+  locally, so their old field sets cannot be directly re-read. The 75 uA
+  idle-current
   discrepancy remains open but is deferred at the user's request; the other
   Revision A electrical gates also remain open.
-- **Next step:** Compare accepted Basic and Enhanced same-fixture sessions
-  through the downstream evidence/retrieval contract and resolve the transient
-  first-`PING` fixture response if it recurs. Verify the configured boot-mode
-  workflow when suitable Pico 1 boot-control wiring is prepared. Return to the
-  open Revision A electrical checklist in
+- **Next step:** Verify the configured boot-mode workflow when suitable Pico 1
+  boot-control wiring is prepared. Resolve the transient first-`PING` fixture
+  response if it recurs. Return to the open Revision A electrical checklist in
   `hardware/schematics/revision_a.md` section 14 before final Phase 1B
   acceptance. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -269,12 +273,32 @@ boot-mode and electrical acceptance remain.
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
 | Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
 | Ring-buffer acceptance | `accepted_32k` | Static RAM and fixture provenance are recorded, and ten consecutive representative boots pass. No-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Deliberate overflow sessions reconcile retained plus explicitly dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The corrected 5,120-byte CDC RX stack passed repeat boot, 504.049 ms backpressure, and deliberate-overflow Pico 2 HIL with at least 1,248 bytes free. All eight stacks retained headroom, and final normal static RAM is 81,040/532,480 bytes. `hardware/validation/phase1_ring_buffer.md` records the decision. |
-| Basic and Enhanced HIL acceptance | Basic passed; Enhanced configured reset/boot-test, UART send, and reconnect passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, exact short-jumper 460800-baud loopbacks at all four supported VIO points, a 15-second configured reset/boot-test capture with session retrieval, forced `BURST` UART-send/capture with exact loss accounting, idle recovery, and a resumed active capture with two segment timestamps pass. Boot-mode, broader electrical, and downstream evidence-comparison gates remain pending. |
+| Basic and Enhanced HIL acceptance | Basic passed; Enhanced configured reset/boot-test, UART send, and reconnect passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, exact short-jumper 460800-baud loopbacks at all four supported VIO points, a 15-second configured reset/boot-test capture with session retrieval, forced `BURST` UART-send/capture with exact loss accounting, idle recovery, and a resumed active capture with two segment timestamps pass. A current-code same-payload contract test and both accepted HIL reports verify the shared downstream evidence shape. Boot-mode and broader electrical gates remain pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
 ## Latest Validation
+
+Basic/Enhanced downstream evidence comparison, reviewed 2026-09-15:
+
+- The accepted Basic Pico 1/FTDI HIL record and the Enhanced Pico 1/Pico 2 HIL
+  record both verify raw UART, normalized events, native session storage, and
+  public session/log retrieval through the shared pipeline. The historical
+  Basic session files are absent locally, so their original field sets cannot
+  be directly re-read.
+- A focused deterministic current-code test sends the same `DMF/1 PONG\n`
+  payload through fake Basic and Enhanced sources into the real
+  `CaptureWorkflow`/`SessionStore` path. It passes equal artifact filename,
+  top-level metadata, segment/backend, session-detail, and recent-log field
+  sets; UART-event records and raw bytes are identical. Explicit backend
+  identity, advertised capabilities, host/device timestamp provenance, and
+  `not_observable`/`none_reported` integrity retain their declared mode
+  distinctions. The test and comparison limits are recorded in
+  `hardware/validation/phase1_enhanced_hil.md`.
+- After binding the test's per-mode session ID factory, fresh Ruff passed,
+  mypy found no issues in 73 source files, the full pytest suite passed 1,292
+  cases, and `git diff --check` passed.
 
 Enhanced idle and active USB reconnect HIL, reviewed 2026-09-15:
 
@@ -1385,7 +1409,7 @@ reproducible measured evidence.
     accounting from nonzero MCU-lifetime starting counters.
   - [x] Run controlled idle/active reconnect workflow HIL with segment/session
     evidence.
-- [ ] Confirm Basic and Enhanced runs produce the same downstream evidence
+- [x] Confirm Basic and Enhanced runs produce the same downstream evidence
   structure, with only declared capability/provenance/integrity differences.
 - [ ] Commit the HIL report with firmware, board, fixture, build, and session
   provenance.

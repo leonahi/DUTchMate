@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from runtime_test_support import (
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
     BackendDisconnectedError,
+    BackendInfo,
     BackendSnapshot,
     BufferStatusEvent,
     SegmentContext,
@@ -114,6 +116,98 @@ def test_capture_uart_records_transport_messages_and_connection_metadata(
         )
     )
     assert metadata["storage"]["evidence_bytes_written"] == evidence_bytes  # type: ignore[index]
+
+
+def test_basic_and_enhanced_capture_share_downstream_evidence_shape(tmp_path: Path) -> None:
+    payload = b"DMF/1 PONG\n"
+    results = {}
+    for mode in ("basic", "enhanced"):
+        clock = FakeMonotonicClock()
+        source = FakeCaptureSource(
+            [UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=payload)],
+            clock=clock,
+        )
+        if mode == "basic":
+            source.segment = SegmentContext(
+                segment_id=0,
+                timestamp=SegmentTimestamp(
+                    source="host",
+                    clock="monotonic",
+                    unit="us",
+                    origin="segment_start",
+                    source_origin_us=1_000,
+                    observation_point="host_serial_read",
+                    event_granularity="serial_read_chunk",
+                ),
+            )
+            info = BackendInfo(
+                mode="basic",
+                port="/dev/ttyUSB0",
+                device=None,
+                firmware=None,
+                capabilities=frozenset({"uart_receive", "uart_send"}),
+            )
+        else:
+            info = enhanced_info(port="/dev/ttyACM0")
+        store = SessionStore(
+            root=tmp_path / mode,
+            clock=_fixed_session_time,
+            id_factory=lambda mode=mode: mode,
+        )
+        runtime = DeviceCoreRuntime(
+            device_control=FakeDeviceControl(),
+            message_source=source,
+            capture_clock=clock,
+            session_store=store,
+        )
+        runtime.record_backend_connection(info)
+        summary = runtime.capture_uart(duration_s=0.2)
+        session_root = tmp_path / mode / summary.session_id
+        results[mode] = {
+            "metadata": store.load_metadata(summary.session_id),
+            "uart_events": [
+                json.loads(line)
+                for line in (session_root / "uart_events.jsonl").read_text().splitlines()
+            ],
+            "raw": (session_root / "uart_raw.log").read_bytes(),
+            "artifacts": {path.name for path in session_root.iterdir() if path.is_file()},
+            "detail": asdict(runtime.get_session(summary.session_id)),
+            "logs": asdict(runtime.recent_logs(session_id=summary.session_id, lines=10)),
+        }
+
+    basic, enhanced = results["basic"], results["enhanced"]
+    assert basic["raw"] == enhanced["raw"] == payload
+    assert basic["artifacts"] == enhanced["artifacts"]
+    assert set(basic["metadata"]) == set(enhanced["metadata"])
+    assert set(basic["metadata"]["segments"][0]) == set(enhanced["metadata"]["segments"][0])
+    assert set(basic["metadata"]["segments"][0]["backend"]) == set(
+        enhanced["metadata"]["segments"][0]["backend"]
+    )
+    assert [set(event) for event in basic["uart_events"]] == [
+        set(event) for event in enhanced["uart_events"]
+    ]
+    assert basic["uart_events"] == enhanced["uart_events"]
+    assert set(basic["detail"]) == set(enhanced["detail"])
+    assert set(basic["detail"]["summary"]) == set(enhanced["detail"]["summary"])
+    assert set(basic["logs"]) == set(enhanced["logs"])
+    assert basic["logs"]["complete_lines"][0]["line_text"] == "DMF/1 PONG\n"
+    assert enhanced["logs"]["complete_lines"][0]["line_text"] == "DMF/1 PONG\n"
+    assert basic["metadata"]["backend_identity"]["firmware"] is None
+    assert basic["metadata"]["backend_identity"]["device"] is None
+    assert basic["metadata"]["backend_mode"] == "basic"
+    assert basic["metadata"]["backend_capabilities"] == ["uart_receive", "uart_send"]
+    assert enhanced["metadata"]["backend_identity"]["firmware"] == "0.1.0"
+    assert enhanced["metadata"]["backend_identity"]["device"] == "dutchmate-rp2350"
+    assert enhanced["metadata"]["backend_mode"] == "enhanced"
+    assert enhanced["metadata"]["backend_capabilities"] == [
+        "gpio_control",
+        "uart_receive",
+        "uart_send",
+    ]
+    assert basic["metadata"]["segments"][0]["timestamp"]["source"] == "host"
+    assert enhanced["metadata"]["segments"][0]["timestamp"]["source"] == "device"
+    assert basic["metadata"]["integrity"]["loss_status"] == "not_observable"
+    assert enhanced["metadata"]["integrity"]["loss_status"] == "none_reported"
 
 
 def test_new_capture_does_not_inherit_prior_connection_loss(tmp_path: Path) -> None:
