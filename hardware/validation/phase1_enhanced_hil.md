@@ -187,3 +187,61 @@ so their historical field sets cannot be compared byte-for-byte to the
 September Enhanced files. The committed Basic HIL report supplies the real
 storage/retrieval result; the new contract test supplies a reproducible
 same-source structural comparison on the current code baseline.
+
+## Configured boot-mode workflow
+
+The operator connected Revision A J3 pin 2 (`DUT_CTRL1`) to Pico 1 GP2
+(physical pin 4), kept `DUT_CTRL0` on Pico 1 `RUN` (pin 30), left GP3 open,
+and retained the 460800-baud UART, common ground, and `DUT_VIO=3.3 V`.
+Pico 2 ran the normal Zephyr 4.4.2/SDK 1.0.1 UF2 SHA-256
+`5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819`
+on `/dev/cu.usbmodem11201`. The public CLI configured `CTRL0` as
+`reset -> RUN`, `open_drain`/active-low, and `CTRL1` as
+`boot -> GP2`, `push_pull`/active-high/idle-low. Status confirmed both
+accepted mappings and commanded mode `normal`.
+
+The Pico 1 fixture samples GP2 once at startup and requires strap changes
+while unpowered or held in reset. For both mode transitions, the operator
+temporarily jumpered Pico 1 `RUN` to GND while leaving `DUT_CTRL0` wired
+in parallel. The `bootloader` command drove GP2 high only during that hold;
+its response reported `performed_at=2026-09-15T20:43:47.798353Z` and
+`device_timestamp_us=1714277106`. After the jumper was removed, a public
+`boot-test --seconds 15` pulsed `CTRL0`. The operator held `RUN` low again
+for the `normal` command, whose response reported
+`performed_at=2026-09-15T20:47:06.212054Z` and
+`device_timestamp_us=1912690435`, then removed the jumper before the
+restored-normal boot test.
+
+| Session | Commanded mode | Exact raw evidence | Result |
+|---|---|---|---|
+| `20260915T203733Z-7d502d02` | `normal` | Reset `0x00` + `DMF/1 BOOT OK board=rpi_pico build=phase1-enhanced-460800-001\n` = 63 bytes | Completed, one segment, no first error |
+| `20260915T204533Z-0d15abc2` | `bootloader` | Reset `0x00` + `DMF/1 ERROR INIT code=E_INIT_001 board=rpi_pico build=phase1-enhanced-460800-001\n` = 82 bytes | Completed, one segment, `ERROR` detected at segment 0/event 6 |
+| `20260915T204741Z-617d85d9` | `normal` | Exact same 63-byte normal evidence and SHA-256 as the first session | Completed, one segment, no first error |
+
+Each session persisted one accepted 100 ms `control_action` reset with raw
+device timestamp: `1339767313`, `1819688434`, and `1947790470` us,
+respectively. Every capture reported device `rp2350_timer` UART timestamps,
+`none_reported` integrity with zero current-session dropped bytes, no
+overflow, interruption, resume, or truncation. Public `dutchmate session`
+retrieval returned native `boot_test` details; public `dutchmate logs`
+displayed the expected fixture line in each session. Local assertions verified
+the exact raw bytes, reconstruction from `data_b64` UART events, session
+mode snapshots, reset evidence, and detected-error record.
+
+The ignored session artifacts have these SHA-256 digests:
+
+| Session | `metadata.json` | `uart_raw.log` | `uart_events.jsonl` | `hardware_events.jsonl` |
+|---|---|---|---|---|
+| First normal | `37b99d4bf3f6176d738adde1ca66223543f9f5c` | `61d68d9fa252ca54eeb95509d6f961e3bd46e74ea357c967eef0aaff7ae95839` | `52372b530e964dabdfca2966f2ad6bccf2748eb84e7719249a2e2ea1ef07ba8a` | `eb02250b46e763f654c3549d237eff2b12c4b26e28199579d4b5997f9a334f45` |
+| GP2-high failure | `e79c42280d821fa12e16773aba64cc291f39884bb455701794849f9dc5afe1cc` | `7ac5b2f71bfd7f1d4da1edf607407c8cfcec70c4e4cb9dc2fd333c6aa26481e4` | `e648de80493348e88c4e494ebae3ab3108f8df6280a9f7210fb1cc55c2814dfe` | `b50d2b732c91efbfc9a8cf9459e9b56b585b18b5d8af267be20900426579ead5` |
+| Restored normal | `7357f072c86851c51517c6ba7740736d246b11f6f81a061c7c0f1296e3c5b26d` | `61d68d9fa252ca54eeb95509d6f961e3bd46e74ea357c967eef0aaff7ae95839` | `f4d56c67c653c1e9c035248a79e6f4256ecfebc9f149885bed9a74612c1429b8` | `41cf83eae141106d727defdef070c4027327df37013fbf76527984ae43ed3398` |
+
+A post-restoration forced `PING` in capture
+`20260915T204855Z-51d462a8` returned exact `DMF/1 PONG\n`, one
+in-session `uart_tx_attempt`, no first error, and `none_reported`
+integrity. Its raw SHA-256 is
+`ddca019a59596c677f2d348609ac57c9ab0c1967d3b71f64ce6b443f548cf8da`.
+The earlier first-`PING` fixture rejection did not recur after this clean
+reset, but its cause remains unestablished. The service was stopped after
+retrieval, returning the control outputs to high impedance while Pico 1 GP2
+retained its internal pull-down.
