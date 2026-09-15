@@ -31,8 +31,10 @@ and `9ca6f5946ab241b5b07aa04630bf5a4d014d755cd31aeb54d655b67bef428163`.
 The corrected host treats the first status in each capture window as a baseline,
 accounts for ordered explicit overflow records before that status, and reports
 later counter increases as new loss. New sessions start with fresh Enhanced
-integrity, while the raw `buffer_status` fields remain unchanged. Its corrected
-repeat `dutchmate boot-test --seconds 15` produced session
+integrity, while the raw `buffer_status` fields remain unchanged. The corrected
+source and regression tests were committed as
+`ab98caa67af19b624a782175f44ee64e3febdb58`. A repeat
+`dutchmate boot-test --seconds 15` produced session
 `20260915T194748Z-78db848e`:
 
 | Evidence | Corrected repeat result |
