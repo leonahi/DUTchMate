@@ -1,8 +1,8 @@
 # Phase 1B Enhanced Workflow HIL Evidence
 
-This record contains the 2026-09-15 configured reset/boot-test run against the
-same Pico 1 Zephyr DUT fixture used for the Enhanced load profiles. Phase and
-next-step ownership remain in `docs/development_status.md`.
+This record contains the 2026-09-15 configured reset/boot-test and USB reconnect
+runs against the same Pico 1 Zephyr DUT fixture used for the Enhanced load
+profiles. Phase and next-step ownership remain in `docs/development_status.md`.
 
 | Provenance | Observed value |
 |---|---|
@@ -83,3 +83,75 @@ metadata `80c552ae224ecb11f7fc60997c88f492b387df058b2005a77273bf8b43caaea4`,
 raw UART `da7c06a2e5cdd359160981af9b488c122c7d9e5f21c58debbca3e86bbf7e245e`,
 and hardware events `5ab4e3908668d18fc0d6781f5403b2147b42b1f356eff5bb138fbc33402e4835`.
 The service was stopped afterward.
+
+## Controlled USB reconnect
+
+The operator unplugged and reconnected only Pico 2 USB while Pico 1, its UART
+and `CTRL0` wiring, common ground, and `DUT_VIO=3.3 V` remained in place.
+The service used the same `/dev/cu.usbmodem11201` path and 460800-baud DUT UART
+setting throughout. An idle disconnect on the diagnostic image changed public
+`connection_state` from `connected` to `disconnected` at 20:05:00 UTC and
+back to `connected` at 20:05:30 UTC on the same port. The reconnecting idle
+service had no active session. The ignored monitor record is
+`build/reconnect-hil/idle-watch.jsonl`, SHA-256
+`f3e754b8a89e3f822efe1609dd0b2020358fe5f430740befe2a4ecdf7ac7847e`.
+
+The first active attempt used the opt-in stack diagnostic image and a configured
+60-second reconnect window, within the documented 0.1–60-second range. Session
+`20260915T200703Z-d86f54e3` entered `reconnecting` at 20:07:32 UTC with
+59.9 seconds left, but the replacement `hello.firmware` did not match its
+session-start value `stack-1of8-command-1112-3072`. The host returned HTTP
+502 `backend_input_error: Reconnected Debug Helper identity changed`. Public
+`dutchmate session` retrieval showed a failed, interrupted, unresumed session
+with one preserved segment ending `usb_disconnect`; it did not append a
+replacement segment. This is the required identity guard operating on an
+unsuitable diagnostic image: `stack_probe.c` intentionally advances the
+`stack-...` firmware identifier after each CDC epoch to expose frozen stack
+readings. The ignored monitor record is
+`build/reconnect-hil/active-watch.jsonl`, SHA-256
+`5629275232233498c7016096e0b41d275c1b0a701cf31d174b956167cf8458c0`.
+The failed session metadata SHA-256 is
+`3656c59e07b38423d745f4da32c6822be29387bfc19dce4538377feff3d43e7f`.
+
+The operator then flashed the normal, non-diagnostic Zephyr 4.4.2/SDK 1.0.1
+`build/dutchmate-rp2350-normal-v2/zephyr/zephyr.uf2`, SHA-256
+`5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819`,
+to Pico 2. After reboot, public status reported the stable `development`
+firmware identifier and all five Enhanced capabilities. The Pico 2 image was
+not read back; the UF2 digest and observed `hello` are the available image
+provenance.
+
+The normal-image repeat used the same 60-second window and a public 150-second
+capture. A forced Pico 1 `PING` was sent before disconnect; two more were sent
+after reconnect. The capture was session `20260915T201343Z-57c45321`:
+
+| Evidence | Result |
+|---|---|
+| Connection | Active `reconnecting` at 20:15:00 UTC with 59.9 seconds remaining; active `connected` again at 20:15:15 UTC on the same port and `development` identity |
+| Lifecycle | Completed `duration_elapsed`, `interrupted=true`, `resumed=true`, no truncation or overflow |
+| Segments | Exactly two contiguous segments, both Enhanced/`development`; segment 0 ended `usb_disconnect`, segment 1 ended `duration_elapsed`; each has its own device `rp2350_timer` origin |
+| Hardware evidence | One `usb_disconnect` on segment 0, one `usb_reconnect` on segment 1, one `timestamp_discontinuity` from 0 to 1 |
+| UART evidence | Segment 0 contains `DMF/1 ERROR COMMAND code=E_COMMAND_001\n`; segment 1 contains two exact `DMF/1 PONG\n` lines, each with segment-relative device timestamps |
+| Integrity | `none_reported`, zero current-session dropped bytes, `overflow=false` |
+| Public access | `dutchmate session` returned the completed two-segment native session; `dutchmate logs --session ...` displayed separate segment 0 and 1 lines |
+
+The first send record contains the exact five-byte `PING\n` payload
+(`data_b64=UElORwo=`) and a successful physical-send acknowledgement. Pico 1
+nevertheless emitted its generic `E_COMMAND_001` response; why its first
+command was rejected is not established from this capture. The next two sends
+of the same command returned `PONG`. The host correctly detected the fixture
+error as the first downstream error in segment 0. It does not alter the observed
+USB disconnect/reconnect or segment-resume result.
+
+The ignored normal-image monitor
+`build/reconnect-hil/active-normal-watch.jsonl` has SHA-256
+`219d6ca0b03bb377e576cab13897464fd06491f074f07c6872d8907bc458dca1`.
+The ignored completed session artifacts under
+`.dutchmate/sessions/20260915T201343Z-57c45321/` have SHA-256 digests:
+`metadata.json` `b17cb1e53d73a3ce036adf8483459672ffc78ebdb95787332dcd7d9ee36af28d`,
+`uart_raw.log` `debc3fd50459ee9a8fe1fbaa42faa2a26dad39e832333db9af2eb8bffb6b9229`,
+`uart_events.jsonl` `58553f24c4de7f9c75eda58fe5cfc5419447ea06f35cdd741bec8522ec6c8816`,
+and `hardware_events.jsonl`
+`0cd146811f25c6f717ce5f56646c2d84005c5110bad1b247097f087f0be14aeb`.
+The service was stopped and the local reconnect configuration restored to its
+5.0-second default afterward.
