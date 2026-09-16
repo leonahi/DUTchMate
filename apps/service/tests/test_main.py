@@ -38,6 +38,9 @@ def test_service_main_passes_config_to_app_and_host_port_to_uvicorn(
 [backend]
 mode = "enhanced"
 
+[hardware]
+dut_io_voltage = 3.3
+
 [hardware.control.reset]
 channel = "CTRL0"
 dut_signal = "RESET_N"
@@ -96,4 +99,5 @@ active_level = "low"
     assert session_budgets == [10 * 1024 * 1024]
     assert session_counts == [25]
     assert len(hardware_configs) == 1
+    assert hardware_configs[0].dut_io_voltage == 3.3
     assert hardware_configs[0].require_control("reset").channel == "CTRL0"

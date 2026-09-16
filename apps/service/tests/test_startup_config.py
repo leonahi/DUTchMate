@@ -32,7 +32,7 @@ from dutchmate_core.device_connection.messages import (
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
 from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
-from dutchmate_core.runtime import DeviceCoreRuntime
+from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
 from dutchmate_core.workflows.capture import CaptureEventSource, CaptureWorkflow
 from dutchmate_service import startup
@@ -316,6 +316,7 @@ def test_apply_startup_hardware_config_skips_disconnected_runtime() -> None:
     config = parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",
@@ -391,6 +392,32 @@ def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
     assert status.port is None
 
 
+def test_enhanced_startup_requires_declared_voltage_before_opening_host(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    opened = False
+
+    def fake_open_host(**_kwargs: object) -> FakeEnhancedAsyncHost:
+        nonlocal opened
+        opened = True
+        raise AssertionError("host opened before voltage validation")
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
+
+    with pytest.raises(DeviceCoreRuntimeError, match="hardware.dut_io_voltage"):
+        build_startup_runtime(
+            session_root=tmp_path,
+            backend_settings=backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+        )
+
+    assert opened is False
+
+
 def test_enhanced_startup_selects_one_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -434,6 +461,7 @@ def test_enhanced_startup_selects_one_async_host(
     )
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -491,6 +519,7 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -568,6 +597,7 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
+            dut_io_voltage=3.3,
             backend_settings=backend_settings(
                 "enhanced",
                 serial_port="/dev/ttyACM0",
@@ -623,6 +653,7 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
+            dut_io_voltage=3.3,
             backend_settings=backend_settings(
                 "enhanced",
                 serial_port="/dev/ttyACM0",
@@ -669,6 +700,7 @@ def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
+            dut_io_voltage=3.3,
             backend_settings=backend_settings(
                 "enhanced",
                 serial_port="/dev/ttyACM0",
@@ -689,6 +721,7 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -698,6 +731,7 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
     config = parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",
@@ -736,6 +770,7 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -791,6 +826,7 @@ def test_enhanced_uart_send_projects_malformed_response_without_input(
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -843,6 +879,7 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=backend_settings(
             "enhanced",
             serial_port="/dev/ttyACM0",
@@ -1204,6 +1241,7 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=settings,
         monotonic_clock=clock,
         sleep=clock.sleep,
@@ -1303,6 +1341,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
+        dut_io_voltage=3.3,
         backend_settings=settings,
         monotonic_clock=clock,
         sleep=clock.sleep,
@@ -1388,6 +1427,7 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     config = parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",
@@ -1434,6 +1474,7 @@ def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -
     config = parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",

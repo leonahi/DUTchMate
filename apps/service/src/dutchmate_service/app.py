@@ -148,6 +148,9 @@ def create_app(
             session_evidence_budget_bytes=session_evidence_budget_bytes,
             session_max_count=session_max_count,
             backend_settings=backend_settings,
+            dut_io_voltage=(
+                hardware_config.dut_io_voltage if hardware_config is not None else None
+            ),
         )
     if hardware_config is not None:
         try:

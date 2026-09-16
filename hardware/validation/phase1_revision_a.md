@@ -16,7 +16,7 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 | Run date/time | 2026-09-10 through 2026-09-11, Europe/Paris |
 | Operator | Not recorded |
 | Prototype | User-confirmed fully assembled Revision A translator prototype |
-| BOM and exact Pico mapping audit | Not run |
+| BOM and exact Pico mapping audit | Source-level schematic/board/firmware audit passed 2026-09-15; populated-part and physical-continuity audit not run |
 | Debug Helper platform | Raspberry Pi Pico 2, non-wireless, RP2350A |
 | Host OS | macOS 26.2, build 25C56 |
 | USB identity | DUTchMate Debug Helper, VID:PID `2E8A:000A` |
@@ -36,6 +36,61 @@ uncertain. Unresolved items remain unchecked in the normative checklist.
 The reference UF2 digest was reproduced from the tracked source before this
 run, but the flashed image was not read back or otherwise proven to match it.
 Do not use the reference digest as flashed-image provenance.
+
+## 2026-09-15 Source Mapping And Configured Rejection Audit
+
+An exact parser comparison of `hardware/schematics/revision_a.md` section 10.1,
+the committed Eagle schematic `U4` net pinrefs, and the Eagle board `U4`
+contact pads found all 17 Revision A net-to-GPIO and physical-pin assignments
+identical. The Eagle schematic devicesets and board element values also match
+the provisional logic-device references: U1 `TXU0202DCUR`, U2
+`TXU0104PWR`, U3 `SN74LV4T125PWR`, and U5/U6 `SN74LVC2G06DBVR`. The RP2350
+devicetree overlay agrees with the 14 assigned UART/event/control GPIOs,
+including the exact `CTRL0`–`CTRL3` enable/data array order, and selects UART0
+at 460800 baud. This checks committed design files; it cannot identify the
+parts soldered to the prototype or prove its physical net continuity.
+
+With the user-confirmed 3.3 V Pico 1 fixture still connected (`DUT_CTRL0` to
+`RUN`, `DUT_CTRL1` to GP2), a local Enhanced service epoch on Pico 2
+`/dev/cu.usbmodem11201` accepted `CTRL0` as released open-drain active-low
+`reset` and `CTRL1` as push-pull active-high/idle-low `boot`. Public status
+showed a connected `dutchmate-rp2350` firmware `development` backend and
+commanded mode `normal`. The following negative requests all failed before
+an accepted mode change:
+
+| Request | Observed result |
+|---|---|
+| CLI `CTRL4` push-pull | Exit 2; invalid control channel |
+| CLI `CTRL0` open-drain active-high | Exit 2; active level must be low |
+| CLI `CTRL1` push-pull active-high/idle-high | Exit 2; idle must oppose active |
+| Direct local service POST of each malformed request | HTTP 400 `invalid_argument` for all three |
+| Config-file parser assigning both `reset` and `boot` to `CTRL0` | `GpioConfigError`: channel assigned to both roles |
+
+The service remained connected, and its accepted CTRL0/CTRL1 states and
+commanded boot mode matched the pre-request snapshot. It was stopped after
+the probes. No control-line voltage or impedance was measured in this run;
+the result supports host/service validation and configuration assignment
+rejection, not an independent physical no-glitch or contention test. Runtime
+movement of a role between channels is intentionally accepted by the Phase 1
+contract and was not treated as a duplicate assignment.
+
+The same acceptance audit found that the validated `dut_io_voltage` value was
+not consumed after TOML parsing. Consequently, an Enhanced service with a
+configured serial port could open the Debug Helper with no trusted voltage
+declaration, and a runtime GPIO-mode request could reach the transport in that
+state. Two focused regression tests reproduced those paths before correction.
+The service composition now requires `hardware.dut_io_voltage` before opening
+a configured Enhanced serial port, and `DeviceCoreRuntime` rejects GPIO-mode
+configuration before transport dispatch when the declaration is absent. The
+existing configuration parser rejects declarations below 1.8 V, above 5.0 V,
+non-finite, boolean, or nonnumeric. This closes the host's trusted-declaration
+gate allowed by `docs/phase1_implementation_spec.md`; it does not claim that
+firmware measures the physical rail or detects a mismatch between declared and
+actual voltage. A short positive Pico 2 check then started the Enhanced service
+with the local trusted declaration set to 3.3 V, reported the expected
+`dutchmate-rp2350` development identity and all five capabilities with zero
+reported loss, and stopped cleanly. No control mapping was applied in that
+positive startup check.
 
 ## Initial USB And Protocol Observation
 
@@ -630,6 +685,14 @@ correlate during later controlled idle/load measurements.
 `in_progress`
 
 - The prototype identity and initial safe-state observations are recorded.
+- The committed Revision A table, Eagle schematic/board, and RP2350 overlay
+  agree on all 17 mappings, and the design files contain the five provisional
+  logic-device references. Populated-device markings and physical continuity
+  remain unaudited.
+- Missing/out-of-range trusted voltage declarations and malformed/duplicate
+  control mappings are rejected before opening the Enhanced device or changing
+  accepted control state, as applicable. No physical voltage/glitch measurement
+  was made during the configured-rejection run.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.

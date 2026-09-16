@@ -219,6 +219,7 @@ class DeviceCoreRuntime:
         segment_context: SegmentContext | None = None,
         reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
         backend_reconnect: CaptureReconnect | None = None,
+        dut_io_voltage: float | None = None,
         action_wall_clock: Callable[[], datetime] | None = None,
         uart_wall_clock: Callable[[], datetime] | None = None,
         uart_monotonic_ns: Callable[[], int] | None = None,
@@ -229,6 +230,7 @@ class DeviceCoreRuntime:
         self._capture_clock = capture_clock
         self._status_clock = capture_clock or time.monotonic
         self._backend_reconnect = backend_reconnect
+        self._dut_io_voltage = dut_io_voltage
         self._session_store = session_store
         self._session_mutation_lock = RLock()
         self._capture_workflow = CaptureWorkflow(
@@ -517,6 +519,12 @@ class DeviceCoreRuntime:
         with self._operation_lock:
             self._require_connected()
             self._require_no_active_capture()
+            if config.dut_io_voltage is None and config.controls:
+                raise DeviceCoreRuntimeError(
+                    "hardware.dut_io_voltage must be configured before GPIO control"
+                )
+            if config.dut_io_voltage is not None:
+                self._dut_io_voltage = config.dut_io_voltage
             applied: dict[GpioRoleName, GpioControlChannelState] = {}
             for mapping in config.controls.values():
                 applied[mapping.role] = self.configure_gpio_mode(
@@ -555,6 +563,10 @@ class DeviceCoreRuntime:
         with self._operation_lock:
             self._require_connected()
             self._require_no_active_capture()
+            if self._dut_io_voltage is None:
+                raise DeviceCoreRuntimeError(
+                    "hardware.dut_io_voltage must be configured before GPIO control"
+                )
             boot_mapping = self._gpio_registry.find_by_role("boot")
             affects_boot_state = request.role == "boot" or (
                 boot_mapping is not None and boot_mapping.channel == request.channel

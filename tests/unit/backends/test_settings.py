@@ -127,6 +127,7 @@ def test_enhanced_backend_rejects_non_protocol_baudrate(baudrate: int) -> None:
     "raw_config",
     [
         {"backend": {"mode": "auto"}},
+        {"backend": {"mode": "hybrid"}},
         {"backend": {"serial_port": " /dev/ttyUSB0"}},
         {"backend": {"serial_port": "/dev/tty\x00USB0"}},
         {"backend": {"serial_port": "/" * 4097}},

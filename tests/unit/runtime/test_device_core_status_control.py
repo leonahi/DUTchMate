@@ -85,6 +85,27 @@ def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
         runtime.apply_hardware_config(config)
 
 
+def test_configure_gpio_mode_requires_declared_dut_io_voltage(tmp_path: Path) -> None:
+    control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
+    runtime = DeviceCoreRuntime(
+        device_control=control,
+        session_store=SessionStore(root=tmp_path),
+    )
+    runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
+
+    with pytest.raises(DeviceCoreRuntimeError, match="hardware.dut_io_voltage"):
+        runtime.configure_gpio_mode(
+            role="reset",
+            channel="CTRL0",
+            dut_signal="RESET_N",
+            mode="open_drain",
+            active_level="low",
+        )
+
+    assert control.calls == []
+    assert runtime.status().control_channels["CTRL0"].state == "unconfigured"
+
+
 def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
     control = FakeDeviceControl(
         [
@@ -100,6 +121,7 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
     config = parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",
@@ -165,6 +187,7 @@ def test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(
     runtime = DeviceCoreRuntime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
+        dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info())
 
@@ -198,6 +221,7 @@ def test_uncertain_boot_command_failure_invalidates_prior_command(
     runtime = DeviceCoreRuntime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
+        dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info())
     runtime.configure_gpio_mode(
@@ -235,6 +259,7 @@ def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
     runtime = DeviceCoreRuntime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
+        dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info())
     def configure_boot() -> GpioControlChannelState:
@@ -271,6 +296,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
     runtime = DeviceCoreRuntime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
+        dut_io_voltage=3.3,
         action_wall_clock=lambda: datetime(2026, 8, 21, 10, tzinfo=timezone.utc),
     )
     runtime.record_backend_connection(enhanced_info())
@@ -307,7 +333,9 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
 def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Path) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
     runtime = DeviceCoreRuntime(
-        device_control=control, session_store=SessionStore(root=tmp_path)
+        device_control=control,
+        session_store=SessionStore(root=tmp_path),
+        dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
     runtime.configure_gpio_mode(

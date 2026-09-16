@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 1
-> Code baseline reviewed: `5001f942de216be27ea9c88c3a650bff3b9fe64a` on 2026-09-15
+> Code baseline reviewed: `5001f942de216be27ea9c88c3a650bff3b9fe64a` on 2026-09-16
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -224,14 +224,25 @@ Read this document first whenever development resumes.
   A post-restoration forced `PING` captured exact `PONG`; the earlier
   first-command anomaly did not recur, but its cause is still unestablished.
   The 75 uA idle-current discrepancy remains open and deferred at the user's
-  request; the other Revision A electrical gates also remain open.
-- **Next step:** Run the Phase 1 acceptance audit against
-  `docs/phase1_implementation_spec.md` and committed validation evidence.
-  Inventory the open Revision A electrical checks from
-  `hardware/schematics/revision_a.md` section 14, select the next independent
-  measurable gate, and leave the deferred 75 uA correlation for later.
-  Resolve the transient first-`PING` fixture response if it recurs. EVENT pins
-  remain reserved; do not add event capture.
+  request; the other Revision A electrical gates also remain open. The Phase 1
+  acceptance audit now maps the Basic, Enhanced workflow, and shared software
+  criteria to committed evidence. A source-level parser audit confirms all 17
+  Revision A net/GPIO/physical-pin assignments across the normative table,
+  Eagle schematic, Eagle board, and RP2350 overlay, plus the five provisional
+  logic-device references in the design files. Live malformed mapping/mode
+  requests left accepted CTRL0/CTRL1 state unchanged. The audit also found that
+  `dut_io_voltage` stopped at TOML parsing; Enhanced startup could open the
+  Debug Helper and GPIO configuration could dispatch without a trusted voltage
+  declaration. Focused TDD now rejects a connected Enhanced startup before USB
+  open when `hardware.dut_io_voltage` is absent and rejects direct control
+  configuration before transport dispatch when no declaration is present.
+- **Next step:** Complete the populated-prototype identity and physical pin/net
+  continuity audit against Revision A, then continue the independent section 14
+  electrical gates: exact missing-supply isolation, all-order power sequencing,
+  hot-plug/back-power coverage, UART cable/edge measurements, and passive/ESD
+  validation. Leave the deferred 75 uA correlation for later. Resolve the
+  transient first-`PING` fixture response only if it recurs. EVENT pins remain
+  reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -278,14 +289,60 @@ electrical acceptance remains.
 | Phase 1B Enhanced host adapter | Host implementation complete; startup, configured reset/boot-test, UART-send, reconnect, and boot-mode HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup, configured `CTRL0` reset/boot workflow, forced `BURST` UART-send/capture, idle recovery, and a resumed two-segment active capture against Pico 2 pass. The host correctly interprets MCU-lifetime UART loss counters in fresh sessions while preserving raw status evidence. Configured boot-mode HIL now passes; electrical acceptance remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress; supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. Broader power-isolation and other section 14 items remain open. |
+| Revision A prototype validation | In progress; source mapping/config rejection, supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. The committed design table, Eagle schematic/board, and firmware overlay agree on all mapped pins; populated-part identity and physical continuity remain unaudited. Invalid channel/mode and duplicate config assignments reject without changing accepted live state. Broader power-isolation and other section 14 items remain open. |
 | Ring-buffer acceptance | `accepted_32k` | Static RAM and fixture provenance are recorded, and ten consecutive representative boots pass. No-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Deliberate overflow sessions reconcile retained plus explicitly dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The corrected 5,120-byte CDC RX stack passed repeat boot, 504.049 ms backpressure, and deliberate-overflow Pico 2 HIL with at least 1,248 bytes free. All eight stacks retained headroom, and final normal static RAM is 81,040/532,480 bytes. `hardware/validation/phase1_ring_buffer.md` records the decision. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced configured reset/boot-test, UART send, reconnect, and boot-mode passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, exact short-jumper 460800-baud loopbacks at all four supported VIO points, a 15-second configured reset/boot-test capture with session retrieval, forced `BURST` UART-send/capture with exact loss accounting, idle recovery, and a resumed active capture with two segment timestamps, and normal/failure/restored-normal GP2 boot captures pass. A current-code same-payload contract test and both accepted HIL reports verify the shared downstream evidence shape. Broader electrical gates remain pending. |
 
 The passing mocked/unit suite is necessary evidence, but it cannot substitute
 for the real-hardware gates in the Phase 1 done criteria.
 
+The acceptance audit currently resolves the normative groups as follows:
+
+| Done-criterion group | Audit result | Primary evidence |
+|---|---|---|
+| Phase 1A Basic backend | Pass | `hardware/validation/phase1_basic_hil.md` and shared fake-backed host/service/CLI tests |
+| Phase 1B protocol, host, firmware, and ring buffer | Pass | Protocol/firmware suites and `hardware/validation/phase1_ring_buffer.md` |
+| Phase 1B real workflows and shared evidence shape | Pass | `hardware/validation/phase1_enhanced_hil.md` and the current-code Basic/Enhanced contract comparison |
+| Shared Phase 1 session, duration, reconnect, retrieval, and backend-selection contracts | Pass | Full automated suite, including an explicit `hybrid` rejection case added by this audit |
+| Revision A first-prototype electrical acceptance | Open | Source mapping and configured rejection checks pass; populated BOM/continuity and the remaining section 14 measurements are incomplete |
+
+Phase 1 therefore remains active because the first-prototype done criterion
+explicitly requires recorded leakage, sequencing, isolation, voltage-level,
+and UART signal-integrity acceptance. The audit does not infer those physical
+results from software tests.
+
 ## Latest Validation
+
+Phase 1 acceptance and voltage-safety audit, reviewed 2026-09-16:
+
+- The normative Phase 1A, Phase 1B, and shared done criteria were compared with
+  committed tests and HIL records. All software/protocol/workflow groups have
+  evidence; the Revision A first-prototype criterion remains open.
+- A source parser confirmed exact agreement for all 17 Revision A mappings
+  between section 10.1, Eagle schematic `U4` pinrefs, Eagle board `U4` pads,
+  and the RP2350 overlay. Eagle devicesets/board values match U1
+  `TXU0202DCUR`, U2 `TXU0104PWR`, U3 `SN74LV4T125PWR`, and U5/U6
+  `SN74LVC2G06DBVR`. This does not prove populated-part identity or physical
+  continuity.
+- With the 3.3 V Pico 1/Pico 2 fixture connected, malformed channel and
+  electrical-mode requests returned CLI exit 2 and service HTTP 400
+  `invalid_argument`; duplicate config assignment raised `GpioConfigError`.
+  Accepted CTRL0/CTRL1 state, commanded boot mode, and connection state were
+  unchanged. The service was stopped afterward.
+- The audit found an unconsumed voltage declaration. Enhanced startup now
+  requires `hardware.dut_io_voltage` before opening a configured serial port,
+  and runtime GPIO configuration requires the declaration before transport
+  dispatch. Focused tests observed both regressions fail before implementation
+  and pass afterward. Out-of-range declarations remain rejected by the
+  existing 1.8–5.0 V parser contract.
+- A positive startup with the local trusted declaration set to 3.3 V connected
+  the real Pico 2 as `dutchmate-rp2350` firmware `development`, advertised all
+  five Enhanced capabilities, reported zero UART loss, and stopped cleanly.
+  Its control channels remained unconfigured during this check.
+- The deferred 75 uA correlation remains unresolved by user request.
+- Fresh final validation passed: Ruff `All checks passed!`, mypy found no
+  issues in 73 source files, full pytest passed 1,295 cases, and
+  `git diff --check` passed.
 
 Enhanced configured GP2 boot-mode HIL, reviewed 2026-09-15:
 
@@ -1392,10 +1449,19 @@ schema and exposes the required identity/capabilities.
 
 - [ ] Build the first prototype with the documented provisional logic devices
   and exact Pico mapping.
+  - [x] Confirm the committed Revision A table, Eagle schematic, Eagle board,
+    and RP2350 overlay agree on all 17 net/GPIO/physical-pin assignments and
+    that the design files name the five provisional logic-device references.
+  - [ ] Inspect the populated U1/U2/U3/U5/U6 markings and verify physical Pico
+    pin/net continuity on the unpowered prototype.
 - [ ] Record leakage, sequencing, isolation, voltage-level, UART signal
   integrity, and safe-state results.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
+  - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected
+    Enhanced backend, reject out-of-range declarations during config parsing,
+    and reject malformed/duplicate control mappings before changing accepted
+    state or dispatching a control command.
 - [x] Record Zephyr RAM/stack usage and every load profile required by
   `docs/ring_buffer_sizing_plan.md`.
   - [x] Record the reproducible static RAM, configured stack/heap, remaining
@@ -1459,6 +1525,10 @@ Exit gate: every Phase 1B done criterion has committed evidence.
 
 - [ ] Map every Phase 1A, Phase 1B, and shared done criterion to a passing test
   or committed HIL/measurement record.
+  - [x] Map Phase 1A, Phase 1B software/protocol/workflow, and shared criteria
+    to current automated tests and committed Basic/Enhanced HIL evidence.
+  - [ ] Close and map the Revision A first-prototype electrical criterion after
+    its remaining section 14 checks pass.
 - [ ] Run Ruff, mypy, the full pytest suite, and `git diff --check`.
 - [ ] Remove completed migration compatibility code and stale status wording.
 - [ ] Change this document to `Phase 1 complete` only when both hardware paths

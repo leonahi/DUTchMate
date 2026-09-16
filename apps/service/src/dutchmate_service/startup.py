@@ -83,6 +83,7 @@ def build_startup_runtime(
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     session_max_count: int | None = None,
     backend_settings: BackendSettings | None = None,
+    dut_io_voltage: float | None = None,
     monotonic_clock: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
 ) -> DeviceCoreRuntime:
@@ -155,6 +156,12 @@ def build_startup_runtime(
             session_store=session_store,
             backend_mode="enhanced",
             capture_clock=monotonic_clock,
+            dut_io_voltage=dut_io_voltage,
+        )
+
+    if dut_io_voltage is None:
+        raise DeviceCoreRuntimeError(
+            "Enhanced backend requires hardware.dut_io_voltage before opening the Debug Helper"
         )
 
     enhanced_host = open_enhanced_async_host(
@@ -197,6 +204,7 @@ def build_startup_runtime(
             tx_policy_enabled=backend_settings.tx_enabled,
             reconnect_timeout_s=backend_settings.reconnect_timeout_s,
             backend_reconnect=reconnect,
+            dut_io_voltage=dut_io_voltage,
         )
         runtime.record_backend_connection(initial_snapshot.info)
         reconnect.start()

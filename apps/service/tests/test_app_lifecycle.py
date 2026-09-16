@@ -173,6 +173,7 @@ def _hardware_config() -> HardwareGpioConfig:
     return parse_hardware_gpio_config(
         {
             "hardware": {
+                "dut_io_voltage": 3.3,
                 "control": {
                     "reset": {
                         "channel": "CTRL0",

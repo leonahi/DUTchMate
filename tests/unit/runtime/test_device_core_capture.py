@@ -266,6 +266,7 @@ def test_capture_snapshots_commanded_boot_mode_at_session_start(tmp_path: Path) 
         message_source=FakeCaptureSource([], clock=clock),
         capture_clock=clock,
         session_store=store,
+        dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info())
     runtime.configure_gpio_mode(
@@ -846,6 +847,7 @@ def test_run_boot_test_creates_session_before_reset_and_records_queued_uart(
         message_source=source,
         capture_clock=AdvancingMonotonicClock(),
         session_store=store,
+        dut_io_voltage=3.3,
         action_wall_clock=_fixed_session_time,
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
