@@ -281,6 +281,35 @@ orders. The active-low nodes correctly fell to 0.0 V only when their VIO
 pull-up rail was absent. This result does not replace transient waveform or
 hot-plug capture.
 
+## DUT-Powered, Debugger-Unpowered UART/Event Isolation At 1.8 V
+
+Setup:
+
+- Pico USB disconnected and Device Core stopped;
+- `DUT_VIO` supplied at 1.80 V with a 1 mA current limit;
+- control pull-ups removed;
+- 10 kOhm load connected from Pico `3V3(OUT)` to ground;
+- a second 10 kOhm resistor moved from `DUT_VIO` to each UART and event
+  connector signal in turn.
+
+| Externally pulled-up signal | Signal result | Loaded Pico `3V3(OUT)` |
+|---|---:|---:|
+| `DUT_EVENT0` | Approximately 1.8 V | Approximately 0.0 V |
+| `DUT_EVENT1` | Approximately 1.8 V | Approximately 0.0 V |
+| `DUT_EVENT2` | Approximately 1.8 V | Approximately 0.0 V |
+| `DUT_EVENT3` | Approximately 1.8 V | Approximately 0.0 V |
+| `DUT_UART_TX` | Approximately 1.8 V | Approximately 0.0 V |
+| `DUT_UART_RX` | Approximately 1.8 V | Approximately 0.0 V |
+
+After the sweep, Pico `VSYS` and `VBUS` also measured approximately 0.0 V.
+This passes the static debugger-supply-absent isolation check for the UART and
+event connector paths at 1.8 V. Combined with the preceding four-control
+pull-up sweep, every external digital signal has now been loaded high with the
+debugger supply absent without a measurable rise on the Pico rails; the UART/
+event portion additionally applied a defined 10 kOhm load to `3V3(OUT)`. This
+does not replace hot-plug/transient capture, absolute leakage measurement, or
+ESD validation.
+
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
 Setup:
@@ -822,6 +851,12 @@ correlate during later controlled idle/load measurements.
   approximately 0.0 V with VIO absent. The four pulled-up DUT controls remained
   released throughout every VIO-present state. This passes the settled all-
   order control-disable requirement; transient capture remains open.
+- With debugger USB absent, `DUT_VIO` at 1.8 V, and Pico `3V3(OUT)` loaded to
+  ground through 10 kOhm, each of the four event and two UART connector signals
+  retained an individual 1.8 V/10 kOhm pull-up while `3V3(OUT)`, `VSYS`, and
+  `VBUS` remained approximately 0.0 V. Together with the control sweep, this
+  passes static debugger-supply-absent isolation for every external digital
+  signal. Hot-plug/transient behavior and absolute leakage remain open.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
