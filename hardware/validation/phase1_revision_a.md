@@ -310,6 +310,36 @@ event portion additionally applied a defined 10 kOhm load to `3V3(OUT)`. This
 does not replace hot-plug/transient capture, absolute leakage measurement, or
 ESD validation.
 
+## Repeated Unloaded Supply Hot-Plug At 1.8 V
+
+All external digital signals and temporary resistors were disconnected and
+Device Core remained stopped. Common ground was retained throughout.
+
+For the VIO hot-plug half, Pico USB remained connected and the 1.80 V source
+remained enabled with a 1 mA current limit. Only the positive `DUT_VIO` lead
+was connected and disconnected five times, with approximately two seconds in
+each state. The operator reported identical behavior in all five cycles:
+
+| State | `DUT_VIO` | Pico `3V3(OUT)` | All interface/control enables |
+|---|---:|---:|---:|
+| VIO connected | Approximately 1.8 V | Approximately 3.3 V | Approximately 0.0 V |
+| VIO disconnected | Approximately 0.0 V | Approximately 3.3 V | Approximately 0.0 V |
+
+For the debugger hot-plug half, `DUT_VIO` remained continuously supplied at
+1.80 V while Pico USB was disconnected and reconnected five times. Every
+connection enumerated normally, and all five cycles behaved identically:
+
+| State | `DUT_VIO` | Pico rails | All interface/control enables | `DBG_CTRL_nOE0`-`DBG_CTRL_nOE3` |
+|---|---:|---:|---:|---:|
+| USB connected | Approximately 1.8 V | `3V3(OUT)` approximately 3.3 V | Approximately 0.0 V | Approximately 1.8 V each |
+| USB disconnected | Approximately 1.8 V | `3V3(OUT)`, `VSYS`, and `VBUS` approximately 0.0 V | Unpowered; not re-recorded | Approximately 1.8 V each |
+
+This passes repeated unloaded 1.8 V supply insertion and removal in both
+orders using settled voltage and enumeration observations. No current-limit
+activation or abnormal condition was reported. The test did not capture
+transition waveforms or exercise hot-plug with external signal loads or an
+active DUT cable, so those broader connector cases remain open.
+
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
 Setup:
@@ -857,6 +887,12 @@ correlate during later controlled idle/load measurements.
   `VBUS` remained approximately 0.0 V. Together with the control sweep, this
   passes static debugger-supply-absent isolation for every external digital
   signal. Hot-plug/transient behavior and absolute leakage remain open.
+- Five VIO-positive-lead insertion/removal cycles with debugger USB held on and
+  five debugger-USB insertion/removal cycles with VIO held at 1.8 V behaved
+  identically. Settled rails and enables remained correct, every USB insertion
+  enumerated, and all four `/OE` nodes remained at 1.8 V whenever VIO was
+  present. This passes repeated unloaded supply hot-plug at 1.8 V. Loaded DUT-
+  cable hot-plug and transition waveform capture remain open.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
