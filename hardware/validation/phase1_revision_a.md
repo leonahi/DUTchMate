@@ -238,6 +238,29 @@ does not capture insertion/removal transients, directly load the UART or event
 signals in this supply direction, or replace the remaining all-order power-
 sequencing and hot-plug checks.
 
+## Pulled-Control Supply-Order Sequence At 1.8 V
+
+The preceding setup was retained with one 10 kOhm pull-up from each DUT control
+output to `DUT_VIO`. Device Core remained stopped throughout. The operator
+performed both supply orders and reported these settled post-transition levels:
+
+| Ordered state or transition | `DUT_VIO` | `DUT_CTRL0`-`DUT_CTRL3` | Pico rails | Measured enables |
+|---|---:|---:|---:|---:|
+| VIO on, debugger off | 1.8 V | Approximately 1.8 V each | `3V3(OUT)`, `VSYS`, and `VBUS` approximately 0.0 V | Not re-recorded |
+| Connect debugger USB with VIO on | 1.8 V | Approximately 1.8 V each | `3V3(OUT)` 3.3 V | All 0.0 V |
+| Disconnect debugger USB with VIO on | 1.8 V | Approximately 1.8 V each | `3V3(OUT)`, `VSYS`, and `VBUS` 0.0 V | Not re-recorded |
+| Debugger USB on, VIO off | 0.0 V | 0.0 V each | `3V3(OUT)` approximately 3.3 V | All approximately 0.0 V |
+| Apply VIO with debugger USB on | Approximately 1.8 V | Approximately 1.8 V each | `3V3(OUT)` approximately 3.3 V | All approximately 0.0 V |
+| Remove VIO with debugger USB on | Approximately 0.0 V | Approximately 0.0 V each | `3V3(OUT)` approximately 3.3 V | All approximately 0.0 V |
+
+These results pass the settled rail, external pull-up, and measured-enable
+expectations for both power-up and power-down orders. They do not constitute a
+transient waveform capture. The reported enable set covered `DBG_CTRL_EN0`
+through `DBG_CTRL_EN3`, `DBG_UART_IF_EN`, and `DBG_INPUT_IF_EN`; it did not
+include the four active-low `DBG_CTRL_nOE0` through `DBG_CTRL_nOE3` nodes.
+Direct `/OE` measurements through both power orders therefore remain required
+for the corresponding section 14 item.
+
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
 Setup:
