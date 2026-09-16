@@ -258,8 +258,28 @@ expectations for both power-up and power-down orders. They do not constitute a
 transient waveform capture. The reported enable set covered `DBG_CTRL_EN0`
 through `DBG_CTRL_EN3`, `DBG_UART_IF_EN`, and `DBG_INPUT_IF_EN`; it did not
 include the four active-low `DBG_CTRL_nOE0` through `DBG_CTRL_nOE3` nodes.
-Direct `/OE` measurements through both power orders therefore remain required
-for the corresponding section 14 item.
+Direct `/OE` measurements through both power orders were therefore performed
+in the following follow-up.
+
+### Active-Low Control `/OE` Follow-Up
+
+The same sequence was repeated while directly measuring all four
+`DBG_CTRL_nOE0` through `DBG_CTRL_nOE3` nodes:
+
+| Ordered state or transition | `DBG_CTRL_nOE0`-`DBG_CTRL_nOE3` | `DUT_CTRL0`-`DUT_CTRL3` | Pico/debugger state |
+|---|---:|---:|---|
+| Debugger USB on, then apply VIO | Approximately 1.8 V each | Approximately 1.8 V each | `3V3(OUT)` approximately 3.3 V |
+| Remove VIO with debugger USB on | Approximately 0.0 V each | Approximately 0.0 V each | `3V3(OUT)` 3.3 V |
+| Debugger USB off, then apply VIO | Approximately 1.8 V each | Approximately 1.8 V each | All Pico power rails approximately 0.0 V |
+| Connect debugger USB with VIO on | Approximately 1.8 V each | Approximately 1.8 V each | `3V3(OUT)` approximately 3.3 V and all MCU control enables approximately 0.0 V |
+| Disconnect debugger USB with VIO on | Approximately 1.8 V each | Approximately 1.8 V each | All Pico power rails approximately 0.0 V |
+
+These settled measurements pass the section 14 requirement that the
+`SN74LVC2G06DBVR` stages leave every `SN74LV4T125PWR` `/OE` pulled high and
+every control output disabled through both debugger/VIO power-up and power-down
+orders. The active-low nodes correctly fell to 0.0 V only when their VIO
+pull-up rail was absent. This result does not replace transient waveform or
+hot-plug capture.
 
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
@@ -795,8 +815,13 @@ correlate during later controlled idle/load measurements.
   outputs retained their individual external 10 kOhm pull-ups at approximately
   1.8 V while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained approximately
   0.0 V. This passes the static debugger-supply-absent control-output isolation
-  check. Transition sequencing and direct UART/event loading in this supply
-  direction remain open.
+  check. Direct UART/event loading in this supply direction remains open.
+- Both supply orders passed direct measurement of all four active-low control
+  `/OE` nodes. Each node remained at approximately 1.8 V whenever VIO was
+  present, including after debugger USB insertion and removal, and fell to
+  approximately 0.0 V with VIO absent. The four pulled-up DUT controls remained
+  released throughout every VIO-present state. This passes the settled all-
+  order control-disable requirement; transient capture remains open.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
