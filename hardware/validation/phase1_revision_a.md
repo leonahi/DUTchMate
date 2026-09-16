@@ -212,6 +212,32 @@ The current-budget result passes its numeric target. The 0.13 V reading on
 later 10 kOhm source-impedance check resolves this specific observation while
 retaining the instrument limitations.
 
+## DUT-Powered, Debugger-Unpowered Pulled-Control Isolation At 1.8 V
+
+Setup:
+
+- Pico USB disconnected and Device Core stopped;
+- Pico 1, UART, and event connections disconnected;
+- bench supply connected from `DUT_VIO` to common ground and set to 1.80 V
+  with a 1 mA current limit;
+- each of `DUT_CTRL0` through `DUT_CTRL3` pulled up to `DUT_VIO` through its
+  own 10 kOhm resistor.
+
+| Measurement | Result | Assessment |
+|---|---:|---|
+| `DUT_VIO` | 1.8 V | Expected |
+| `DUT_CTRL0`-`DUT_CTRL3` | Approximately 1.8 V each | Every disabled control output retained the external pull-up level |
+| Pico `3V3(OUT)` | Approximately 0.0 V | No measurable debugger-rail back-power |
+| Pico `VSYS` | Approximately 0.0 V | No measurable debugger-rail back-power |
+| Pico `VBUS` | Approximately 0.0 V | No measurable debugger-rail back-power |
+
+This passes the static debugger-3.3-V-absent isolation check for all four
+control outputs at the representative 1.8 V point: every output remained
+externally pullable high while none of the measured Pico power rails rose. It
+does not capture insertion/removal transients, directly load the UART or event
+signals in this supply direction, or replace the remaining all-order power-
+sequencing and hot-plug checks.
+
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
 Setup:
@@ -741,7 +767,13 @@ correlate during later controlled idle/load measurements.
   low and a loaded 1.8 V/10 kOhm injection sweep covered every control, event,
   and UART external signal. Each line retained 1.8 V while a separate 10 kOhm
   load held `DUT_VIO` at 0.0 V. This passes the loaded missing-supply safe-state
-  gate; opposite-supply isolation and absolute leakage remain open.
+  gate; absolute leakage remains open.
+- With debugger USB absent and `DUT_VIO` supplied at 1.8 V, all four control
+  outputs retained their individual external 10 kOhm pull-ups at approximately
+  1.8 V while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained approximately
+  0.0 V. This passes the static debugger-supply-absent control-output isolation
+  check. Transition sequencing and direct UART/event loading in this supply
+  direction remain open.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.

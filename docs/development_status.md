@@ -242,9 +242,16 @@ Read this document first whenever development resumes.
   enable measured 0.0 V; each of the four control, four event, and two UART
   external lines retained an injected 1.8 V through 10 kOhm while a separate
   10 kOhm load held `DUT_VIO` at 0.0 V.
-- **Next step:** Continue with the opposite-supply isolation and exact
-  all-order power-sequencing gate, starting with debugger 3.3 V absent while
-  `DUT_VIO` is supplied and all four control outputs are externally pulled up.
+- With debugger USB absent, `DUT_VIO` supplied at 1.8 V, and all four control
+  outputs individually pulled up through 10 kOhm, every control remained at
+  approximately 1.8 V while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained at
+  approximately 0.0 V. This passes the static debugger-supply-absent control-
+  output isolation check.
+- **Next step:** Continue the exact all-order power-sequencing gate using the
+  same four pull-ups. From the current VIO-on/debugger-off state, connect and
+  then disconnect Pico USB with Device Core stopped, recording the control,
+  enable, VIO, and debugger-rail levels on both sides of each transition. Then
+  repeat with debugger power applied before and removed after `DUT_VIO`.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
   the user's request. After isolation/sequencing, continue hot-plug/back-power,
   UART cable/edge, and passive/ESD validation. Resolve the transient first-
@@ -296,7 +303,7 @@ electrical acceptance remains.
 | Phase 1B Enhanced host adapter | Host implementation complete; startup, configured reset/boot-test, UART-send, reconnect, and boot-mode HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup, configured `CTRL0` reset/boot workflow, forced `BURST` UART-send/capture, idle recovery, and a resumed two-segment active capture against Pico 2 pass. The host correctly interprets MCU-lifetime UART loss counters in fresh sessions while preserving raw status evidence. Configured boot-mode HIL now passes; electrical acceptance remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress; missing-`DUT_VIO` loaded isolation, source mapping/config rejection, supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. With debugger USB present and `DUT_VIO` absent, all ten externally injected signal lines remained at 1.8 V while a 10 kOhm load held `DUT_VIO` at 0.0 V and all enables remained low. The committed design table, Eagle schematic/board, and firmware overlay agree on all mapped pins; populated-part identity and physical continuity are explicitly deferred. Invalid channel/mode and duplicate config assignments reject without changing accepted live state. Opposite-supply isolation and broader section 14 items remain open. |
+| Revision A prototype validation | In progress; both static missing-supply isolation directions for the measured paths, source mapping/config rejection, supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. With debugger USB present and `DUT_VIO` absent, all ten externally injected signal lines remained at 1.8 V while a 10 kOhm load held `DUT_VIO` at 0.0 V and all enables remained low. With debugger USB absent and `DUT_VIO` at 1.8 V, all four externally pulled-up controls remained at approximately 1.8 V while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained at approximately 0.0 V. The committed design table, Eagle schematic/board, and firmware overlay agree on all mapped pins; populated-part identity and physical continuity are explicitly deferred. Invalid channel/mode and duplicate config assignments reject without changing accepted live state. Exact transition sequencing, direct UART/event loading in the debugger-unpowered direction, and broader section 14 items remain open. |
 | Ring-buffer acceptance | `accepted_32k` | Static RAM and fixture provenance are recorded, and ten consecutive representative boots pass. No-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Deliberate overflow sessions reconcile retained plus explicitly dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The corrected 5,120-byte CDC RX stack passed repeat boot, 504.049 ms backpressure, and deliberate-overflow Pico 2 HIL with at least 1,248 bytes free. All eight stacks retained headroom, and final normal static RAM is 81,040/532,480 bytes. `hardware/validation/phase1_ring_buffer.md` records the decision. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced configured reset/boot-test, UART send, reconnect, and boot-mode passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, exact short-jumper 460800-baud loopbacks at all four supported VIO points, a 15-second configured reset/boot-test capture with session retrieval, forced `BURST` UART-send/capture with exact loss accounting, idle recovery, and a resumed active capture with two segment timestamps, and normal/failure/restored-normal GP2 boot captures pass. A current-code same-payload contract test and both accepted HIL reports verify the shared downstream evidence shape. Broader electrical gates remain pending. |
 
@@ -339,7 +346,20 @@ Loaded missing-`DUT_VIO` isolation sweep, reviewed 2026-09-16:
 - This passes the loaded missing-supply/high-impedance check for all ten
   external lines and the DUT-side-supply-absent half of translator isolation.
   No source-current measurement was taken, so absolute leakage remains open;
-  debugger-3.3-V-absent isolation and all-order sequencing also remain open.
+  the reverse-direction and all-order sequencing checks remained open at this
+  point.
+
+Debugger-supply-absent pulled-control isolation, reviewed 2026-09-16:
+
+- Pico USB, Pico 1, UART, and event connections were absent. `DUT_VIO` was
+  supplied at 1.80 V with a 1 mA current limit, and each of the four DUT control
+  outputs had its own 10 kOhm pull-up to `DUT_VIO`.
+- `DUT_VIO` measured 1.8 V and every `DUT_CTRLx` measured approximately
+  1.8 V. Pico `3V3(OUT)`, `VSYS`, and `VBUS` each measured approximately
+  0.0 V.
+- This passes static debugger-supply-absent isolation for every control output
+  at 1.8 V. Exact insertion/removal sequencing and direct UART/event loading in
+  this supply direction remain open.
 
 Phase 1 acceptance and voltage-safety audit, reviewed 2026-09-16:
 
