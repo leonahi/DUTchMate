@@ -146,6 +146,50 @@ missing-`DUT_VIO`, high-impedance, or safe-state checklist items because exact
 numeric readings and calibrated instrument identity were not recorded. Static
 voltage alone also does not prove high impedance.
 
+## Loaded Missing-DUT_VIO Isolation Sweep
+
+On 2026-09-16, the missing-supply check was repeated with a defined load and
+all DUT connections removed. Pico 1 UART, controls, and common-ground wiring
+were disconnected; external pull-ups and the normal `DUT_VIO` source were
+removed. Pico 2 remained USB-powered, and Device Core remained stopped.
+
+Initial DMM readings relative to prototype ground were:
+
+| Point | Reading |
+|---|---:|
+| Pico 2 `3V3(OUT)` | 3.3 V |
+| `DUT_VIO` | 0.0 V |
+| `DBG_UART_IF_EN` | 0.0 V |
+| `DBG_INPUT_IF_EN` | 0.0 V |
+| `DBG_CTRL_EN0`–`DBG_CTRL_EN3` | 0.0 V each |
+
+A current-limited 1.80 V source was then connected through a 10 kOhm series
+resistor to one external signal at a time. A separate 10 kOhm resistor loaded
+`DUT_VIO` to ground, and the DMM black lead remained on J1 pin 1 ground. The
+first unloaded attempt put both `DUT_CTRL0` and the otherwise floating
+`DUT_VIO` rail at 1.8 V; both returned to 0.0 V when the source was removed.
+That floating-rail observation was treated as inconclusive and replaced by the
+loaded method rather than accepted as a back-power result.
+
+Under the loaded method, every external signal below remained at 1.8 V while
+`DUT_VIO` remained at 0.0 V:
+
+| Translator path | External signals checked |
+|---|---|
+| `SN74LV4T125PWR` control outputs | `DUT_CTRL0`, `DUT_CTRL1`, `DUT_CTRL2`, `DUT_CTRL3` |
+| `TXU0104PWR` DUT-side inputs | `DUT_EVENT0`, `DUT_EVENT1`, `DUT_EVENT2`, `DUT_EVENT3` |
+| `TXU0202DCUR` opposite-direction UART channels | `DUT_UART_RX`, `DUT_UART_TX` |
+
+No injected line showed a reported voltage drop through its 10 kOhm source
+resistor, no loaded `DUT_VIO` rise was observed, and the debugger 3.3 V rail
+remained present. Together with the exact-low enable readings, this passes the
+missing-`DUT_VIO` high-impedance/disabled-interface checklist item for all ten
+external signal lines and supplies loaded evidence for the DUT-side-supply-
+absent half of the translator isolation check. Measurement resolution and DMM
+calibration remain unrecorded, and source current was not measured. This result
+does not close debugger-3.3-V-absent isolation, all-order power sequencing,
+hot-plug, ESD clamping, or absolute leakage-current checks.
+
 ## DUT-Powered, Debugger-Unpowered Leakage At 1.8 V
 
 Setup:
@@ -688,11 +732,16 @@ correlate during later controlled idle/load measurements.
 - The committed Revision A table, Eagle schematic/board, and RP2350 overlay
   agree on all 17 mappings, and the design files contain the five provisional
   logic-device references. Populated-device markings and physical continuity
-  remain unaudited.
+  remain unaudited and were explicitly deferred by the user on 2026-09-16.
 - Missing/out-of-range trusted voltage declarations and malformed/duplicate
   control mappings are rejected before opening the Enhanced device or changing
   accepted control state, as applicable. No physical voltage/glitch measurement
   was made during the configured-rejection run.
+- With debugger USB powered and `DUT_VIO` absent, exact enable readings were
+  low and a loaded 1.8 V/10 kOhm injection sweep covered every control, event,
+  and UART external signal. Each line retained 1.8 V while a separate 10 kOhm
+  load held `DUT_VIO` at 0.0 V. This passes the loaded missing-supply safe-state
+  gate; opposite-supply isolation and absolute leakage remain open.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
