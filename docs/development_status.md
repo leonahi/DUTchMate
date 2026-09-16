@@ -274,12 +274,18 @@ Read this document first whenever development resumes.
 - Analog UART cable/edge and series-resistor waveform validation is deferred at
   the user's request because no analog oscilloscope is available. The existing
   25 MS/s Saleae results remain digital functional evidence only.
-- **Next step:** Continue with loaded DUT-cable hot-plug using the Pico 1
-  460800-baud fixture and the live Enhanced capture path. Passive/ESD validation
-  follows; full analog edge/cable acceptance remains deferred.
+- Loaded UART signal hot-plug at 3.3 V reproduced transition bytes and one
+  rejected command in cycles 1 and 3; the following PING returned PONG without
+  resetting either board or reconnecting Enhanced USB. Cycle 2 recovery is
+  inconclusive because its sends occurred outside the capture window. Earlier
+  empty-capture failure claims were corrected after checking send timestamps.
+- **Next step:** Isolate the loaded UART hot-plug corruption by disconnecting
+  one UART direction at a time and recording both receiver inputs with the
+  available Saleae. Correlate the trace with forced-send/session timestamps
+  before selecting a hardware or fixture change. Loaded hot-plug acceptance
+  remains open; analog edge/cable acceptance remains deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
-  the user's request. Resolve the transient first-`PING` fixture response only
-  if it recurs. EVENT pins remain reserved; do not add event capture.
+  the user's request. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
   phase, unless the user explicitly changes the priority.
 
@@ -349,6 +355,29 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Loaded UART hot-plug, reviewed 2026-09-16:
+
+- Session `20260916T213110Z-dbeb6b07` captured cycle 1 transition bytes,
+  `E_COMMAND_001` on the first post-reconnect PING, and PONG on the next.
+  Cycle 2 transition bytes were retained, but the recovery sends were late.
+- Controlled cycle 3 in `20260916T214409Z-5fedcd96` captured baseline PONG,
+  five NUL bytes, `E_COMMAND_001`, and recovery PONG. Both post-reconnect sends
+  were inside the active capture and recorded as forced perturbations. No
+  reset was needed; Enhanced remained connected with zero reported buffer loss.
+- CTRL0 was connected to Pico 1 RUN and configured active-low/open-drain.
+  Dedicated boot-test `20260916T214156Z-ad4b412e` captured the expected 63-byte
+  reset/boot sequence; normal capture correctly rejected a standalone reset.
+- Empty captures `603b59ec`, `ae2d3714`, and `e4258b21` did not encompass the
+  corresponding sends. They establish neither UART failure nor recurrence of
+  a first-command-after-reset fault. Full IDs, timestamps, raw evidence, and
+  the corrected interpretation are in `hardware/validation/phase1_revision_a.md`.
+- Recovery with one rejected command is demonstrated; corruption-free loaded
+  hot-plug remains unaccepted. The electrical source needs directional traces.
+- Cycle 3 completed with 66 raw bytes, one segment, and no overflow or
+  interruption. Artifact verification confirmed the exact byte sequence and
+  all three successful send records. Hashes are retained in the validation
+  record. Device Core was stopped after retrieval; CTRL0-to-RUN wiring remains.
 
 Loaded missing-`DUT_VIO` isolation sweep, reviewed 2026-09-16:
 
@@ -1586,6 +1615,10 @@ schema and exposes the required identity/capabilities.
     request on 2026-09-16.
 - [ ] Record leakage, sequencing, isolation, voltage-level, UART signal
   integrity, and safe-state results.
+  - [ ] Resolve loaded UART hot-plug command corruption. Cycles 1 and 3
+    recovered after one rejected command without reset; cycle 2 recovery was
+    outside the capture window. Preserve transition bytes and isolate each
+    UART direction with Saleae before changing hardware or fixture behavior.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected

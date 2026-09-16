@@ -340,6 +340,83 @@ activation or abnormal condition was reported. The test did not capture
 transition waveforms or exercise hot-plug with external signal loads or an
 active DUT cable, so those broader connector cases remain open.
 
+## Loaded UART Signal Hot-Plug At 3.3 V (2026-09-16)
+
+The Pico 1 `phase1-enhanced-460800-001` fixture and normal Pico 2 Debug Helper
+were USB powered, with common ground and external `DUT_VIO = 3.3 V` retained.
+Pico 1 GP0 connected to J1 pin 4 (`DUT_UART_TX`), and GP1 to J3 pin 4
+(`DUT_UART_RX`). Only those two signal wires were disconnected/reconnected;
+this was not a whole-connector or ground-disconnection test. Enhanced service
+used `/dev/cu.usbmodem11201` at 460800 baud with UART TX enabled.
+
+| Cycle | Session | Observed result |
+|---|---|---|
+| 1 | `20260916T213110Z-dbeb6b07` | Baseline PONG, transition bytes, first post-reconnect PING returned `E_COMMAND_001`, second returned PONG without reset |
+| 2 | Same session | Additional transition bytes retained; recovery sends occurred after the capture ended, so recovery timing is inconclusive |
+| 3 | `20260916T214409Z-5fedcd96` | Baseline PONG, five NUL bytes, first post-reconnect PING returned `E_COMMAND_001`, second returned PONG without reset |
+
+Cycle 3's baseline send was acknowledged at 21:44:15.602950 UTC; its two
+recovery sends were acknowledged at 21:45:29.212392 and 21:45:35.662501 UTC.
+All three five-byte `PING\n` payloads have recorded forced-send attempts and
+successful results in that session. The raw received sequence was:
+
+```text
+DMF/1 PONG\n
+\x00\x00\x00\x00\x00DMF/1 ERROR COMMAND code=E_COMMAND_001\n
+DMF/1 PONG\n
+```
+
+The Debug Helper remained connected with zero reported receive-buffer loss.
+Cycle 3 completed at 21:47:09 UTC with one segment, 66 raw UART bytes, no
+interruption, overflow, or truncation, and the detected `ERROR` at segment 0 /
+event 9. Local ignored artifacts are retained under
+`.dutchmate/sessions/20260916T214409Z-5fedcd96/`:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `0116bc6622bac996e34be291fb37eb5728c018c4547ebfe70b1ad7b88f88ea71` |
+| `uart_raw.log` | `219c31663e0eddac4b4e15ea4c6b6cd771b6974db607ad290e03e33887cda661` |
+| `uart_events.jsonl` | `995c7e89812461131b436ad567372c4085f24ba4ac4eddc88881dc11848aa99f` |
+| `hardware_events.jsonl` | `82f58d6577db3f07ab68485c2eb4612c3ab828195a7d91d1a52aadae5a62b580` |
+
+Exact raw bytes, three send attempts/results, and terminal metadata were
+verified from these artifacts. Device Core was stopped after retrieval.
+
+This demonstrates recovery after one rejected command, not corruption-free
+hot-plug. The fixture's newline-delimited command loop clears its buffer after
+each newline; the observed rejection/recovery is consistent with extra bytes
+preceding the first command. The exact bytes entering Pico 1 RX and their
+electrical source were not captured, so this remains a hypothesis rather than
+a confirmed floating-input or firmware fault. Raw transition bytes must remain
+in DUTchMate evidence; zero buffer loss does not imply uncorrupted UART data.
+
+After cycle 2, the user connected `DUT_CTRL0` to Pico 1 RUN. Runtime `CTRL0`
+was configured as `reset`, open-drain, active-low. Standalone reset during a
+capture was correctly rejected with HTTP 409 `capture_active`; the dedicated
+boot-test `20260916T214156Z-ad4b412e` then captured the reset-leading NUL and
+exact 62-byte boot marker. Cycle 3 retained this reset wiring but needed no
+reset during recovery. CTRL1-3 remained unconfigured.
+
+### Correction Of Capture-Timing Interpretations
+
+Several earlier empty captures were incorrectly described during the bench
+session as missing responses or a recurring first-command fault. Their send
+acknowledgements were outside their capture windows:
+
+| Session | Capture end (UTC) | Send acknowledgement (UTC) |
+|---|---|---|
+| `20260916T212316Z-603b59ec` | 21:23:21 | 21:23:21.730258 |
+| `20260916T213110Z-dbeb6b07` (cycle 2 retries) | 21:36:10 | 21:36:19.301966 and 21:36:22.842077 |
+| `20260916T213642Z-ae2d3714` | 21:36:48 | 21:36:50.905055 |
+| `20260916T214232Z-e4258b21` | 21:42:39 | 21:42:54.031973 |
+
+The affected sessions have no corresponding `uart_tx_attempt` records for
+those late sends. Empty evidence cannot establish no response, failed wiring,
+or a reset requirement. The later in-window retry in
+`20260916T214324Z-47d83c37` contains exact `DMF/1 PONG\n`. This corrects those
+earlier interpretations without discarding the actual cycle 1/3 hot-plug
+corruption or the separate earlier first-command anomaly.
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and
