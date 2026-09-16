@@ -340,6 +340,17 @@ activation or abnormal condition was reported. The test did not capture
 transition waveforms or exercise hot-plug with external signal loads or an
 active DUT cable, so those broader connector cases remain open.
 
+## Deferred Analog UART Cable/Edge Validation
+
+On 2026-09-16, the user confirmed that no analog oscilloscope is available and
+explicitly deferred the UART cable/edge and series-resistor waveform test. The
+available 25 MS/s Saleae can verify digital decoding and timing, but it cannot
+measure the analog rise/fall shape, overshoot, undershoot, ringing, or voltage
+margin required to accept the selected series-resistor values. The existing
+short-jumper 460800-baud loopbacks therefore remain functional evidence only;
+the section 14 cable-length, analog edge, and series-resistor validation items
+remain open and deferred.
+
 ## DUT-Powered-First Debugger Power-Up At 1.8 V
 
 Setup:
@@ -893,6 +904,10 @@ correlate during later controlled idle/load measurements.
   enumerated, and all four `/OE` nodes remained at 1.8 V whenever VIO was
   present. This passes repeated unloaded supply hot-plug at 1.8 V. Loaded DUT-
   cable hot-plug and transition waveform capture remain open.
+- The user explicitly deferred analog UART cable/edge and series-resistor
+  validation because no analog oscilloscope is available. Existing Saleae and
+  loopback results remain digital functional evidence and do not close those
+  section 14 items.
 - The 1.8 V idle current is within budget.
 - The VIO-first debugger power-up sequence retained the expected disabled
   interface and control enable states.
