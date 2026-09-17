@@ -516,6 +516,60 @@ initial baseline error persists before wire movement, despite a clean first
 PING in this trace; input history before recording and startup behavior remain
 unresolved. The opposite UART direction is not covered by this comparison.
 
+## TX-Only Hot-Plug: Digital Trace / Receive Evidence Mismatch (2026-09-17)
+
+The fixture GP1 pull-up remained installed and the GP1 command wire remained
+connected. Only Pico 1 GP0 to J1 pin 4 (`DUT_UART_TX`) was disconnected and
+reconnected. The intended Saleae D2 placement was directly on J1 pin 4 so it
+would remain on the Debug Helper side of the open connection; D1 stayed on
+Pico 1 GP1. The exported D2 column retains the name `PICO1_TX`, which does not
+independently establish the physical probe location during disconnection.
+
+The unchanged supplied export is retained as
+`evidence/20260917-tx-only-hotplug-digital.csv`, SHA-256
+`e653744327b9336660687037c5754a4e8e9249c054f2944b442035c5f6fb2086`.
+It contains 296 timestamp/state rows spanning 0 to 170.427678720 seconds.
+Decoding at 460800, 8-N-1 yields only three clean exchanges:
+
+| Command start, D1 (s) | Response start, D2 (s) | Result |
+|---|---|---|
+| 38.863149000 | 38.864284760 | Baseline PING / PONG |
+| 103.365294640 | 103.365652880 | First post-reconnect PING / PONG |
+| 109.539601560 | 109.539827600 | Second post-reconnect PING / PONG |
+
+D1 has 96 transitions and D2 has 198; every decoded frame has a valid stop
+bit and D2 shows no extra transitions between the three response packets.
+Session `20260917T090848Z-ebdef0d3`, however, contains 50 received bytes:
+three exact 11-byte PONG responses plus 17 bytes between the baseline and
+first recovery response (`00` four times, `FF`, then `00` twelve times).
+All three PING sends have successful forced-send records; both recovery
+responses arrived without reset or fixture command rejection.
+
+Aligning the first PONG between the two clocks places those extra receive
+events at approximately 62.320-69.066 seconds in the CSV. D2 has no transitions
+anywhere in 60-90 seconds. The later PONG alignments differ by less than
+0.6 ms, so a large capture-window mismatch does not explain the discrepancy.
+This does not prove a firmware defect or absence of an electrical disturbance:
+probe attachment, thresholds, and behavior across the translator remain
+unresolved. No bytes were removed or reclassified as valid fixture output.
+
+The session subsequently recorded `usb_disconnect` at 09:13:27 UTC and ended
+at 09:13:32 UTC as `failed`, `reconnect_timeout`, `interrupted=true`, with
+`service_unavailable`. The cause/intent of that later disconnection is not
+established. The earlier three exchanges and extra bytes remain usable partial
+evidence, but this is not a completed uninterrupted acceptance run. There is
+one segment, no truncation or overflow, and zero reported receive-buffer loss.
+Device Core was found stopped when the investigation resumed.
+
+Local session artifact SHA-256 digests:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `e601c0e5f1615aaf1a02ea5980490e222f33b27457c0dd1a108487e70b27c6fd` |
+| `uart_raw.log` | `e87976b60787c3e5ffd7c055d276a953070f267b34ce0845e1e6603d7fe6d205` |
+| `uart_events.jsonl` | `093edec710cca49211f7555e6a3cac2364a35c640b2689c2ea7cb5dc85aeefc7` |
+| `hardware_events.jsonl` | `9c74d0d2b208edc7f9089b97b5dc627cd06d3273437ad20b0a894ab7108f084b` |
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and

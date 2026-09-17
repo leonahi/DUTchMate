@@ -288,11 +288,16 @@ Read this document first whenever development resumes.
   transitions during the reported wire-change interval, and both recovery
   PINGs returned PONG immediately. This supports the undriven-RX diagnosis for
   that cycle; a separate initial baseline rejection still preceded wire movement.
-- **Next step:** Keep the fixture RX pull-up installed and isolate the opposite
-  UART direction, with Saleae D2 on the Debug Helper connector-side input
-  (J1 pin 4) when disconnecting Pico 1 GP0. Preserve raw evidence and verify
-  capture windows. Investigate the pre-test baseline rejection separately;
-  loaded hot-plug acceptance remains open and analog acceptance is deferred.
+- The TX-only cycle returned two immediate PONGs, but its CSV shows no
+  unexpected D2 activity while the session contains 17 extra receive bytes.
+  The session later failed after a USB disconnect; earlier UART evidence is
+  retained. Device Core is currently stopped.
+- **Next step:** Confirm D2 remained directly on board-side J1 pin 4 during
+  the open-wire interval. Then capture that connector input and Pico 2 GP1
+  (`DBG_UART_RX`) together to distinguish probe/input effects from the
+  translator or downstream receive path. Retain the fixture GP1 pull-up.
+  Investigate the pre-test baseline rejection separately; loaded hot-plug
+  acceptance remains open and analog acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
   the user's request. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -364,6 +369,21 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+TX-only trace discrepancy, reviewed 2026-09-17:
+
+- `hardware/validation/evidence/20260917-tx-only-hotplug-digital.csv` decodes
+  three clean PING/PONG exchanges, with no extra D2 transitions. Session
+  `20260917T090848Z-ebdef0d3` includes the same three PONGs plus 17 extra
+  bytes, approximately aligned to CSV seconds 62.320-69.066, when D2 is high.
+- Recovery commands succeeded immediately without reset. The discrepancy
+  remains unresolved pending physical probe verification and a trace across
+  the translator; no firmware change is justified by this evidence alone.
+- A later USB disconnect at 09:13:27 UTC ended the session at 09:13:32 UTC
+  with `reconnect_timeout` and `interrupted=true`. The run is partial evidence,
+  not an uninterrupted acceptance pass. Its 50 raw bytes, one segment, zero
+  reported buffer loss, and artifact hashes are preserved in the validation
+  record. Service status confirmed stopped on resumption.
 
 Fixture-RX pull-up comparison, reviewed 2026-09-17:
 
@@ -1665,6 +1685,9 @@ schema and exposes the required identity/capabilities.
     - [x] Compare a fixture-side 10 kOhm RX pull-up: retain continuous digital
       evidence of no extra RX transitions and two immediate post-cycle PONGs.
       Keep the distinct pre-test baseline rejection and opposite direction open.
+    - [ ] Resolve TX-only trace/session discrepancy: retained CSV has no extra
+      D2 transitions but session has 17 extra bytes. Verify board-side probe
+      attachment and observe connector input alongside Pico 2 GP1.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected
