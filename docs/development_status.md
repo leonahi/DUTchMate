@@ -324,17 +324,16 @@ Read this document first whenever development resumes.
   D1 on Pico 2 GP1 (physical pin 2), D2 on J1 pin 4, fixture GP1 pull-up
   retained, both UART wires connected, `DUT_VIO` at 3.3 V, and the added
   J1-pin-4-to-`DUT_VIO` 10 kOhm pull-up.
-- The first helper-side pull-up comparison is clean. Both probe channels contain
-  only three matching PONG packets, and the host retained exactly the same
-  33 bytes. There was no transition during the reported wire-change interval.
-  This supports input bias during disconnection as the cause of the prior
-  receive-pin disturbances; one cycle is diagnostic evidence rather than final
-  repeatability acceptance.
-- **Next step:** Repeat several TX disconnect/reconnect cycles with the 10 kOhm
-  J1-pin-4 pull-up retained, using paired probes and one continuous host session.
-  If all cycles remain quiet and each immediate recovery PING returns PONG,
-  record the pull-up as the required UART-idle bias for hot-plug behavior and
-  assess the Revision A schematic/BOM change. Retain the fixture GP1 pull-up.
+- The helper-side pull-up result now repeats across five consecutive TX wire
+  cycles. Both probe channels contain only the six expected PONG packets
+  (baseline plus five recoveries), and the completed host session retained the
+  same 66 bytes with no extras or reported loss. The added 10 kOhm idle-high
+  bias eliminates the reproduced disconnect disturbance.
+- **Next step:** Treat an idle-high pull-up on the DUT-to-debugger UART input as
+  required for hot-plug behavior, then assess and implement the Revision A
+  schematic/BOM correction without conflating it with the DUT-side RX-input
+  responsibility. Retain the temporary helper-side pull-up until that decision
+  is recorded; Device Core is stopped before further wiring changes.
   Investigate the pre-test baseline rejection separately; loaded hot-plug
   acceptance remains open and analog acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
@@ -408,6 +407,19 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Five-cycle helper-side TX pull-up repeatability, reviewed 2026-09-17:
+
+- `hardware/validation/evidence/20260917-tx-pullup-five-cycles-digital.csv`
+  spans 300.812861440 seconds. D1 and D2 each have 396 transitions forming
+  exactly six PONG packets with valid stop bits. There are no other transitions;
+  paired edge timestamps differ by no more than 40 ns.
+- Session `20260917T200511Z-b56c8116` completed its requested 300 seconds with
+  exactly six PONGs (66 bytes) for six successful sends. It has one segment,
+  zero reported loss, and no overflow, interruption, resumption, or truncation.
+- This passes the planned repeatability comparison and establishes that the
+  helper-side 10 kOhm idle-high bias prevents the reproduced TX-disconnect
+  disturbance. A schematic/BOM correction remains to be selected and recorded.
 
 Helper-side TX pull-up comparison, reviewed 2026-09-17:
 
@@ -1784,8 +1796,10 @@ schema and exposes the required identity/capabilities.
         while the connector signal remains digitally high.
       - [x] Compare one helper-side 10 kOhm input-pull-up cycle; paired probes
         and host evidence contain only the three expected PONGs.
-      - [ ] Establish repeated pull-up behavior and decide the production
-        schematic/BOM change before closing the TX-only corruption gate.
+      - [x] Establish repeated pull-up behavior across five consecutive wire
+        cycles with exact paired-probe and host evidence.
+      - [ ] Decide and implement the production schematic/BOM change before
+        closing the TX-only corruption gate.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected

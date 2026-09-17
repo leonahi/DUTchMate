@@ -770,6 +770,55 @@ Local session SHA-256 digests:
 | `uart_events.jsonl` | `b53107b6b0a89abe2416eafcf4c4b0c1635e0fd61af4cbf5060bb22cd35718dd` |
 | `hardware_events.jsonl` | `233e9ce42e6400740936ed124eaf66c1ed345bef901a0bf1a58c81fc0b68f7fe` |
 
+### Five-cycle helper-side TX pull-up repeatability
+
+The same paired-probe setup and temporary helper-side 10 kOhm pull-up were
+retained for five consecutive Pico 1 GP0 to J1 pin 4 disconnect/reconnect
+cycles. One continuous Saleae recording covered a baseline command and one
+immediate recovery command after each reported cycle. The supplied
+`digital_tx_pullup_5cycles.csv` is preserved unchanged as
+`evidence/20260917-tx-pullup-five-cycles-digital.csv`, SHA-256
+`cdcbdc2109b6e3eec034888d12d605b1b49407aedea90bfa73b43ada3b9da362`.
+Its 456 data rows span 0–300.812861440 seconds; the old exported channel labels
+remain, while the physical D1/D2 mapping is unchanged from the preceding run.
+
+D1 and D2 each have 396 transitions grouped into exactly six packets:
+
+| Exchange | D1/D2 packet start (CSV s) | Decoded result |
+|---|---:|---|
+| Baseline | 37.808920800 | `DMF/1 PONG\n` |
+| Cycle 1 recovery | 91.735273120 | `DMF/1 PONG\n` |
+| Cycle 2 recovery | 154.259665880 | `DMF/1 PONG\n` |
+| Cycle 3 recovery | 202.196747720 | `DMF/1 PONG\n` |
+| Cycle 4 recovery | 239.492758360 | `DMF/1 PONG\n` |
+| Cycle 5 recovery | 277.114590480 | `DMF/1 PONG\n` |
+
+All 66 decoded frames per channel have valid stop bits. There are no other
+transitions, and corresponding D1/D2 edge timestamps differ by at most 40 ns.
+
+Session `20260917T200511Z-b56c8116` ran 20:05:11–20:10:11 UTC and completed
+with `duration_elapsed`. All six forced-send attempt/result pairs succeeded.
+Its 66 raw bytes are exactly six `DMF/1 PONG\n` replies. It has one segment,
+zero reported receive-buffer loss, and no overflow, interruption, resumption,
+or truncation.
+
+Local session SHA-256 digests:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `c211122140b018ae893fc3226a7fb0adeed8ff30b701d7c6fa8d39c9ff85fd64` |
+| `uart_raw.log` | `635303336c221f1dbfa1b9b9a68774d6ecc3469de39dd90161cc23d5dfb61a60` |
+| `uart_events.jsonl` | `78c4b7f555535a93086ea26a9b759d039d8c2149007dbd16a5f7be845313b1a0` |
+| `hardware_events.jsonl` | `2fd19f4ac39fa41642917cb6ad881bd66510009863e129b76ad11bc4f674b2ef` |
+
+Together with the failing no-pull-up capture and the clean one-cycle pull-up
+comparison, this establishes the helper-side disconnected-input bias as the
+cause of the reproduced TX-wire disturbance. The external 10 kOhm idle-high
+bias is effective and repeatable at 3.3 V in this fixture. The result does not
+select a final production value across every supported `DUT_VIO`, amend the
+schematic/BOM, or address a DUT's own RX input when the debugger-to-DUT wire is
+removed. Those are separate design responsibilities.
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and
