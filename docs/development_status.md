@@ -291,11 +291,50 @@ Read this document first whenever development resumes.
 - The TX-only cycle returned two immediate PONGs, but its CSV shows no
   unexpected D2 activity while the session contains 17 extra receive bytes.
   The session later failed after a USB disconnect; earlier UART evidence is
-  retained. Device Core is currently stopped.
-- **Next step:** Confirm D2 remained directly on board-side J1 pin 4 during
-  the open-wire interval. Then capture that connector input and Pico 2 GP1
-  (`DBG_UART_RX`) together to distinguish probe/input effects from the
-  translator or downstream receive path. Retain the fixture GP1 pull-up.
+  retained.
+- The operator confirmed D2 stayed attached to board-side J1 pin 4 during
+  the TX-only open-wire interval.
+- The first paired-probe retry encountered Enhanced startup handshake timeouts.
+  Session `20260917T143554Z-0dbaf328` retained one baseline PONG without
+  a corresponding analyzer recording; it remained active past its requested
+  300 seconds and was marked abandoned on service restart. The shutdown log
+  also contains a session lifecycle transition exception. These observations
+  require investigation; they are not passing hot-plug evidence.
+- Pico 2 USB power cycling restored the handshake. The subsequent 300-second
+  capture completed normally with three PONGs and six extra bytes. Its supplied
+  CSV still has PING commands on the first channel and PONG replies on the
+  second, inconsistent with observing the receive path on both probes.
+- The operator confirmed the earlier D1 probe was on Pico 1 GP1, explaining
+  the PING/PONG channel difference. The corrected setup is now reported ready:
+  D1 on Pico 2 GP1 (physical pin 2), D2 on J1 pin 4.
+- The corrected baseline attempt timed out before any wire cycle. Both analyzer
+  signals stayed high for 94.84 seconds and the host retained no UART bytes.
+  Pico 2 remained enumerated, but restarting Device Core again timed out waiting
+  for Enhanced hello. All controls were unconfigured.
+- Another Pico 2 USB power cycle restored the handshake and a normal 10-second
+  passive telemetry capture. With corrected probes, the operator confirmed both
+  baseline PONGs before the TX wire cycle. The completed paired capture shows
+  four extra low intervals at Pico 2 GP1 while connector-side D2 remains
+  digitally high; these correspond to the host's `00 F8 00 00` extra bytes.
+  Both recovery commands returned PONG. Device Core is now stopped.
+- **Resumed:** The operator reports the additional helper-side 10 kOhm pull-up
+  ready. Device Core connected to the same Debug Helper identity on its current
+  `/dev/cu.usbmodem11401` path, with all controls unconfigured. The stated setup
+  retains:
+  D1 on Pico 2 GP1 (physical pin 2), D2 on J1 pin 4, fixture GP1 pull-up
+  retained, both UART wires connected, `DUT_VIO` at 3.3 V, and the added
+  J1-pin-4-to-`DUT_VIO` 10 kOhm pull-up.
+- The first helper-side pull-up comparison is clean. Both probe channels contain
+  only three matching PONG packets, and the host retained exactly the same
+  33 bytes. There was no transition during the reported wire-change interval.
+  This supports input bias during disconnection as the cause of the prior
+  receive-pin disturbances; one cycle is diagnostic evidence rather than final
+  repeatability acceptance.
+- **Next step:** Repeat several TX disconnect/reconnect cycles with the 10 kOhm
+  J1-pin-4 pull-up retained, using paired probes and one continuous host session.
+  If all cycles remain quiet and each immediate recovery PING returns PONG,
+  record the pull-up as the required UART-idle bias for hot-plug behavior and
+  assess the Revision A schematic/BOM change. Retain the fixture GP1 pull-up.
   Investigate the pre-test baseline rejection separately; loaded hot-plug
   acceptance remains open and analog acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
@@ -369,6 +408,58 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Helper-side TX pull-up comparison, reviewed 2026-09-17:
+
+- The operator installed 10 kOhm from J1 pin 4 (`DUT_UART_TX`) to the existing
+  3.3 V `DUT_VIO`, leaving it and D2 on the helper side during the TX wire cycle.
+- `hardware/validation/evidence/20260917-tx-paired-with-pullup-digital.csv`
+  spans 138.529996800 seconds. D1 and D2 each have 198 transitions forming only
+  three exact PONG packets, all with valid stop bits. Corresponding edge times
+  differ by at most 40 ns; neither channel has wire-cycle transitions.
+- Session `20260917T195304Z-a810227d` completed its requested 300 seconds and
+  retained exactly three PONGs (33 bytes) for three successful sends, with no
+  extra receive bytes. It has one segment, zero reported loss, no overflow,
+  interruption, resumption, or truncation.
+
+Corrected paired-probe TX cycle, reviewed 2026-09-17:
+
+- `hardware/validation/evidence/20260917-tx-paired-corrected-digital.csv`
+  shows matching PONGs on D1 (Pico 2 GP1) and D2 (J1 pin 4). D1 additionally
+  has four low intervals during CSV seconds 215.555–233.268; D2 stays high
+  throughout that interval. Sampling the abnormal starts at 460800 8-N-1
+  yields `00 F8 00 00`, with invalid stop bits on all three zero candidates.
+- Session `20260917T152349Z-8e3cd93e` completed its 300 seconds normally:
+  37 raw bytes, three successful sends/PONGs, one segment, zero reported loss,
+  no overflow/interruption/truncation. The extra bytes have corresponding
+  receive-pin disturbances; this does not prove the translator itself faulty.
+- The preceding passive session `20260917T152150Z-ff5f724f` completed in
+  10 seconds with ten advancing buffer-status events and no reported loss.
+  The separate handshake/lifecycle failure remains unexplained.
+
+Corrected-probe baseline timeout, reviewed 2026-09-17:
+
+- `hardware/validation/evidence/20260917-paired-baseline-timeout-digital.csv`
+  records both signals high throughout 94.841077760 seconds, with no edges.
+  Both probes monitor the reply path, so this does not prove whether PING
+  reached the fixture.
+- Session `20260917T151535Z-d8c07406` has zero received bytes, one timed-out
+  PING with unknown accepted-byte count, a `usb_disconnect` event, and a
+  terminal `reconnect_timeout`. The OS still lists Pico 2; the event does not
+  establish a physical USB unplug. A fresh service start also failed to receive
+  Enhanced hello. The cause remains unresolved; no wire-cycle result was obtained.
+
+Paired-probe attempt, reviewed 2026-09-17:
+
+- Retained `hardware/validation/evidence/20260917-tx-paired-hotplug-digital.csv`
+  contains three clean PING packets on its first signal column and three clean
+  PONG packets on its second, with no other transitions. The operator confirmed
+  D1 was on Pico 1 GP1, so it does not establish translator input/output behavior.
+- Session `20260917T144831Z-0f9b7835` completed by `duration_elapsed` with
+  39 bytes: three PONGs plus `00 00 00 00 F8 00`. The extra bytes approximately
+  align to CSV seconds 81.232–91.513, when both exported signals are high.
+  One segment, zero reported buffer loss, no overflow or interruption; the
+  extra received bytes remain corruption evidence despite those integrity flags.
 
 TX-only trace discrepancy, reviewed 2026-09-17:
 
@@ -1688,6 +1779,13 @@ schema and exposes the required identity/capabilities.
     - [ ] Resolve TX-only trace/session discrepancy: retained CSV has no extra
       D2 transitions but session has 17 extra bytes. Verify board-side probe
       attachment and observe connector input alongside Pico 2 GP1.
+      - [x] Confirm corrected paired probes and retain a completed capture
+        showing receive-pin low intervals corresponding to four extra bytes
+        while the connector signal remains digitally high.
+      - [x] Compare one helper-side 10 kOhm input-pull-up cycle; paired probes
+        and host evidence contain only the three expected PONGs.
+      - [ ] Establish repeated pull-up behavior and decide the production
+        schematic/BOM change before closing the TX-only corruption gate.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected

@@ -524,6 +524,9 @@ reconnected. The intended Saleae D2 placement was directly on J1 pin 4 so it
 would remain on the Debug Helper side of the open connection; D1 stayed on
 Pico 1 GP1. The exported D2 column retains the name `PICO1_TX`, which does not
 independently establish the physical probe location during disconnection.
+The operator subsequently confirmed that D2 remained attached to board-side
+J1 pin 4 throughout the open-wire interval. The next comparison therefore
+adds the translator output at Pico 2 GP1 to observe both ends of this path.
 
 The unchanged supplied export is retained as
 `evidence/20260917-tx-only-hotplug-digital.csv`, SHA-256
@@ -569,6 +572,203 @@ Local session artifact SHA-256 digests:
 | `uart_raw.log` | `e87976b60787c3e5ffd7c055d276a953070f267b34ce0845e1e6603d7fe6d205` |
 | `uart_events.jsonl` | `093edec710cca49211f7555e6a3cac2364a35c640b2689c2ea7cb5dc85aeefc7` |
 | `hardware_events.jsonl` | `9c74d0d2b208edc7f9089b97b5dc627cd06d3273437ad20b0a894ab7108f084b` |
+
+### Paired-probe retry interrupted before the wire cycle
+
+On 2026-09-17 the operator confirmed probes ready with D1 on Pico 2 GP1
+(`DBG_UART_RX`) and D2 retained on J1 pin 4. Session
+`20260917T143554Z-0dbaf328` retained exactly `DMF/1 PONG\n`, but the operator
+reported that analyzer recording had not started for that baseline and
+requested a repeat. No paired trace has been supplied for this attempt.
+
+The 300-second capture started at 14:35:54 UTC and was still reported active
+at 14:41:47. Device Core was stopped to restart the capture. Its shutdown log
+contains `ValueError: session lifecycle transition requires active state`.
+The stored session is `abandoned`, ending at 14:42:19 with
+`end_reason=service_restart`. Subsequent Enhanced starts on
+`/dev/cu.usbmodem1401` failed with `Timed out waiting for Enhanced hello`.
+The cause of these lifecycle and handshake failures is not established.
+No fresh baseline or wire-cycle acceptance result was obtained after the
+operator started recording again.
+
+### Supplied paired-probe export has unresolved channel mapping
+
+Pico 2 USB power cycling restored the Enhanced handshake. The next capture,
+`20260917T144831Z-0f9b7835`, completed its 300-second duration normally.
+The supplied `digital_tx_paired.csv` is preserved unchanged as
+`evidence/20260917-tx-paired-hotplug-digital.csv`, SHA-256
+`913570d658ae8ed7cceeaf21c7d0f2ba7635c7924950b63427b636d2826e97b2`.
+Its 296 data rows span 0–190.704517120 seconds; headers remain
+`Time [s],PICO1_RX,PICO1_TX`.
+
+| Exchange | First signal: PING start (s) | Second signal: PONG start (s) |
+|---|---|---|
+| Baseline | 39.657943680 | 39.658149080 |
+| First recovery | 141.294255840 | 141.294812760 |
+| Second recovery | 151.906170160 | 151.907257760 |
+
+At 460800 8-N-1, the first signal has 96 transitions encoding only three
+`PING\n` commands; the second has 198 transitions encoding only three
+`DMF/1 PONG\n` responses. All decoded stop bits are valid. There are no
+transitions outside those packets. This conflicts with the intended D1
+Pico 2 GP1 (`DBG_UART_RX`) / D2 J1 pin 4 receive-path comparison: both ends
+should show the fixture replies. The operator subsequently confirmed that D1
+had remained on Pico 1 GP1, explaining the command/reply channel difference.
+The corrected probe setup was then reported ready with D1 moved to Pico 2 GP1
+(physical pin 2) and D2 retained on J1 pin 4. This does not resolve the extra
+host receive bytes; the supplied export did not observe Pico 2 GP1.
+
+Host raw evidence contains 39 bytes: the baseline PONG, six bytes
+`00 00 00 00 F8 00`, then two recovery PONGs. All three forced sends have
+successful attempt/result records. Anchoring the first PONG places the six
+extra bytes at approximately CSV seconds 81.232–91.513, when both exported
+signals remain high. Later PONG alignment differs by less than 0.9 ms.
+The completed session has one segment, zero reported buffer loss, no
+overflow, interruption, or truncation. Those flags do not erase the six
+unexpected bytes or establish a clean UART wire cycle. This export does not
+yet distinguish translator behavior from downstream reception or probing.
+
+### Corrected-probe baseline timeout
+
+With D1 reported moved to Pico 2 GP1 and D2 retained on J1 pin 4, the supplied
+`digital_paired_baseline_timeout.csv` contains only its initial and final state:
+both channels high at 0 and 94.841077760 seconds, with no transitions.
+The unchanged file is retained as
+`evidence/20260917-paired-baseline-timeout-digital.csv`, SHA-256
+`932f4f76dfa67610c08998da97b3ea5dca09260d704af887fea97d9abd3b21eb`.
+Headers still use the older `PICO1_RX,PICO1_TX` labels. Both reported physical
+probes monitor the fixture-reply path, so a flat trace cannot establish whether
+the outgoing PING reached Pico 1. There is no shared edge for clock alignment.
+
+Session `20260917T151535Z-d8c07406` started at 15:15:35 UTC. Its sole PING
+attempt began at 15:15:53.846459 and failed at 15:15:54.952793 with `timeout`
+and `bytes_accepted=null`. It recorded `usb_disconnect` at 15:15:55 and ended
+at 15:16:00 as `failed`, `reconnect_timeout`, `interrupted=true`. Both UART
+artifacts are empty. No UART wire cycle was requested or performed in this
+attempt. The session is failed diagnostic evidence, not an acceptance pass.
+
+On review, Device Core remained disconnected while OS serial enumeration still
+listed `/dev/cu.usbmodem1401`, serial `FA63A4D787572B33`. A service stop/start
+then failed with `Timed out waiting for Enhanced hello`. This does not identify
+the cause of the loss of protocol responsiveness or prove a physical USB
+disconnect. Device Core was stopped after the failed startup.
+
+Local failed-session SHA-256 digests:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `022d1aa992c9f92b1b0bc2e697654e28b12c3511b63d7bd987e9c78677372944` |
+| `uart_raw.log` and `uart_events.jsonl` (both empty) | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `hardware_events.jsonl` | `4b104dfcbc57bea9394a8a806db811404d677f775d42fccd464ea6847b2592f2` |
+
+### Corrected paired-probe TX cycle: receive-pin disturbances captured
+
+After another Pico 2 USB power cycle, the Enhanced handshake succeeded and
+passive session `20260917T152150Z-ff5f724f` completed normally in 10 seconds.
+It retained ten buffer-status events with advancing timestamps and no reported
+loss. The operator then confirmed matching baseline PONGs with D1 on Pico 2
+GP1 (physical pin 2, `DBG_UART_RX`) and D2 on J1 pin 4 (`DUT_UART_TX`).
+Both probes stayed on the helper side during the reported GP0 wire cycle;
+the fixture GP1 pull-up and other UART wire stayed connected.
+
+The supplied `digital_tx_paired_corrected.csv` is preserved unchanged as
+`evidence/20260917-tx-paired-corrected-digital.csv`, SHA-256
+`fc5b6189da28d24a0c3153fbc1c486e4149953233561d602c7ff96988b827b30`.
+Its 224 data rows span 0–316.454993920 seconds. Old column names remain
+`PICO1_RX,PICO1_TX`; the physical mapping above is operator-confirmed.
+Both channels decode exact `DMF/1 PONG\n` replies near 92.311541,
+269.620098, and 297.826016 seconds, all with valid stop bits.
+
+D2 has only the 198 transitions belonging to those replies. D1 has 206
+transitions, including these four additional low intervals while D2 stays high:
+
+| D1 falling edge (CSV s) | D1 rising edge (CSV s) | Low duration |
+|---|---|---|
+| 215.555238360 | 215.555500760 | 262.40 us |
+| 215.559416360 | 215.559424640 | 8.28 us |
+| 215.559911520 | 233.149373880 | 17.58946236 s |
+| 233.225111200 | 233.267936200 | 42.825 ms |
+
+Sampling each falling edge as an 8-N-1 start at 460800 baud produces
+`00 F8 00 00`; the three zero candidates have low/invalid stop samples.
+These are abnormal waveforms, not four valid UART frames. Their value/order
+and relative timing agree with the extra host bytes. The measured low durations
+do not independently establish the operator's exact unplug/replug times.
+
+Session `20260917T152349Z-8e3cd93e` ran 15:23:49–15:28:49 UTC and completed
+with `duration_elapsed`. Its raw 37 bytes are the baseline PONG, `00 F8 00 00`,
+and two recovery PONGs. All three forced-send attempts succeeded. It has one
+segment, zero reported receive-buffer loss, and no overflow, interruption,
+or truncation. Device Core was stopped after evidence review.
+
+This locates observable disturbances at the MCU receive pin and explains why
+raw bytes can appear while the connector probe reports no extra edges. It does
+not prove a faulty translator: analog levels/thresholds, the connector-to-input
+series path, input bias, and other translator conditions are not distinguished.
+The separate USB/protocol responsiveness failure also remains unexplained.
+
+The specified TXU0202 has typical 5 MOhm input pull-downs; TI permits external
+pull-ups no greater than 1 MOhm (data sheet section 9.3.1.1). A temporary
+10 kOhm pull-up from the helper-side connector input to its existing 3.3 V
+`DUT_VIO` is a diagnostic input-bias comparison, not an accepted hardware change.
+Populated-part identity remains deferred. Source:
+[TI TXU0202 data sheet](https://www.ti.com/lit/ds/symlink/txu0202.pdf).
+
+Local session SHA-256 digests:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `76cc0cc0b4c148735bd252add5a82111cc3b42522807334d2ae67da321ba310e` |
+| `uart_raw.log` | `43853f2145ac3ff984ae1857e4530f047dcc36b6fd3dd479f35222a44e0696dd` |
+| `uart_events.jsonl` | `e21bbabf81d65eb3d5ee71172eb87b475d35e9b9555ddf84e27e89c866ea5a2f` |
+| `hardware_events.jsonl` | `7d9d780d0bb5099ac56c23fda25a635900a518431eefcee56a3463979adf2ebc` |
+
+### Helper-side 10 kOhm TX pull-up comparison
+
+The operator installed the proposed temporary 10 kOhm resistor from helper J1
+pin 4 (`DUT_UART_TX`) to the existing 3.3 V `DUT_VIO`. D1 remained on Pico 2
+GP1, D2 remained on J1 pin 4, the fixture GP1 pull-up remained installed, and
+both UART wires were initially connected. Device Core opened the same Debug
+Helper identity at its re-enumerated `/dev/cu.usbmodem11401` path with all
+control channels unconfigured.
+
+During continuous Saleae and host capture, the operator disconnected only Pico
+1 GP0 from J1 pin 4, leaving D2 and the added pull-up on the helper side, waited
+approximately two seconds, and reconnected GP0. Baseline and both immediate
+recovery commands returned exact PONG responses.
+
+The supplied `digital_tx_paired_with_pullup.csv` is preserved unchanged as
+`evidence/20260917-tx-paired-with-pullup-digital.csv`, SHA-256
+`16efaba3c6e633db20ce5e389c3ee21c7d90ba59851c1c25ed33a9dcf544597f`.
+Its 232 data rows span 0–138.529996800 seconds; the older exported column names
+remain. D1 and D2 each contain 198 transitions forming only three exact
+`DMF/1 PONG\n` packets at approximately 26.049807, 102.942523, and
+119.171079 seconds. Every decoded stop bit is valid. Corresponding D1/D2 edge
+times differ by no more than 40 ns, and neither channel contains any transition
+outside the three replies.
+
+Session `20260917T195304Z-a810227d` ran 19:53:04–19:58:04 UTC and completed
+with `duration_elapsed`. It contains exactly 33 raw bytes: the same three
+PONGs. All three forced-send attempt/result pairs report success and five
+accepted command bytes. No unexpected receive byte is present. It has one
+segment, zero reported receive-buffer loss, and no overflow, interruption,
+resumption, or truncation.
+
+This controlled one-variable comparison supports disconnected-input bias as the
+cause of the previous receive-pin disturbances: adding the pull-up eliminated
+both the long/short low intervals and the resulting extra host bytes. It does
+not by itself establish repeatability, select a production resistor value, or
+close the hardware change. Multiple continuous cycles and a schematic/BOM
+decision remain required.
+
+Local session SHA-256 digests:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `359b56b25092093c65ecfa9d55b73388b114841779b1c542a139da117428bf44` |
+| `uart_raw.log` | `4b455288d0c7a2620b46fe31aa1d3a4d644c432be6884532b0d524bd30d2c729` |
+| `uart_events.jsonl` | `b53107b6b0a89abe2416eafcf4c4b0c1635e0fd61af4cbf5060bb22cd35718dd` |
+| `hardware_events.jsonl` | `233e9ce42e6400740936ed124eaf66c1ed345bef901a0bf1a58c81fc0b68f7fe` |
 
 ## Deferred Analog UART Cable/Edge Validation
 
