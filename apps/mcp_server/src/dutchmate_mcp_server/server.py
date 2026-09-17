@@ -8,7 +8,16 @@ from typing import Annotated, Final, TypeAlias, cast
 
 from mcp.server import CacheHint, MCPServer
 from mcp.server.caching import CacheableMethod
-from mcp.types import CallToolResult, TextContent
+from mcp.server.context import ServerRequestContext
+from mcp.types import (
+    LATEST_PROTOCOL_VERSION,
+    CallToolResult,
+    DiscoverResult,
+    RequestParams,
+    ServerCapabilities,
+    TextContent,
+    ToolsCapability,
+)
 from pydantic import WithJsonSchema
 
 from dutchmate_core.validation import UartSendValidationError
@@ -92,6 +101,23 @@ def create_server(
         cache_hints=cache_hints,
     )
     factory = client_factory or (lambda: DeviceCoreClient(service_url))
+
+    async def discover(
+        ctx: ServerRequestContext[object, object],
+        params: RequestParams | None,
+    ) -> DiscoverResult:
+        del ctx, params
+        return DiscoverResult(
+            supported_versions=[LATEST_PROTOCOL_VERSION],
+            capabilities=ServerCapabilities(tools=ToolsCapability(list_changed=False)),
+            instructions=SERVER_INSTRUCTIONS,
+        )
+
+    server._lowlevel_server.add_request_handler(
+        "server/discover",
+        RequestParams,
+        discover,
+    )
 
     @server.tool()
     async def reset_dut(pulse_ms: PulseMsArgument = 100) -> CallToolResult:

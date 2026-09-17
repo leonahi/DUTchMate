@@ -15,7 +15,11 @@ Read this document first whenever development resumes.
   over the existing Device Core HTTP client. Successful calls return complete
   structured results; local validation, canonical service failures, service
   unavailability, and invalid service responses are projected as bounded
-  structured MCP tool errors.
+  structured MCP tool errors. Modern SDK v2 stream integration now verifies
+  discovery without `initialize`, per-request protocol/client metadata, fixed
+  private-cache tool listings, structured calls, unsupported-version handling,
+  cancellation, and clean EOF shutdown. The SDK-owned legacy handshake remains
+  covered only as a compatibility smoke path.
 - **Deferred Phase 1 context:** Phase 1A is accepted; Phase 1B targets a
   non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
   Helper. The firmware architecture is approved. Its host prerequisites now
@@ -341,10 +345,9 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Implement the modern MCP protocol integration-test slice:
-  exercise `server/discover`, per-request protocol metadata, deterministic
-  cacheable `tools/list`, tool calls, cancellation, and clean stdio EOF through
-  the SDK v2 client. Keep CLI launch wiring as the following independent slice.
+- **Next step:** Wire `dutchmate mcp` with `--service-url`,
+  `DUTCHMATE_SERVICE_URL`, and stderr-only log-level handling while preserving
+  stdio as the only MCP transport and keeping stdout protocol-clean.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -417,6 +420,30 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 2 modern MCP protocol integration, reviewed 2026-09-17:
+
+- The SDK v2 client connects through its stream-framed in-memory transport,
+  completes `server/discover` at `2026-07-28` without an `initialize`
+  handshake, and receives the fixed DUTchMate identity, instructions, tools
+  capability, complete result type, and private 300-second cache hint.
+- DUTchMate now overrides the generic SDK discovery capability advertisement:
+  the fixed tool catalog reports `listChanged: false`, while unused prompt and
+  resource capabilities are absent. SDK wire validation, response identity
+  stamping, and cache-hint stamping remain unchanged.
+- Two uncached `tools/list` calls return the same nine tools in documented
+  order. Every observed modern request carries protocol version, client info,
+  and client capabilities in `_meta`, with no HTTP transport request or MCP
+  session identifier.
+- Stream tests also preserve a complete structured tool call, exact
+  `UnsupportedProtocolVersion` context, cancellation through
+  `notifications/cancelled`, and sub-second clean EOF shutdown. The legacy SDK
+  handshake smoke test lists the same nine tools.
+- Focused MCP validation passes all 29 server, service-client, protocol
+  baseline, and modern/legacy integration tests.
+- Fresh repository validation passed: Ruff reported `All checks passed!`, mypy
+  found no issues in 73 source files, the full pytest suite passed 1,305 cases,
+  and `git diff --check` reported no whitespace errors.
 
 Phase 2 MCP tool registration and error projection, reviewed 2026-09-17:
 
@@ -1687,7 +1714,7 @@ Work follows the independently testable sequence in
   private finite cache hints.
 - [x] Register the nine Phase 2 tools in documented order and project complete
   structured success and actionable validation/service error results.
-- [ ] Add modern SDK v2 integration tests for `server/discover`, required
+- [x] Add modern SDK v2 integration tests for `server/discover`, required
   per-request metadata, deterministic cacheable tool listing, calls,
   cancellation, and clean EOF shutdown. Retain one compatibility smoke test
   only for the SDK-owned legacy path.
