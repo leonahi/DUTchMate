@@ -19,7 +19,12 @@ Read this document first whenever development resumes.
   discovery without `initialize`, per-request protocol/client metadata, fixed
   private-cache tool listings, structured calls, unsupported-version handling,
   cancellation, and clean EOF shutdown. The SDK-owned legacy handshake remains
-  covered only as a compatibility smoke path.
+  covered only as a compatibility smoke path. `dutchmate mcp` now replaces the
+  CLI process with the separately packaged `dutchmate-mcp` executable, keeping
+  the delivery packages independent and giving the adapter direct ownership of
+  stdio. Both entrypoints accept `--service-url` and
+  `DUTCHMATE_SERVICE_URL`; log levels are normalized into the SDK while stdout
+  remains protocol-clean.
 - **Deferred Phase 1 context:** Phase 1A is accepted; Phase 1B targets a
   non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
   Helper. The firmware architecture is approved. Its host prerequisites now
@@ -345,9 +350,8 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Wire `dutchmate mcp` with `--service-url`,
-  `DUTCHMATE_SERVICE_URL`, and stderr-only log-level handling while preserving
-  stdio as the only MCP transport and keeping stdout protocol-clean.
+- **Next step:** Document named host registrations and run the official MCP
+  conformance suite for the `2026-07-28` stdio server.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -420,6 +424,27 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 2 MCP CLI launch wiring, reviewed 2026-09-17:
+
+- `dutchmate mcp` accepts `--service-url`, `DUTCHMATE_SERVICE_URL`, and the
+  five supported log levels, then replaces itself with `dutchmate-mcp` while
+  inheriting stdin, stdout, and stderr.
+- The CLI and MCP delivery packages remain import-independent. The MCP
+  entrypoint owns final URL/default resolution, normalizes log levels for the
+  SDK, and exposes stdio as its only transport.
+- Focused launch tests pass all 17 CLI, entrypoint, and server-composition
+  cases. A real EOF subprocess at debug level exits cleanly without writing to
+  stdout.
+- The installed `dutchmate mcp --log-level debug` process chain also exits zero
+  on EOF with empty stdout and diagnostic output confined to stderr.
+- Fresh repository validation passed: Ruff reported `All checks passed!`, mypy
+  found no issues in 74 source files, the full pytest suite passed 1,314 cases,
+  and `git diff --check` reported no whitespace errors.
+- Graphify refreshed the new CLI launch module and cross-package executable
+  relationship: 4,839 nodes, 12,762 edges, and 251 communities. Its existing
+  partial-extraction warning for the Zephyr fixture header remains unchanged;
+  firmware compilation and tests remain authoritative for that source.
 
 Phase 2 modern MCP protocol integration, reviewed 2026-09-17:
 
@@ -1718,7 +1743,7 @@ Work follows the independently testable sequence in
   per-request metadata, deterministic cacheable tool listing, calls,
   cancellation, and clean EOF shutdown. Retain one compatibility smoke test
   only for the SDK-owned legacy path.
-- [ ] Wire `dutchmate mcp` with `--service-url`,
+- [x] Wire `dutchmate mcp` with `--service-url`,
   `DUTCHMATE_SERVICE_URL`, stderr-only logging, and no additional transport.
 - [ ] Document named host registrations and run the official MCP conformance
   suite for the `2026-07-28` stdio server.

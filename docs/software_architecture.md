@@ -19,6 +19,10 @@ to `docs/development_status.md`.
 ```text
 apps/cli
   -> HTTP client for apps/service
+  -> process replacement for apps/mcp_server executable
+
+apps/mcp_server
+  -> HTTP client for apps/service
 
 apps/service
   -> process/runtime ownership
@@ -372,7 +376,10 @@ not import low-level transport code or open serial ports for debug workflows.
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
 reset, boot mode, session listing, session detail, recent logs, and literal
-wait-pattern, plus bounded UART send and baseline mark/clear.
+wait-pattern, plus bounded UART send and baseline mark/clear. `dutchmate mcp`
+replaces the CLI process with the separately packaged `dutchmate-mcp`
+executable. This preserves the delivery-package import boundary and gives the
+MCP adapter direct ownership of stdin, stdout, and stderr.
 
 ### MCP Server
 
@@ -384,7 +391,10 @@ locked to official MCP Python SDK 2.x and the stateless `2026-07-28` protocol
 model; Device Core IDs remain explicit tool data rather than hidden MCP session
 state. Its fixed-identity `MCPServer` composition delegates discovery, per-request
 metadata, result typing, private cache hints, and stdio framing to the SDK. The
-tool contract is defined in `docs/mcp_integration_plan.md`.
+entrypoint resolves the Device Core URL from `--service-url`, then
+`DUTCHMATE_SERVICE_URL`, then its loopback default. It configures SDK logging
+on stderr while keeping stdout reserved for protocol frames. The tool contract
+is defined in `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 

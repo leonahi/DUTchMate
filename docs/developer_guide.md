@@ -61,6 +61,7 @@ Run package commands from the repository root:
 ```bash
 uv run --package dutchmate-cli dutchmate --help
 uv run --package dutchmate-service dutchmate-service --help
+uv run --package dutchmate-mcp-server dutchmate-mcp --help
 ```
 
 Start and inspect the current local service:
@@ -70,6 +71,20 @@ uv run --package dutchmate-cli dutchmate start --backend enhanced
 uv run --package dutchmate-cli dutchmate status
 uv run --package dutchmate-cli dutchmate stop
 ```
+
+Run the MCP stdio adapter after starting the Device Core Service:
+
+```bash
+uv run --package dutchmate-cli dutchmate mcp
+uv run --package dutchmate-cli dutchmate mcp \
+  --service-url http://127.0.0.1:2040 \
+  --log-level info
+```
+
+`DUTCHMATE_SERVICE_URL` supplies the service URL when `--service-url` is
+omitted. The command replaces the CLI process with the separately packaged
+`dutchmate-mcp` executable so stdin and stdout remain dedicated to MCP stdio;
+process logs go to stderr.
 
 `dutchmate start` requires `--backend basic|enhanced` or `[backend].mode`.
 Basic also requires an explicit/configured serial port and opens it directly as
@@ -87,8 +102,9 @@ Use `uv lock` after dependency declarations change. Commit the shared
   session logic. It must not import CLI, service, MCP, or AI packages.
 - `apps/service` composes `core`, owns the selected serial connection, and
   exposes HTTP. Endpoint handlers remain thin.
-- `apps/cli` calls the service over HTTP. It must not own serial transport.
-- `apps/mcp_server` will call the same service in Phase 2. It must not own
+- `apps/cli` calls the service over HTTP and launches the separately packaged
+  MCP executable without importing it. It must not own serial transport.
+- `apps/mcp_server` calls the same service over HTTP. It must not own
   serial transport, session persistence, or AI logic.
 - `hardware/protocol/v1` is the Enhanced firmware/host wire contract. Its
   schemas, examples, parser/encoder models, tests, and firmware change together.

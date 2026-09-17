@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Final, TypeAlias, cast
+from typing import Annotated, Final, Literal, TypeAlias, cast
 
 from mcp.server import CacheHint, MCPServer
 from mcp.server.caching import CacheableMethod
@@ -45,6 +45,7 @@ CACHE_TTL_MS: Final = 300_000
 
 ClientFactory: TypeAlias = Callable[[], DeviceCoreClient]
 ClientOperation: TypeAlias = Callable[[DeviceCoreClient], Awaitable[dict[str, object]]]
+LogLevel: TypeAlias = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 PulseMsArgument: TypeAlias = Annotated[
     object,
@@ -83,6 +84,7 @@ BooleanArgument: TypeAlias = Annotated[
 def create_server(
     service_url: str = DEFAULT_SERVICE_URL,
     *,
+    log_level: LogLevel = "INFO",
     client_factory: ClientFactory | None = None,
 ) -> MCPServer[object]:
     """Create one stateless MCP server with fixed protocol-facing metadata."""
@@ -98,6 +100,7 @@ def create_server(
         instructions=SERVER_INSTRUCTIONS,
         version=SERVER_VERSION,
         tools=[],
+        log_level=log_level,
         cache_hints=cache_hints,
     )
     factory = client_factory or (lambda: DeviceCoreClient(service_url))
@@ -283,7 +286,11 @@ def _tool_result(payload: dict[str, object], *, is_error: bool = False) -> CallT
     )
 
 
-def run_stdio() -> None:
+def run_stdio(
+    *,
+    service_url: str = DEFAULT_SERVICE_URL,
+    log_level: LogLevel = "INFO",
+) -> None:
     """Run the server over stdio; no other MCP transport is exposed."""
 
-    create_server().run("stdio")
+    create_server(service_url, log_level=log_level).run("stdio")

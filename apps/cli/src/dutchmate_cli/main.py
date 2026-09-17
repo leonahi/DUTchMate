@@ -35,6 +35,7 @@ from dutchmate_cli.lifecycle import (
     stop_service,
 )
 from dutchmate_cli.logs import format_recent_logs
+from dutchmate_cli.mcp import McpLaunchError, McpLogLevel, launch_mcp
 from dutchmate_cli.send import format_uart_send
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
@@ -570,9 +571,30 @@ def dut_boot_mode(
 
 
 @app.command()
-def mcp() -> None:
-    """Run the Phase 2 MCP stdio adapter."""
-    _fail("MCP server is planned for Phase 2.")
+def mcp(
+    service_url: Annotated[
+        str | None,
+        typer.Option(
+            "--service-url",
+            envvar="DUTCHMATE_SERVICE_URL",
+            help="Base URL for the local Device Core Service.",
+        ),
+    ] = None,
+    log_level: Annotated[
+        McpLogLevel,
+        typer.Option(
+            "--log-level",
+            case_sensitive=False,
+            help="MCP process log level.",
+        ),
+    ] = McpLogLevel.INFO,
+) -> None:
+    """Run the MCP server over stdio."""
+
+    try:
+        launch_mcp(service_url=service_url, log_level=log_level)
+    except McpLaunchError as exc:
+        _fail(str(exc))
 
 
 def _fail(message: str) -> NoReturn:

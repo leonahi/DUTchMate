@@ -194,10 +194,17 @@ def test_create_server_configures_finite_private_cache_hints() -> None:
 
 def test_run_stdio_exposes_only_the_stdio_transport(monkeypatch: object) -> None:
     server = Mock()
-    monkeypatch.setattr(server_module, "create_server", lambda: server)
+    create_calls: list[tuple[str, str]] = []
 
-    run_stdio()
+    def fake_create_server(service_url: str, *, log_level: str) -> Mock:
+        create_calls.append((service_url, log_level))
+        return server
 
+    monkeypatch.setattr(server_module, "create_server", fake_create_server)
+
+    run_stdio(service_url="http://127.0.0.1:3040", log_level="DEBUG")
+
+    assert create_calls == [("http://127.0.0.1:3040", "DEBUG")]
     server.run.assert_called_once_with("stdio")
 
 
