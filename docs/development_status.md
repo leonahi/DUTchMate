@@ -284,10 +284,15 @@ Read this document first whenever development resumes.
   GP1 during the wire change, followed by two valid 8-N-1 PING
   frames. The fixture rejects the first and answers the second; the untouched
   return path stays clean. The trace and session agree without a reset.
-- **Next step:** Prepare a controlled fixture-RX bias comparison to test the
-  undriven-input hypothesis, then isolate the opposite UART direction. Preserve
-  raw evidence and correlate all sends inside active capture windows. Loaded
-  hot-plug acceptance remains open; analog edge/cable acceptance is deferred.
+- The fixture-side 10 kOhm RX pull-up comparison eliminated extra digital
+  transitions during the reported wire-change interval, and both recovery
+  PINGs returned PONG immediately. This supports the undriven-RX diagnosis for
+  that cycle; a separate initial baseline rejection still preceded wire movement.
+- **Next step:** Keep the fixture RX pull-up installed and isolate the opposite
+  UART direction, with Saleae D2 on the Debug Helper connector-side input
+  (J1 pin 4) when disconnecting Pico 1 GP0. Preserve raw evidence and verify
+  capture windows. Investigate the pre-test baseline rejection separately;
+  loaded hot-plug acceptance remains open and analog acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
   the user's request. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -359,6 +364,22 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Fixture-RX pull-up comparison, reviewed 2026-09-17:
+
+- The user installed 10 kOhm from Pico 1 GP1 to its own 3.3 V output, keeping
+  the pull-up and Saleae D1 on GP1 throughout the RX-only wire cycle.
+- Retained CSV `hardware/validation/evidence/20260917-rx-only-hotplug-with-pullup-digital.csv`
+  has no RX transitions outside the four clean PING packets. Both post-cycle
+  commands returned PONG immediately, matching session
+  `20260917T085816Z-5c60e312` (four recorded sends, 72 response bytes).
+- The session completed with one segment, zero reported buffer loss, and no
+  overflow/interruption. CSV and session hashes are recorded in the validation
+  record. Device Core is stopped; the fixture RX pull-up remains installed.
+- The initial baseline error still occurred before wire movement. This
+  comparison supports a fixture-side undriven-input cause of RX-only hot-plug
+  corruption and a local diagnostic mitigation; it does not close startup
+  behavior, the opposite UART direction, or full hot-plug acceptance.
 
 Continuous RX-only digital trace, reviewed 2026-09-17:
 
@@ -1641,6 +1662,9 @@ schema and exposes the required identity/capabilities.
     - [x] Capture the complete RX-only transition and recovery sequence with
       Saleae; correlate clean post-reconnect commands and error/PONG responses
       with the active Enhanced session. Retain the original digital CSV.
+    - [x] Compare a fixture-side 10 kOhm RX pull-up: retain continuous digital
+      evidence of no extra RX transitions and two immediate post-cycle PONGs.
+      Keep the distinct pre-test baseline rejection and opposite direction open.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected

@@ -461,6 +461,61 @@ electrical hypothesis; a controlled bias test is needed to distinguish it from
 contact effects and probe/loading influences. This is not evidence that the
 Debug Helper transmitted a malformed recovery command.
 
+## RX-Only Hot-Plug With Fixture-Side Pull-Up (2026-09-17)
+
+For the controlled comparison, the operator installed 10 kOhm from Pico 1
+GP1 to Pico 1 `3V3(OUT)`. This pull-up and Saleae D1 stayed attached to GP1
+while only the J3 pin 4 UART wire was disconnected/reconnected. D2 remained on
+GP0, the return path stayed connected, and CTRL0-to-RUN remained unconfigured.
+The service was stopped for setup and restarted on `/dev/cu.usbmodem1301`.
+The operator confirmed the pull-up was ready but did not supply the requested
+numeric GP1 DMM reading; no measured idle voltage is inferred here.
+
+The continuous 25 MS/s export is retained unchanged as
+`evidence/20260917-rx-only-hotplug-with-pullup-digital.csv`, SHA-256
+`508947e3eb0635f6b68ad50cf66560a50f89b85742d37eeea773919bc5a19a15`.
+It has 574 timestamp/state rows, spanning 0 to 201.371156480 seconds.
+Bit-center decoding at 460800, 8-N-1 gives:
+
+| Trace time, RX / TX start (s) | Command at GP1 | Response at GP0 |
+|---|---|---|
+| 41.924846360 / 41.926054680 | `PING\n` (initial baseline) | `DMF/1 ERROR COMMAND code=E_COMMAND_001\n` |
+| 62.629883480 / 62.630426760 | `PING\n` (baseline retry) | `DMF/1 PONG\n` |
+| 164.448071240 / 164.448775240 | `PING\n` (first after wire change) | `DMF/1 PONG\n` |
+| 170.777861600 / 170.778159280 | `PING\n` (second after wire change) | `DMF/1 PONG\n` |
+
+Every one of the 128 RX transitions falls inside those four five-byte command
+windows. RX stays digitally high between packets, including the interval in
+which the operator reported the disconnect/reconnect. All 20 command bytes
+and 72 response bytes have valid stop-bit samples. In contrast, the earlier
+no-pull-up trace recorded 4,657 RX transitions in its wire-change interval.
+The CSV has no separate contact-state marker, so precise unplug/replug times
+are not independently measured.
+
+Session `20260917T085816Z-5c60e312` records the same 72 response bytes and four
+successful forced sends. Completion acknowledgements are at 08:58:25.352884,
+08:58:46.061847, 09:00:27.881417, and 09:00:34.208825 UTC. Both recovery
+commands were inside the active session; no reset or USB reconnect was needed.
+The session completed at 09:03:16 UTC with one segment, zero reported buffer
+loss, no overflow/interruption, and the baseline error retained. Device Core
+was stopped after verification. Local session artifact SHA-256 digests are:
+
+| Artifact | SHA-256 |
+|---|---|
+| `metadata.json` | `1dbb281eb9b6250ca6c8cf050a2cf4d550371390dd60d86ee2f6ce4af8129ddf` |
+| `uart_raw.log` | `816a35264a40101f1be90427ca2dd1e1f03cb441b5aabd32484ae2d6d6c7dd0f` |
+| `uart_events.jsonl` | `952721661b7dcf5868fa9772c402cec9e38be5671ae2ad3af11780b48efd5c87` |
+| `hardware_events.jsonl` | `71729138bbe6cd2f9e7b09364b65a0e9a54e74700a5bee3ba7c199f9939a3afb` |
+
+This single comparison strongly supports an undriven fixture RX input as the
+cause of the prior RX-only hot-plug disturbance: with the local pull-up, no
+extra digital transitions were captured and the first recovery command
+succeeded. It is a verified diagnostic mitigation for this setup, not a
+production hardware/firmware change or complete hot-plug acceptance. The
+initial baseline error persists before wire movement, despite a clean first
+PING in this trace; input history before recording and startup behavior remain
+unresolved. The opposite UART direction is not covered by this comparison.
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and
