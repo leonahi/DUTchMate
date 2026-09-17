@@ -819,6 +819,14 @@ select a final production value across every supported `DUT_VIO`, amend the
 schematic/BOM, or address a DUT's own RX input when the debugger-to-DUT wire is
 removed. Those are separate design responsibilities.
 
+The user subsequently accepted the next-revision correction: retain the
+fixed-direction `TXU0202DCUR` and add 10 kOhm from translator-side `UART_TX`
+(`U1.B2`, pin 1, after `R16`) to `DUT_VIO`. No required helper-side pull-up is
+added to the debugger-to-DUT `DUT_UART_RX` output. A DUT that requires clean
+behavior with its cable removed must provide local idle-high bias on its own
+UART RX input. This records the design decision; the next-revision schematic
+and BOM have not yet been supplied or verified.
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and

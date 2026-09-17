@@ -329,11 +329,14 @@ Read this document first whenever development resumes.
   (baseline plus five recoveries), and the completed host session retained the
   same 66 bytes with no extras or reported loss. The added 10 kOhm idle-high
   bias eliminates the reproduced disconnect disturbance.
-- **Next step:** Treat an idle-high pull-up on the DUT-to-debugger UART input as
-  required for hot-plug behavior, then assess and implement the Revision A
-  schematic/BOM correction without conflating it with the DUT-side RX-input
-  responsibility. Retain the temporary helper-side pull-up until that decision
-  is recorded; Device Core is stopped before further wiring changes.
+- The hardware decision is recorded: retain the fixed-direction TXU0202 and add
+  10 kOhm from translator-side `UART_TX` (`U1.B2`, after `R16`) to `DUT_VIO` in
+  the next board revision. No required helper-side pull-up is added to the
+  debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
+  cable is absent.
+- **Next step:** Carry this decision into the next-revision schematic/BOM and
+  verify the resulting design artifacts. The current Revision A prototype uses
+  the tested temporary resistor for any further loaded UART hot-plug work.
   Investigate the pre-test baseline rejection separately; loaded hot-plug
   acceptance remains open and analog acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
@@ -419,7 +422,8 @@ Five-cycle helper-side TX pull-up repeatability, reviewed 2026-09-17:
   zero reported loss, and no overflow, interruption, resumption, or truncation.
 - This passes the planned repeatability comparison and establishes that the
   helper-side 10 kOhm idle-high bias prevents the reproduced TX-disconnect
-  disturbance. A schematic/BOM correction remains to be selected and recorded.
+  disturbance. The accepted next-revision correction retains TXU0202 and adds
+  10 kOhm from `UART_TX`/`U1.B2` to `DUT_VIO`.
 
 Helper-side TX pull-up comparison, reviewed 2026-09-17:
 
@@ -1798,7 +1802,9 @@ schema and exposes the required identity/capabilities.
         and host evidence contain only the three expected PONGs.
       - [x] Establish repeated pull-up behavior across five consecutive wire
         cycles with exact paired-probe and host evidence.
-      - [ ] Decide and implement the production schematic/BOM change before
+      - [x] Decide the production correction: retain TXU0202 and add 10 kOhm
+        from `UART_TX`/`U1.B2` to `DUT_VIO` in the next board revision.
+      - [ ] Implement and verify the next-revision schematic/BOM change before
         closing the TX-only corruption gate.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.

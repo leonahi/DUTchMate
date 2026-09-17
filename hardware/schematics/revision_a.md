@@ -547,6 +547,11 @@ For the selected `TXU0202DCUR` VSSOP-8 package:
 - Use `R16` as the 22 Ohm UART series-resistor array between the connector-side
   `DUT_UART_RX` / `DUT_UART_TX` nets and the translator-side `UART_RX` /
   `UART_TX` nets.
+- Revision A validation requires the next board revision to add 10 kOhm from
+  translator input `UART_TX` (`U1.B2`, pin 1, after `R16`) to `DUT_VIO`. This
+  holds the DUT-to-debugger receive path at the UART idle-high level when the
+  DUT transmitter or cable is absent. Existing Revision A prototypes require
+  the equivalent helper-side rework for loaded UART hot-plug testing.
 - Validate UART operation at the maximum intended baud rate and cable length.
 
 Revision A has one `TXU0202` OE shared by both fixed-direction channels.
@@ -562,7 +567,11 @@ guarantee high impedance at DUT RX. Independent electrical TX disable would
 require a reviewed hardware revision with separate direction enables or an
 additional isolation stage.
 
-Do not use UART pull-ups or pull-downs unless required by the DUT or startup behaviour.
+No required helper-side pull-up is added to `DUT_UART_RX`: it is the
+debugger-to-DUT push-pull output while the translator is enabled. A DUT that
+must remain quiet with the cable removed must bias its own UART RX input high,
+using an internal pull-up or a local external resistor. Other UART pull-ups or
+pull-downs remain application-specific.
 
 ## 7. Power and sequencing
 
