@@ -1,7 +1,7 @@
 # Development Status
 
-> Active phase: Phase 1
-> Code baseline reviewed: `28caf60f362220f0e8ec995ff708490e1ceea5c1` on 2026-09-16
+> Active phase: Phase 2
+> Code baseline reviewed: `df75b53` on 2026-09-17
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -9,7 +9,14 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 1A is accepted; Phase 1B now targets a
+- **Current milestone:** Phase 2 MCP integration is active after the user
+  explicitly deferred the remaining Phase 1 hardware gates on 2026-09-17.
+  The nine documented Phase 2 tools are now registered in deterministic order
+  over the existing Device Core HTTP client. Successful calls return complete
+  structured results; local validation, canonical service failures, service
+  unavailability, and invalid service responses are projected as bounded
+  structured MCP tool errors.
+- **Deferred Phase 1 context:** Phase 1A is accepted; Phase 1B targets a
   non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
   Helper. The firmware architecture is approved. Its host prerequisites now
   align required capabilities, canonical `dutchmate-rp2350` identity fixtures,
@@ -334,15 +341,15 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Carry this decision into the next-revision schematic/BOM and
-  verify the resulting design artifacts. The current Revision A prototype uses
-  the tested temporary resistor for any further loaded UART hot-plug work.
-  Investigate the pre-test baseline rejection separately; loaded hot-plug
-  acceptance remains open and analog acceptance is deferred.
-  The populated-part/continuity audit and 75 uA correlation remain deferred at
-  the user's request. EVENT pins remain reserved; do not add event capture.
-- **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
-  phase, unless the user explicitly changes the priority.
+- **Next step:** Implement the modern MCP protocol integration-test slice:
+  exercise `server/discover`, per-request protocol metadata, deterministic
+  cacheable `tools/list`, tool calls, cancellation, and clean stdio EOF through
+  the SDK v2 client. Keep CLI launch wiring as the following independent slice.
+- **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
+  correction into the next-revision schematic/BOM and verify the resulting
+  design artifacts. Loaded hot-plug acceptance, the pre-test baseline
+  rejection, populated-part/continuity audit, 75 uA correlation, and analog
+  measurements remain open. EVENT pins remain reserved.
 
 Update the review date, current milestone, next step, checklist, and validation
 evidence in the same commit as every completed development slice. Reconcile the
@@ -404,12 +411,32 @@ The acceptance audit currently resolves the normative groups as follows:
 | Shared Phase 1 session, duration, reconnect, retrieval, and backend-selection contracts | Pass | Full automated suite, including an explicit `hybrid` rejection case added by this audit |
 | Revision A first-prototype electrical acceptance | Open | Source mapping and configured rejection checks pass; populated BOM/continuity and the remaining section 14 measurements are incomplete |
 
-Phase 1 therefore remains active because the first-prototype done criterion
+Phase 1 therefore remains incomplete and deferred because the first-prototype done criterion
 explicitly requires recorded leakage, sequencing, isolation, voltage-level,
 and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 2 MCP tool registration and error projection, reviewed 2026-09-17:
+
+- `create_server()` registers the nine documented tools in their normative
+  order while retaining the fixed server identity and private finite cache
+  hints.
+- Each tool delegates through a short-lived `DeviceCoreClient`, returns the
+  service's JSON object as complete structured content, and makes no direct
+  serial, firmware-protocol, GPIO, or model-provider call.
+- Local argument failures return `invalid_argument` without HTTP dispatch.
+  Canonical Device Core failures retain their exact code, detail, truncation
+  marker, and optional context. Connection and invalid-response failures use
+  bounded `service_unavailable` and `service_protocol_error` results.
+- Focused MCP server/client tests pass: 23 tests, including all nine endpoint
+  wrappers, deterministic listing, success projection, structured service
+  errors, unavailable service handling, invalid response handling, and UART
+  payload byte-limit context.
+- Fresh repository validation passed: Ruff reported `All checks passed!`, mypy
+  found no issues in 73 source files, the full pytest suite passed 1,300 cases,
+  and `git diff --check` reported no whitespace errors.
 
 Five-cycle helper-side TX pull-up repeatability, reviewed 2026-09-17:
 
@@ -1649,10 +1676,35 @@ The following items are no longer backlog work:
 - removal of the obsolete synchronous Enhanced command/source, hello, startup,
   and reconnect compatibility path.
 
-## Active Queue — Phase 1
+## Active Queue — Phase 2
 
-Work proceeds in this order. A step is complete only when its listed exit gate
-passes and the evidence is committed.
+Work follows the independently testable sequence in
+`docs/mcp_integration_plan.md`.
+
+- [x] Lock the official MCP SDK 2.x protocol/dependency baseline and record
+  `2026-07-28` as normative.
+- [x] Compose one stateless stdio-only `MCPServer` with fixed identity and
+  private finite cache hints.
+- [x] Register the nine Phase 2 tools in documented order and project complete
+  structured success and actionable validation/service error results.
+- [ ] Add modern SDK v2 integration tests for `server/discover`, required
+  per-request metadata, deterministic cacheable tool listing, calls,
+  cancellation, and clean EOF shutdown. Retain one compatibility smoke test
+  only for the SDK-owned legacy path.
+- [ ] Wire `dutchmate mcp` with `--service-url`,
+  `DUTCHMATE_SERVICE_URL`, stderr-only logging, and no additional transport.
+- [ ] Document named host registrations and run the official MCP conformance
+  suite for the `2026-07-28` stdio server.
+
+Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
+host-acceptance requirements all have fresh automated or conformance evidence.
+
+## Deferred Queue — Phase 1 Hardware
+
+The user deferred this remaining queue on 2026-09-17 while updating the next
+board revision in parallel. These criteria remain unresolved; when resumed, a
+step is complete only when its listed exit gate passes and the evidence is
+committed.
 
 ### 1. Close Shared Control And Reporting Contracts
 
@@ -1895,10 +1947,8 @@ real hardware, and no unchecked item remains in this list.
 
 | Phase | Status | Resume condition |
 |---|---|---|
-| Phase 2 — MCP integration | Paused; dependency/client/server-composition foundations exist | Phase 1 completes or the user explicitly reprioritizes. Next slice is tool registration and error projection. |
 | Phase 3 — hardware/protocol refinement | Not started | Phase 2 completion and Phase 1 measurements identify concrete refinements. |
 | Phase 4 — AI debug reports | Not started | Deterministic evidence and MCP surfaces are accepted. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
-MCP work does not count toward Phase 1 completion. Existing Phase 2 foundations
-remain intact but paused while Phase 1 is active.
+Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.
