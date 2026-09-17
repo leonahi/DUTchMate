@@ -417,6 +417,50 @@ or a reset requirement. The later in-window retry in
 earlier interpretations without discarding the actual cycle 1/3 hot-plug
 corruption or the separate earlier first-command anomaly.
 
+## RX-Only Hot-Plug With Continuous Digital Trace (2026-09-17)
+
+The same 3.3 V/460800-baud fixture setup was retained. Pico 2 enumerated at
+`/dev/cu.usbmodem1301` with unchanged serial `FA63A4D787572B33`. CTRL0 remained
+physically connected to Pico 1 RUN but was unconfigured in the new service
+epoch; no reset was issued. Saleae D1 (`PICO1_RX`) probed Pico 1 GP1 and D2
+(`PICO1_TX`) probed GP0. Only J3 pin 4 to GP1 was disconnected/reconnected;
+D1 stayed attached to GP1 and the GP0 return path stayed connected.
+
+The operator supplied a continuous 25 MS/s digital export covering baseline,
+wire movement, and both recovery commands. The unchanged CSV is retained at
+`evidence/20260917-rx-only-hotplug-digital.csv`, SHA-256
+`549555376fc0c5e2e46cf8fe05312382fc0c69267b949c1a922d6df9cfb2507c`.
+It contains 5,134 timestamp/state rows for both channels, from 0 to
+244.310343680 seconds. Sampling UART bit centers at 460800, 8-N-1 gives:
+
+| Trace time (s) | Pico 1 RX (D1) | Pico 1 TX (D2) |
+|---|---|---|
+| 42.079215000 / 42.080219480 | Clean `PING\n` | `DMF/1 PONG\n` |
+| 172.295236280-173.358330840 | Irregular transitions and extended low intervals during the wire-change interval | Stayed idle-high |
+| 214.910277520 / 214.911095400 | Clean `PING\n` | `DMF/1 ERROR COMMAND code=E_COMMAND_001\n` |
+| 221.776993400 / 221.777749160 | Clean `PING\n` | `DMF/1 PONG\n` |
+
+Both post-reconnect command frames have valid stop bits, as do all response
+frames. Noise-interval decoder output is not a reliable count of bytes accepted
+by the RP2040 UART; the exported logic transitions do not reveal analog voltage
+or the exact contact-open/contact-close instants.
+
+Session `20260917T084116Z-b6095f44` recorded all three forced `PING\n` attempts
+and the matching 61-byte response sequence. The corresponding send completion
+times were 08:41:22.361955, 08:44:15.191065, and 08:44:22.065929 UTC. It
+completed at 08:46:16 UTC with one segment, zero reported buffer loss, no
+overflow/interruption, and a detected fixture command error.
+
+This isolates the reproduced command rejection to disturbing the fixture RX
+connection: GP1 had spurious digital activity before a clean command, while
+the untouched return path carried clean responses. The fixture accumulates
+bytes until newline (or discards an overlong command until newline), then
+clears that state. Accumulated/discarded input therefore explains the observed
+single rejection followed by recovery. An undriven RX input is the leading
+electrical hypothesis; a controlled bias test is needed to distinguish it from
+contact effects and probe/loading influences. This is not evidence that the
+Debug Helper transmitted a malformed recovery command.
+
 ## Deferred Analog UART Cable/Edge Validation
 
 On 2026-09-16, the user confirmed that no analog oscilloscope is available and

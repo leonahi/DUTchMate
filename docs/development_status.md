@@ -2,6 +2,7 @@
 
 > Active phase: Phase 1
 > Code baseline reviewed: `28caf60f362220f0e8ec995ff708490e1ceea5c1` on 2026-09-16
+> Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
 ## Resume Here
@@ -279,11 +280,14 @@ Read this document first whenever development resumes.
   resetting either board or reconnecting Enhanced USB. Cycle 2 recovery is
   inconclusive because its sends occurred outside the capture window. Earlier
   empty-capture failure claims were corrected after checking send timestamps.
-- **Next step:** Isolate the loaded UART hot-plug corruption by disconnecting
-  one UART direction at a time and recording both receiver inputs with the
-  available Saleae. Correlate the trace with forced-send/session timestamps
-  before selecting a hardware or fixture change. Loaded hot-plug acceptance
-  remains open; analog edge/cable acceptance remains deferred.
+- The continuous RX-only Saleae trace now shows spurious activity at Pico 1
+  GP1 during the wire change, followed by two valid 8-N-1 PING
+  frames. The fixture rejects the first and answers the second; the untouched
+  return path stays clean. The trace and session agree without a reset.
+- **Next step:** Prepare a controlled fixture-RX bias comparison to test the
+  undriven-input hypothesis, then isolate the opposite UART direction. Preserve
+  raw evidence and correlate all sends inside active capture windows. Loaded
+  hot-plug acceptance remains open; analog edge/cable acceptance is deferred.
   The populated-part/continuity audit and 75 uA correlation remain deferred at
   the user's request. EVENT pins remain reserved; do not add event capture.
 - **Do not start:** additional MCP/Phase 2 work while Phase 1 is the active
@@ -355,6 +359,21 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Continuous RX-only digital trace, reviewed 2026-09-17:
+
+- The retained `hardware/validation/evidence/20260917-rx-only-hotplug-digital.csv`
+  covers baseline, the GP1 wire change, and both recovery commands. D1 is
+  Pico 1 GP1/RX; D2 is GP0/TX. CTRL0 is connected to RUN but unconfigured.
+- GP1 had irregular digital transitions around 172.295-173.358 s. Commands
+  at 214.910 s and 221.777 s both decode as clean `PING\n`; the responses are
+  `E_COMMAND_001` then PONG. The return path stayed idle during the wire change.
+- Session `20260917T084116Z-b6095f44` contains the matching 61 response bytes,
+  three forced sends, one segment, zero reported loss, and no interruption.
+  The digital trace localizes the rejection to preceding input activity on the
+  disturbed fixture RX path; an undriven input remains the electrical hypothesis
+  pending a controlled bias comparison. Full timings and CSV hash are recorded
+  in `hardware/validation/phase1_revision_a.md`.
 
 Loaded UART hot-plug, reviewed 2026-09-16:
 
@@ -1619,6 +1638,9 @@ schema and exposes the required identity/capabilities.
     recovered after one rejected command without reset; cycle 2 recovery was
     outside the capture window. Preserve transition bytes and isolate each
     UART direction with Saleae before changing hardware or fixture behavior.
+    - [x] Capture the complete RX-only transition and recovery sequence with
+      Saleae; correlate clean post-reconnect commands and error/PONG responses
+      with the active Enhanced session. Retain the original digital CSV.
   - [x] Resolve the 1.8 V debugger-unpowered `3V3(OUT)` observation with a
     10 kOhm loaded source-impedance check, retaining instrument limitations.
   - [x] Reject missing trusted `DUT_VIO` declaration before opening a connected
