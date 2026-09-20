@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 4 AI debug reports — deterministic evidence packaging
-> Code baseline reviewed: `e65aa2c4a99b147244217e2d941b2f2779889d61` on 2026-09-20
+> Code baseline reviewed: `23619ff53d502d3ba7e50aa9a0f49961a9477fea` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
