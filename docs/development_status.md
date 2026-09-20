@@ -12,7 +12,8 @@ Read this document first whenever development resumes.
 - **Current milestone:** Phase 2 MCP integration passed its scoped tools-only
   stdio acceptance gate on 2026-09-20. Phase 4 AI debug reports are the next
   software phase while the user defers the remaining Phase 1 hardware gates;
-  Phase 3 refinement still depends on those measurements.
+  Phase 3 refinement still depends on those measurements. A subsequent live
+  read-only MCP call also reached the running Device Core Service successfully.
   The nine documented Phase 2 tools are now registered in deterministic order
   over the existing Device Core HTTP client. Successful calls return complete
   structured results; local validation, canonical service failures, service
@@ -360,7 +361,8 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Start Phase 4 from `docs/debug_agent_context_contract.md`:
+- **Next step:** With the live MCP smoke test complete, start Phase 4 from
+  `docs/debug_agent_context_contract.md`:
   map the bounded evidence-package inputs and tests, then implement its first
   deterministic slice before selecting a provider adapter. Validate the named
   VS Code and Claude Code host UIs when those applications become available.
@@ -436,6 +438,20 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 2 live MCP smoke, reviewed 2026-09-20:
+
+- Device Core started with the connected Enhanced Pico 2 on
+  `/dev/cu.usbmodem11401` at 460800 baud; status showed a connected device, no
+  active workflow, and all four controls unconfigured. The locally installed
+  Python SDK launched `.venv/bin/dutchmate mcp` by absolute path with the
+  virtual environment removed from `PATH`, negotiated modern stdio, and listed
+  the exact nine tools.
+- A read-only `get_recent_uart_log` call with `lines=1` reached the live service
+  as `GET /dut/logs?lines=1` and returned HTTP 200 plus a complete structured
+  MCP result. The verification checked schema fields without printing UART
+  content or the session identifier. No reset, capture, or control tool was
+  called. Device Core was stopped afterward, and stopped status was confirmed.
 
 Phase 2 scoped stdio acceptance, reviewed 2026-09-20:
 
@@ -1823,6 +1839,8 @@ Work follows the independently testable sequence in
 - [x] Establish scoped tools-only stdio acceptance for the official runner's
   HTTP/fixture-only cases, pass the direct-process and applicable official
   checks, and record named host UI validation as follow-up when available.
+- [x] Complete one read-only MCP tool call through the installed stdio launcher
+  to a running Device Core Service; stop the temporary service afterward.
 
 Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
 host-acceptance requirements all have fresh automated or conformance evidence.
