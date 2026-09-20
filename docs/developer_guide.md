@@ -9,14 +9,16 @@ repeated here.
 ## Workspace
 
 DUTchMate uses a `uv` workspace with one root lockfile. This keeps the core,
-CLI, service, and MCP packages independently testable while resolving them from
-one dependency set. Run package entrypoints from the repository root.
+CLI, service, MCP, and Debug Agent packages independently testable while
+resolving them from one dependency set. Run package entrypoints from the
+repository root.
 
 ```text
 apps/
   cli/             Human CLI; owns `dutchmate` and `dm`.
   service/         Local FastAPI Device Core Service.
   mcp_server/      MCP stdio delivery adapter.
+  debug_agent/     Optional bounded evidence assembly and analysis adapters.
 
 core/
   src/             Reusable Python library.
@@ -43,6 +45,7 @@ Python packages:
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
 | `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28` stdio delivery adapter and Device Core HTTP client. |
+| `apps/debug_agent/` | `dutchmate-debug-agent` | Optional bounded Debug Agent context and provider boundary; no provider enabled by default. |
 
 See `docs/software_architecture.md` for module ownership and data flow.
 
@@ -51,7 +54,7 @@ See `docs/software_architecture.md` for module ownership and data flow.
 Requirements are Python 3.10+ and `uv`.
 
 ```bash
-uv sync
+uv sync --all-packages
 uv run pytest
 uv run ruff check .
 ```
@@ -88,8 +91,9 @@ process logs go to stderr.
 
 ### Register MCP with a coding agent
 
-Install the workspace with `uv sync`, start the Device Core Service separately,
-then resolve the absolute launcher path with `realpath .venv/bin/dutchmate`.
+Install the workspace with `uv sync --all-packages`, start the Device Core
+Service separately, then resolve the absolute launcher path with
+`realpath .venv/bin/dutchmate`.
 Use that absolute path in a host that does not inherit the shell's virtual
 environment. The launcher finds its sibling `dutchmate-mcp` executable in the
 same environment. Each host launches its own stdio process; there is no MCP
@@ -147,6 +151,9 @@ Use `uv lock` after dependency declarations change. Commit the shared
   MCP executable without importing it. It must not own serial transport.
 - `apps/mcp_server` calls the same service over HTTP. It must not own
   serial transport, session persistence, or AI logic.
+- `apps/debug_agent` assembles bounded native session context through `core`
+  query APIs. Provider adapters stay in this package and are disabled by
+  default; Device Core does not depend on it.
 - `hardware/protocol/v1` is the Enhanced firmware/host wire contract. Its
   schemas, examples, parser/encoder models, tests, and firmware change together.
 

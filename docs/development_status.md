@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 4 preparation
+> Active phase: Phase 4 AI debug reports — deterministic evidence packaging
 > Code baseline reviewed: `e65aa2c4a99b147244217e2d941b2f2779889d61` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,10 +9,15 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 2 MCP integration passed its scoped tools-only
-  stdio acceptance gate on 2026-09-20. Phase 4 AI debug reports are the next
-  software phase while the user defers the remaining Phase 1 hardware gates;
-  Phase 3 refinement still depends on those measurements. A subsequent live
+- **Current milestone:** Phase 4 AI debug reports have started with an optional
+  Debug Agent workspace package and its first deterministic, native-schema
+  session-facts projection. The projection reads through `SessionStore`, keeps
+  bounded lifecycle, backend, integrity, first-error, and event-count facts,
+  and rejects legacy or unknown schemas without interpreting raw artifacts.
+  UART/event excerpt selection and provider adapters remain next. Phase 2 MCP
+  integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
+  The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
+  still depends on those measurements. A subsequent live
   read-only MCP call also reached the running Device Core Service successfully.
   The nine documented Phase 2 tools are now registered in deterministic order
   over the existing Device Core HTTP client. Successful calls return complete
@@ -361,11 +366,12 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** With the live MCP smoke test complete, start Phase 4 from
-  `docs/debug_agent_context_contract.md`:
-  map the bounded evidence-package inputs and tests, then implement its first
-  deterministic slice before selecting a provider adapter. Validate the named
-  VS Code and Claude Code host UIs when those applications become available.
+- **Next step:** Extend the Phase 4 deterministic package with bounded UART
+  and hardware-event excerpts, explicit omission counts, and the priority rules
+  in `docs/debug_agent_context_contract.md`. Keep provider selection disabled
+  until the complete package and report boundaries are validated. Validate the
+  named VS Code and Claude Code host UIs when those applications become
+  available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -438,6 +444,19 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 native session-facts slice, reviewed 2026-09-20:
+
+- The new `dutchmate-debug-agent` workspace package imports from the installed
+  environment and depends only on `dutchmate-core`. Four focused tests exercise
+  native fact projection, bounded metadata without raw evidence arrays, legacy
+  and unknown schema rejection, and path-safe session IDs.
+- Full repository validation passed: Ruff, mypy (76 source files), 1,322 pytest
+  tests, and `git diff --check`. `uv lock` and `uv sync --all-packages --frozen`
+  resolved and installed the complete workspace.
+- `graphify update .` refreshed the structural graph. Extraction warned that
+  the existing `hardware/firmware/zephyr_dut/src/fixture_protocol.h` could be
+  only partially parsed; that header supplied no graph symbols.
 
 Phase 2 live MCP smoke, reviewed 2026-09-20:
 
@@ -1845,13 +1864,20 @@ Work follows the independently testable sequence in
 Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
 host-acceptance requirements all have fresh automated or conformance evidence.
 
-## Active Queue — Phase 4 Preparation
+## Active Queue — Phase 4 Evidence Packaging
 
-- [ ] Map the bounded evidence-package contract and existing deterministic
+- [x] Map the bounded evidence-package contract and existing deterministic
   evidence sources before selecting the first implementation slice.
-- [ ] Define focused acceptance tests for that slice using
+- [x] Define focused acceptance tests for that slice using
   `docs/debug_agent_context_contract.md`; keep provider-specific work behind
   the documented boundary.
+- [x] Add a separate Debug Agent workspace package and project native session
+  facts through validated `SessionStore` retrieval; reject unsupported schemas
+  without reading or inferring raw evidence.
+- [ ] Assemble bounded UART and hardware-event excerpts with contract limits,
+  priority rules, and explicit truncation/omission metadata.
+- [ ] Validate an optional Coding Agent context package and keep provider
+  requests behind the disabled-by-default Debug Agent boundary.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2102,7 +2128,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Preparation active | Phase 2 stdio and deterministic evidence surfaces are accepted; begin bounded evidence packaging. |
+| Phase 4 — AI debug reports | Evidence packaging active | Native session-facts projection is implemented; bounded UART/event excerpts are next. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.

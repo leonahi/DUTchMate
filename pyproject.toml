@@ -25,6 +25,7 @@ members = [
   "apps/cli",
   "apps/service",
   "apps/mcp_server",
+  "apps/debug_agent",
 ]
 
 [tool.uv.sources]
@@ -32,6 +33,7 @@ dutchmate-core = { workspace = true }
 dutchmate-cli = { workspace = true }
 dutchmate-service = { workspace = true }
 dutchmate-mcp-server = { workspace = true }
+dutchmate-debug-agent = { workspace = true }
 
 [tool.uv]
 package = false
@@ -44,6 +46,7 @@ src = [
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",
+  "apps/debug_agent/src",
 ]
 
 [tool.ruff.lint]
@@ -55,11 +58,13 @@ pythonpath = [
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",
+  "apps/debug_agent/src",
 ]
 testpaths = [
   "apps/cli/tests",
   "apps/service/tests",
   "apps/mcp_server/tests",
+  "apps/debug_agent/tests",
   "tests",
 ]
 asyncio_mode = "auto"
@@ -72,4 +77,5 @@ files = [
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",
+  "apps/debug_agent/src",
 ]

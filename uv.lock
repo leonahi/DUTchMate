@@ -17,6 +17,7 @@ resolution-markers = [
 members = [
     "dutchmate-cli",
     "dutchmate-core",
+    "dutchmate-debug-agent",
     "dutchmate-mcp-server",
     "dutchmate-service",
     "dutchmate-workspace",
@@ -343,6 +344,17 @@ requires-dist = [
     { name = "pyserial-asyncio", specifier = ">=0.6" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
 ]
+
+[[package]]
+name = "dutchmate-debug-agent"
+version = "0.1.0"
+source = { editable = "apps/debug_agent" }
+dependencies = [
+    { name = "dutchmate-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "dutchmate-core", editable = "core" }]
 
 [[package]]
 name = "dutchmate-mcp-server"

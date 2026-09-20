@@ -24,6 +24,10 @@ apps/cli
 apps/mcp_server
   -> HTTP client for apps/service
 
+apps/debug_agent
+  -> bounded, schema-aware session facts from core/session_store
+  -> optional provider adapters outside apps/service and core
+
 apps/service
   -> process/runtime ownership
   -> core
@@ -55,6 +59,13 @@ core/workflows.device_actions, gpio_config
 core/device_connection
   -> no higher DUTchMate layer
 ```
+
+The Debug Agent application reads native session evidence through the validated
+`SessionStore` query boundary. Its deterministic session-facts projection keeps
+backend identity, capability policy, lifecycle, integrity, timestamp provenance,
+stored first-error reference, and bounded event counts without loading raw UART
+or hardware-event arrays. Later excerpt selection and provider adapters remain
+within `apps/debug_agent`; neither Device Core nor `core` depends on that app.
 
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:
