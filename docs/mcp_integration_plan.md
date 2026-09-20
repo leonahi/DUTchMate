@@ -441,8 +441,46 @@ Implement Phase 2 in these independently testable slices:
    `--service-url`/`DUTCHMATE_SERVICE_URL` and stderr log level without writing
    non-protocol data to stdout.
 6. **Host registration and acceptance:** document named host configurations and
-   run the official MCP conformance suite for the `2026-07-28` stdio server
+   accept the `2026-07-28` tools-only stdio server against the scoped gate below
    before declaring Phase 2 complete.
+
+## Phase 2 Acceptance Gate
+
+The shipped transport is stdio. The official conformance CLI
+`@modelcontextprotocol/conformance@0.2.0-alpha.11` accepts an HTTP URL for
+server tests, not a stdio command. Its frozen `2026-07-28` requirement set also
+exercises optional prompts, resources, sampling, media, progress, tasks, and
+fixture tools that DUTchMate does not advertise. A nonzero full-suite result
+therefore cannot, by itself, accept or reject this fixed tools-only server.
+
+Phase 2 acceptance requires all of the following:
+
+1. The installed `dutchmate mcp` executable passes a modern SDK v2 **real stdio
+   subprocess** test for discovery, the exact nine-tool listing, a bounded
+   structured tool error with Device Core deliberately unreachable, and clean
+   shutdown. The Inspector CLI also passes strict modern `tools/list` validation
+   through the absolute launcher path.
+2. The SDK integration tests pass modern per-request metadata, version
+   rejection, private cache hints, stable tool order, complete structured
+   success/error calls, cancellation, and EOF. Server/client tests pass all
+   nine Device Core endpoint mappings and the defined validation/error paths.
+3. The official pinned requirement set is run against a temporary loopback HTTP
+   projection of the **same** `create_server()` composition, with an unreachable
+   Device Core URL. All applicable `server-stateless` checks must pass except
+   the two checks that require its synthetic `test_missing_capability` sampling
+   tool. All three `tools-list` checks and the `caching` checks for
+   `tools/list` hints, nonnegative TTL, valid cache scope, and wire schema must
+   pass. Other results are recorded as scope evidence, not counted as a stdio
+   product failure or silently reported as passing.
+4. Ruff, mypy, the full pytest suite, and `git diff --check` pass. Named VS Code
+   and Claude Code registrations are documented against their host formats;
+   host UI validation is follow-up evidence when those applications are
+   available, not a substitute for direct stdio checks.
+
+This gate accepts the declared stdio tool surface only. It does not claim that
+the optional conformance fixtures or an HTTP MCP deployment pass. The temporary
+HTTP projection is used only for protocol validation and must not be exposed as
+a Phase 2 product command.
 
 ## Test Requirements
 
@@ -502,3 +540,7 @@ Minimum Phase 2 tests:
   https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio
 - Official Python SDK v2 documentation:
   https://github.com/modelcontextprotocol/python-sdk
+- Official conformance runner:
+  https://github.com/modelcontextprotocol/conformance
+- Official MCP Inspector CLI:
+  https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md

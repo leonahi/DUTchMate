@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 
 import anyio
 import httpx
 import pytest
 from mcp.client import Client, ClientSession
 from mcp.client._memory import InMemoryTransport
+from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server.context import CallNext, HandlerResult, ServerRequestContext
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
@@ -216,6 +219,27 @@ async def test_stream_transport_shuts_down_cleanly_on_client_eof() -> None:
     with anyio.fail_after(1):
         async with Client(InMemoryTransport(server), mode="auto", cache=None) as client:
             assert client.protocol_version == LATEST_MODERN_VERSION
+
+
+async def test_installed_cli_serves_modern_stdio_without_service_or_venv_path() -> None:
+    executable = Path(sys.executable).with_name("dutchmate")
+    parameters = StdioServerParameters(
+        command=str(executable),
+        args=["mcp", "--service-url", "http://127.0.0.1:0"],
+        env={"PATH": "/usr/bin:/bin"},
+    )
+
+    with anyio.fail_after(10):
+        async with Client(stdio_client(parameters), mode="auto", cache=None) as client:
+            assert client.protocol_version == LATEST_MODERN_VERSION
+            listing = await client.list_tools()
+            assert [tool.name for tool in listing.tools] == EXPECTED_TOOL_NAMES
+
+            result = await client.call_tool("get_recent_uart_log", {})
+            assert result.result_type == "complete"
+            assert result.is_error is True
+            assert result.structured_content is not None
+            assert result.structured_content["error"] == "service_unavailable"
 
 
 async def test_sdk_legacy_compatibility_path_lists_the_same_tools() -> None:

@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 2
+> Active phase: Phase 4 preparation
 > Code baseline reviewed: `a4c8a4955a71aad0b72d3090b86a05343f225c44` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,8 +9,10 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 2 MCP integration is active after the user
-  explicitly deferred the remaining Phase 1 hardware gates on 2026-09-17.
+- **Current milestone:** Phase 2 MCP integration passed its scoped tools-only
+  stdio acceptance gate on 2026-09-20. Phase 4 AI debug reports are the next
+  software phase while the user defers the remaining Phase 1 hardware gates;
+  Phase 3 refinement still depends on those measurements.
   The nine documented Phase 2 tools are now registered in deterministic order
   over the existing Device Core HTTP client. Successful calls return complete
   structured results; local validation, canonical service failures, service
@@ -31,7 +33,8 @@ Read this document first whenever development resumes.
   discovery. The official Inspector modern stdio tool listing passes strict
   validation; the official conformance runner has only an HTTP server input,
   and its full `2026-07-28` fixture suite remains nonpassing for this fixed
-  tools-only product. Phase 2 acceptance is therefore still open.
+  tools-only product. The scoped gate in `docs/mcp_integration_plan.md` accepts
+  the declared stdio surface without claiming full fixture or HTTP conformance.
 - **Deferred Phase 1 context:** Phase 1A is accepted; Phase 1B targets a
   non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
   Helper. The firmware architecture is approved. Its host prerequisites now
@@ -357,11 +360,10 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Resolve the Phase 2 acceptance gate for a fixed tools-only
-  stdio server: obtain direct official stdio conformance coverage or define a
-  scoped acceptance interpretation of the current runner's fixture and
-  HTTP-only cases. Recheck host registrations in the named host UIs when those
-  applications are available.
+- **Next step:** Start Phase 4 from `docs/debug_agent_context_contract.md`:
+  map the bounded evidence-package inputs and tests, then implement its first
+  deterministic slice before selecting a provider adapter. Validate the named
+  VS Code and Claude Code host UIs when those applications become available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -435,6 +437,31 @@ results from software tests.
 
 ## Latest Validation
 
+Phase 2 scoped stdio acceptance, reviewed 2026-09-20:
+
+- The acceptance interpretation is now explicit in
+  `docs/mcp_integration_plan.md`: direct modern stdio behavior and the existing
+  SDK/tool contract tests are primary; the official HTTP-only conformance
+  projection supplies only named, applicable supporting checks. Optional
+  fixture/HTTP features are excluded without being reported as passes.
+- A new installed-CLI subprocess test passed modern SDK v2 discovery, the exact
+  nine-tool catalog, and a complete structured `service_unavailable` result
+  over real stdio with no virtual-environment `PATH`. Its Device Core URL was
+  deliberately unreachable. The official Inspector 2.7.0 CLI again passed
+  strict modern stdio `tools/list` and returned the same nine names.
+- The pinned official `2026-07-28` requirement set was rerun against a
+  temporary loopback HTTP projection of the same `create_server()` composition,
+  again with unreachable Device Core. Of 50 scenarios, the full suite reported
+  104 passed checks and 61 failed, including 13 unscored scenarios. The scoped
+  stateless case passed 23 checks; only its two synthetic sampling-tool checks
+  failed. All three `tools-list` checks and the four required tool-cache/TTL/
+  scope/schema checks passed. The projection was stopped after validation and
+  is not part of the product.
+- Ruff passed, mypy found no issues in 74 source files, all 1,318 pytest cases
+  passed, and `git diff --check` found no whitespace errors. The Phase 2
+  tools-only stdio exit gate is accepted; named host UIs remain follow-up
+  validation when available, and deferred Phase 1 hardware gates are unchanged.
+
 Phase 2 host registration and conformance investigation, reviewed 2026-09-20:
 
 - The developer guide now gives named VS Code and Claude Code stdio
@@ -463,8 +490,8 @@ Phase 2 host registration and conformance investigation, reviewed 2026-09-20:
   reproduced it before the fix and now verify `METHOD_NOT_FOUND`; the official
   capability-declaration and handler-match checks both pass. The fix removes
   SDK default handlers via its internal registry, which should be retested
-  when upgrading SDK 2. Phase 2 remains open pending a defensible stdio
-  conformance acceptance gate.
+  when upgrading SDK 2. At this investigation, Phase 2 remained open pending
+  a defensible stdio conformance acceptance gate.
 - Fresh repository validation passed: Ruff reported `All checks passed!`, mypy
   found no issues in 74 source files, the full pytest suite passed 1,317 cases,
   and `git diff --check` reported no whitespace errors.
@@ -1772,7 +1799,7 @@ The following items are no longer backlog work:
 - removal of the obsolete synchronous Enhanced command/source, hello, startup,
   and reconnect compatibility path.
 
-## Active Queue — Phase 2
+## Completed Queue — Phase 2
 
 Work follows the independently testable sequence in
 `docs/mcp_integration_plan.md`.
@@ -1793,12 +1820,20 @@ Work follows the independently testable sequence in
   absolute-path launch with the official Inspector CLI.
 - [x] Run the official `2026-07-28` conformance requirement set against the
   temporary HTTP projection and fix the discovered capability mismatch.
-- [ ] Establish direct stdio conformance acceptance or a scoped interpretation
-  of the official HTTP/fixture-only runner, and verify named host UIs when
-  available; then decide the Phase 2 exit gate.
+- [x] Establish scoped tools-only stdio acceptance for the official runner's
+  HTTP/fixture-only cases, pass the direct-process and applicable official
+  checks, and record named host UI validation as follow-up when available.
 
 Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
 host-acceptance requirements all have fresh automated or conformance evidence.
+
+## Active Queue — Phase 4 Preparation
+
+- [ ] Map the bounded evidence-package contract and existing deterministic
+  evidence sources before selecting the first implementation slice.
+- [ ] Define focused acceptance tests for that slice using
+  `docs/debug_agent_context_contract.md`; keep provider-specific work behind
+  the documented boundary.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2044,12 +2079,12 @@ Exit gate: every Phase 1B done criterion has committed evidence.
 Exit gate: no criterion is inferred from unit tests when it explicitly requires
 real hardware, and no unchecked item remains in this list.
 
-## Later Phases — Not Active
+## Later Phase Roadmap
 
 | Phase | Status | Resume condition |
 |---|---|---|
-| Phase 3 — hardware/protocol refinement | Not started | Phase 2 completion and Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Not started | Deterministic evidence and MCP surfaces are accepted. |
+| Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
+| Phase 4 — AI debug reports | Preparation active | Phase 2 stdio and deterministic evidence surfaces are accepted; begin bounded evidence packaging. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.
