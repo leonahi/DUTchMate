@@ -85,6 +85,16 @@ request combines that validated context with the bounded native evidence for
 each selected session. Provider invocation remains a separate application
 boundary and is not part of evidence assembly.
 
+The Debug Agent report validator checks the common provider response against
+selected session, UART, hardware, TX-outcome, and source/diff references. It
+attaches request metadata and provenance warnings itself, preserving the
+native first-error coordinates without copying captured text into report
+metadata. The provider boundary freezes canonical request bytes, exposes a
+manifest before submission, defaults to disabled, requires separate remote
+processing opt-in, and validates the response before returning a report.
+Concrete provider SDKs are not included in this slice; credentials remain
+external to request, manifest, and report data.
+
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:
 

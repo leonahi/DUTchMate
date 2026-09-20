@@ -184,6 +184,13 @@ manifest containing the selected session IDs, included source paths, applied
 limits, truncation state, total text bytes, provider ID, and model ID. The
 manifest need not duplicate the full context text.
 
+Preparation serializes the versioned analysis request once as canonical UTF-8
+JSON and freezes those exact bytes for submission. The manifest's
+`total_text_bytes` is the byte length of that JSON, and its SHA-256 digest
+identifies the submitted payload. Preparation rejects payloads above 4 MiB.
+Provider calls have a 60-second default timeout, configurable up to 300
+seconds. Preparation itself makes no provider call.
+
 ## Report Contract
 
 Every Debug Agent report separates:
@@ -198,12 +205,36 @@ The report may identify an advisory `first_meaningful_failure`, which may add
 context to or differ from the deterministic Phase 1 `first_error`. It must cite
 its evidence and must never overwrite or relabel the stored `first_error`.
 
+The version-1 provider response has exactly these fields:
+`schema_version`, `observations`, `inferences`, `unknowns`,
+`recommended_next_evidence`, and `recommended_source_areas`, plus optional
+`first_meaningful_failure`. Observations and the advisory failure contain
+`text` and nonempty `references`; inferences contain `text`, nonempty
+`basis` references, and nonempty `uncertainty`. Each recommended evidence
+entry contains `action` and explicit `bounds`. Source-area entries contain a
+safe repository-relative `path`, a `symbol`, or both.
+
+References may cite a selected session, native `first_error`, selected UART
+line ordinal, selected hardware-event index, summarized UART TX attempt,
+selected source/configuration line range, or selected diff hunk. References
+outside the assembled request are invalid. The provider may not supply
+`metadata`, overwrite `first_error`, or return a source patch. The response
+is capped at 128 KiB, with at most 50 entries per report list, eight references
+per statement, and 4 KiB of UTF-8 per text field.
+
 The report records the context-package schema version, session IDs, effective
 limits, truncation state, source commit when source context was provided,
 provider ID, model ID, whether processing was remote, request-schema version,
 and a digest of the submitted context. It never records credentials. It must
 not claim a definitive code root cause without sufficient source evidence and
 must not emit or apply a source patch.
+
+Report metadata is attached by the Debug Agent after response validation, not
+accepted from the provider. It retains native `first_error` coordinates
+without copying its captured text, and derives integrity, truncation, and
+timestamp-provenance warnings from the assembled session evidence. Every
+inference must state uncertainty; semantic claims still require review against
+their cited evidence.
 
 ## Phase 4 Test Requirements
 

@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 4 AI debug reports — provider/report boundary
+> Active phase: Phase 4 AI debug reports — provider integration
 > Code baseline reviewed: `9b774afc1638a09d30a2ba29973c1150c08c9646` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -25,7 +25,13 @@ Read this document first whenever development resumes.
   byte and line limits, safe repository-relative paths, and known secret
   material without opening source files. A versioned analysis request combines
   that context with bounded native evidence for up to eight selected sessions.
-  Provider integration remains unimplemented and disabled. Phase 2 MCP
+  A common structured report now validates citations against selected
+  evidence, preserves native first-error coordinates without copying captured
+  text, and derives provenance warnings from the request. The provider
+  boundary freezes a bounded request payload, exposes its manifest before
+  submission, rejects remote processing without explicit opt-in, and fails
+  analysis alone on timeout or invalid output. No concrete provider adapter is
+  registered, so analysis remains disabled by default. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
   still depends on those measurements. A subsequent live
@@ -377,12 +383,12 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Define and validate the common structured Debug Agent report
-  against `docs/debug_agent_context_contract.md`, preserving observations,
-  inferences, unknowns, evidence references, provenance warnings, and
-  deterministic `first_error` authority. Then add the disabled-by-default
-  provider boundary with explicit opt-in and a pre-submission manifest.
-  Validate named VS Code and Claude Code host UIs when available.
+- **Next step:** Integrate one concrete Debug Agent provider adapter behind the
+  prepared-request boundary, with credentials supplied externally and no
+  fallback to another provider. Expose manifest review and validated report
+  delivery through a host-facing entrypoint, then exercise timeout, invalid
+  response, and remote opt-in paths end to end. Validate named VS Code and
+  Claude Code host UIs when available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -455,6 +461,20 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 report and provider boundary, reviewed 2026-09-20:
+
+- Nineteen new tests passed for selected-evidence citations, advisory
+  first-failure separation, native provenance warnings, bounded recommendations,
+  secret-free report metadata, disabled default, local/remote fixture parity,
+  pre-submission manifests, remote opt-in, request size, timeout, invalid output,
+  provider failure, immutable manifest limits, and no fallback. The Debug Agent
+  package now has 68 focused tests. No concrete provider SDK or credentials were
+  added.
+- Full repository validation passed: Ruff, mypy (85 source files), 1,386 pytest
+  tests, changed-file Ruff format check, and `git diff --check`. The incremental
+  Graphify update refreshed the module graph; its existing `fixture_protocol.h`
+  partial-extraction warning remains.
 
 Phase 4 Coding Agent context and analysis request, reviewed 2026-09-20:
 
@@ -1925,8 +1945,10 @@ host-acceptance requirements all have fresh automated or conformance evidence.
   baseline; preserve its session ID and timing-comparability state.
 - [x] Validate an optional Coding Agent context package and assemble a bounded
   versioned analysis request without invoking a provider.
-- [ ] Validate the common report shape, then add a disabled-by-default
+- [x] Validate the common report shape, then add a disabled-by-default
   provider adapter boundary with explicit opt-in and submission manifest.
+- [ ] Add a concrete provider adapter and host-facing manifest/report flow
+  without expanding Device Core permissions or persisting credentials.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2177,7 +2199,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Provider/report boundary active | Native evidence and optional Coding Agent context are validated and assembled; structured report validation and provider gating are next. |
+| Phase 4 — AI debug reports | Provider integration active | Validated request, report schema, and disabled-by-default provider boundary exist; concrete adapter and host-facing flow are next. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.
