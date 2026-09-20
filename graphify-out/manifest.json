@@ -1026,10 +1026,10 @@
     "semantic_hash": ""
   },
   "docs/debug_agent_context_contract.md": {
-    "mtime": 1787321632.8409507,
-    "seen": 1788295136.19926,
-    "ast_hash": "d3baa73c12c26263c10355f04bdd3812",
-    "semantic_hash": "d3baa73c12c26263c10355f04bdd3812"
+    "mtime": 1789917156.7950978,
+    "seen": 1789917214.814353,
+    "ast_hash": "3965f0d3d6b57172cda751be0fed26ab",
+    "semantic_hash": ""
   },
   "docs/developer_guide.md": {
     "mtime": 1789905295.239351,
@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "docs/development_status.md": {
-    "mtime": 1789916372.8613698,
-    "seen": 1789916406.41697,
-    "ast_hash": "05469b9041f1a03d65fc8f0392a17862",
+    "mtime": 1789916491.3033197,
+    "seen": 1789917214.814355,
+    "ast_hash": "dde48fa8ef951cf80ecb4d13eac8de8c",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1080,9 +1080,9 @@
     "semantic_hash": ""
   },
   "docs/software_architecture.md": {
-    "mtime": 1789916383.9842253,
-    "seen": 1789916406.416976,
-    "ast_hash": "4ba78583bcf5d05df33c97020e2716d9",
+    "mtime": 1789917156.8579335,
+    "seen": 1789917214.8143601,
+    "ast_hash": "d5812d37dc4cdbc2c18dc1784d3d9ed2",
     "semantic_hash": ""
   },
   "hardware/schematics/revision_a.md": {
@@ -2118,15 +2118,33 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/tests/test_evidence_package.py": {
-    "mtime": 1789916343.4632509,
-    "seen": 1789916406.41676,
-    "ast_hash": "f3f5aa46a91f88b38c92b828f009301f",
+    "mtime": 1789917073.4790795,
+    "seen": 1789917214.814141,
+    "ast_hash": "b653c4d5a8e6915caa46eaf5e56998a5",
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/baseline_context.py": {
     "mtime": 1789916303.7891803,
     "seen": 1789916406.416754,
     "ast_hash": "4ca5dbfc450cad66c4855825311d92c8",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/src/dutchmate_debug_agent/analysis_request.py": {
+    "mtime": 1789917069.6534472,
+    "seen": 1789917214.814132,
+    "ast_hash": "23282a60d3407d5293b0f9e238bb049b",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/src/dutchmate_debug_agent/coding_context.py": {
+    "mtime": 1789917205.7274013,
+    "seen": 1789917214.8141341,
+    "ast_hash": "f5beab8a98e68c8d7ec7acc8e89bdf60",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/tests/test_coding_context.py": {
+    "mtime": 1789917109.6331258,
+    "seen": 1789917214.8141398,
+    "ast_hash": "1d1dec63b9c9c86030c2285039389e33",
     "semantic_hash": ""
   }
 }

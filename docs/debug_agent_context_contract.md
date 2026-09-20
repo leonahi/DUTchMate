@@ -108,8 +108,11 @@ actually defined by the native session schema.
 
 Allowed excerpt kinds are `source`, `configuration`, and `diff`. Source and
 configuration excerpts must include their repository-relative path, commit,
-line range, and text. Diff excerpts must include the path, `base_commit`,
-`head_commit`, unified-diff hunk ranges, and diff text.
+line range, and text; the physical text-line count must match the inclusive
+range. Diff excerpts must include the path, `base_commit`, `head_commit`,
+`hunks`, and unified-diff text. Each hunk declares integer `old_start`,
+`old_count`, `new_start`, and `new_count` values. Those ranges must match
+the text's `@@` headers and body-line counts.
 
 Default package limits:
 
@@ -121,11 +124,22 @@ Default package limits:
 | `excerpts` | 8 entries |
 | One excerpt | 200 lines and 16 KiB UTF-8 |
 | All excerpt text | 64 KiB UTF-8 |
+| `session_ids` | 8 distinct IDs |
+| `constraints` | 100 entries |
+| Each summary or constraint | 4 KiB UTF-8 |
+| Each symbol or build identifier | 256 bytes UTF-8 |
+| Each source path | 1024 bytes UTF-8 |
 
 The packer rejects an over-limit or malformed package rather than silently
 discarding Coding Agent context. The caller may submit a smaller package.
 Package limits may become configurable later, but every report must record the
 effective limits.
+
+The versioned analysis request pairs each selected native session evidence
+package with the optional Coding Agent context. If the optional package is
+present, its ordered `session_ids` must exactly match the request. The
+validated package contains only caller-supplied text and provenance; validating
+its paths does not open or search the repository.
 
 ## Access and Safety Rules
 

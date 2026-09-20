@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 4 AI debug reports — deterministic evidence packaging
+> Active phase: Phase 4 AI debug reports — provider/report boundary
 > Code baseline reviewed: `1eeddc4073ce0c4fb7a370573be8339ee6a1e205` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -20,8 +20,12 @@ Read this document first whenever development resumes.
   reports omissions plus failed or unmatched UART TX outcomes. Conditional
   baseline context now uses only the validated project pointer, preserves its
   ID and timing-comparability state, and reports an explicit reason when the
-  subject cannot be compared. Optional Coding Agent context validation is next;
-  provider integration remains unimplemented. Phase 2 MCP
+  subject cannot be compared. The optional version-1 Coding Agent context is
+  now validated for exact session correlation, source/diff provenance, explicit
+  byte and line limits, safe repository-relative paths, and known secret
+  material without opening source files. A versioned analysis request combines
+  that context with bounded native evidence for up to eight selected sessions.
+  Provider integration remains unimplemented and disabled. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
   still depends on those measurements. A subsequent live
@@ -373,11 +377,12 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Validate the versioned optional Coding Agent context package
-  against `docs/debug_agent_context_contract.md`, including paths, excerpt
-  limits, and secret-material rejection. Then compose the complete bounded
-  analysis request while keeping provider integration separate. Validate named
-  VS Code and Claude Code host UIs when available.
+- **Next step:** Define and validate the common structured Debug Agent report
+  against `docs/debug_agent_context_contract.md`, preserving observations,
+  inferences, unknowns, evidence references, provenance warnings, and
+  deterministic `first_error` authority. Then add the disabled-by-default
+  provider boundary with explicit opt-in and a pre-submission manifest.
+  Validate named VS Code and Claude Code host UIs when available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -450,6 +455,18 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 Coding Agent context and analysis request, reviewed 2026-09-20:
+
+- Thirty-two new tests passed for source/diff provenance, exact session
+  correlation, path and secret rejection, per-field/aggregate limits, and
+  native evidence composition without repository lookup. The Debug Agent
+  package now has 49 passing focused tests.
+- Full repository validation passed: Ruff, mypy (83 source files), 1,367 pytest
+  tests, and `git diff --check`. Changed Python files pass Ruff formatting;
+  repository-wide format check still reports 66 previously unformatted files.
+  `graphify update .` refreshed the module graph with the existing
+  `fixture_protocol.h` partial-extraction warning.
 
 Phase 4 conditional baseline context, reviewed 2026-09-20:
 
@@ -1906,8 +1923,10 @@ host-acceptance requirements all have fresh automated or conformance evidence.
   priority rules, and explicit truncation/omission metadata.
 - [x] Attach a baseline comparison summary only for a valid designated project
   baseline; preserve its session ID and timing-comparability state.
-- [ ] Validate an optional Coding Agent context package and keep provider
-  requests behind the disabled-by-default Debug Agent boundary.
+- [x] Validate an optional Coding Agent context package and assemble a bounded
+  versioned analysis request without invoking a provider.
+- [ ] Validate the common report shape, then add a disabled-by-default
+  provider adapter boundary with explicit opt-in and submission manifest.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2158,7 +2177,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Evidence packaging active | Native facts, bounded excerpts, and conditional baseline context are implemented; optional Coding Agent context validation is next. |
+| Phase 4 — AI debug reports | Provider/report boundary active | Native evidence and optional Coding Agent context are validated and assembled; structured report validation and provider gating are next. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.

@@ -77,6 +77,14 @@ comparison UART text; an ineligible subject gets an explicit reason. Provider
 adapters remain within `apps/debug_agent`; neither Device Core nor `core`
 depends on that app.
 
+The Debug Agent also validates the optional Coding Agent context package as
+caller-supplied data. It checks version, session correlation, source/diff
+provenance, byte and line budgets, repository-relative paths, and known
+secret material without opening repository files. Its versioned analysis
+request combines that validated context with the bounded native evidence for
+each selected session. Provider invocation remains a separate application
+boundary and is not part of evidence assembly.
+
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:
 

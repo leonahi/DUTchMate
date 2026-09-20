@@ -27,6 +27,7 @@ from dutchmate_core.session_store.models import (
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
+from dutchmate_debug_agent.analysis_request import build_analysis_request
 from dutchmate_debug_agent.evidence_package import build_session_evidence
 
 
@@ -59,6 +60,65 @@ def test_evidence_prioritizes_early_failure_patterns_and_boot_edges(tmp_path: Pa
     )
     assert any(line.pattern_indexes for line in package.uart_excerpts if line.text == "BOOT_OK\n")
     json.dumps(asdict(package))
+
+
+def test_analysis_request_combines_native_evidence_and_selected_source(tmp_path: Path) -> None:
+    store, first = _native_session(tmp_path, suffix="first")
+    _append_lines(store, first, ["ERROR boot\n"])
+    store.complete_session(first)
+    _, second = _native_session(tmp_path, suffix="second")
+    _append_lines(store, second, ["READY\n"])
+    store.complete_session(second)
+    context = {
+        "schema_version": 1,
+        "objective": "Explain the boot difference",
+        "session_ids": [first.session_id, second.session_id],
+        "excerpts": [
+            {
+                "kind": "source",
+                "path": "src/does-not-exist.c",
+                "commit": "0123456789abcdef",
+                "start_line": 1,
+                "end_line": 1,
+                "text": "boot();\n",
+            }
+        ],
+    }
+
+    request = build_analysis_request(store, [first.session_id, second.session_id], context)
+
+    assert request.schema_version == 1
+    assert request.session_ids == (first.session_id, second.session_id)
+    assert [part.facts.session_id for part in request.session_evidence] == list(request.session_ids)
+    assert request.coding_context is not None
+    assert request.coding_context.source_paths == ("src/does-not-exist.c",)
+    assert request.total_excerpt_text_bytes == len(b"ERROR boot\nREADY\nboot();\n")
+    assert request.context_truncated is False
+    json.dumps(asdict(request))
+
+
+def test_analysis_request_rejects_context_for_different_sessions_before_reading(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path)
+    context = {
+        "schema_version": 1,
+        "objective": "Investigate",
+        "session_ids": ["other-session"],
+    }
+    with pytest.raises(ValueError, match="session_ids"):
+        build_analysis_request(store, ["wanted-session"], context)
+
+
+def test_analysis_request_accepts_no_source_context(tmp_path: Path) -> None:
+    store, handle = _native_session(tmp_path)
+    store.complete_session(handle)
+
+    request = build_analysis_request(store, [handle.session_id])
+
+    assert request.coding_context is None
+    assert request.session_ids == (handle.session_id,)
+    assert request.total_excerpt_text_bytes == 0
 
 
 def test_text_budget_never_expands_oversized_line_or_first_error_excerpt(tmp_path: Path) -> None:
