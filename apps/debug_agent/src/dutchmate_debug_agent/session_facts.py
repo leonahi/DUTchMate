@@ -17,6 +17,7 @@ from dutchmate_core.session_store.models import (
     FirstError,
     LegacySessionDetail,
     LineProcessing,
+    NativeSessionDetail,
     SessionQueryError,
     SessionState,
     SessionWorkflow,
@@ -63,6 +64,10 @@ class SessionFacts:
 def load_session_facts(store: SessionStore, session_id: str) -> SessionFacts:
     """Load facts through the validated, schema-aware session-store query."""
 
+    return _project_native_detail(_require_native_detail(store, session_id))
+
+
+def _require_native_detail(store: SessionStore, session_id: str) -> NativeSessionDetail:
     detail = store.get_session_detail(session_id)
     if isinstance(detail, LegacySessionDetail):
         raise SessionQueryError(
@@ -72,7 +77,10 @@ def load_session_facts(store: SessionStore, session_id: str) -> SessionFacts:
             session_id=detail.summary.session_id,
             detected_schema_version=0,
         )
+    return detail
 
+
+def _project_native_detail(detail: NativeSessionDetail) -> SessionFacts:
     summary = detail.summary
     return SessionFacts(
         session_id=summary.session_id,

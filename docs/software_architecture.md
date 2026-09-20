@@ -64,8 +64,14 @@ The Debug Agent application reads native session evidence through the validated
 `SessionStore` query boundary. Its deterministic session-facts projection keeps
 backend identity, capability policy, lifecycle, integrity, timestamp provenance,
 stored first-error reference, and bounded event counts without loading raw UART
-or hardware-event arrays. Later excerpt selection and provider adapters remain
-within `apps/debug_agent`; neither Device Core nor `core` depends on that app.
+or hardware-event arrays. The evidence packer then reads a stable validated
+artifact snapshot, replays UART lines, and selects first-error, detected-pattern,
+session start/end, and recent context within 300 lines and 64 KiB of display
+text.
+Hardware excerpts stop at 100 events; failure and unmatched UART TX outcomes
+remain explicit summaries even when their records are omitted. Package omissions
+and trimmed fields are reported. Provider adapters remain within
+`apps/debug_agent`; neither Device Core nor `core` depends on that app.
 
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:

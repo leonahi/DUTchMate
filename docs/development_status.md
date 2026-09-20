@@ -14,7 +14,12 @@ Read this document first whenever development resumes.
   session-facts projection. The projection reads through `SessionStore`, keeps
   bounded lifecycle, backend, integrity, first-error, and event-count facts,
   and rejects legacy or unknown schemas without interpreting raw artifacts.
-  UART/event excerpt selection and provider adapters remain next. Phase 2 MCP
+  The second slice now builds deterministic UART and hardware-event excerpts
+  from a stable session snapshot, prioritizes failure/pattern and session start/end
+  context, enforces 300-line/64-KiB UART and 100-event hardware limits, and
+  reports omissions plus failed or unmatched UART TX outcomes. Conditional
+  baseline comparison and optional Coding Agent context validation are next;
+  provider integration remains unimplemented. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
   still depends on those measurements. A subsequent live
@@ -366,12 +371,12 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Extend the Phase 4 deterministic package with bounded UART
-  and hardware-event excerpts, explicit omission counts, and the priority rules
-  in `docs/debug_agent_context_contract.md`. Keep provider selection disabled
-  until the complete package and report boundaries are validated. Validate the
-  named VS Code and Claude Code host UIs when those applications become
-  available.
+- **Next step:** Attach a baseline comparison summary only when the project
+  pointer designates a valid baseline, preserving baseline ID and timing
+  comparability. Then validate the versioned optional Coding Agent context
+  package against `docs/debug_agent_context_contract.md`; defer provider
+  selection until the complete request and report boundaries pass.
+  Validate named VS Code and Claude Code host UIs when available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -444,6 +449,17 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 bounded evidence excerpts, reviewed 2026-09-20:
+
+- Seven new end-to-end session-store tests passed for early failure/pattern and
+  session start/end priority, 300-line/64-KiB UART and 100-event hardware caps,
+  omission counts, failed/partial and unknown UART TX outcomes, active sessions,
+  corrupt UART text rejection, and reconnect segment ordering. The Debug Agent
+  package now has 11 passing focused tests.
+- Full repository validation passed: Ruff, mypy (80 source files), 1,329 pytest
+  tests, and `git diff --check`. `graphify update .` refreshed the module graph;
+  its existing `fixture_protocol.h` partial-extraction warning remains.
 
 Phase 4 native session-facts slice, reviewed 2026-09-20:
 
@@ -1874,8 +1890,10 @@ host-acceptance requirements all have fresh automated or conformance evidence.
 - [x] Add a separate Debug Agent workspace package and project native session
   facts through validated `SessionStore` retrieval; reject unsupported schemas
   without reading or inferring raw evidence.
-- [ ] Assemble bounded UART and hardware-event excerpts with contract limits,
+- [x] Assemble bounded UART and hardware-event excerpts with contract limits,
   priority rules, and explicit truncation/omission metadata.
+- [ ] Attach a baseline comparison summary only for a valid designated project
+  baseline; preserve its session ID and timing-comparability state.
 - [ ] Validate an optional Coding Agent context package and keep provider
   requests behind the disabled-by-default Debug Agent boundary.
 
@@ -2128,7 +2146,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Evidence packaging active | Native session-facts projection is implemented; bounded UART/event excerpts are next. |
+| Phase 4 — AI debug reports | Evidence packaging active | Native facts and bounded UART/event excerpts are implemented; conditional baseline context is next. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.
