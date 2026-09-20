@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 4 AI debug reports — host acceptance
-> Code baseline reviewed: `018e1d09d1be4bd7042332c11173399f8fd98d20` on 2026-09-20
+> Code baseline reviewed: `3435563291713851b1b3343d005900f34f081e4a` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
