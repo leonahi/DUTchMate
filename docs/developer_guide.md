@@ -87,6 +87,10 @@ validated Coding Agent context JSON package. A changed session or model
 requires a new preview. Ollama is reached at `http://127.0.0.1:11434`; remote
 URLs are rejected by the adapter. Analysis failures return an error without a
 partial report or provider fallback.
+The adapter requests an 8,192-token context, disables model thinking, and caps
+generation at 2,048 tokens; responses stopped by that cap are rejected as
+incomplete. Choose a local model that supports Ollama structured output and
+fits the selected evidence within that context.
 
 Start and inspect the current local service:
 

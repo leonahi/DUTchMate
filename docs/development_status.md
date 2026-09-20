@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 4 AI debug reports — provider integration
+> Active phase: Phase 4 AI debug reports — host acceptance
 > Code baseline reviewed: `018e1d09d1be4bd7042332c11173399f8fd98d20` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -34,8 +34,10 @@ Read this document first whenever development resumes.
   `dutchmate-debug` preview/analyze entrypoint now require review of a manifest
   digest that binds the provider, model, limits, and exact request. Invalid
   output and timeouts return analysis errors without a partial report. Provider
-  selection remains disabled by default. A live Ollama/model and named host UI
-  acceptance run remain open. Phase 2 MCP
+  selection remains disabled by default. A live local `qwen3:4b` preview/analyze
+  run on a completed native session produced a validated, cited report. Named
+  host UI acceptance remains open; model-suggested source paths still need
+  review against the repository. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
   still depends on those measurements. A subsequent live
@@ -387,11 +389,11 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Run the preview/analyze flow against a locally running Ollama
-  model and a completed native session, review the returned report and its
-  evidence citations, then validate the command from named VS Code and Claude
-  Code host UIs when available. The generic remote opt-in boundary has fixture
-  coverage; a remote host flow awaits a selected remote adapter.
+- **Next step:** Validate the digest-reviewed command from named VS Code and
+  Claude Code host UIs when available, and evaluate source-area suggestion
+  quality with selected Coding Agent context before expanding provider use.
+  The generic remote opt-in boundary has fixture coverage; a remote host flow
+  awaits a selected remote adapter.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -464,6 +466,27 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 live local-model smoke and citation-constrained Ollama output, reviewed
+2026-09-20:
+
+- An isolated local Ollama 0.33.0 runtime served `qwen3:4b` for a completed
+  native session (`20260913T174342Z-ebdcfa44`). The host-facing `preview`
+  returned manifest digest
+  `8b5f89667a55a1f75ee7f26ac15c42115464c95030b8512a954f2e286f1455e0`;
+  `analyze` with that digest returned a validated report preserving request
+  digest `fbacbd3ef7721e9ea307cf4e4904b1962274ab77591a8a4e16e607ac147ccd98`,
+  native first-error coordinates, and a citation to selected UART ordinal 0.
+  The source-area recommendations named two paths absent from the repository;
+  model recommendations remain advisory.
+- Initial unconstrained live attempts timed out or used invalid citation
+  coordinates. The adapter now disables model thinking, bounds context and
+  output tokens, rejects token-limit truncation, and supplies a structured
+  output schema constrained to coordinates in the frozen request. Focused
+  tests cover the selected-coordinate schema and truncation response. Named
+  VS Code and Claude Code host UIs were not exercised in this smoke run.
+- Full repository validation passed: Ruff, mypy (87 source files), 1,402 pytest
+  tests, changed-file Ruff format check, and `git diff --check`.
 
 Phase 4 local Ollama adapter and host-facing CLI, reviewed 2026-09-20:
 
@@ -1969,8 +1992,10 @@ host-acceptance requirements all have fresh automated or conformance evidence.
   provider adapter boundary with explicit opt-in and submission manifest.
 - [x] Add a local Ollama adapter and host-facing digest-reviewed manifest/report
   flow without expanding Device Core permissions or persisting credentials.
-- [ ] Run live local-model and named host UI acceptance on a completed native
-  session; keep remote-host integration pending until a remote adapter is chosen.
+- [x] Run live local-model preview/analyze acceptance on a completed native
+  session and review the report against its selected evidence.
+- [ ] Validate the command from named VS Code and Claude Code host UIs when
+  available; keep remote-host integration pending until a remote adapter is chosen.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2221,7 +2246,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Local provider integration active | The Ollama adapter and digest-reviewed CLI flow are implemented; live local-model and named host UI acceptance remain. |
+| Phase 4 — AI debug reports | Local model acceptance passed | Digest-reviewed local Ollama analysis passed; named host UI and source-area quality review remain. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.

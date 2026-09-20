@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from copy import deepcopy
+from typing import Any, cast
 
 import httpx
 
@@ -111,6 +114,90 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _branch(kind: str, fields: Mapping[str, object]) -> dict[str, object]:
+    properties = {"kind": {"const": kind}, **fields}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+def _report_schema_for(payload: bytes) -> dict[str, object]:
+    """Constrain references to the exact evidence coordinates in the frozen request."""
+
+    request: dict[str, Any] = json.loads(payload)
+    branches: list[dict[str, object]] = []
+    for part in request["session_evidence"]:
+        facts = part["facts"]
+        session_id = facts["session_id"]
+        sid = {"session_id": {"const": session_id}}
+        branches.append(_branch("session", sid))
+        if facts["first_error"] is not None:
+            branches.append(_branch("first_error", sid))
+        for kind, field, source in (
+            ("uart", "ordinal", "uart_excerpts"),
+            ("hardware", "event_index", "hardware_excerpts"),
+            ("tx_outcome", "attempt_id", "tx_outcomes"),
+        ):
+            values = sorted({item[field] for item in part[source]})
+            if values:
+                branches.append(_branch(kind, {**sid, field: {"enum": values}}))
+
+    context = request["coding_context"]
+    if context is not None:
+        sources: dict[tuple[str, str], tuple[int, int]] = {}
+        diffs: dict[tuple[str, str, str], set[int]] = {}
+        for excerpt in context["excerpts"]:
+            path = excerpt["path"]
+            if excerpt["kind"] == "diff":
+                diff_key = (path, excerpt["base_commit"], excerpt["head_commit"])
+                diffs.setdefault(diff_key, set()).update(range(len(excerpt["hunks"])))
+            else:
+                source_key = (path, excerpt["commit"])
+                current = sources.get(source_key)
+                start, end = excerpt["start_line"], excerpt["end_line"]
+                sources[source_key] = (
+                    (min(current[0], start), max(current[1], end))
+                    if current is not None
+                    else (start, end)
+                )
+        for (path, commit), (start, end) in sources.items():
+            line = {"type": "integer", "minimum": start, "maximum": end}
+            branches.append(
+                _branch(
+                    "source",
+                    {
+                        "path": {"const": path},
+                        "commit": {"const": commit},
+                        "start_line": line,
+                        "end_line": line,
+                    },
+                )
+            )
+        for (path, base, head), indexes in diffs.items():
+            branches.append(
+                _branch(
+                    "diff",
+                    {
+                        "path": {"const": path},
+                        "base_commit": {"const": base},
+                        "head_commit": {"const": head},
+                        "hunk_index": {"enum": sorted(indexes)},
+                    },
+                )
+            )
+
+    schema = cast(dict[str, Any], deepcopy(_REPORT_SCHEMA))
+    reference = {"oneOf": branches}
+    properties = schema["properties"]
+    properties["observations"]["items"]["properties"]["references"]["items"] = reference
+    properties["inferences"]["items"]["properties"]["basis"]["items"] = reference
+    properties["first_meaningful_failure"]["properties"]["references"]["items"] = reference
+    return schema
+
+
 class OllamaAdapter:
     """Use Ollama's non-streaming local chat endpoint without remote redirects."""
 
@@ -149,9 +236,10 @@ class OllamaAdapter:
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": payload.decode("utf-8")},
             ],
-            "format": _REPORT_SCHEMA,
+            "format": _report_schema_for(payload),
             "stream": False,
-            "options": {"temperature": 0},
+            "think": False,
+            "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 2048},
         }
         async with (
             httpx.AsyncClient(
@@ -173,7 +261,11 @@ class OllamaAdapter:
                 chunks.append(chunk)
         try:
             wrapper = json.loads(b"".join(chunks))
-            if not isinstance(wrapper, dict) or wrapper.get("done") is not True:
+            if (
+                not isinstance(wrapper, dict)
+                or wrapper.get("done") is not True
+                or wrapper.get("done_reason") == "length"
+            ):
                 raise ValueError("Ollama chat response is incomplete")
             message = wrapper.get("message")
             if not isinstance(message, dict) or not isinstance(message.get("content"), str):
