@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "docs/development_status.md": {
-    "mtime": 1789915584.3859732,
-    "seen": 1789915677.022124,
-    "ast_hash": "3af63eef1e633f0c291df8d1797acd11",
+    "mtime": 1789916372.8613698,
+    "seen": 1789916406.41697,
+    "ast_hash": "05469b9041f1a03d65fc8f0392a17862",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1080,9 +1080,9 @@
     "semantic_hash": ""
   },
   "docs/software_architecture.md": {
-    "mtime": 1789915572.9003608,
-    "seen": 1789915677.022134,
-    "ast_hash": "898079f4dffd3bd32ebdf69c971c986d",
+    "mtime": 1789916383.9842253,
+    "seen": 1789916406.416976,
+    "ast_hash": "4ba78583bcf5d05df33c97020e2716d9",
     "semantic_hash": ""
   },
   "hardware/schematics/revision_a.md": {
@@ -2094,9 +2094,9 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/evidence_package.py": {
-    "mtime": 1789915511.4574437,
-    "seen": 1789915677.021906,
-    "ast_hash": "2773ecf47f6181373d8dd5ff69005d29",
+    "mtime": 1789916312.382688,
+    "seen": 1789916406.416756,
+    "ast_hash": "9344038ff633dcc41dee683de47b2c27",
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/evidence_source.py": {
@@ -2118,9 +2118,15 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/tests/test_evidence_package.py": {
-    "mtime": 1789915661.2723513,
-    "seen": 1789915677.0219111,
-    "ast_hash": "242922d01883f500339ded056000d540",
+    "mtime": 1789916343.4632509,
+    "seen": 1789916406.41676,
+    "ast_hash": "f3f5aa46a91f88b38c92b828f009301f",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/src/dutchmate_debug_agent/baseline_context.py": {
+    "mtime": 1789916303.7891803,
+    "seen": 1789916406.416754,
+    "ast_hash": "4ca5dbfc450cad66c4855825311d92c8",
     "semantic_hash": ""
   }
 }

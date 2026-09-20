@@ -70,8 +70,12 @@ session start/end, and recent context within 300 lines and 64 KiB of display
 text.
 Hardware excerpts stop at 100 events; failure and unmatched UART TX outcomes
 remain explicit summaries even when their records are omitted. Package omissions
-and trimmed fields are reported. Provider adapters remain within
-`apps/debug_agent`; neither Device Core nor `core` depends on that app.
+and trimmed fields are reported. A baseline comparison is added only through
+the validated project pointer. The package retains its session ID, timing
+comparability, pattern deltas, and bounded line-change counts without copying
+comparison UART text; an ineligible subject gets an explicit reason. Provider
+adapters remain within `apps/debug_agent`; neither Device Core nor `core`
+depends on that app.
 
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:

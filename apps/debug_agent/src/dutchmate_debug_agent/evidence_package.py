@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 
 from dutchmate_core.session_store.store import SessionStore
+from dutchmate_debug_agent.baseline_context import BaselineContext, load_baseline_context
 from dutchmate_debug_agent.evidence_source import _evidence_fault, _read_stable_artifacts
 from dutchmate_debug_agent.hardware_excerpts import (
     _EVENT_STRING_BYTES,
@@ -38,6 +39,7 @@ class EvidenceLimits:
 @dataclass(frozen=True, slots=True)
 class SessionEvidence:
     facts: SessionFacts
+    baseline_context: BaselineContext | None
     uart_excerpts: tuple[UartExcerpt, ...]
     hardware_excerpts: tuple[HardwareEventExcerpt, ...]
     tx_outcomes: tuple[UartTxOutcome, ...]
@@ -78,8 +80,14 @@ def build_session_evidence(store: SessionStore, session_id: str) -> SessionEvide
     trimmed_fields = any(event.truncated_fields for event in hardware_excerpts)
     trimmed_patterns = any(line.omitted_pattern_indexes for line in uart_excerpts)
     trimmed_outcomes = any(outcome.error_truncated for outcome in outcomes)
+    baseline_context = load_baseline_context(
+        store,
+        facts.session_id,
+        expected_baseline=facts.baseline,
+    )
     return SessionEvidence(
         facts=facts,
+        baseline_context=baseline_context,
         uart_excerpts=uart_excerpts,
         hardware_excerpts=hardware_excerpts,
         tx_outcomes=outcomes,

@@ -18,7 +18,9 @@ Read this document first whenever development resumes.
   from a stable session snapshot, prioritizes failure/pattern and session start/end
   context, enforces 300-line/64-KiB UART and 100-event hardware limits, and
   reports omissions plus failed or unmatched UART TX outcomes. Conditional
-  baseline comparison and optional Coding Agent context validation are next;
+  baseline context now uses only the validated project pointer, preserves its
+  ID and timing-comparability state, and reports an explicit reason when the
+  subject cannot be compared. Optional Coding Agent context validation is next;
   provider integration remains unimplemented. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
@@ -371,12 +373,11 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Attach a baseline comparison summary only when the project
-  pointer designates a valid baseline, preserving baseline ID and timing
-  comparability. Then validate the versioned optional Coding Agent context
-  package against `docs/debug_agent_context_contract.md`; defer provider
-  selection until the complete request and report boundaries pass.
-  Validate named VS Code and Claude Code host UIs when available.
+- **Next step:** Validate the versioned optional Coding Agent context package
+  against `docs/debug_agent_context_contract.md`, including paths, excerpt
+  limits, and secret-material rejection. Then compose the complete bounded
+  analysis request while keeping provider integration separate. Validate named
+  VS Code and Claude Code host UIs when available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -449,6 +450,17 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 conditional baseline context, reviewed 2026-09-20:
+
+- Six new tests passed for absent designation, a valid designated comparison,
+  timing-provenance mismatch, an active ineligible subject, corrupt pointer
+  rejection, and pointer retargeting during assembly. The Debug Agent package
+  now has 17 passing focused tests. The projected comparison omits raw UART
+  line-change text while retaining its bounded counts and timing state.
+- Full repository validation passed: Ruff, mypy (81 source files), 1,335 pytest
+  tests, and `git diff --check`. `graphify update .` refreshed the module graph;
+  its existing `fixture_protocol.h` partial-extraction warning remains.
 
 Phase 4 bounded evidence excerpts, reviewed 2026-09-20:
 
@@ -1892,7 +1904,7 @@ host-acceptance requirements all have fresh automated or conformance evidence.
   without reading or inferring raw evidence.
 - [x] Assemble bounded UART and hardware-event excerpts with contract limits,
   priority rules, and explicit truncation/omission metadata.
-- [ ] Attach a baseline comparison summary only for a valid designated project
+- [x] Attach a baseline comparison summary only for a valid designated project
   baseline; preserve its session ID and timing-comparability state.
 - [ ] Validate an optional Coding Agent context package and keep provider
   requests behind the disabled-by-default Debug Agent boundary.
@@ -2146,7 +2158,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Evidence packaging active | Native facts and bounded UART/event excerpts are implemented; conditional baseline context is next. |
+| Phase 4 — AI debug reports | Evidence packaging active | Native facts, bounded excerpts, and conditional baseline context are implemented; optional Coding Agent context validation is next. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.

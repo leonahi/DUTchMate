@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,7 +18,12 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
-from dutchmate_core.session_store.models import SessionHandle, SessionQueryError
+from dutchmate_core.session_store.models import (
+    BaselineError,
+    SessionComparison,
+    SessionHandle,
+    SessionQueryError,
+)
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
@@ -215,15 +220,150 @@ def test_reconnect_keeps_partial_line_in_its_original_segment(tmp_path: Path) ->
     ]
 
 
-def _native_session(root: Path) -> tuple[SessionStore, SessionHandle]:
+def test_completed_sessions_do_not_gain_a_heuristic_baseline(tmp_path: Path) -> None:
+    store, earlier = _native_session(tmp_path, suffix="earlier")
+    store.complete_session(earlier)
+    store, subject = _native_session(tmp_path, suffix="subject")
+    store.complete_session(subject)
+
+    package = build_session_evidence(store, subject.session_id)
+
+    assert package.baseline_context is None
+
+
+def test_designated_baseline_adds_bounded_comparison_summary(tmp_path: Path) -> None:
+    store, baseline = _native_session(tmp_path, suffix="baseline")
+    _append_lines(store, baseline, ["READY\n", "BOOT_OK\n"])
+    store.complete_session(baseline)
+    store, subject = _native_session(tmp_path, suffix="subject")
+    _append_lines(store, subject, ["READY\n", "ERROR\n"])
+    store.complete_session(subject)
+    store.mark_baseline(baseline.session_id)
+
+    context = build_session_evidence(store, subject.session_id).baseline_context
+
+    assert context is not None
+    assert context.baseline_session_id == baseline.session_id
+    assert context.comparison_available is True
+    assert context.timing_comparable is True
+    assert context.timing_incompatibility_reason is None
+    assert tuple(asdict(count) for count in context.pattern_counts) == (
+        {"type": "failure", "baseline_count": 0, "subject_count": 1, "delta": 1},
+        {"type": "success", "baseline_count": 1, "subject_count": 0, "delta": -1},
+    )
+    assert context.line_changes_in_window == 2
+    assert not hasattr(context, "line_changes")
+
+
+def test_designated_baseline_preserves_incomparable_timing(tmp_path: Path) -> None:
+    store, baseline = _native_session(tmp_path, suffix="baseline")
+    _append_lines(store, baseline, ["READY\n"])
+    store.complete_session(baseline)
+    basic = replace(
+        _snapshot(0),
+        info=BackendInfo(
+            mode="basic",
+            port="/dev/ttyUSB0",
+            device=None,
+            firmware=None,
+            capabilities=frozenset({"uart_receive", "uart_send"}),
+        ),
+        segment=SegmentContext(
+            segment_id=0,
+            timestamp=SegmentTimestamp(
+                source="host",
+                clock="monotonic",
+                unit="us",
+                origin="segment_start",
+                source_origin_us=1000,
+                observation_point="host_serial_read",
+                event_granularity="uart_event",
+            ),
+        ),
+        integrity=UartIntegrity(
+            loss_status="not_observable",
+            observation_scope=None,
+            dropped_bytes=None,
+        ),
+    )
+    store, subject = _native_session(tmp_path, suffix="subject", snapshot=basic)
+    _append_lines(store, subject, ["READY\n"])
+    store.complete_session(subject)
+    store.mark_baseline(baseline.session_id)
+
+    context = build_session_evidence(store, subject.session_id).baseline_context
+
+    assert context is not None
+    assert context.baseline_session_id == baseline.session_id
+    assert context.comparison_available is True
+    assert context.timing_comparable is False
+    assert context.timing_incompatibility_reason == "timestamp_provenance_mismatch"
+    assert context.window_span_delta_us is None
+
+
+def test_designated_baseline_reports_active_subject_as_unavailable(tmp_path: Path) -> None:
+    store, baseline = _native_session(tmp_path, suffix="baseline")
+    store.complete_session(baseline)
+    store, subject = _native_session(tmp_path, suffix="subject")
+    store.mark_baseline(baseline.session_id)
+
+    context = build_session_evidence(store, subject.session_id).baseline_context
+
+    assert context is not None
+    assert context.baseline_session_id == baseline.session_id
+    assert context.comparison_available is False
+    assert context.unavailable_reason == "state_not_terminal"
+    assert context.timing_comparable is None
+
+
+def test_corrupt_designated_baseline_is_an_error_not_an_omission(tmp_path: Path) -> None:
+    store, subject = _native_session(tmp_path)
+    store.complete_session(subject)
+    (tmp_path / "baseline.json").write_text("not JSON", encoding="utf-8")
+
+    with pytest.raises(BaselineError) as raised:
+        build_session_evidence(store, subject.session_id)
+    assert raised.value.error == "persistence_fault"
+
+
+def test_baseline_retargeted_during_assembly_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, first = _native_session(tmp_path, suffix="first")
+    store.complete_session(first)
+    store, second = _native_session(tmp_path, suffix="second")
+    store.complete_session(second)
+    store, subject = _native_session(tmp_path, suffix="subject")
+    store.complete_session(subject)
+    store.mark_baseline(first.session_id)
+    compare = store.compare_session
+
+    def compare_then_retarget(session_id: str) -> SessionComparison:
+        result = compare(session_id)
+        store.mark_baseline(second.session_id)
+        return result
+
+    monkeypatch.setattr(store, "compare_session", compare_then_retarget)
+
+    with pytest.raises(BaselineError, match="changed during evidence assembly"):
+        build_session_evidence(store, subject.session_id)
+
+
+def _native_session(
+    root: Path,
+    *,
+    suffix: str = "evidence",
+    snapshot: BackendSnapshot | None = None,
+) -> tuple[SessionStore, SessionHandle]:
     store = SessionStore(
         root=root,
         clock=lambda: datetime(2026, 9, 20, 12, tzinfo=timezone.utc),
-        id_factory=lambda: "evidence",
+        id_factory=lambda: suffix,
     )
     handle = store.create_session(
         command="capture --seconds 1",
-        backend_snapshot=_snapshot(0),
+        backend_snapshot=snapshot or _snapshot(0),
         workflow="capture",
         duration_s=1.0,
         reconnect_timeout_s=5.0,
