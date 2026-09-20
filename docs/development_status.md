@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 2
-> Code baseline reviewed: `dcef82a079fb8fa2eab3a5bc94b93242d628b752` on 2026-09-17
+> Code baseline reviewed: `dcef82a079fb8fa2eab3a5bc94b93242d628b752` on 2026-09-20
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -24,7 +24,14 @@ Read this document first whenever development resumes.
   the delivery packages independent and giving the adapter direct ownership of
   stdio. Both entrypoints accept `--service-url` and
   `DUTCHMATE_SERVICE_URL`; log levels are normalized into the SDK while stdout
-  remains protocol-clean.
+  remains protocol-clean. Absolute host launch now resolves the sibling MCP
+  executable even when the virtual environment is absent from `PATH`. Named VS
+  Code and Claude Code stdio registrations are documented. SDK-owned empty
+  prompt/resource handlers are removed so served methods match tools-only
+  discovery. The official Inspector modern stdio tool listing passes strict
+  validation; the official conformance runner has only an HTTP server input,
+  and its full `2026-07-28` fixture suite remains nonpassing for this fixed
+  tools-only product. Phase 2 acceptance is therefore still open.
 - **Deferred Phase 1 context:** Phase 1A is accepted; Phase 1B targets a
   non-wireless Raspberry Pi Pico 2 with its RP2350A MCU for the Enhanced Debug
   Helper. The firmware architecture is approved. Its host prerequisites now
@@ -350,8 +357,11 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Document named host registrations and run the official MCP
-  conformance suite for the `2026-07-28` stdio server.
+- **Next step:** Resolve the Phase 2 acceptance gate for a fixed tools-only
+  stdio server: obtain direct official stdio conformance coverage or define a
+  scoped acceptance interpretation of the current runner's fixture and
+  HTTP-only cases. Recheck host registrations in the named host UIs when those
+  applications are available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -424,6 +434,40 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 2 host registration and conformance investigation, reviewed 2026-09-20:
+
+- The developer guide now gives named VS Code and Claude Code stdio
+  registrations. Neither host UI is installed or independently exercised in
+  this workspace; the installed CLI's absolute-path launch is covered by a
+  subprocess regression with the virtual environment removed from `PATH`.
+- Official MCP Inspector 2.7.0 CLI connected to the installed
+  `.venv/bin/dutchmate mcp` over modern stdio, passed strict `tools/list`
+  validation, and returned the nine tools in documented order. Local Node
+  22.18.0 is below Inspector's declared 22.19.0 minimum, though this check
+  completed successfully. No live session data was requested.
+- Official conformance CLI 0.2.0-alpha.11 accepts an HTTP URL, not a stdio
+  command. Its pinned `2026-07-28` requirement set was run against a temporary
+  loopback HTTP projection of the same `create_server()` composition, with an
+  unreachable Device Core URL so it could not access hardware or sessions.
+  This projection is not a shipped transport and was stopped after the run.
+- The suite ran 50 scenarios and reported 104 checks passed, 61 failed; 13
+  scenarios were explicitly unscored for this requirement revision, 11 of
+  those failing. Its fixed fixture expects optional prompts, resources,
+  synthetic media/progress/sampling tools, and HTTP behavior that the Phase 2
+  stdio product does not expose. The scoped `server-stateless` run passed
+  23 of 25 applicable checks; the two failures require a synthetic sampling
+  tool absent from DUTchMate. `tools-list` passed all three checks.
+- The initial run exposed an actual capability mismatch: SDK 2 served empty
+  prompt/resource lists despite tools-only discovery. Focused wire tests
+  reproduced it before the fix and now verify `METHOD_NOT_FOUND`; the official
+  capability-declaration and handler-match checks both pass. The fix removes
+  SDK default handlers via its internal registry, which should be retested
+  when upgrading SDK 2. Phase 2 remains open pending a defensible stdio
+  conformance acceptance gate.
+- Fresh repository validation passed: Ruff reported `All checks passed!`, mypy
+  found no issues in 74 source files, the full pytest suite passed 1,317 cases,
+  and `git diff --check` reported no whitespace errors.
 
 Phase 2 MCP CLI launch wiring, reviewed 2026-09-17:
 
@@ -1745,8 +1789,13 @@ Work follows the independently testable sequence in
   only for the SDK-owned legacy path.
 - [x] Wire `dutchmate mcp` with `--service-url`,
   `DUTCHMATE_SERVICE_URL`, stderr-only logging, and no additional transport.
-- [ ] Document named host registrations and run the official MCP conformance
-  suite for the `2026-07-28` stdio server.
+- [x] Document named VS Code and Claude Code stdio registrations and verify
+  absolute-path launch with the official Inspector CLI.
+- [x] Run the official `2026-07-28` conformance requirement set against the
+  temporary HTTP projection and fix the discovered capability mismatch.
+- [ ] Establish direct stdio conformance acceptance or a scoped interpretation
+  of the official HTTP/fixture-only runner, and verify named host UIs when
+  available; then decide the Phase 2 exit gate.
 
 Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
 host-acceptance requirements all have fresh automated or conformance evidence.

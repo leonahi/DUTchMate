@@ -12,6 +12,7 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import (
     CLIENT_CAPABILITIES_META_KEY,
     CLIENT_INFO_META_KEY,
+    METHOD_NOT_FOUND,
     PROTOCOL_VERSION_META_KEY,
     UNSUPPORTED_PROTOCOL_VERSION,
     CallToolResult,
@@ -146,6 +147,20 @@ async def test_modern_stream_client_rejects_unsupported_protocol_version() -> No
         "supported": [LATEST_MODERN_VERSION],
         "requested": "2099-01-01",
     }
+
+
+@pytest.mark.parametrize("method", ["prompts/list", "resources/list"])
+async def test_modern_stream_rejects_unadvertised_capabilities(method: str) -> None:
+    server = create_server()
+
+    async with Client(InMemoryTransport(server), mode="auto", cache=None) as client:
+        with pytest.raises(MCPError) as raised:
+            if method == "prompts/list":
+                await client.session.list_prompts()
+            else:
+                await client.session.list_resources()
+
+    assert raised.value.code == METHOD_NOT_FOUND
 
 
 async def test_modern_stream_client_cancellation_stops_the_tool_call() -> None:

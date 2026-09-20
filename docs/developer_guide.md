@@ -86,6 +86,47 @@ omitted. The command replaces the CLI process with the separately packaged
 `dutchmate-mcp` executable so stdin and stdout remain dedicated to MCP stdio;
 process logs go to stderr.
 
+### Register MCP with a coding agent
+
+Install the workspace with `uv sync`, start the Device Core Service separately,
+then resolve the absolute launcher path with `realpath .venv/bin/dutchmate`.
+Use that absolute path in a host that does not inherit the shell's virtual
+environment. The launcher finds its sibling `dutchmate-mcp` executable in the
+same environment. Each host launches its own stdio process; there is no MCP
+HTTP endpoint to configure.
+
+For [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration),
+put this in `.vscode/mcp.json` and replace the example command path with the
+resolved path on that machine:
+
+```json
+{
+  "servers": {
+    "dutchmate": {
+      "type": "stdio",
+      "command": "/absolute/path/to/DUTchMate/.venv/bin/dutchmate",
+      "args": ["mcp"],
+      "env": {
+        "DUTCHMATE_SERVICE_URL": "http://127.0.0.1:2040"
+      }
+    }
+  }
+}
+```
+
+For [Claude Code](https://code.claude.com/docs/en/mcp), register the same
+absolute launcher as a local stdio server:
+
+```bash
+claude mcp add --transport stdio dutchmate -- \
+  /absolute/path/to/DUTchMate/.venv/bin/dutchmate mcp
+```
+
+The default service URL is `http://127.0.0.1:2040`. For a different address,
+add `--service-url URL` after `mcp` in either registration. A host can list the
+nine fixed tools while Device Core is stopped; calls that need the service then
+return structured errors.
+
 `dutchmate start` requires `--backend basic|enhanced` or `[backend].mode`.
 Basic also requires an explicit/configured serial port and opens it directly as
 validated 8-N-1 UART without waiting for a DUTchMate `hello`. Enhanced accepts

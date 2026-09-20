@@ -103,6 +103,17 @@ def create_server(
         log_level=log_level,
         cache_hints=cache_hints,
     )
+    # SDK 2 registers these handlers even for empty catalogs. Remove them so
+    # the served methods agree with our tools-only discovery capabilities.
+    for method in (
+        "prompts/list",
+        "prompts/get",
+        "resources/list",
+        "resources/templates/list",
+        "resources/read",
+        "subscriptions/listen",
+    ):
+        server._lowlevel_server._request_handlers.pop(method, None)
     factory = client_factory or (lambda: DeviceCoreClient(service_url))
 
     async def discover(
