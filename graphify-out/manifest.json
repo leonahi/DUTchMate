@@ -1026,21 +1026,21 @@
     "semantic_hash": ""
   },
   "docs/debug_agent_context_contract.md": {
-    "mtime": 1789920790.6296775,
-    "seen": 1789920808.149024,
-    "ast_hash": "f713bcd75724692944ccc70ba0521ae8",
+    "mtime": 1789934464.3699777,
+    "seen": 1789934489.093069,
+    "ast_hash": "781ff0b4f7440c3055933263b31e8de4",
     "semantic_hash": ""
   },
   "docs/developer_guide.md": {
-    "mtime": 1789905295.239351,
-    "seen": 1789915677.022124,
-    "ast_hash": "ddcbd9880f3ceb92d452a5c4f3c9f275",
+    "mtime": 1789934464.48523,
+    "seen": 1789934489.093069,
+    "ast_hash": "97293dc2d7b94140e0e07b77f411815d",
     "semantic_hash": ""
   },
   "docs/development_status.md": {
-    "mtime": 1789920973.0622473,
-    "seen": 1789920983.6068878,
-    "ast_hash": "f3b6722cbd8e2d65e8c85c2dadcbafef",
+    "mtime": 1789933583.512253,
+    "seen": 1789934489.09307,
+    "ast_hash": "614e4ecb6805b8994bf16c018d49fff2",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1080,9 +1080,9 @@
     "semantic_hash": ""
   },
   "docs/software_architecture.md": {
-    "mtime": 1789920795.916654,
-    "seen": 1789920808.149031,
-    "ast_hash": "09dc102199556592a36908ce52e06aa4",
+    "mtime": 1789934464.427536,
+    "seen": 1789934489.093076,
+    "ast_hash": "44d640dd3603529f016c09791eaafabf",
     "semantic_hash": ""
   },
   "hardware/schematics/revision_a.md": {
@@ -2070,9 +2070,9 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/pyproject.toml": {
-    "mtime": 1789904929.3265882,
-    "seen": 1789905218.8387399,
-    "ast_hash": "858c8526ac0c949249d322267fc80895",
+    "mtime": 1789934319.7108176,
+    "seen": 1789934489.092843,
+    "ast_hash": "54b53c4d66ad3401bd89a59087880772",
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/__init__.py": {
@@ -2148,9 +2148,9 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/provider_boundary.py": {
-    "mtime": 1789920941.3789337,
-    "seen": 1789920983.606635,
-    "ast_hash": "c62cbdb44f2b757e8d01cbbb579e9f7a",
+    "mtime": 1789934449.549352,
+    "seen": 1789934489.092853,
+    "ast_hash": "db966b20598392a6b10efa3c241225c0",
     "semantic_hash": ""
   },
   "apps/debug_agent/src/dutchmate_debug_agent/report_schema.py": {
@@ -2160,9 +2160,33 @@
     "semantic_hash": ""
   },
   "apps/debug_agent/tests/test_report_boundary.py": {
-    "mtime": 1789920963.0195487,
-    "seen": 1789920983.606652,
-    "ast_hash": "3e980b8f210e8fc407d0b8ba9fd15a05",
+    "mtime": 1789934478.247878,
+    "seen": 1789934489.09286,
+    "ast_hash": "37149f5f9db2efea5222930394103960",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/src/dutchmate_debug_agent/cli.py": {
+    "mtime": 1789934404.9883022,
+    "seen": 1789934489.092848,
+    "ast_hash": "3b92602bc60195fd9afd2d0272c7a655",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/src/dutchmate_debug_agent/ollama_adapter.py": {
+    "mtime": 1789934478.2474413,
+    "seen": 1789934489.0928519,
+    "ast_hash": "9ea045cfb15cc8cd775d2d7313e9410e",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/tests/test_debug_cli.py": {
+    "mtime": 1789934478.2475917,
+    "seen": 1789934489.0928571,
+    "ast_hash": "c7f808905cd1f3a97c530fda5d54553c",
+    "semantic_hash": ""
+  },
+  "apps/debug_agent/tests/test_ollama_adapter.py": {
+    "mtime": 1789934478.2474117,
+    "seen": 1789934489.0928588,
+    "ast_hash": "3318b86b787964eefd90dd2d555a8d9e",
     "semantic_hash": ""
   }
 }

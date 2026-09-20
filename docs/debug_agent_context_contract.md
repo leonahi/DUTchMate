@@ -191,6 +191,11 @@ identifies the submitted payload. Preparation rejects payloads above 4 MiB.
 Provider calls have a 60-second default timeout, configurable up to 300
 seconds. Preparation itself makes no provider call.
 
+The host-facing preview also includes a `manifest_digest`: SHA-256 of canonical
+JSON for the manifest fields other than `manifest_digest`. Submission requires
+this digest, binding review to the selected provider, model, limits, and
+request digest. If evidence or selection changes, the caller previews again.
+
 ## Report Contract
 
 Every Debug Agent report separates:

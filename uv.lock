@@ -351,10 +351,14 @@ version = "0.1.0"
 source = { editable = "apps/debug_agent" }
 dependencies = [
     { name = "dutchmate-core" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dutchmate-core", editable = "core" }]
+requires-dist = [
+    { name = "dutchmate-core", editable = "core" },
+    { name = "httpx", specifier = ">=0.27" },
+]
 
 [[package]]
 name = "dutchmate-mcp-server"

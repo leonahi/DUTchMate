@@ -45,7 +45,7 @@ Python packages:
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
 | `apps/mcp_server/` | `dutchmate-mcp-server` | MCP `2026-07-28` stdio delivery adapter and Device Core HTTP client. |
-| `apps/debug_agent/` | `dutchmate-debug-agent` | Optional bounded Debug Agent context and provider boundary; no provider enabled by default. |
+| `apps/debug_agent/` | `dutchmate-debug-agent` | Optional bounded Debug Agent context, local Ollama adapter, and reviewed analysis CLI; no provider enabled by default. |
 
 See `docs/software_architecture.md` for module ownership and data flow.
 
@@ -65,7 +65,28 @@ Run package commands from the repository root:
 uv run --package dutchmate-cli dutchmate --help
 uv run --package dutchmate-service dutchmate-service --help
 uv run --package dutchmate-mcp-server dutchmate-mcp --help
+uv run --package dutchmate-debug-agent dutchmate-debug --help
 ```
+
+To analyze a completed native session with a locally running Ollama model,
+first review the manifest returned by `preview`. Then pass its
+`manifest_digest` to `analyze` using the same arguments. Both commands read
+selected sessions through `SessionStore`; `preview` does not call the model.
+
+```bash
+uv run --package dutchmate-debug-agent dutchmate-debug preview \
+  --session-id SESSION_ID --provider ollama --model MODEL_ID
+uv run --package dutchmate-debug-agent dutchmate-debug analyze \
+  --session-id SESSION_ID --provider ollama --model MODEL_ID \
+  --approved-digest MANIFEST_DIGEST
+```
+
+Use `--session-root` for a nondefault session directory, repeat `--session-id`
+for additional sessions, and pass `--context-file` only for an explicit,
+validated Coding Agent context JSON package. A changed session or model
+requires a new preview. Ollama is reached at `http://127.0.0.1:11434`; remote
+URLs are rejected by the adapter. Analysis failures return an error without a
+partial report or provider fallback.
 
 Start and inspect the current local service:
 

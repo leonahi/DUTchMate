@@ -17,6 +17,7 @@ from dutchmate_debug_agent.provider_boundary import (
     ProviderSelection,
     prepare_analysis,
     submit_analysis,
+    submit_approved_analysis,
 )
 from dutchmate_debug_agent.report_schema import validate_report_response
 
@@ -438,3 +439,30 @@ def test_prepared_manifest_limits_cannot_be_changed_after_review(tmp_path: Path)
     with suppress(TypeError):
         prepared.manifest.applied_limits["coding_context"]["excerpts"] = 999
     assert asdict(prepared.manifest)["applied_limits"]["coding_context"]["excerpts"] == 8
+
+
+@pytest.mark.asyncio
+async def test_host_digest_gate_rejects_changed_request_without_provider_call(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    adapter = FixtureAdapter(
+        provider_id="local",
+        remote=False,
+        response=_response(request.session_ids[0]),
+    )
+    prepared = prepare_analysis(
+        request,
+        ProviderSelection(provider_id="local", model_id="fixture"),
+        {"local": adapter},
+    )
+    with pytest.raises(AnalysisUnavailable, match="manifest digest"):
+        await submit_approved_analysis(prepared, approved_digest="0" * 64)
+    assert adapter.calls == []
+
+    report = await submit_approved_analysis(
+        prepared,
+        approved_digest=prepared.manifest.manifest_digest,
+    )
+    assert report.metadata.request_digest == prepared.manifest.request_digest
+    assert len(adapter.calls) == 1

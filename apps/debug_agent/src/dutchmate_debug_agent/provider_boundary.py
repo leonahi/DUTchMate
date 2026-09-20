@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
 from dutchmate_debug_agent.analysis_request import AnalysisRequest
@@ -65,6 +66,7 @@ class AnalysisManifest:
     remote: bool
     provider_timeout_s: float
     request_digest: str
+    manifest_digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +146,15 @@ def prepare_analysis(
         remote=adapter.remote,
         provider_timeout_s=float(selection.timeout_s),
         request_digest=hashlib.sha256(payload).hexdigest(),
+        manifest_digest="",
+    )
+    review_fields = asdict(manifest)
+    del review_fields["manifest_digest"]
+    manifest = replace(
+        manifest,
+        manifest_digest=hashlib.sha256(
+            json.dumps(review_fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
     )
     return PreparedAnalysis(
         manifest=manifest,
@@ -179,3 +190,17 @@ async def submit_analysis(prepared: PreparedAnalysis) -> DebugReport:
         )
     except ValueError:
         raise AnalysisUnavailable("selected provider returned an invalid response") from None
+
+
+async def submit_approved_analysis(
+    prepared: PreparedAnalysis,
+    *,
+    approved_digest: str,
+) -> DebugReport:
+    """Submit only when the caller approved this exact prepared request."""
+
+    if not isinstance(approved_digest, str) or not hmac.compare_digest(
+        approved_digest, prepared.manifest.manifest_digest
+    ):
+        raise AnalysisUnavailable("manifest digest mismatch")
+    return await submit_analysis(prepared)

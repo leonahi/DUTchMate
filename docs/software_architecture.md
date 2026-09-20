@@ -92,8 +92,10 @@ native first-error coordinates without copying captured text into report
 metadata. The provider boundary freezes canonical request bytes, exposes a
 manifest before submission, defaults to disabled, requires separate remote
 processing opt-in, and validates the response before returning a report.
-Concrete provider SDKs are not included in this slice; credentials remain
-external to request, manifest, and report data.
+The Debug Agent CLI previews the manifest and requires its digest before
+submitting to the local-only Ollama adapter. That adapter uses the bounded
+chat response path; the shared report validator remains provider-independent.
+Neither the CLI nor adapter stores credentials or changes Device Core state.
 
 Shared capture, UART processing, and storage use this normalized event
 dependency direction:
