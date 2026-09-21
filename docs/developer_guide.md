@@ -92,6 +92,13 @@ generation at 2,048 tokens; responses stopped by that cap are rejected as
 incomplete. Choose a local model that supports Ollama structured output and
 fits the selected evidence within that context.
 
+`dutchmate-debug` is a host-facing CLI, not an MCP server. A coding agent in
+VS Code, Claude Code, or another terminal-capable host invokes the same command;
+there is no host-specific Debug Agent registration. Ollama is optional for the
+rest of the coding workflow: `preview` does not contact it, and the coding agent
+may skip `analyze` when no local model is installed. The MCP registrations below
+expose Device Core tools and are independent of Debug Agent analysis.
+
 Start and inspect the current local service:
 
 ```bash

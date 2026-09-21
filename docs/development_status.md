@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Phase 4 AI debug reports — host acceptance
-> Code baseline reviewed: `3435563291713851b1b3343d005900f34f081e4a` on 2026-09-20
+> Code baseline reviewed: `3435563291713851b1b3343d005900f34f081e4a` on 2026-09-21
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -35,9 +35,11 @@ Read this document first whenever development resumes.
   digest that binds the provider, model, limits, and exact request. Invalid
   output and timeouts return analysis errors without a partial report. Provider
   selection remains disabled by default. A live local `qwen3:4b` preview/analyze
-  run on a completed native session produced a validated, cited report. Named
-  host UI acceptance remains open; model-suggested source paths still need
-  review against the repository. Phase 2 MCP
+  run on a completed native session produced a validated, cited report. The
+  VS Code-hosted Coding Agent can invoke the absolute CLI and reproduce the
+  reviewed preview; Claude Code is unavailable on the current machine because
+  no subscription is present. Model-suggested source paths still need review
+  against the repository. Phase 2 MCP
   integration passed its scoped tools-only stdio acceptance gate on 2026-09-20.
   The user defers the remaining Phase 1 hardware gates; Phase 3 refinement
   still depends on those measurements. A subsequent live
@@ -389,11 +391,11 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Validate the digest-reviewed command from named VS Code and
-  Claude Code host UIs when available, and evaluate source-area suggestion
-  quality with selected Coding Agent context before expanding provider use.
-  The generic remote opt-in boundary has fixture coverage; a remote host flow
-  awaits a selected remote adapter.
+- **Next step:** Evaluate source-area suggestion quality with selected Coding
+  Agent context before expanding provider use. Revisit Claude Code host
+  acceptance only if that host and an authenticated subscription become
+  available. The generic remote opt-in boundary has fixture coverage; a remote
+  host flow awaits a selected remote adapter.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -466,6 +468,24 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Phase 4 named coding-host acceptance, reviewed 2026-09-21:
+
+- VS Code 1.138.0 with the OpenAI coding-agent extension 26.908.40401 hosted
+  the active acceptance session. From that host, the Coding Agent launched the
+  absolute `.venv/bin/dutchmate-debug` entrypoint and reproduced the reviewed
+  `qwen3:4b` preview manifest and digest for completed native session
+  `20260913T174342Z-ebdcfa44`. The preceding digest-approved live analysis was
+  also run from this VS Code-hosted agent session.
+- A temporary Claude Code 2.1.278 client launched successfully, but its official
+  authentication status was `loggedIn: false`; the user confirmed that no
+  Claude Code subscription is available. No DUTchMate prompt or evidence was
+  submitted. The login was cancelled and all temporary client and configuration
+  files were removed. Claude Code acceptance is unavailable rather than failed.
+- Documentation now distinguishes the host-facing Debug Agent CLI from MCP
+  registration and states that a coding agent may skip local-model analysis.
+- Full repository validation passed: Ruff, mypy (87 source files), 1,402 pytest
+  tests, and `git diff --check`.
 
 Phase 4 live local-model smoke and citation-constrained Ollama output, reviewed
 2026-09-20:
@@ -1994,8 +2014,9 @@ host-acceptance requirements all have fresh automated or conformance evidence.
   flow without expanding Device Core permissions or persisting credentials.
 - [x] Run live local-model preview/analyze acceptance on a completed native
   session and review the report against its selected evidence.
-- [ ] Validate the command from named VS Code and Claude Code host UIs when
-  available; keep remote-host integration pending until a remote adapter is chosen.
+- [x] Validate the Debug Agent CLI from the installed VS Code coding-agent host.
+- [ ] Validate from Claude Code if an authenticated subscription becomes
+  available; the current machine has no Claude Code subscription.
 
 ## Deferred Queue — Phase 1 Hardware
 
@@ -2246,7 +2267,7 @@ real hardware, and no unchecked item remains in this list.
 | Phase | Status | Resume condition |
 |---|---|---|
 | Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Local model acceptance passed | Digest-reviewed local Ollama analysis passed; named host UI and source-area quality review remain. |
+| Phase 4 — AI debug reports | VS Code host acceptance passed | Local Ollama analysis and VS Code invocation passed; source-area quality review remains, while Claude Code is unavailable without a subscription. |
 | Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
 
 Phase 2 work does not close or waive any deferred Phase 1 hardware criterion.
