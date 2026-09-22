@@ -1,0 +1,23 @@
+[project]
+name = "dutchmate"
+version = "0.1.0"
+description = "DUTchMate host tools and coding-agent integration."
+requires-python = ">=3.10"
+dependencies = [
+  "dutchmate-cli==0.1.0",
+  "dutchmate-mcp-server==0.1.0",
+  "dutchmate-service==0.1.0",
+]
+
+[project.optional-dependencies]
+debug-agent = ["dutchmate-debug-agent==0.1.0"]
+
+[project.scripts]
+dutchmate = "dutchmate.entrypoints:app"
+dm = "dutchmate.entrypoints:app"
+dutchmate-service = "dutchmate_service.main:main"
+dutchmate-mcp = "dutchmate_mcp_server.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12"]
+build-backend = "uv_build"

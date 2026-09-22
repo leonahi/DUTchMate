@@ -64,7 +64,7 @@ UF2.
 ```bash
 git rev-parse HEAD
 git status --short
-uv run --package dutchmate-cli python -m serial.tools.list_ports -v
+uv run --package dutchmate python -m serial.tools.list_ports -v
 git -C /path/to/zephyr describe --tags --always --dirty
 git -C /path/to/zephyr rev-parse HEAD
 shasum -a 256 /path/to/build/zephyr/.config
@@ -107,8 +107,8 @@ max_size_mb = 16
 Start the service and verify the resolved connection:
 
 ```bash
-uv run --package dutchmate-cli dutchmate start
-uv run --package dutchmate-cli dutchmate status
+uv run --package dutchmate dutchmate start
+uv run --package dutchmate dutchmate status
 ```
 
 The status must report:
@@ -129,7 +129,7 @@ configuration changed, stop it and start it again before continuing.
 2. In terminal A, start the required 15-second capture:
 
    ```bash
-   uv run --package dutchmate-cli dutchmate capture --seconds 15
+   uv run --package dutchmate dutchmate capture --seconds 15
    ```
 
 3. Within the first three seconds, briefly connect Pico RUN to GND and release
@@ -138,8 +138,8 @@ configuration changed, stop it and start it again before continuing.
 5. Retrieve its evidence:
 
    ```bash
-   uv run --package dutchmate-cli dutchmate logs --session <BOOT_SESSION> --last 20
-   uv run --package dutchmate-cli dutchmate session <BOOT_SESSION>
+   uv run --package dutchmate dutchmate logs --session <BOOT_SESSION> --last 20
+   uv run --package dutchmate dutchmate session <BOOT_SESSION>
    ```
 
 The UART evidence must include these exact fixture-protocol bytes, with the
@@ -166,14 +166,14 @@ command.
 1. In terminal A, start another 15-second capture:
 
    ```bash
-   uv run --package dutchmate-cli dutchmate capture --seconds 15
+   uv run --package dutchmate dutchmate capture --seconds 15
    ```
 
 2. While it is active, run both commands in terminal B:
 
    ```bash
-   uv run --package dutchmate-cli dutchmate send PING --force
-   uv run --package dutchmate-cli dutchmate send INFO --force
+   uv run --package dutchmate dutchmate send PING --force
+   uv run --package dutchmate dutchmate send INFO --force
    ```
 
 3. Each send must print an attempt ID and `Perturbation logged: yes`.
@@ -181,8 +181,8 @@ command.
 5. Retrieve its evidence:
 
    ```bash
-   uv run --package dutchmate-cli dutchmate logs --session <COMMAND_SESSION> --last 20
-   uv run --package dutchmate-cli dutchmate session <COMMAND_SESSION>
+   uv run --package dutchmate dutchmate logs --session <COMMAND_SESSION> --last 20
+   uv run --package dutchmate dutchmate session <COMMAND_SESSION>
    ```
 
 The replay must contain these lines in command order:
@@ -218,7 +218,7 @@ After the evidence and report fields have been recorded, release the adapter if
 no further DUTchMate scenarios will run:
 
 ```bash
-uv run --package dutchmate-cli dutchmate stop
+uv run --package dutchmate dutchmate stop
 ```
 
 ## Objective acceptance checklist

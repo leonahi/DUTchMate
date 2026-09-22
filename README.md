@@ -34,7 +34,7 @@ Durable requirements and architecture are intentionally separate from progress:
 Requirements are Python 3.10+ and `uv`.
 
 ```bash
-uv sync
+uv sync --all-packages
 uv run pytest
 uv run ruff check .
 ```
@@ -42,17 +42,25 @@ uv run ruff check .
 Run the CLI from the repository root:
 
 ```bash
-uv run --package dutchmate-cli dutchmate --help
-uv run --package dutchmate-cli dutchmate start --backend enhanced
-uv run --package dutchmate-cli dutchmate status
-uv run --package dutchmate-cli dutchmate stop
+uv run --package dutchmate dutchmate --help
+uv run --package dutchmate dutchmate start --backend enhanced
+uv run --package dutchmate dutchmate status
+uv run --package dutchmate dutchmate stop
 ```
+
+The public distribution is `dutchmate`. After the license and publisher gate
+allows a public release, the supported installation commands will be
+`uv tool install dutchmate` and `pipx install dutchmate`. The optional Debug
+Agent is selected with the `debug-agent` extra and invoked as
+`dutchmate debug`.
 
 ## Repository
 
 ```text
 apps/          CLI, Device Core Service, and Phase 2 MCP package.
 core/          Reusable protocol, capture, GPIO, session, and workflow logic.
+packages/      Public `dutchmate` executable composition package.
+plugins/       Repo-local portable coding-agent plugin.
 hardware/      Firmware, protocol schemas/examples, schematics, and validation.
 docs/          Architecture, implementation contracts, plans, and guides.
 tests/         Cross-package unit tests, integration tests, and fixtures.
@@ -76,6 +84,7 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 | `hardware/validation/phase1_ring_buffer.md` | Ring-buffer measurements and final empirical decision record. |
 | `docs/mcp_integration_plan.md` | Phase 2 stateless MCP `2026-07-28` transport, tool set, responses, and tests. |
 | `docs/debug_agent_context_contract.md` | Phase 4 bounded context, provider boundary, and report contract. |
+| `docs/ci_packaging_distribution_plan.md` | CI, package ownership, firmware identity, plugin, and gated release design. |
 
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
 Its schemas, examples, host models, tests, and firmware handling must change

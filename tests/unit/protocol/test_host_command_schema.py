@@ -7,12 +7,28 @@ from jsonschema import Draft202012Validator
 SCHEMA_PATH = (
     Path(__file__).parents[3] / "hardware" / "protocol" / "v1" / "host_to_device.schema.json"
 )
+EXAMPLES_PATH = SCHEMA_PATH.parent / "examples"
 
 
 def _validator() -> Draft202012Validator:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
+
+
+@pytest.mark.parametrize(
+    "example_path",
+    [
+        path
+        for path in sorted(EXAMPLES_PATH.glob("*.json"))
+        if "cmd" in json.loads(path.read_text(encoding="utf-8"))
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_checked_in_host_command_example_matches_the_schema(
+    example_path: Path,
+) -> None:
+    _validator().validate(json.loads(example_path.read_text(encoding="utf-8")))
 
 
 @pytest.mark.parametrize(

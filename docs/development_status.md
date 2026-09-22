@@ -1,7 +1,7 @@
 # Development Status
 
-> Active phase: Phase 4 AI debug reports — host acceptance
-> Code baseline reviewed: `7fbd83960820f5bc681b96e246777a25598fb0f6` on 2026-09-21
+> Active phase: Delivery Infrastructure — private validation and release gating
+> Code baseline reviewed: `7fbd83960820f5bc681b96e246777a25598fb0f6` plus the current delivery-infrastructure working tree on 2026-09-22
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -9,7 +9,13 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Phase 4 AI debug reports have started with an optional
+- **Current milestone:** Delivery Infrastructure is active by owner direction.
+  Always-running host CI, the public aggregator and atomic executable-ownership
+  migration, isolated built-wheel acceptance, three-target firmware CI with
+  provenance, and the repo-local portable plugin are implemented and locally
+  validated. Public publishing authority remains withheld pending an approved
+  software license and publisher metadata.
+- **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
   bounded lifecycle, backend, integrity, first-error, and event-count facts,
@@ -53,8 +59,8 @@ Read this document first whenever development resumes.
   private-cache tool listings, structured calls, unsupported-version handling,
   cancellation, and clean EOF shutdown. The SDK-owned legacy handshake remains
   covered only as a compatibility smoke path. `dutchmate mcp` now replaces the
-  CLI process with the separately packaged `dutchmate-mcp` executable, keeping
-  the delivery packages independent and giving the adapter direct ownership of
+  CLI process with the aggregator-owned `dutchmate-mcp` executable, whose entry
+  point targets the independent MCP adapter and gives it direct ownership of
   stdio. Both entrypoints accept `--service-url` and
   `DUTCHMATE_SERVICE_URL`; log levels are normalized into the SDK while stdout
   remains protocol-clean. Absolute host launch now resolves the sibling MCP
@@ -391,11 +397,11 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Evaluate source-area suggestion quality with selected Coding
-  Agent context before expanding provider use. Revisit Claude Code host
-  acceptance only if that host and an authenticated subscription become
-  available. The generic remote opt-in boundary has fixture coverage; a remote
-  host flow awaits a selected remote adapter.
+- **Next step:** Commit and run the new host and firmware workflows on GitHub,
+  then resolve any runner-specific failures. Record the owner-approved license
+  and publisher metadata before adding TestPyPI or PyPI publishing authority.
+  Phase 4 source-area suggestion review and authenticated Claude Code host
+  acceptance remain paused rather than discarded.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -468,6 +474,31 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Delivery Infrastructure private-validation slices, reviewed 2026-09-22:
+
+- The locked workspace exposes all four aggregator-owned public commands, and
+  `dutchmate debug` invokes the optional Debug Agent Python API directly.
+  Component distributions no longer duplicate those public scripts; direct
+  `dutchmate-debug` remains available only for component development.
+- All six synchronized `0.1.0` source distributions and wheels built with
+  `uv build --all-packages --no-sources`. An isolated `uv tool install` smoke
+  removed repository `PYTHONPATH`, checked public help commands and the
+  missing-extra error, verified that dependency executables were not exposed,
+  and completed real MCP discovery with the nine deterministic tools and clean
+  EOF.
+- The RP2350 Debug Helper compiled with Zephyr 4.4.2 and SDK 1.0.1. Both the
+  default 115200 and opt-in 460800 Pico fixtures compiled with Zephyr 4.4.0 and
+  SDK 1.0.1. Each configuration produced ELF, map, UF2, size, and SHA-256
+  provenance artifacts.
+- Portable plugin manifests validate against the checked-in official 1.0.0
+  schemas, skill frontmatter and marketplace registration pass, and the
+  installed-MCP acceptance above validates the plugin's command surface.
+- Full repository validation passed: locked resolution, Ruff, mypy (89 source
+  files), 1,425 pytest tests, and `git diff --check`. `graphify update .`
+  refreshed the module graph; its existing `fixture_protocol.h` partial-
+  extraction warning remains. Both GitHub workflow files also pass YAML syntax
+  parsing and tests enforce commit-pinned actions and the intended job matrix.
 
 Phase 4 named coding-host acceptance, reviewed 2026-09-21:
 
@@ -1992,7 +2023,7 @@ Work follows the independently testable sequence in
 Exit gate: the MCP integration plan's protocol, packaging, error, launch, and
 host-acceptance requirements all have fresh automated or conformance evidence.
 
-## Active Queue — Phase 4 Evidence Packaging
+## Paused Queue — Phase 4 Evidence Packaging
 
 - [x] Map the bounded evidence-package contract and existing deterministic
   evidence sources before selecting the first implementation slice.
@@ -2017,6 +2048,32 @@ host-acceptance requirements all have fresh automated or conformance evidence.
 - [x] Validate the Debug Agent CLI from the installed VS Code coding-agent host.
 - [ ] Validate from Claude Code if an authenticated subscription becomes
   available; the current machine has no Claude Code subscription.
+
+## Active Queue — Delivery Infrastructure
+
+The owner activated this milestone on 2026-09-22. It does not wait for the
+deferred Phase 1 hardware queue.
+`docs/ci_packaging_distribution_plan.md` defines the approved design and
+acceptance contracts; this section alone tracks its progress.
+
+- [x] Establish the always-running host CI workflow and extend the existing
+  architecture and protocol contract tests.
+- [x] Add the `dutchmate` aggregator, synchronized host-version validation, and
+  the atomic console-script ownership migration.
+- [x] Add clean-wheel and isolated `uv tool install` acceptance, including the
+  direct-Python optional Debug Agent path and installed MCP discovery.
+- [x] Add independent Debug Helper firmware version authority, compile CI, and
+  provenance artifacts for all three firmware configurations.
+- [x] Add and validate the repo-local portable coding-agent plugin against the
+  installed MCP surface.
+- [ ] Record owner approval of the software license and public publisher
+  metadata before granting any release workflow publishing authority.
+- [ ] Validate the immutable accepted host artifacts through TestPyPI.
+- [ ] Publish those same artifacts to production PyPI in dependency order.
+
+Exit gate: the plan's host CI, packaging, firmware-build, plugin, and gated
+release contracts have fresh evidence, while HIL and public firmware binary
+release remain explicitly separate.
 
 ## Deferred Queue — Phase 1 Hardware
 

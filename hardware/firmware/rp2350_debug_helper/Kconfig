@@ -11,11 +11,12 @@ config DUTCHMATE_RP2350_DEBUG_HELPER
 menu "DUTchMate identity"
 
 config DUTCHMATE_FIRMWARE_VERSION
-	string "Firmware version reported by hello"
+	string "Firmware product version reported by hello"
 	default "development"
 	help
-	  A 1..64 byte identifier using ASCII letters, digits, dot, underscore,
-	  plus, or hyphen.
+	  Release builds use the Semantic Version from the firmware project's
+	  PRODUCT_VERSION file. Development and diagnostic builds may use a 1..64 byte
+	  identifier with ASCII letters, digits, dot, underscore, plus, or hyphen.
 
 config DUTCHMATE_PRODUCTION_BUILD
 	bool "Enforce production USB identity"

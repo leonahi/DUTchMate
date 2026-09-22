@@ -4,13 +4,10 @@ version = "0.1.0"
 description = "DUTchMate MCP server adapter."
 requires-python = ">=3.10"
 dependencies = [
-  "dutchmate-core",
+  "dutchmate-core==0.1.0",
   "httpx>=0.27",
   "mcp>=2.0,<3",
 ]
-
-[project.scripts]
-dutchmate-mcp = "dutchmate_mcp_server.main:main"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12"]

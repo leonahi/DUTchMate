@@ -9,19 +9,25 @@ repeated here.
 ## Workspace
 
 DUTchMate uses a `uv` workspace with one root lockfile. This keeps the core,
-CLI, service, MCP, and Debug Agent packages independently testable while
-resolving them from one dependency set. Run package entrypoints from the
-repository root.
+CLI, service, MCP, and Debug Agent packages independently testable while the
+public aggregator owns the normal executable surface. Run package entrypoints
+from the repository root.
 
 ```text
 apps/
-  cli/             Human CLI; owns `dutchmate` and `dm`.
+  cli/             Human CLI implementation and HTTP client.
   service/         Local FastAPI Device Core Service.
   mcp_server/      MCP stdio delivery adapter.
   debug_agent/     Optional bounded evidence assembly and analysis adapters.
 
 core/
   src/             Reusable Python library.
+
+packages/
+  dutchmate/       Public executable and optional-feature composition.
+
+plugins/
+  dutchmate/       Portable local MCP registration and workflow skills.
 
 hardware/
   firmware/        RP2350/Pico 2 Zephyr firmware location.
@@ -41,6 +47,7 @@ Python packages:
 
 | Path | Package | Purpose |
 |---|---|---|
+| `packages/dutchmate/` | `dutchmate` | Public executable ownership and optional Debug Agent composition. |
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
@@ -62,11 +69,17 @@ uv run ruff check .
 Run package commands from the repository root:
 
 ```bash
-uv run --package dutchmate-cli dutchmate --help
-uv run --package dutchmate-service dutchmate-service --help
-uv run --package dutchmate-mcp-server dutchmate-mcp --help
+uv run --package dutchmate dutchmate --help
+uv run --package dutchmate dutchmate-service --help
+uv run --package dutchmate dutchmate-mcp --help
+uv run --package dutchmate --extra debug-agent dutchmate debug --help
 uv run --package dutchmate-debug-agent dutchmate-debug --help
 ```
+
+The final command is retained for direct Debug Agent component development.
+Normal users install the aggregator and use `dutchmate debug`; that command
+invokes the optional package's Python entry API and does not depend on the
+dependency-owned executable being exposed by `uv tool install`.
 
 To analyze a completed native session with a locally running Ollama model,
 first review the manifest returned by `preview`. Then pass its
@@ -74,9 +87,9 @@ first review the manifest returned by `preview`. Then pass its
 selected sessions through `SessionStore`; `preview` does not call the model.
 
 ```bash
-uv run --package dutchmate-debug-agent dutchmate-debug preview \
+uv run --package dutchmate --extra debug-agent dutchmate debug preview \
   --session-id SESSION_ID --provider ollama --model MODEL_ID
-uv run --package dutchmate-debug-agent dutchmate-debug analyze \
+uv run --package dutchmate --extra debug-agent dutchmate debug analyze \
   --session-id SESSION_ID --provider ollama --model MODEL_ID \
   --approved-digest MANIFEST_DIGEST
 ```
@@ -92,7 +105,7 @@ generation at 2,048 tokens; responses stopped by that cap are rejected as
 incomplete. Choose a local model that supports Ollama structured output and
 fits the selected evidence within that context.
 
-`dutchmate-debug` is a host-facing CLI, not an MCP server. A coding agent in
+`dutchmate debug` is a host-facing CLI, not an MCP server. A coding agent in
 VS Code, Claude Code, or another terminal-capable host invokes the same command;
 there is no host-specific Debug Agent registration. Ollama is optional for the
 rest of the coding workflow: `preview` does not contact it, and the coding agent
@@ -102,24 +115,24 @@ expose Device Core tools and are independent of Debug Agent analysis.
 Start and inspect the current local service:
 
 ```bash
-uv run --package dutchmate-cli dutchmate start --backend enhanced
-uv run --package dutchmate-cli dutchmate status
-uv run --package dutchmate-cli dutchmate stop
+uv run --package dutchmate dutchmate start --backend enhanced
+uv run --package dutchmate dutchmate status
+uv run --package dutchmate dutchmate stop
 ```
 
 Run the MCP stdio adapter after starting the Device Core Service:
 
 ```bash
-uv run --package dutchmate-cli dutchmate mcp
-uv run --package dutchmate-cli dutchmate mcp \
+uv run --package dutchmate dutchmate mcp
+uv run --package dutchmate dutchmate mcp \
   --service-url http://127.0.0.1:2040 \
   --log-level info
 ```
 
 `DUTCHMATE_SERVICE_URL` supplies the service URL when `--service-url` is
-omitted. The command replaces the CLI process with the separately packaged
-`dutchmate-mcp` executable so stdin and stdout remain dedicated to MCP stdio;
-process logs go to stderr.
+omitted. The command replaces the CLI process with the aggregator-owned
+`dutchmate-mcp` executable, whose entry point targets the MCP adapter package,
+so stdin and stdout remain dedicated to MCP stdio; process logs go to stderr.
 
 ### Register MCP with a coding agent
 
@@ -127,9 +140,9 @@ Install the workspace with `uv sync --all-packages`, start the Device Core
 Service separately, then resolve the absolute launcher path with
 `realpath .venv/bin/dutchmate`.
 Use that absolute path in a host that does not inherit the shell's virtual
-environment. The launcher finds its sibling `dutchmate-mcp` executable in the
-same environment. Each host launches its own stdio process; there is no MCP
-HTTP endpoint to configure.
+environment. The launcher finds the aggregator-owned sibling `dutchmate-mcp`
+executable in the same environment. Each host launches its own stdio process;
+there is no MCP HTTP endpoint to configure.
 
 For [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration),
 put this in `.vscode/mcp.json` and replace the example command path with the
@@ -175,6 +188,9 @@ Use `uv lock` after dependency declarations change. Commit the shared
 
 ## Package Boundaries
 
+- `packages/dutchmate` is the public composition root. It may import delivery
+  entry APIs to expose commands, but it does not own Device Core or hardware
+  behavior.
 - `core` contains reusable protocol, capture, GPIO, workflow, runtime, and
   session logic. It must not import CLI, service, MCP, or AI packages.
 - `apps/service` composes `core`, owns the selected serial connection, and

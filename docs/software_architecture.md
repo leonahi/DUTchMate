@@ -418,9 +418,18 @@ Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
 reset, boot mode, session listing, session detail, recent logs, and literal
 wait-pattern, plus bounded UART send and baseline mark/clear. `dutchmate mcp`
-replaces the CLI process with the separately packaged `dutchmate-mcp`
-executable. This preserves the delivery-package import boundary and gives the
-MCP adapter direct ownership of stdin, stdout, and stderr.
+replaces the CLI process with the aggregator-owned `dutchmate-mcp` entry point,
+which targets the separately packaged MCP adapter. This preserves the
+delivery-package import boundary and gives the MCP adapter direct ownership of
+stdin, stdout, and stderr.
+
+### Public Distribution Composition
+
+`packages/dutchmate` owns the public `dutchmate`, `dm`, `dutchmate-service`, and
+`dutchmate-mcp` executables. It is the only composition layer permitted to
+reference delivery entry APIs. Its optional `dutchmate debug` command lazily
+invokes the Debug Agent's Python entry API; CLI, service, MCP, and Debug Agent
+packages do not import one another.
 
 ### MCP Server
 
@@ -439,6 +448,8 @@ is defined in `docs/mcp_integration_plan.md`.
 
 ## Boundary Rules
 
+- The public `dutchmate` package composes delivery entry APIs but contains no
+  Device Core, backend, protocol, or hardware behavior.
 - `core` does not import any app or AI package.
 - `device_connection` knows the Enhanced protocol, not sessions or workflows.
 - `backends` owns device-specific adaptation, not line or session processing.

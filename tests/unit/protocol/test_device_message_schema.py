@@ -10,6 +10,7 @@ SCHEMA_PATH = (
     Path(__file__).parents[3] / "hardware" / "protocol" / "v1" / "device_to_host.schema.json"
 )
 ERRORS_SCHEMA_PATH = SCHEMA_PATH.with_name("errors.schema.json")
+EXAMPLES_PATH = SCHEMA_PATH.parent / "examples"
 
 
 def _validator() -> Draft202012Validator:
@@ -21,6 +22,21 @@ def _validator() -> Draft202012Validator:
         Resource.from_contents(errors_schema),
     )
     return Draft202012Validator(schema, registry=registry)
+
+
+@pytest.mark.parametrize(
+    "example_path",
+    [
+        path
+        for path in sorted(EXAMPLES_PATH.glob("*.json"))
+        if "cmd" not in json.loads(path.read_text(encoding="utf-8"))
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_checked_in_device_message_example_matches_the_schema(
+    example_path: Path,
+) -> None:
+    _validator().validate(json.loads(example_path.read_text(encoding="utf-8")))
 
 
 def _hello(capability: str) -> dict[str, object]:

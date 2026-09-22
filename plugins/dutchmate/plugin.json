@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "dutchmate",
+  "version": "0.1.0",
+  "description": "Deterministic DUT control and bounded debug evidence through DUTchMate MCP."
+}

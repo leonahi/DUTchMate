@@ -1,0 +1,20 @@
+{
+  "name": "dutchmate-local",
+  "interface": {
+    "displayName": "DUTchMate Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "dutchmate",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dutchmate"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

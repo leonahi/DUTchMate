@@ -8,10 +8,12 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_ROOTS = {
+    "dutchmate": REPOSITORY_ROOT / "packages/dutchmate/src/dutchmate",
     "dutchmate_core": REPOSITORY_ROOT / "core/src/dutchmate_core",
     "dutchmate_cli": REPOSITORY_ROOT / "apps/cli/src/dutchmate_cli",
     "dutchmate_service": REPOSITORY_ROOT / "apps/service/src/dutchmate_service",
     "dutchmate_mcp_server": REPOSITORY_ROOT / "apps/mcp_server/src/dutchmate_mcp_server",
+    "dutchmate_debug_agent": REPOSITORY_ROOT / "apps/debug_agent/src/dutchmate_debug_agent",
 }
 
 DELIVERY_FRAMEWORKS = frozenset(
@@ -50,7 +52,9 @@ def test_core_never_depends_on_delivery_packages_or_frameworks() -> None:
     modules = _production_modules()
     violations: set[tuple[str, str]] = set()
     forbidden_prefixes = (
+        "dutchmate",
         "dutchmate_cli",
+        "dutchmate_debug_agent",
         "dutchmate_mcp_server",
         "dutchmate_service",
     )
@@ -70,9 +74,30 @@ def test_core_never_depends_on_delivery_packages_or_frameworks() -> None:
 def test_delivery_packages_do_not_import_each_other() -> None:
     modules = _production_modules()
     forbidden_by_package = {
-        "dutchmate_cli": ("dutchmate_mcp_server", "dutchmate_service"),
-        "dutchmate_mcp_server": ("dutchmate_cli", "dutchmate_service"),
-        "dutchmate_service": ("dutchmate_cli", "dutchmate_mcp_server"),
+        "dutchmate_cli": (
+            "dutchmate",
+            "dutchmate_debug_agent",
+            "dutchmate_mcp_server",
+            "dutchmate_service",
+        ),
+        "dutchmate_debug_agent": (
+            "dutchmate",
+            "dutchmate_cli",
+            "dutchmate_mcp_server",
+            "dutchmate_service",
+        ),
+        "dutchmate_mcp_server": (
+            "dutchmate",
+            "dutchmate_cli",
+            "dutchmate_debug_agent",
+            "dutchmate_service",
+        ),
+        "dutchmate_service": (
+            "dutchmate",
+            "dutchmate_cli",
+            "dutchmate_debug_agent",
+            "dutchmate_mcp_server",
+        ),
     }
     violations: set[tuple[str, str]] = set()
 

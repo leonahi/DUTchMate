@@ -22,6 +22,7 @@ dev = [
 [tool.uv.workspace]
 members = [
   "core",
+  "packages/dutchmate",
   "apps/cli",
   "apps/service",
   "apps/mcp_server",
@@ -29,6 +30,7 @@ members = [
 ]
 
 [tool.uv.sources]
+dutchmate = { workspace = true }
 dutchmate-core = { workspace = true }
 dutchmate-cli = { workspace = true }
 dutchmate-service = { workspace = true }
@@ -43,6 +45,7 @@ line-length = 100
 target-version = "py310"
 src = [
   "core/src",
+  "packages/dutchmate/src",
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",
@@ -55,6 +58,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 pythonpath = [
   "core/src",
+  "packages/dutchmate/src",
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",
@@ -74,6 +78,7 @@ python_version = "3.10"
 strict = true
 files = [
   "core/src",
+  "packages/dutchmate/src",
   "apps/cli/src",
   "apps/service/src",
   "apps/mcp_server/src",

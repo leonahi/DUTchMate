@@ -126,6 +126,10 @@ Run the build from a west workspace pinned to Zephyr 4.4.2 with SDK 1.0.1.
 `west build` is unavailable from the DUTchMate repository itself unless that
 repository is also inside a west workspace.
 
+`PRODUCT_VERSION` is the authoritative Debug Helper product version. Release-grade
+builds pass that value as `CONFIG_DUTCHMATE_FIRMWARE_VERSION`; it is independent
+of the DUTchMate host-software version and Enhanced protocol version.
+
 Zephyr 4.4.2 is the enforced minimum. Earlier releases leave RP2350 PL011 UART
 error interrupts latched and can trap the MCU in an interrupt storm
 ([GHSA-36rp-2hcp-f5hv](https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-36rp-2hcp-f5hv)).
@@ -212,9 +216,10 @@ Keeping the build at this repository-relative path also supplies the
 first build, restart the clangd language server in VS Code so Zephyr headers,
 generated devicetree macros, and target compiler flags are recognized.
 
-Set `CONFIG_DUTCHMATE_FIRMWARE_VERSION` to a 1..64-byte build identifier made
-from ASCII letters, digits, `.`, `_`, `+`, and `-`. Production builds must also
-set `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
+Release builds set `CONFIG_DUTCHMATE_FIRMWARE_VERSION` from `PRODUCT_VERSION`.
+Development and diagnostic identifiers remain limited to 1..64 bytes made from
+ASCII letters, digits, `.`, `_`, `+`, and `-`. Production builds must also set
+`CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 `CONFIG_CDC_ACM_SERIAL_VID` and `CONFIG_CDC_ACM_SERIAL_PID` with an assigned
 pair. A production build that retains `2E8A:000A` fails at compile time.
 
