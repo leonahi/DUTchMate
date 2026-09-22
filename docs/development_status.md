@@ -475,6 +475,21 @@ results from software tests.
 
 ## Latest Validation
 
+Host-CI portability corrections, reviewed 2026-09-22:
+
+- The first Ubuntu full-suite run exposed two environment-specific assumptions:
+  Typer/Rich inserted ANSI styling inside the invalid `--log-level` token, and
+  glibc hid POSIX `strnlen` during the Debug Helper's strict ISO C11 host build.
+- The CLI regression now forces colored output and compares its unstyled text.
+  The firmware host harness explicitly limits POSIX visibility to 2001, while
+  `hello.c` uses an internal bounded ISO C11 string-length helper. The focused
+  nine failing cases were reproduced before the corrections and all pass after
+  them.
+- Full local validation passed after the corrections: locked resolution, Ruff,
+  mypy (89 source files), 1,425 pytest tests, and `git diff --check`. The RP2350
+  Debug Helper also rebuilt successfully with Zephyr 4.4.2 and SDK 1.0.1. A
+  fresh hosted workflow run remains the next external acceptance check.
+
 Delivery Infrastructure private-validation slices, reviewed 2026-09-22:
 
 - The locked workspace exposes all four aggregator-owned public commands, and

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 import dutchmate_cli.mcp as mcp_module
@@ -70,10 +71,15 @@ def test_mcp_command_rejects_unknown_log_level_before_launch(
         lambda **_kwargs: pytest.fail("invalid arguments must not launch MCP"),
     )
 
-    result = CliRunner().invoke(main.app, ["mcp", "--log-level", "verbose"])
+    result = CliRunner().invoke(
+        main.app,
+        ["mcp", "--log-level", "verbose"],
+        color=True,
+        env={"FORCE_COLOR": "1", "TERM": "xterm-256color"},
+    )
 
     assert result.exit_code == 2
-    assert "Invalid value for '--log-level'" in result.output
+    assert "Invalid value for '--log-level'" in unstyle(result.output)
 
 
 def test_launcher_replaces_the_cli_process_with_mcp_executable(

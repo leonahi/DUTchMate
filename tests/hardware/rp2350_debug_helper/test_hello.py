@@ -21,6 +21,7 @@ def _build_harness(tmp_path: Path) -> Path:
         [
             compiler,
             "-std=c11",
+            "-D_POSIX_C_SOURCE=200112L",
             "-Wall",
             "-Wextra",
             "-Werror",

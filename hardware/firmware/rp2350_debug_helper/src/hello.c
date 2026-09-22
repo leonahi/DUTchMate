@@ -19,6 +19,16 @@ static int is_safe_firmware_byte(unsigned char byte)
 	       byte == '.' || byte == '_' || byte == '+' || byte == '-';
 }
 
+static size_t bounded_string_length(const char *value, size_t limit)
+{
+	size_t length = 0U;
+
+	while (length < limit && value[length] != '\0') {
+		length++;
+	}
+	return length;
+}
+
 int dmh_hello_encode(
 	const char *firmware,
 	char *output,
@@ -33,7 +43,7 @@ int dmh_hello_encode(
 	if (firmware == NULL || output == NULL || output_length == NULL) {
 		return -EINVAL;
 	}
-	firmware_length = strnlen(firmware, FIRMWARE_MAX_BYTES + 1U);
+	firmware_length = bounded_string_length(firmware, FIRMWARE_MAX_BYTES + 1U);
 	if (firmware_length == 0U || firmware_length > FIRMWARE_MAX_BYTES) {
 		return -EINVAL;
 	}
