@@ -27,46 +27,73 @@ defaults:
   run:
     shell: bash
 
+env:
+  ZEPHYR_CI_IMAGE: ghcr.io/zephyrproject-rtos/ci:v0.29.4@sha256:a153979984288133a478adc0bfe1081d2e1c77c2db62e9f9e48a143090913788
+
 jobs:
   debug-helper:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/zephyrproject-rtos/ci:v0.29.4@sha256:a153979984288133a478adc0bfe1081d2e1c77c2db62e9f9e48a143090913788
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Initialize Zephyr 4.4.2 workspace
+      - name: Free disk space before pulling Zephyr
         run: |
-          west init -m https://github.com/zephyrproject-rtos/zephyr --mr v4.4.2 "$RUNNER_TEMP/zephyr-4.4.2"
-          cd "$RUNNER_TEMP/zephyr-4.4.2"
-          west update --narrow
-          west zephyr-export
-      - name: Build RP2350 Debug Helper
+          df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache
+          docker system prune --all --force
+          df -h /
+      - name: Pull pinned Zephyr CI image
+        run: docker pull "$ZEPHYR_CI_IMAGE"
+      - name: Build RP2350 Debug Helper in Zephyr container
         run: |
-          IFS= read -r firmware_version < "$GITHUB_WORKSPACE/hardware/firmware/rp2350_debug_helper/PRODUCT_VERSION"
-          west build \
-            -b rpi_pico2/rp2350a/m33 \
-            -s "$GITHUB_WORKSPACE/hardware/firmware/rp2350_debug_helper" \
-            -d "$RUNNER_TEMP/debug-helper-build" \
-            --pristine -- \
-            -DCONFIG_DUTCHMATE_FIRMWARE_VERSION=\"$firmware_version\"
-          arm-zephyr-eabi-size "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.elf" \
-            > "$RUNNER_TEMP/debug-helper-build/zephyr/size.txt"
-          python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \
-            --component debug-helper \
-            --product-version "$firmware_version" \
-            --protocol-version 1 \
-            --hardware-revision rev-a \
-            --build-commit "$GITHUB_SHA" \
-            --target rpi_pico2/rp2350a/m33 \
-            --configuration default \
-            --zephyr-version 4.4.2 \
-            --sdk-version 1.0.1 \
-            --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.elf" \
-            --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.map" \
-            --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.uf2" \
-            --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/size.txt" \
-            --output-dir "$RUNNER_TEMP/debug-helper-artifacts"
-        working-directory: ${{ runner.temp }}/zephyr-4.4.2
+          docker run --rm \
+            --user 0:0 \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
+            --workdir "$GITHUB_WORKSPACE" \
+            --env GITHUB_SHA \
+            --env GITHUB_WORKSPACE \
+            --env RUNNER_TEMP \
+            "$ZEPHYR_CI_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              west init -m https://github.com/zephyrproject-rtos/zephyr \
+                --mr v4.4.2 "$RUNNER_TEMP/zephyr-4.4.2"
+              cd "$RUNNER_TEMP/zephyr-4.4.2"
+              west update --narrow
+              west zephyr-export
+              IFS= read -r firmware_version \
+                < "$GITHUB_WORKSPACE/hardware/firmware/rp2350_debug_helper/PRODUCT_VERSION"
+              west build \
+                -b rpi_pico2/rp2350a/m33 \
+                -s "$GITHUB_WORKSPACE/hardware/firmware/rp2350_debug_helper" \
+                -d "$RUNNER_TEMP/debug-helper-build" \
+                --pristine -- \
+                -DCONFIG_DUTCHMATE_FIRMWARE_VERSION=\"$firmware_version\"
+              arm-zephyr-eabi-size \
+                "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.elf" \
+                > "$RUNNER_TEMP/debug-helper-build/zephyr/size.txt"
+              python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \
+                --component debug-helper \
+                --product-version "$firmware_version" \
+                --protocol-version 1 \
+                --hardware-revision rev-a \
+                --build-commit "$GITHUB_SHA" \
+                --target rpi_pico2/rp2350a/m33 \
+                --configuration default \
+                --zephyr-version 4.4.2 \
+                --sdk-version 1.0.1 \
+                --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.elf" \
+                --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.map" \
+                --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.uf2" \
+                --artifact "$RUNNER_TEMP/debug-helper-build/zephyr/size.txt" \
+                --output-dir "$RUNNER_TEMP/debug-helper-artifacts"
+            '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: debug-helper-${{ github.sha }}
@@ -76,8 +103,6 @@ jobs:
 
   pico-fixture:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/zephyrproject-rtos/ci:v0.29.4@sha256:a153979984288133a478adc0bfe1081d2e1c77c2db62e9f9e48a143090913788
     strategy:
       fail-fast: false
       matrix:
@@ -88,45 +113,74 @@ jobs:
             overlay: boards/rpi_pico_460800.overlay
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Initialize Zephyr 4.4.0 workspace
+      - name: Free disk space before pulling Zephyr
         run: |
-          west init -m https://github.com/zephyrproject-rtos/zephyr --mr v4.4.0 "$RUNNER_TEMP/zephyr-4.4.0"
-          cd "$RUNNER_TEMP/zephyr-4.4.0"
-          west update --narrow
-          west zephyr-export
-      - name: Build Pico fixture
+          df -h /
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache
+          docker system prune --all --force
+          df -h /
+      - name: Pull pinned Zephyr CI image
+        run: docker pull "$ZEPHYR_CI_IMAGE"
+      - name: Build Pico fixture in Zephyr container
         env:
           FIXTURE_CONFIGURATION: ${{ matrix.configuration }}
           FIXTURE_OVERLAY: ${{ matrix.overlay }}
         run: |
-          fixture_build_id="ci-${GITHUB_SHA:0:12}"
-          cmake_arguments=(-DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID=\"$fixture_build_id\")
-          if [[ -n "$FIXTURE_OVERLAY" ]]; then
-            cmake_arguments+=("-DDTC_OVERLAY_FILE=$FIXTURE_OVERLAY")
-          fi
-          west build \
-            -b rpi_pico \
-            -s "$GITHUB_WORKSPACE/hardware/firmware/zephyr_dut" \
-            -d "$RUNNER_TEMP/pico-fixture-build" \
-            --pristine -- "${cmake_arguments[@]}"
-          arm-zephyr-eabi-size "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.elf" \
-            > "$RUNNER_TEMP/pico-fixture-build/zephyr/size.txt"
-          python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \
-            --component pico-fixture \
-            --product-version "$fixture_build_id" \
-            --protocol-version 1 \
-            --hardware-revision pico-fixture \
-            --build-commit "$GITHUB_SHA" \
-            --target rpi_pico \
-            --configuration "$FIXTURE_CONFIGURATION" \
-            --zephyr-version 4.4.0 \
-            --sdk-version 1.0.1 \
-            --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.elf" \
-            --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.map" \
-            --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.uf2" \
-            --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/size.txt" \
-            --output-dir "$RUNNER_TEMP/pico-fixture-artifacts"
-        working-directory: ${{ runner.temp }}/zephyr-4.4.0
+          docker run --rm \
+            --user 0:0 \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
+            --workdir "$GITHUB_WORKSPACE" \
+            --env FIXTURE_CONFIGURATION \
+            --env FIXTURE_OVERLAY \
+            --env GITHUB_SHA \
+            --env GITHUB_WORKSPACE \
+            --env RUNNER_TEMP \
+            "$ZEPHYR_CI_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              west init -m https://github.com/zephyrproject-rtos/zephyr \
+                --mr v4.4.0 "$RUNNER_TEMP/zephyr-4.4.0"
+              cd "$RUNNER_TEMP/zephyr-4.4.0"
+              west update --narrow
+              west zephyr-export
+              fixture_build_id="ci-${GITHUB_SHA:0:12}"
+              cmake_arguments=(
+                -DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID=\"$fixture_build_id\"
+              )
+              if [[ -n "$FIXTURE_OVERLAY" ]]; then
+                cmake_arguments+=("-DDTC_OVERLAY_FILE=$FIXTURE_OVERLAY")
+              fi
+              west build \
+                -b rpi_pico \
+                -s "$GITHUB_WORKSPACE/hardware/firmware/zephyr_dut" \
+                -d "$RUNNER_TEMP/pico-fixture-build" \
+                --pristine -- "${cmake_arguments[@]}"
+              arm-zephyr-eabi-size \
+                "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.elf" \
+                > "$RUNNER_TEMP/pico-fixture-build/zephyr/size.txt"
+              python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \
+                --component pico-fixture \
+                --product-version "$fixture_build_id" \
+                --protocol-version 1 \
+                --hardware-revision pico-fixture \
+                --build-commit "$GITHUB_SHA" \
+                --target rpi_pico \
+                --configuration "$FIXTURE_CONFIGURATION" \
+                --zephyr-version 4.4.0 \
+                --sdk-version 1.0.1 \
+                --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.elf" \
+                --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.map" \
+                --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.uf2" \
+                --artifact "$RUNNER_TEMP/pico-fixture-build/zephyr/size.txt" \
+                --output-dir "$RUNNER_TEMP/pico-fixture-artifacts"
+            '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pico-fixture-${{ matrix.configuration }}-${{ github.sha }}

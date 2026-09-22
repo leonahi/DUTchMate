@@ -31,13 +31,25 @@ def test_firmware_ci_has_three_builds_and_pinned_inputs() -> None:
     assert "configuration: default-115200" in workflow
     assert "configuration: enhanced-460800" in workflow
     assert re.search(
-        r"image: ghcr\.io/zephyrproject-rtos/ci:v0\.29\.4@sha256:[0-9a-f]{64}$",
+        r"ZEPHYR_CI_IMAGE: ghcr\.io/zephyrproject-rtos/ci:v0\.29\.4@sha256:[0-9a-f]{64}$",
         workflow,
         flags=re.MULTILINE,
     )
+    assert "\n    container:" not in workflow
     assert "defaults:\n  run:\n    shell: bash" in workflow
     assert "write_firmware_provenance.py" in workflow
     assert not (WORKFLOW_ROOT / "hil.yml").exists()
+    debug_job = workflow[
+        workflow.index("  debug-helper:\n") : workflow.index("  pico-fixture:\n")
+    ]
+    fixture_job = workflow[workflow.index("  pico-fixture:\n") :]
+    for job in (debug_job, fixture_job):
+        cleanup = job.index("- name: Free disk space before pulling Zephyr")
+        pull = job.index('docker pull "$ZEPHYR_CI_IMAGE"')
+        run = job.index("docker run --rm")
+        assert cleanup < pull < run
+        assert '--volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE"' in job
+        assert '--volume "$RUNNER_TEMP:$RUNNER_TEMP"' in job
     _assert_actions_are_commit_pinned(workflow)
 
 

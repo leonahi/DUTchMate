@@ -475,6 +475,22 @@ results from software tests.
 
 ## Latest Validation
 
+Firmware-CI runner-capacity correction, reviewed 2026-09-22:
+
+- All three first hosted firmware jobs failed before checkout because the
+  standard runner exhausted its disk while Docker registered the job-level
+  Zephyr image. Container retry could not help, and a workflow step could not
+  clean the host before GitHub created a job-level container.
+- The firmware jobs now start on the host, remove only disposable preinstalled
+  runner SDK/tool caches, prune Docker storage, explicitly pull the same
+  digest-pinned official Zephyr v0.29.4 image, and execute each build inside it
+  with bounded workspace and temporary-directory mounts. The Zephyr, SDK,
+  target, configuration, provenance, and artifact contracts are unchanged.
+- Workflow YAML and all embedded Bash scripts parse locally. A regression test
+  enforces the absence of job-level containers and cleanup-before-pull ordering
+  in both jobs. A fresh hosted firmware-workflow run remains required before
+  this runner-capacity correction is accepted.
+
 Host-CI portability corrections, reviewed 2026-09-22:
 
 - The first Ubuntu full-suite run exposed two environment-specific assumptions:
@@ -2079,6 +2095,8 @@ acceptance contracts; this section alone tracks its progress.
   direct-Python optional Debug Agent path and installed MCP discovery.
 - [x] Add independent Debug Helper firmware version authority, compile CI, and
   provenance artifacts for all three firmware configurations.
+- [ ] Confirm all three firmware configurations on the GitHub-hosted runner
+  after the job-container disk-capacity correction.
 - [x] Add and validate the repo-local portable coding-agent plugin against the
   installed MCP surface.
 - [ ] Record owner approval of the software license and public publisher
