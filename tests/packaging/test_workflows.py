@@ -53,6 +53,17 @@ def test_firmware_ci_has_three_builds_and_pinned_inputs() -> None:
     _assert_actions_are_commit_pinned(workflow)
 
 
+def test_firmware_ci_uses_the_pinned_sdk_size_tool_without_path_lookup() -> None:
+    workflow = _workflow("firmware.yml")
+    sdk_size_tool = (
+        '"/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}/gnu/arm-zephyr-eabi/bin/'
+        'arm-zephyr-eabi-size"'
+    )
+
+    assert workflow.count(sdk_size_tool) == 2
+    assert not re.search(r"^\s+arm-zephyr-eabi-size \\$", workflow, flags=re.MULTILINE)
+
+
 def _workflow(name: str) -> str:
     path = WORKFLOW_ROOT / name
     assert path.is_file(), f"missing workflow: {path.relative_to(REPOSITORY_ROOT)}"

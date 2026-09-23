@@ -75,7 +75,7 @@ jobs:
                 -d "$RUNNER_TEMP/debug-helper-build" \
                 --pristine -- \
                 -DCONFIG_DUTCHMATE_FIRMWARE_VERSION=\"$firmware_version\"
-              arm-zephyr-eabi-size \
+              "/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size" \
                 "$RUNNER_TEMP/debug-helper-build/zephyr/zephyr.elf" \
                 > "$RUNNER_TEMP/debug-helper-build/zephyr/size.txt"
               python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \
@@ -162,7 +162,7 @@ jobs:
                 -s "$GITHUB_WORKSPACE/hardware/firmware/zephyr_dut" \
                 -d "$RUNNER_TEMP/pico-fixture-build" \
                 --pristine -- "${cmake_arguments[@]}"
-              arm-zephyr-eabi-size \
+              "/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size" \
                 "$RUNNER_TEMP/pico-fixture-build/zephyr/zephyr.elf" \
                 > "$RUNNER_TEMP/pico-fixture-build/zephyr/size.txt"
               python3 "$GITHUB_WORKSPACE/scripts/ci/write_firmware_provenance.py" \

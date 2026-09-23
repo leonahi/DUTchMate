@@ -12,10 +12,10 @@ Read this document first whenever development resumes.
 - **Current milestone:** Delivery Infrastructure is active by owner direction.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
-  provenance, Python 3.10-compatible timeout normalization, and the repo-local
-  portable plugin are implemented and locally validated. Public publishing
-  authority remains withheld pending an approved software license and
-  publisher metadata.
+  path-stable SDK size capture and provenance, Python 3.10-compatible timeout
+  normalization, and the repo-local portable plugin are implemented and
+  locally validated. Public publishing authority remains withheld pending an
+  approved software license and publisher metadata.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -476,6 +476,23 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Firmware-CI SDK size-tool correction, reviewed 2026-09-23:
+
+- After the runner-capacity correction, all three hosted firmware builds
+  reached successful ELF/UF2 generation and then failed in their shared size
+  capture because `arm-zephyr-eabi-size` is not exported on the pinned image's
+  `PATH`.
+- The image's official Dockerfile installs SDK 1.0.1 below
+  `/opt/toolchains/zephyr-sdk-1.0.1`; the workflow now invokes the SDK's ARM
+  size executable through that pinned root and the image-provided
+  `ZSDK_VERSION`, rather than relying on command lookup.
+- A regression contract covers both firmware jobs. The equivalent SDK 1.0.1
+  executable produced size output for existing RP2040 and RP2350 ELFs, and the
+  workflow YAML plus all six embedded Bash scripts parse locally. Locked
+  resolution, Ruff, mypy (89 source files), all 1,426 tests, and
+  `git diff --check` passed. A fresh hosted firmware-workflow run remains
+  required before acceptance.
 
 Python 3.10 timeout-normalization correction, reviewed 2026-09-23:
 
@@ -2116,7 +2133,7 @@ acceptance contracts; this section alone tracks its progress.
 - [x] Add independent Debug Helper firmware version authority, compile CI, and
   provenance artifacts for all three firmware configurations.
 - [ ] Confirm all three firmware configurations on the GitHub-hosted runner
-  after the job-container disk-capacity correction.
+  after the job-container disk-capacity and SDK size-tool corrections.
 - [x] Add and validate the repo-local portable coding-agent plugin against the
   installed MCP surface.
 - [ ] Record owner approval of the software license and public publisher
