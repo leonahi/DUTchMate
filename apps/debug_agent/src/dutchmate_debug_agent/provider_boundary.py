@@ -175,7 +175,7 @@ async def submit_analysis(prepared: PreparedAnalysis) -> DebugReport:
             ),
             timeout=prepared.manifest.provider_timeout_s,
         )
-    except TimeoutError:
+    except (TimeoutError, asyncio.TimeoutError):
         raise AnalysisUnavailable("selected provider timed out") from None
     except Exception:
         raise AnalysisUnavailable("selected provider is unavailable") from None

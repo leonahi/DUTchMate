@@ -141,7 +141,7 @@ class AsyncEnhancedSerialAdapter:
             assert waiter is not None
         try:
             return await self._wait_for_hello(waiter, timeout_s)
-        except TimeoutError as exc:
+        except asyncio.TimeoutError as exc:
             await self._terminate(
                 BackendDisconnectedError("Timed out waiting for Enhanced hello")
             )
@@ -334,7 +334,7 @@ class AsyncEnhancedSerialAdapter:
                         self._active_write_task = None
                 try:
                     return await asyncio.wait_for(asyncio.shield(response), timeout_s)
-                except TimeoutError as exc:
+                except asyncio.TimeoutError as exc:
                     timeout = TransportTimeoutError(
                         "Timed out waiting for Enhanced command response"
                     )

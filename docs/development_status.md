@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Delivery Infrastructure — private validation and release gating
-> Code baseline reviewed: `558bc75bf5fa8fbe0355e71d7052de3e16e199fe` on 2026-09-22
+> Code baseline reviewed: `558bc75bf5fa8fbe0355e71d7052de3e16e199fe` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -12,9 +12,10 @@ Read this document first whenever development resumes.
 - **Current milestone:** Delivery Infrastructure is active by owner direction.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
-  provenance, and the repo-local portable plugin are implemented and locally
-  validated. Public publishing authority remains withheld pending an approved
-  software license and publisher metadata.
+  provenance, Python 3.10-compatible timeout normalization, and the repo-local
+  portable plugin are implemented and locally validated. Public publishing
+  authority remains withheld pending an approved software license and
+  publisher metadata.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -397,9 +398,10 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Commit and run the new host and firmware workflows on GitHub,
-  then resolve any runner-specific failures. Record the owner-approved license
-  and publisher metadata before adding TestPyPI or PyPI publishing authority.
+- **Next step:** Run the corrected host and firmware workflows on GitHub, then
+  resolve any remaining runner-specific failures. Record the owner-approved
+  license and publisher metadata before adding TestPyPI or PyPI publishing
+  authority.
   Phase 4 source-area suggestion review and authenticated Claude Code host
   acceptance remain paused rather than discarded.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
@@ -474,6 +476,23 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Python 3.10 timeout-normalization correction, reviewed 2026-09-23:
+
+- The hosted Python 3.10 suite exposed the pre-3.11 distinction between
+  built-in `TimeoutError` and `asyncio.TimeoutError`. That caused provider
+  deadlines to be reported as generic provider failures and allowed Enhanced
+  serial hello/command deadlines to escape without their transport-level
+  normalization and cleanup.
+- The three `asyncio.wait_for` boundaries now catch `asyncio.TimeoutError`;
+  the provider boundary additionally catches a provider-raised built-in
+  `TimeoutError`. No timeout values, lifecycle behavior, or public error
+  contracts changed.
+- The six reported cases and the additional provider-raised timeout case were
+  reproduced under Python 3.10.19 before correction. All 1,425 tests then
+  passed under Python 3.10.19; lock verification, Ruff, mypy (89 source files),
+  and `git diff --check` also passed. A fresh hosted host-CI run remains
+  required.
 
 Firmware-CI runner-capacity correction, reviewed 2026-09-22:
 
@@ -2087,8 +2106,9 @@ deferred Phase 1 hardware queue.
 `docs/ci_packaging_distribution_plan.md` defines the approved design and
 acceptance contracts; this section alone tracks its progress.
 
-- [x] Establish the always-running host CI workflow and extend the existing
-  architecture and protocol contract tests.
+- [x] Establish the always-running host CI workflow, extend the existing
+  architecture and protocol contract tests, and normalize Python 3.10 asyncio
+  timeout behavior.
 - [x] Add the `dutchmate` aggregator, synchronized host-version validation, and
   the atomic console-script ownership migration.
 - [x] Add clean-wheel and isolated `uv tool install` acceptance, including the
