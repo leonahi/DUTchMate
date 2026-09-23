@@ -64,10 +64,24 @@ def test_firmware_ci_uses_the_pinned_sdk_size_tool_without_path_lookup() -> None
     assert not re.search(r"^\s+arm-zephyr-eabi-size \\$", workflow, flags=re.MULTILINE)
 
 
-def test_release_build_and_publish_authority_are_separated() -> None:
+def test_release_bootstraps_publishers_sequentially_without_rebuilding() -> None:
     workflow = _workflow("release.yml")
 
-    for job in ("build", "publish-testpypi", "verify-testpypi", "publish-pypi"):
+    publication_order = (
+        ("core", "dist/dutchmate_core-*"),
+        ("cli", "dist/dutchmate_cli-*"),
+        ("service", "dist/dutchmate_service-*"),
+        ("mcp-server", "dist/dutchmate_mcp_server-*"),
+        ("dutchmate", "dist/dutchmate-[0-9]*"),
+    )
+    job_ids = (
+        "build",
+        *(f"publish-testpypi-{name}" for name, _artifact in publication_order),
+        "verify-testpypi",
+        *(f"publish-pypi-{name}" for name, _artifact in publication_order),
+        "verify-pypi",
+    )
+    for job in job_ids:
         assert f"  {job}:\n" in workflow
     assert 'tags: ["v*.*.*"]' in workflow
     assert "validate_release_tag.py" in workflow
@@ -76,32 +90,53 @@ def test_release_build_and_publish_authority_are_separated() -> None:
     assert "--dist dist --public-release" in workflow
     assert "environment: testpypi" in workflow
     assert "environment: pypi" in workflow
-    assert workflow.count("id-token: write") == 2
+    assert workflow.count("id-token: write") == 10
     assert "verify_index_artifacts.py" in workflow
     assert "dist/dutchmate_debug_agent-*" not in workflow
-    for artifact in (
-        "dist/dutchmate_core-*",
-        "dist/dutchmate_cli-*",
-        "dist/dutchmate_service-*",
-        "dist/dutchmate_mcp_server-*",
-        "dist/dutchmate-[0-9]*",
-    ):
-        assert artifact in workflow
-
-    build = workflow[workflow.index("  build:\n") : workflow.index("  publish-testpypi:\n")]
-    test_publish = workflow[
-        workflow.index("  publish-testpypi:\n") : workflow.index("  verify-testpypi:\n")
-    ]
-    verification = workflow[
-        workflow.index("  verify-testpypi:\n") : workflow.index("  publish-pypi:\n")
-    ]
-    production_publish = workflow[workflow.index("  publish-pypi:\n") :]
-
+    build = _job(workflow, "build")
     assert "id-token: write" not in build
-    assert "uv build" not in test_publish
-    assert "uv build" not in verification
-    assert "uv build" not in production_publish
-    assert "needs: verify-testpypi" in production_publish
+
+    previous_test_job = "build"
+    for name, artifact in publication_order:
+        job_id = f"publish-testpypi-{name}"
+        job = _job(workflow, job_id)
+        assert f"needs: {previous_test_job}" in job
+        assert "environment: testpypi" in job
+        assert "id-token: write" in job
+        assert "UV_PUBLISH_URL: https://test.pypi.org/legacy/" in job
+        assert "UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/" in job
+        assert f"uv publish --trusted-publishing always {artifact}" in job
+        assert "uv build" not in job
+        for other_name, other_artifact in publication_order:
+            if other_name != name:
+                assert other_artifact not in job
+        previous_test_job = job_id
+
+    test_verification = _job(workflow, "verify-testpypi")
+    assert f"needs: {previous_test_job}" in test_verification
+    assert "--index-url https://test.pypi.org" in test_verification
+    assert "uv build" not in test_verification
+
+    previous_production_job = "verify-testpypi"
+    for name, artifact in publication_order:
+        job_id = f"publish-pypi-{name}"
+        job = _job(workflow, job_id)
+        assert f"needs: {previous_production_job}" in job
+        assert "environment: pypi" in job
+        assert "id-token: write" in job
+        assert "UV_PUBLISH_URL: https://upload.pypi.org/legacy/" in job
+        assert "UV_PUBLISH_CHECK_URL: https://pypi.org/simple/" in job
+        assert f"uv publish --trusted-publishing always {artifact}" in job
+        assert "uv build" not in job
+        for other_name, other_artifact in publication_order:
+            if other_name != name:
+                assert other_artifact not in job
+        previous_production_job = job_id
+
+    production_verification = _job(workflow, "verify-pypi")
+    assert f"needs: {previous_production_job}" in production_verification
+    assert "--index-url https://pypi.org" in production_verification
+    assert "uv build" not in production_verification
     _assert_actions_are_commit_pinned(workflow)
 
 
@@ -109,6 +144,14 @@ def _workflow(name: str) -> str:
     path = WORKFLOW_ROOT / name
     assert path.is_file(), f"missing workflow: {path.relative_to(REPOSITORY_ROOT)}"
     return path.read_text(encoding="utf-8")
+
+
+def _job(workflow: str, job_id: str) -> str:
+    start = workflow.index(f"  {job_id}:\n")
+    match = re.search(r"^  [a-z0-9-]+:\n", workflow[start + 1 :], flags=re.MULTILINE)
+    if match is None:
+        return workflow[start:]
+    return workflow[start : start + 1 + match.start()]
 
 
 def _assert_actions_are_commit_pinned(workflow: str) -> None:

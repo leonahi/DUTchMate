@@ -380,10 +380,21 @@ instructions and pull-request template must be backed by a required DCO status
 check configured in GitHub.
 
 `.github/workflows/release.yml` keeps its unprivileged build, TestPyPI publish,
-TestPyPI digest verification, and production publish jobs separate. Configure
-protected `testpypi` and `pypi` environments and Trusted Publishing for the five
-`v0.1.0` public projects before pushing that release tag. Do not register or
-publish `dutchmate-debug-agent` until the `v0.2.0` release slice.
+TestPyPI digest verification, production publish, and production digest
+verification jobs separate. The protected `testpypi` and `pypi` environments
+remain the only publication environments. Do not register or publish
+`dutchmate-debug-agent` until the `v0.2.0` release slice.
+
+[PyPI permits only one pending GitHub Trusted Publisher for a given owner,
+repository, workflow, and environment tuple](https://github.com/pypi/warehouse/issues/16920).
+The five new monorepo projects therefore cannot all be registered as pending
+publishers at once. The initial `v0.1.0` release uses the Warehouse-supported
+sequential bootstrap: register one pending project, publish it so the pending
+publisher becomes normal, then register the next pending project with the same
+tuple. [Normal publishers may be associated with multiple
+projects](https://docs.pypi.org/trusted-publishers/adding-a-publisher/). This
+bootstrap is required independently on TestPyPI and production PyPI because
+they are separate indexes.
 
 The host release workflow must:
 
@@ -393,14 +404,63 @@ The host release workflow must:
 4. select and revalidate the five `v0.1.0` public artifact pairs without
    rebuilding;
 5. retain only those accepted public artifacts immutably;
-6. publish `dutchmate-core` to TestPyPI first;
-7. publish CLI, service, and MCP server next;
-8. publish the `dutchmate` aggregator last;
+6. expose one separately protected OIDC publication job per project and index;
+7. publish to TestPyPI sequentially in this exact order: `dutchmate-core`,
+   `dutchmate-cli`, `dutchmate-service`, `dutchmate-mcp-server`, then
+   `dutchmate`;
+8. require each TestPyPI job to complete before the next job can reach the
+   `testpypi` environment approval gate;
 9. verify every TestPyPI filename and SHA-256 digest against the retained
    artifacts;
-10. require approval through the protected `pypi` environment;
-11. publish the same artifacts to production in the same dependency order;
-12. use `uv publish` in publishing jobs without rebuilding.
+10. prevent the first production job from starting unless the complete
+    TestPyPI verification succeeds;
+11. publish the same artifacts to production through separately protected
+    `pypi` jobs in the same dependency order;
+12. verify every production filename and SHA-256 digest against the retained
+    artifacts;
+13. use `uv publish` with Trusted Publishing and index checks in publishing
+    jobs without rebuilding.
+
+### Initial `v0.1.0` Trusted Publisher Bootstrap
+
+Before pushing `v0.1.0`, register only `dutchmate-core` as a pending TestPyPI
+publisher with owner `leonahi`, repository `DUTchMate`, workflow `release.yml`,
+and environment `testpypi`. If a different project currently holds that pending
+tuple, remove it and register `dutchmate-core` instead. Confirm that the
+`testpypi` environment requires review and permits the release tag before
+starting the workflow.
+
+After the build job accepts and retains the five-package artifact set:
+
+1. approve `publish-testpypi-core`;
+2. after it succeeds and its publisher is normal, register
+   `dutchmate-cli` as the sole pending publisher for the same tuple and approve
+   `publish-testpypi-cli`;
+3. repeat for `dutchmate-service`, `dutchmate-mcp-server`, and `dutchmate`,
+   approving only the corresponding waiting job each time;
+4. require `verify-testpypi` to validate all five projects and all ten retained
+   files before any production action.
+
+Only after `verify-testpypi` succeeds, register `dutchmate-core` as the sole
+pending production publisher with the same repository and workflow but the
+`pypi` environment. Repeat the same one-at-a-time registration and approval
+sequence through `publish-pypi-dutchmate`. Every production job remains behind
+the protected `pypi` environment, and `verify-pypi` validates the exact retained
+files after the final upload.
+
+Do not bypass environment protection or approve a job until its matching
+pending or normal publisher is visible on the target index. Failed jobs may be
+retried against the retained artifacts; the configured index check prevents an
+identical existing file from being treated as a new build.
+
+If sequential pending conversion fails because Warehouse behavior changes,
+stop before publishing the next project. The contingency is a temporary
+account-wide token for the affected index, exposed only through its protected
+GitHub environment, to upload the missing project from the exact retained
+artifact. Immediately revoke the token, remove the secret, and register the
+normal `release.yml` Trusted Publisher for the newly created project before
+continuing. This broader-credential path is a last resort and is not part of
+the normal workflow.
 
 Recheck project names immediately before registration because prior availability
 checks are not reservations.

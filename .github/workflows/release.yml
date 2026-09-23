@@ -56,7 +56,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish-testpypi:
+  publish-testpypi-core:
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -71,20 +71,98 @@ jobs:
         with:
           name: python-release-distributions
           path: dist
-      - name: Publish retained artifacts to TestPyPI in dependency order
+      - name: Publish dutchmate-core to TestPyPI
         env:
           UV_PUBLISH_URL: https://test.pypi.org/legacy/
           UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/
-        run: |
-          uv publish --trusted-publishing always dist/dutchmate_core-*
-          uv publish --trusted-publishing always \
-            dist/dutchmate_cli-* \
-            dist/dutchmate_service-* \
-            dist/dutchmate_mcp_server-*
-          uv publish --trusted-publishing always dist/dutchmate-[0-9]*
+        run: uv publish --trusted-publishing always dist/dutchmate_core-*
+
+  publish-testpypi-cli:
+    needs: publish-testpypi-core
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-cli to TestPyPI
+        env:
+          UV_PUBLISH_URL: https://test.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_cli-*
+
+  publish-testpypi-service:
+    needs: publish-testpypi-cli
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-service to TestPyPI
+        env:
+          UV_PUBLISH_URL: https://test.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_service-*
+
+  publish-testpypi-mcp-server:
+    needs: publish-testpypi-service
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-mcp-server to TestPyPI
+        env:
+          UV_PUBLISH_URL: https://test.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_mcp_server-*
+
+  publish-testpypi-dutchmate:
+    needs: publish-testpypi-mcp-server
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate to TestPyPI
+        env:
+          UV_PUBLISH_URL: https://test.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://test.pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate-[0-9]*
 
   verify-testpypi:
-    needs: publish-testpypi
+    needs: publish-testpypi-dutchmate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -105,7 +183,7 @@ jobs:
           --dist dist
           --index-url https://test.pypi.org
 
-  publish-pypi:
+  publish-pypi-core:
     needs: verify-testpypi
     runs-on: ubuntu-latest
     environment: pypi
@@ -120,11 +198,114 @@ jobs:
         with:
           name: python-release-distributions
           path: dist
-      - name: Publish retained artifacts to PyPI in dependency order
-        run: |
-          uv publish --trusted-publishing always dist/dutchmate_core-*
-          uv publish --trusted-publishing always \
-            dist/dutchmate_cli-* \
-            dist/dutchmate_service-* \
-            dist/dutchmate_mcp_server-*
-          uv publish --trusted-publishing always dist/dutchmate-[0-9]*
+      - name: Publish dutchmate-core to PyPI
+        env:
+          UV_PUBLISH_URL: https://upload.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_core-*
+
+  publish-pypi-cli:
+    needs: publish-pypi-core
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-cli to PyPI
+        env:
+          UV_PUBLISH_URL: https://upload.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_cli-*
+
+  publish-pypi-service:
+    needs: publish-pypi-cli
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-service to PyPI
+        env:
+          UV_PUBLISH_URL: https://upload.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_service-*
+
+  publish-pypi-mcp-server:
+    needs: publish-pypi-service
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate-mcp-server to PyPI
+        env:
+          UV_PUBLISH_URL: https://upload.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate_mcp_server-*
+
+  publish-pypi-dutchmate:
+    needs: publish-pypi-mcp-server
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Publish dutchmate to PyPI
+        env:
+          UV_PUBLISH_URL: https://upload.pypi.org/legacy/
+          UV_PUBLISH_CHECK_URL: https://pypi.org/simple/
+        run: uv publish --trusted-publishing always dist/dutchmate-[0-9]*
+
+  verify-pypi:
+    needs: publish-pypi-dutchmate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-release-distributions
+          path: dist
+      - name: Verify PyPI exposes the exact accepted files and digests
+        run: >-
+          python scripts/ci/verify_index_artifacts.py
+          --dist dist
+          --index-url https://pypi.org

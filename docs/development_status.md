@@ -17,12 +17,16 @@ Read this document first whenever development resumes.
   validated. The host and firmware workflows are green on GitHub. Public
   package metadata now records the owner-approved mixed-license policy and
   publisher, and the tag-gated release workflow preserves accepted artifacts
-  through TestPyPI digest verification and separately protected production
-  publishing. The owner has limited `v0.1.0` to five public distributions;
-  `dutchmate-debug-agent` remains workspace-tested and is deferred to the
-  coordinated `v0.2.0` release. Publishing authority remains unusable until
-  the GitHub environments and five Trusted Publisher registrations are
-  configured.
+  through sequential per-project TestPyPI publication, aggregate digest
+  verification, separately protected production publication, and final
+  production digest verification. The owner has limited `v0.1.0` to five
+  public distributions; `dutchmate-debug-agent` remains workspace-tested and
+  is deferred to the coordinated `v0.2.0` release. The protected GitHub
+  environments exist. The initial release now accounts for PyPI's
+  one-pending-publisher-per-identity
+  monorepo limitation by registering and converting one project at a time;
+  publication remains blocked until that reviewed operator sequence and the
+  required DCO status check are ready.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -405,10 +409,14 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Configure the `testpypi` and `pypi` GitHub environments,
-  register the five `v0.1.0` projects as Trusted Publishers for `release.yml`, and
-  install/require the DCO status check before pushing `v0.1.0`. Authenticated
-  Claude Code host acceptance remains paused until a subscription is available.
+- **Next step:** Install and require the DCO status check, confirm both protected
+  publication environments require review and permit `v0.1.0`, and retain or
+  register only `dutchmate-core` as the pending `release.yml`/`testpypi`
+  publisher. Do not push `v0.1.0` until the revised workflow commit is reviewed;
+  then follow the documented one-project-at-a-time TestPyPI bootstrap and do
+  not configure or approve production until all five TestPyPI projects pass the
+  aggregate digest gate. Authenticated Claude Code host acceptance remains
+  paused until a subscription is available.
 - **Deferred hardware work:** Add the replacement KiCad design under
   `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
   `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
@@ -482,6 +490,26 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Sequential Trusted Publisher bootstrap revision, reviewed 2026-09-23:
+
+- The release workflow now publishes each of the five `v0.1.0` distributions
+  through its own protected OIDC job on each index. Explicit dependencies keep
+  the order `dutchmate-core`, CLI, service, MCP server, then the `dutchmate`
+  aggregator, allowing only one pending publisher to be registered and
+  converted at a time.
+- Every publish job downloads the single retained build artifact and has no
+  build authority. Aggregate TestPyPI filename/SHA-256 verification gates the
+  first production job, and an equivalent aggregate check follows production
+  publication. The protected `testpypi` and `pypi` environments and the
+  five-package allowlist remain unchanged.
+- The operator runbook records the one-at-a-time registration and approval
+  sequence and a tightly scoped temporary-token contingency. No tag was created
+  and no artifact was published during this revision.
+- The workflow contract was observed failing before implementation and passing
+  afterward. Release YAML syntax parsing, all 23 packaging tests, lock
+  verification, Ruff, mypy (89 source files), all 1,435 tests, and
+  `git diff --check` passed.
 
 Five-distribution `v0.1.0` release staging, reviewed 2026-09-23:
 
@@ -2216,10 +2244,17 @@ acceptance contracts; this section alone tracks its progress.
   and the separately gated release workflow.
 - [x] Limit the `v0.1.0` public artifact set to five distributions while
   retaining clean installed-artifact coverage for all six workspace packages.
-- [ ] Configure protected `testpypi` and `pypi` GitHub environments, all five
-  Trusted Publisher registrations, and the required DCO status check.
+- [x] Configure protected `testpypi` and `pypi` GitHub environments.
+- [x] Revise the first-publication workflow for PyPI's monorepo pending-publisher
+  constraint: one OIDC job and environment approval per project, one pending
+  registration at a time, aggregate TestPyPI verification before production,
+  and no artifact rebuilds.
+- [ ] Install and require the DCO status check.
+- [ ] Sequentially register and convert the five TestPyPI Trusted Publishers,
+  beginning with `dutchmate-core`.
 - [ ] Validate the immutable accepted host artifacts through TestPyPI.
-- [ ] Publish those same artifacts to production PyPI in dependency order.
+- [ ] Sequentially register and convert the five production Trusted Publishers,
+  then publish and digest-verify those same artifacts in dependency order.
 
 Exit gate: the plan's host CI, packaging, firmware-build, plugin, and gated
 release contracts have fresh evidence, while HIL and public firmware binary
