@@ -266,7 +266,7 @@ core/
 hardware/
   firmware/      RP2350/Pico 2 firmware.
   protocol/      Versioned protocol schemas, examples, and fixtures.
-  schematics/    Debug Helper hardware design files.
+  pcb/           Current KiCad workspace and preserved legacy PCB design files.
 
 tests/
   unit/          Parser, line-buffering, pattern, and session tests.
@@ -276,10 +276,12 @@ tests/
 
 ## Enhanced Backend Hardware Mapping Contract
 
-`hardware/schematics/revision_a.md` owns the Revision A voltage-domain
-design, Pico pin map, provisional BOM, and electrical validation checklist.
-Firmware board configuration, schematic capture, and mapping tests must preserve
-that baseline; a pin or component substitution is a reviewed hardware revision.
+`hardware/pcb/debug-helper/legacy-eagle/revision_a.md` preserves the current
+Revision A voltage-domain design authority, Pico pin map, provisional BOM, and
+electrical validation checklist until the replacement KiCad design is audited
+and adopted. Firmware board configuration, schematic capture, and mapping tests
+must preserve that baseline; a pin or component substitution is a reviewed
+hardware revision.
 
 `docs/gpio_configuration_semantics.md` owns the exact host identifier,
 electrical-mode, state-transition, workflow, validation-order, and reporting
@@ -1881,9 +1883,9 @@ Additional ecosystems may be added after this baseline is stable.
 
 - The Enhanced Debug Helper implements the same UART receive interface and uses
   the same downstream capture/session pipeline as Phase 1A.
-- The schematic and firmware use the complete Phase 1 Revision A Pico mapping
-  from `hardware/schematics/revision_a.md` section 10.1 without implicit
-  channel swaps.
+- The PCB design and firmware use the complete Phase 1 Revision A Pico mapping
+  from `hardware/pcb/debug-helper/legacy-eagle/revision_a.md` section 10.1
+  without implicit channel swaps.
 - The first prototype uses the Revision A provisional logic-device MPNs and
   records results for leakage, sequencing, isolation, voltage-level, and UART
   signal-integrity validation.

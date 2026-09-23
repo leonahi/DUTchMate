@@ -3,10 +3,18 @@ name = "dutchmate-core"
 version = "0.1.0"
 description = "Core hardware interface, protocol parsing, session storage, and workflows for DUTchMate."
 requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Nahit Pawar" }]
 dependencies = [
   "pyserial-asyncio>=0.6",
   "tomli>=2.0; python_version < '3.11'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/leonahi/DUTchMate"
+Repository = "https://github.com/leonahi/DUTchMate"
+Issues = "https://github.com/leonahi/DUTchMate/issues"
 
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12"]

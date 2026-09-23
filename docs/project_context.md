@@ -327,7 +327,8 @@ advisory.
 - **No galvanic isolation:** the Revision A Debug Helper shares ground with the
   DUT. Translation and connector protection reduce risk but do not isolate
   ground offsets, shorts, or fault energy. Prototype validation remains a
-  release gate; see `hardware/schematics/revision_a.md`.
+  release gate; see the legacy design record at
+  `hardware/pcb/debug-helper/legacy-eagle/revision_a.md`.
 - **NDJSON overhead:** JSON and base64 increase Enhanced USB traffic. Phase 3
   may adopt a binary framed protocol if measured throughput requires it.
 - **Firmware-sampled UART timestamps:** RP2350 timestamps are taken at firmware

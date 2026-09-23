@@ -5,9 +5,11 @@
 > evidence for the first assembled Revision A translator prototype.
 
 This record preserves measured prototype evidence for the checklist in
-`hardware/schematics/revision_a.md` section 14. An observation is not an
-acceptance result when its instrument, method, or numeric result is missing or
-uncertain. Unresolved items remain unchecked in the normative checklist.
+the legacy design record
+`hardware/pcb/debug-helper/legacy-eagle/revision_a.md` section 14. An
+observation is not an acceptance result when its instrument, method, or numeric
+result is missing or uncertain. Unresolved items remain unchecked in the
+normative checklist.
 
 ## Prototype And Run Identity
 
@@ -39,10 +41,11 @@ Do not use the reference digest as flashed-image provenance.
 
 ## 2026-09-15 Source Mapping And Configured Rejection Audit
 
-An exact parser comparison of `hardware/schematics/revision_a.md` section 10.1,
-the committed Eagle schematic `U4` net pinrefs, and the Eagle board `U4`
+An exact parser comparison of the legacy design record
+`hardware/pcb/debug-helper/legacy-eagle/revision_a.md` section 10.1, the
+committed legacy EAGLE schematic `U4` net pinrefs, and the legacy EAGLE board `U4`
 contact pads found all 17 Revision A net-to-GPIO and physical-pin assignments
-identical. The Eagle schematic devicesets and board element values also match
+identical. The legacy EAGLE schematic devicesets and board element values also match
 the provisional logic-device references: U1 `TXU0202DCUR`, U2
 `TXU0104PWR`, U3 `SN74LV4T125PWR`, and U5/U6 `SN74LVC2G06DBVR`. The RP2350
 devicetree overlay agrees with the 14 assigned UART/event/control GPIOs,
@@ -1355,7 +1358,7 @@ correlate during later controlled idle/load measurements.
 `in_progress`
 
 - The prototype identity and initial safe-state observations are recorded.
-- The committed Revision A table, Eagle schematic/board, and RP2350 overlay
+- The committed Revision A table, legacy EAGLE schematic/board, and RP2350 overlay
   agree on all 17 mappings, and the design files contain the five provisional
   logic-device references. Populated-device markings and physical continuity
   remain unaudited and were explicitly deferred by the user on 2026-09-16.

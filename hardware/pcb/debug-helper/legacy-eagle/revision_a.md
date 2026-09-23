@@ -1,5 +1,10 @@
 # DUTchMate Revision A Voltage-Domain GPIO and UART Interface
 
+> Legacy EAGLE design record. The historical board and schematic sources are
+> retained under `hardware/pcb/debug-helper/legacy-eagle/revision_a/eagle/`.
+> The replacement KiCad design will live under
+> `hardware/pcb/debug-helper/rev-a/` after its provenance audit.
+
 **Revision:** 1.0<br>
 **Date:** 2026-08-11<br>
 **Scope:** Four debugger-to-DUT control signals, four DUT-to-debugger event signals, and one UART pair across different logic-voltage domains.

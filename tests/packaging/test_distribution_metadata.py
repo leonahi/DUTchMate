@@ -11,6 +11,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility.
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 HOST_VERSION_AUTHORITY = REPOSITORY_ROOT / "pyproject.toml"
+APACHE_LICENSE = REPOSITORY_ROOT / "LICENSES/Apache-2.0.txt"
+EXPECTED_AUTHOR = [{"name": "Nahit Pawar"}]
+EXPECTED_URLS = {
+    "Homepage": "https://github.com/leonahi/DUTchMate",
+    "Repository": "https://github.com/leonahi/DUTchMate",
+    "Issues": "https://github.com/leonahi/DUTchMate/issues",
+}
 DISTRIBUTIONS = {
     "dutchmate": REPOSITORY_ROOT / "packages/dutchmate/pyproject.toml",
     "dutchmate-core": REPOSITORY_ROOT / "core/pyproject.toml",
@@ -88,6 +95,49 @@ def test_console_scripts_have_one_authoritative_owner() -> None:
                 f"and {distribution!r}"
             )
             owners[executable] = distribution
+
+
+def test_all_host_distributions_publish_apache_license_and_owner_metadata() -> None:
+    canonical_license = APACHE_LICENSE.read_text(encoding="utf-8")
+
+    for path in DISTRIBUTIONS.values():
+        project = _project(path)
+        assert project["license"] == "Apache-2.0"
+        assert project["license-files"] == ["LICENSE"]
+        assert project["authors"] == EXPECTED_AUTHOR
+        assert project["urls"] == EXPECTED_URLS
+        assert (path.parent / "LICENSE").read_text(encoding="utf-8") == canonical_license
+
+
+def test_workspace_root_remains_unlicensed_as_one_distribution() -> None:
+    project = _project(HOST_VERSION_AUTHORITY)
+
+    assert "license" not in project
+    assert "license-files" not in project
+
+
+def test_repository_license_policy_preserves_hardware_design_gate() -> None:
+    policy = (REPOSITORY_ROOT / "LICENSE.md").read_text(encoding="utf-8")
+
+    assert "Apache-2.0" in policy
+    assert "CC-BY-4.0" in policy
+    assert "hardware/pcb/debug-helper/legacy-eagle/" in policy
+    assert "hardware/pcb/debug-helper/rev-a/" in policy
+    assert "not covered" in policy.lower()
+    assert "KiCad" in policy
+
+
+def test_repository_requires_future_dco_sign_off() -> None:
+    dco = (REPOSITORY_ROOT / "DCO").read_text(encoding="utf-8")
+    contributing = (REPOSITORY_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    pull_request_template = (
+        REPOSITORY_ROOT / ".github/pull_request_template.md"
+    ).read_text(encoding="utf-8")
+
+    assert "Developer's Certificate of Origin 1.1" in dco
+    assert "git commit -s" in contributing
+    assert "Signed-off-by:" in contributing
+    assert "DCO" in pull_request_template
 
 
 def _project(path: Path) -> dict[str, object]:

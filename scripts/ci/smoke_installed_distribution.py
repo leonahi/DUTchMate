@@ -8,8 +8,10 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import zipfile
+from email.message import Message
 from email.parser import Parser
 from pathlib import Path
 
@@ -43,12 +45,19 @@ EXPECTED_TOOLS = [
     "get_debug_session",
     "list_debug_sessions",
 ]
+EXPECTED_AUTHOR = "Nahit Pawar"
+EXPECTED_PROJECT_URLS = {
+    "Homepage, https://github.com/leonahi/DUTchMate",
+    "Repository, https://github.com/leonahi/DUTchMate",
+    "Issues, https://github.com/leonahi/DUTchMate/issues",
+}
 
 
 def main() -> None:
     arguments = _parser().parse_args()
     dist = arguments.dist.resolve()
     wheels = _wheels_by_distribution(dist)
+    _validate_artifact_metadata(dist, wheels)
     _validate_wheel_scripts(wheels)
 
     uv = shutil.which("uv")
@@ -113,6 +122,68 @@ def _validate_wheel_scripts(wheels: dict[str, Path]) -> None:
                     f"{executable} is owned by {owners[executable]} and {distribution}"
                 )
             owners[executable] = distribution
+
+
+def _validate_artifact_metadata(dist: Path, wheels: dict[str, Path]) -> None:
+    source_distributions = sorted(dist.glob("*.tar.gz"))
+    assert len(source_distributions) == len(wheels), (
+        f"expected {len(wheels)} source distributions, found {len(source_distributions)}"
+    )
+
+    identities: set[tuple[str, str]] = set()
+    for wheel in wheels.values():
+        with zipfile.ZipFile(wheel) as archive:
+            names = archive.namelist()
+            metadata_path = next(
+                name for name in names if name.endswith(".dist-info/METADATA")
+            )
+            metadata = Parser().parsestr(archive.read(metadata_path).decode("utf-8"))
+            license_path = next(
+                name for name in names if name.endswith(".dist-info/licenses/LICENSE")
+            )
+            _assert_release_metadata(metadata, wheel.name)
+            _assert_apache_license(archive.read(license_path).decode("utf-8"), wheel.name)
+            assert not any("hardware/" in name for name in names)
+            identities.add((metadata["Name"], metadata["Version"]))
+
+    source_identities: set[tuple[str, str]] = set()
+    for source_distribution in source_distributions:
+        with tarfile.open(source_distribution, mode="r:gz") as archive:
+            members = archive.getmembers()
+            metadata_member = next(
+                member
+                for member in members
+                if member.name.count("/") == 1 and member.name.endswith("/PKG-INFO")
+            )
+            license_member = next(
+                member
+                for member in members
+                if member.name.count("/") == 1 and member.name.endswith("/LICENSE")
+            )
+            metadata_file = archive.extractfile(metadata_member)
+            license_file = archive.extractfile(license_member)
+            assert metadata_file is not None and license_file is not None
+            metadata = Parser().parsestr(metadata_file.read().decode("utf-8"))
+            _assert_release_metadata(metadata, source_distribution.name)
+            _assert_apache_license(
+                license_file.read().decode("utf-8"), source_distribution.name
+            )
+            assert not any("hardware/" in member.name for member in members)
+            source_identities.add((metadata["Name"], metadata["Version"]))
+
+    assert source_identities == identities
+
+
+def _assert_release_metadata(metadata: Message, artifact: str) -> None:
+    assert metadata["License-Expression"] == "Apache-2.0", artifact
+    assert metadata.get_all("License-File") == ["LICENSE"], artifact
+    assert metadata.get_all("Author") == [EXPECTED_AUTHOR], artifact
+    assert set(metadata.get_all("Project-URL")) == EXPECTED_PROJECT_URLS, artifact
+
+
+def _assert_apache_license(text: str, artifact: str) -> None:
+    assert "Apache License" in text, artifact
+    assert "Version 2.0, January 2004" in text, artifact
 
 
 def _wheel_scripts(wheel: Path) -> dict[str, str]:

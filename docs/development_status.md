@@ -15,8 +15,11 @@ Read this document first whenever development resumes.
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
   normalization, and the repo-local portable plugin are implemented and
   validated. The host and firmware workflows are green on GitHub. Public
-  publishing authority remains withheld pending an approved software license
-  and publisher metadata.
+  package metadata now records the owner-approved mixed-license policy and
+  publisher, and the tag-gated release workflow preserves accepted artifacts
+  through TestPyPI digest verification and separately protected production
+  publishing. Publishing authority remains unusable until the GitHub
+  environments and six Trusted Publisher registrations are configured.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -304,7 +307,7 @@ Read this document first whenever development resumes.
   acceptance audit now maps the Basic, Enhanced workflow, and shared software
   criteria to committed evidence. A source-level parser audit confirms all 17
   Revision A net/GPIO/physical-pin assignments across the normative table,
-  Eagle schematic, Eagle board, and RP2350 overlay, plus the five provisional
+  legacy EAGLE schematic, legacy EAGLE board, and RP2350 overlay, plus the five provisional
   logic-device references in the design files. Live malformed mapping/mode
   requests left accepted CTRL0/CTRL1 state unchanged. The audit also found that
   `dut_io_voltage` stopped at TOML parsing; Enhanced startup could open the
@@ -399,15 +402,16 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Record the owner-approved license and publisher metadata
-  before adding TestPyPI or PyPI publishing authority. Until that decision is
-  available, resume Phase 4 source-area suggestion review. Authenticated Claude
-  Code host acceptance remains paused until a subscription is available.
-- **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
-  correction into the next-revision schematic/BOM and verify the resulting
-  design artifacts. Loaded hot-plug acceptance, the pre-test baseline
-  rejection, populated-part/continuity audit, 75 uA correlation, and analog
-  measurements remain open. EVENT pins remain reserved.
+- **Next step:** Configure the `testpypi` and `pypi` GitHub environments,
+  register all six projects as Trusted Publishers for `release.yml`, and
+  install/require the DCO status check before pushing `v0.1.0`. Authenticated
+  Claude Code host acceptance remains paused until a subscription is available.
+- **Deferred hardware work:** Add the replacement KiCad design under
+  `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
+  `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
+  assets, and verify the resulting artifacts. Loaded hot-plug acceptance, the
+  pre-test baseline rejection, populated-part/continuity audit, 75 uA
+  correlation, and analog measurements remain open. EVENT pins remain reserved.
 
 Update the review date, current milestone, next step, checklist, and validation
 evidence in the same commit as every completed development slice. Reconcile the
@@ -452,7 +456,7 @@ electrical acceptance remains.
 | Phase 1B Enhanced host adapter | Host implementation complete; startup, configured reset/boot-test, UART-send, reconnect, and boot-mode HIL passed | Target protocol migration, required timestamp/overflow capability alignment, RP2350 identity/timer migration, the reviewed fake-backed async adapter, production-capable one-resource serial factory, async semantic consumers, service lifecycle/startup selection, service-owned continuous ingestion, coordinated idle/active reconnect, and obsolete sync-path removal are complete. Production startup and each replacement use exactly one async host. Port configuration and the final input flush occur with DTR low; DTR is asserted only after async-reader attachment so the one-shot firmware `hello` cannot be flushed. The independent USB CDC port uses portable 115200 line coding instead of the firmware-owned 460800 DUT UART rate. Real CLI startup, configured `CTRL0` reset/boot workflow, forced `BURST` UART-send/capture, idle recovery, and a resumed two-segment active capture against Pico 2 pass. The host correctly interprets MCU-lifetime UART loss counters in fresh sessions while preserving raw status evidence. Configured boot-mode HIL now passes; electrical acceptance remains pending. |
 | Zephyr DUT fixture | Implemented and Basic-HIL validated | The `rpi_pico` application cross-builds with Zephyr 4.4.0 and SDK 1.0.1; its reproduced UF2 matched the flashed image digest and the fixture passed the real Basic acceptance run. |
 | RP2350 Debug Helper firmware | Firmware implementation complete; frame-sized FIFO is HIL lossless | The non-wireless Pico 2 application preserves the Revision A pin map and safe states. Identity, hello/epoch behavior, the ordered 32 KiB ring, interrupt-driven GP1 UART RX with RP2350 timestamps, bounded exact v1 evidence output, periodic buffer status, host-command framing/decoding, response encoding, generic control state transitions, bounded UART TX completion, one-command execution/cancellation, and live CDC command routing are implemented. The writer drains immediately ready outputs in bounded batches instead of sleeping 10 ms after every descriptor. The 2,048-byte staging FIFO holds the maximum encoded frame and permits continuous USB packet packing. Its first no-stall HIL run reported zero firmware loss/overflow and only 160 bytes of ring occupancy while exposing a downstream host persistence limit. After host batching, repeat HIL retained the exact stream with zero loss/overflow and only 131 bytes of ring high-water. The shared CDC callback services RX and TX readiness using the Zephyr FIFO APIs. Stable DTR, carrier-ready state, Zephyr 4.4.2 line-error handling, reset-line recovery, supported-voltage loopback/control, and representative reset HIL pass. Electrical margins, remaining baud rates, events, and broader load behavior remain incomplete. The Pico 1 DUT fixture stays separate. |
-| Revision A prototype validation | In progress; static missing-supply isolation in both directions for every external digital signal, settled pulled-control supply ordering including direct `/OE` verification, repeated unloaded 1.8 V supply hot-plug, source mapping/config rejection, supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. With debugger USB present and `DUT_VIO` absent, all ten externally injected signal lines remained at 1.8 V while a 10 kOhm load held `DUT_VIO` at 0.0 V and all enables remained low. With debugger USB absent and `DUT_VIO` at 1.8 V, every control, event, and UART connector signal retained an individual 1.8 V/10 kOhm pull-up while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained approximately 0.0 V; the UART/event sweep additionally loaded `3V3(OUT)` through 10 kOhm. Both settled supply orders retained the expected rails, pulled-up controls, measured enable levels, and active-low control `/OE` levels. Five VIO lead cycles with USB held on and five USB cycles with VIO held on retained the expected settled readings and enumeration. The committed design table, Eagle schematic/board, and firmware overlay agree on all mapped pins; populated-part identity and physical continuity are explicitly deferred. Invalid channel/mode and duplicate config assignments reject without changing accepted live state. Loaded cable hot-plug remains open; analog UART cable/edge, series-resistor waveform, and broader transient capture are explicitly deferred because no analog oscilloscope is available. |
+| Revision A prototype validation | In progress; static missing-supply isolation in both directions for every external digital signal, settled pulled-control supply ordering including direct `/OE` verification, repeated unloaded 1.8 V supply hot-plug, source mapping/config rejection, supported-voltage push-pull, representative open-drain reset, debugger-reset control high impedance, and the loaded `3V3(OUT)` check passed | `hardware/validation/phase1_revision_a.md` records the assembled prototype identity, preliminary safe-state observations, passing idle current, exact short-jumper 460800-baud UART loopback at all four supported VIO points, the passing four-channel 1.8 V push-pull control sweep, representative 2.5/3.3/5.0 V control levels, representative 1.8 V open-drain reset behavior against a 10 kOhm DUT-side pull-up, all four externally pulled-up control outputs remaining high-impedance through Pico `RUN` reset, and the instrument-limited loaded `3V3(OUT)` result. With debugger USB present and `DUT_VIO` absent, all ten externally injected signal lines remained at 1.8 V while a 10 kOhm load held `DUT_VIO` at 0.0 V and all enables remained low. With debugger USB absent and `DUT_VIO` at 1.8 V, every control, event, and UART connector signal retained an individual 1.8 V/10 kOhm pull-up while Pico `3V3(OUT)`, `VSYS`, and `VBUS` remained approximately 0.0 V; the UART/event sweep additionally loaded `3V3(OUT)` through 10 kOhm. Both settled supply orders retained the expected rails, pulled-up controls, measured enable levels, and active-low control `/OE` levels. Five VIO lead cycles with USB held on and five USB cycles with VIO held on retained the expected settled readings and enumeration. The committed design table, legacy EAGLE schematic/board, and firmware overlay agree on all mapped pins; populated-part identity and physical continuity are explicitly deferred. Invalid channel/mode and duplicate config assignments reject without changing accepted live state. Loaded cable hot-plug remains open; analog UART cable/edge, series-resistor waveform, and broader transient capture are explicitly deferred because no analog oscilloscope is available. |
 | Ring-buffer acceptance | `accepted_32k` | Static RAM and fixture provenance are recorded, and ten consecutive representative boots pass. No-stall and 100/250/500 ms backpressure sessions retained the exact 94,299-byte stream with zero loss/overflow and uninterrupted epochs. Deliberate overflow sessions reconcile retained plus explicitly dropped bytes to the 43,081-byte fixture output with visible `loss_reported` integrity. The corrected 5,120-byte CDC RX stack passed repeat boot, 504.049 ms backpressure, and deliberate-overflow Pico 2 HIL with at least 1,248 bytes free. All eight stacks retained headroom, and final normal static RAM is 81,040/532,480 bytes. `hardware/validation/phase1_ring_buffer.md` records the decision. |
 | Basic and Enhanced HIL acceptance | Basic passed; Enhanced configured reset/boot-test, UART send, reconnect, and boot-mode passed | `hardware/validation/phase1_basic_hil.md` records the accepted Basic run. Pico 2 USB hello, real CLI startup, host command response, exact short-jumper 460800-baud loopbacks at all four supported VIO points, a 15-second configured reset/boot-test capture with session retrieval, forced `BURST` UART-send/capture with exact loss accounting, idle recovery, and a resumed active capture with two segment timestamps, and normal/failure/restored-normal GP2 boot captures pass. A current-code same-payload contract test and both accepted HIL reports verify the shared downstream evidence shape. Broader electrical gates remain pending. |
 
@@ -475,6 +479,46 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+PCB source-layout migration, reviewed 2026-09-23:
+
+- The owner-moved historical Revision A EAGLE design is preserved under
+  `hardware/pcb/debug-helper/legacy-eagle/`; active specifications, firmware
+  guidance, validation records, licensing policy, and repository navigation now
+  reference that path explicitly as legacy evidence.
+- `hardware/pcb/debug-helper/rev-a/` is reserved for the future KiCad project.
+  Its README records the source/library/provenance/manufacturing ownership model
+  and keeps the CERN-OHL-P-2.0 grant blocked until the design and provenance
+  audit exist.
+- KiCad local settings, locks, autosaves, backups, cache/rescue files, and
+  conventional scratch export directories are ignored. Editable KiCad sources,
+  project libraries, and reviewed `manufacturing/` outputs remain trackable.
+- A repository-wide reference scan found no remaining references to the former
+  schematic directory. Focused license contracts, the full test suite, Ruff,
+  mypy, lock verification, and `git diff --check` passed.
+
+Mixed-license and Python-release enablement, reviewed 2026-09-23:
+
+- The root scope map applies Apache-2.0 to host software, protocol/build
+  infrastructure, the portable plugin, and both firmware projects;
+  CC-BY-4.0 applies to general documentation. The legacy EAGLE design material
+  now under `hardware/pcb/debug-helper/legacy-eagle/` is explicitly outside the
+  new grants. `hardware/pcb/debug-helper/rev-a/` is reserved for the
+  owner-managed KiCad replacement and provenance audit.
+- All six Python projects declare `License-Expression: Apache-2.0`, Nahit Pawar
+  as author, and the public repository URLs. Their complete local Apache texts
+  match the canonical SPDX text, and all six wheels and source distributions
+  contain the expected license metadata and file without hardware content.
+- DCO 1.1 contribution guidance and a pull-request reminder are added. The
+  external DCO App installation and required status check remain an owner
+  configuration step.
+- The release workflow validates exact stable tags, builds and accepts artifacts
+  once, grants OIDC only to separate publish jobs, publishes in dependency
+  order, verifies every TestPyPI filename and SHA-256 digest, and reuses the
+  retained artifacts for protected production publication.
+- Lock verification, Ruff, mypy (89 source files), all 1,437 tests, the
+  12-artifact build, isolated base/Debug-Agent command checks, installed MCP
+  discovery, release YAML parsing, and `git diff --check` passed.
 
 Hosted delivery-infrastructure acceptance, reported 2026-09-23:
 
@@ -1063,8 +1107,8 @@ Phase 1 acceptance and voltage-safety audit, reviewed 2026-09-16:
   committed tests and HIL records. All software/protocol/workflow groups have
   evidence; the Revision A first-prototype criterion remains open.
 - A source parser confirmed exact agreement for all 17 Revision A mappings
-  between section 10.1, Eagle schematic `U4` pinrefs, Eagle board `U4` pads,
-  and the RP2350 overlay. Eagle devicesets/board values match U1
+  between section 10.1, legacy EAGLE schematic `U4` pinrefs, legacy EAGLE board
+  `U4` pads, and the RP2350 overlay. Legacy EAGLE devicesets/board values match U1
   `TXU0202DCUR`, U2 `TXU0104PWR`, U3 `SN74LV4T125PWR`, and U5/U6
   `SN74LVC2G06DBVR`. This does not prove populated-part identity or physical
   continuity.
@@ -2144,8 +2188,11 @@ acceptance contracts; this section alone tracks its progress.
   after the job-container disk-capacity and SDK size-tool corrections.
 - [x] Add and validate the repo-local portable coding-agent plugin against the
   installed MCP surface.
-- [ ] Record owner approval of the software license and public publisher
-  metadata before granting any release workflow publishing authority.
+- [x] Record owner approval of the mixed-license policy and Nahit Pawar as the
+  public publisher; add artifact license contracts, DCO repository guidance,
+  and the separately gated release workflow.
+- [ ] Configure protected `testpypi` and `pypi` GitHub environments, all six
+  Trusted Publisher registrations, and the required DCO status check.
 - [ ] Validate the immutable accepted host artifacts through TestPyPI.
 - [ ] Publish those same artifacts to production PyPI in dependency order.
 
@@ -2280,7 +2327,7 @@ schema and exposes the required identity/capabilities.
 
 - [ ] Build the first prototype with the documented provisional logic devices
   and exact Pico mapping.
-  - [x] Confirm the committed Revision A table, Eagle schematic, Eagle board,
+  - [x] Confirm the committed Revision A table, legacy EAGLE schematic and board,
     and RP2350 overlay agree on all 17 net/GPIO/physical-pin assignments and
     that the design files name the five provisional logic-device references.
   - [ ] Inspect the populated U1/U2/U3/U5/U6 markings and verify physical Pico

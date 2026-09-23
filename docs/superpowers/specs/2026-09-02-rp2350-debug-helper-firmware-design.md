@@ -14,7 +14,7 @@ existing contracts. Normative behavior remains in:
 - `hardware/protocol/v1/*.schema.json`
 - `docs/gpio_configuration_semantics.md`
 - `docs/ring_buffer_sizing_plan.md`
-- `hardware/schematics/revision_a.md`, especially section 10.1
+- `hardware/pcb/debug-helper/legacy-eagle/revision_a.md`, especially section 10.1
 
 The firmware provides USB CDC NDJSON, identity, UART RX/TX, RP2350 timestamps,
 buffer telemetry, a 32 KiB UART RX ring, and generic `CTRL0` through `CTRL3`.

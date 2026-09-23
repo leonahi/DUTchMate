@@ -48,10 +48,10 @@ uv run --package dutchmate dutchmate status
 uv run --package dutchmate dutchmate stop
 ```
 
-The public distribution is `dutchmate`. After the license and publisher gate
-allows a public release, the supported installation commands will be
-`uv tool install dutchmate` and `pipx install dutchmate`. The optional Debug
-Agent is selected with the `debug-agent` extra and invoked as
+The public distribution is `dutchmate`. After the protected PyPI publishing
+environments and Trusted Publishers are configured, the supported installation
+commands will be `uv tool install dutchmate` and `pipx install dutchmate`. The
+optional Debug Agent is selected with the `debug-agent` extra and invoked as
 `dutchmate debug`.
 
 ## Repository
@@ -61,7 +61,7 @@ apps/          CLI, Device Core Service, and Phase 2 MCP package.
 core/          Reusable protocol, capture, GPIO, session, and workflow logic.
 packages/      Public `dutchmate` executable composition package.
 plugins/       Repo-local portable coding-agent plugin.
-hardware/      Firmware, protocol schemas/examples, schematics, and validation.
+hardware/      Firmware, protocol schemas/examples, PCB sources, and validation.
 docs/          Architecture, implementation contracts, plans, and guides.
 tests/         Cross-package unit tests, integration tests, and fixtures.
 ```
@@ -77,7 +77,7 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 | `docs/phase1_implementation_spec.md` | Normative Phase 1 backend/API/session/protocol requirements, tests, and done criteria. |
 | `docs/software_architecture.md` | Python data flow, module ownership, and dependency boundaries. |
 | `docs/developer_guide.md` | Workspace layout, setup, package boundaries, and contribution workflow. |
-| `hardware/schematics/revision_a.md` | Revision A voltage-domain hardware, pin map, BOM, and validation checklist. |
+| `hardware/pcb/debug-helper/legacy-eagle/revision_a.md` | Legacy Revision A voltage-domain design, pin map, BOM, and validation checklist. |
 | `docs/gpio_configuration_semantics.md` | Control-channel identifiers, electrical modes, state, workflows, and reporting. |
 | `docs/reconnect_session_semantics.md` | Reconnect, segment, timestamp, resume, and restart behavior. |
 | `docs/ring_buffer_sizing_plan.md` | Phase 1B buffer baseline, telemetry, and validation method. |
@@ -89,3 +89,15 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
 Its schemas, examples, host models, tests, and firmware handling must change
 together.
+
+## Licensing and contributions
+
+DUTchMate uses licenses appropriate to each kind of material: Apache-2.0 for
+host software and firmware, CC-BY-4.0 for general documentation, and a future
+CERN-OHL-P-2.0 grant for audited KiCad hardware-design material. The legacy
+EAGLE files are excluded from the new grants. See [`LICENSE.md`](LICENSE.md) for
+the authoritative scope map.
+
+Future pull-request commits require DCO 1.1 sign-off. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution and validation
+workflow.

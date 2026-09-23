@@ -357,12 +357,27 @@ submission path expects a remote HTTPS MCP endpoint.
 ## Public Release Gate and Publication Order
 
 CI, private artifacts, firmware builds, and the local plugin proceed before a
-public release. Public publishing remains blocked until the owner approves the
-software license and publisher metadata.
+public release. The owner approved Nahit Pawar as the public publisher and a
+mixed-license repository policy on 2026-09-23. Apache-2.0 covers all six Python
+distributions and both firmware projects; CC-BY-4.0 covers general
+documentation. Future KiCad hardware design material may use CERN-OHL-P-2.0
+only after a provenance audit. The legacy EAGLE design under
+`hardware/pcb/debug-helper/legacy-eagle/` remains outside the new license grants
+and all public release artifacts; `hardware/pcb/debug-helper/rev-a/` is reserved
+for the future KiCad source.
 
-After that decision, add `.github/workflows/release.yml` with separate build and
-publish jobs. Configure protected `testpypi` and `pypi` environments and Trusted
-Publishing for all six projects.
+The root `LICENSE.md` is the authoritative scope map. Each publishable Python
+project declares the SPDX expression `Apache-2.0` and includes its own complete
+license text in wheels and source distributions. The non-published workspace
+root does not declare one project license because the repository is mixed
+license. Future pull-request commits require DCO 1.1 sign-off; the repository
+instructions and pull-request template must be backed by a required DCO status
+check configured in GitHub.
+
+`.github/workflows/release.yml` keeps its unprivileged build, TestPyPI publish,
+TestPyPI digest verification, and production publish jobs separate. Configure
+protected `testpypi` and `pypi` environments and Trusted Publishing for all six
+projects before pushing a release tag.
 
 The host release workflow must:
 
@@ -371,10 +386,14 @@ The host release workflow must:
 3. build all artifacts once;
 4. perform the complete clean-artifact acceptance gate;
 5. retain the accepted artifacts immutably;
-6. publish `dutchmate-core` first;
+6. publish `dutchmate-core` to TestPyPI first;
 7. publish CLI, service, MCP server, and Debug Agent next;
 8. publish the `dutchmate` aggregator last;
-9. use `uv publish` on the retained artifacts without rebuilding.
+9. verify every TestPyPI filename and SHA-256 digest against the retained
+   artifacts;
+10. require approval through the protected `pypi` environment;
+11. publish the same artifacts to production in the same dependency order;
+12. use `uv publish` in publishing jobs without rebuilding.
 
 Recheck project names immediately before registration because prior availability
 checks are not reservations.
@@ -395,7 +414,8 @@ The independently testable slices are:
    acceptance.
 4. Add firmware compile CI and independent version/provenance metadata.
 5. Add and validate the local coding-agent plugin.
-6. Record the approved license and public publisher metadata.
+6. Record the approved license and public publisher metadata, add the DCO
+   contribution policy, and add the separately gated release workflow.
 7. Validate the retained artifacts through TestPyPI.
 8. Publish the same artifacts to production PyPI.
 

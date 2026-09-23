@@ -18,9 +18,9 @@ CTRL2
 CTRL3
 ```
 
-The hardware channel mapping model is defined in
-`hardware/schematics/revision_a.md`. In that model, physical channels
-such as `CTRL0` are separate from workflow roles such as `reset` and DUT
+The current hardware channel mapping model is preserved in the legacy design
+record at `hardware/pcb/debug-helper/legacy-eagle/revision_a.md`. In that model,
+physical channels such as `CTRL0` are separate from workflow roles such as `reset` and DUT
 schematic names such as `RESET_N`. Phase 1 host code accepts custom control
 roles as project metadata, while built-in workflows only assign semantics to
 the recognized Phase 1 roles `reset` and `boot`. Recognition by a built-in

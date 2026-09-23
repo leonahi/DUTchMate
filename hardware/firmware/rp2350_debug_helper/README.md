@@ -110,7 +110,7 @@ the application is not yet accepted as a complete Enhanced Debug Helper.
 ## Revision A mapping
 
 The devicetree overlay preserves the normative mapping from
-`hardware/schematics/revision_a.md` section 10.1:
+`hardware/pcb/debug-helper/legacy-eagle/revision_a.md` section 10.1:
 
 | Function | Pico 2 GPIOs |
 |---|---|

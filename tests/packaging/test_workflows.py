@@ -64,6 +64,37 @@ def test_firmware_ci_uses_the_pinned_sdk_size_tool_without_path_lookup() -> None
     assert not re.search(r"^\s+arm-zephyr-eabi-size \\$", workflow, flags=re.MULTILINE)
 
 
+def test_release_build_and_publish_authority_are_separated() -> None:
+    workflow = _workflow("release.yml")
+
+    for job in ("build", "publish-testpypi", "verify-testpypi", "publish-pypi"):
+        assert f"  {job}:\n" in workflow
+    assert 'tags: ["v*.*.*"]' in workflow
+    assert "validate_release_tag.py" in workflow
+    assert "uv build --all-packages --no-sources" in workflow
+    assert "smoke_installed_distribution.py --dist dist" in workflow
+    assert "environment: testpypi" in workflow
+    assert "environment: pypi" in workflow
+    assert workflow.count("id-token: write") == 2
+    assert "verify_index_artifacts.py" in workflow
+
+    build = workflow[workflow.index("  build:\n") : workflow.index("  publish-testpypi:\n")]
+    test_publish = workflow[
+        workflow.index("  publish-testpypi:\n") : workflow.index("  verify-testpypi:\n")
+    ]
+    verification = workflow[
+        workflow.index("  verify-testpypi:\n") : workflow.index("  publish-pypi:\n")
+    ]
+    production_publish = workflow[workflow.index("  publish-pypi:\n") :]
+
+    assert "id-token: write" not in build
+    assert "uv build" not in test_publish
+    assert "uv build" not in verification
+    assert "uv build" not in production_publish
+    assert "needs: verify-testpypi" in production_publish
+    _assert_actions_are_commit_pinned(workflow)
+
+
 def _workflow(name: str) -> str:
     path = WORKFLOW_ROOT / name
     assert path.is_file(), f"missing workflow: {path.relative_to(REPOSITORY_ROOT)}"
