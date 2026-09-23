@@ -1,5 +1,7 @@
 # DUTchMate
 
+Author : Nahit PAWAR
+
 DUTchMate is an AI-assisted embedded debugging system. It receives real DUT
 evidence through one selected device backend, stores structured debug sessions,
 and exposes deterministic workflows to humans and coding agents.
