@@ -47,7 +47,7 @@ Python packages:
 
 | Path | Package | Purpose |
 |---|---|---|
-| `packages/dutchmate/` | `dutchmate` | Public executable ownership and optional Debug Agent composition. |
+| `packages/dutchmate/` | `dutchmate` | Public executable ownership for the five-distribution `v0.1.0` release. |
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
@@ -72,14 +72,12 @@ Run package commands from the repository root:
 uv run --package dutchmate dutchmate --help
 uv run --package dutchmate dutchmate-service --help
 uv run --package dutchmate dutchmate-mcp --help
-uv run --package dutchmate --extra debug-agent dutchmate debug --help
 uv run --package dutchmate-debug-agent dutchmate-debug --help
 ```
 
-The final command is retained for direct Debug Agent component development.
-Normal users install the aggregator and use `dutchmate debug`; that command
-invokes the optional package's Python entry API and does not depend on the
-dependency-owned executable being exposed by `uv tool install`.
+The final command is a workspace-development interface. The Debug Agent is
+tested in normal CI but is not a dependency, extra, command, or artifact of the
+public `v0.1.0` release. Its first public release is planned for `v0.2.0`.
 
 To analyze a completed native session with a locally running Ollama model,
 first review the manifest returned by `preview`. Then pass its
@@ -87,9 +85,9 @@ first review the manifest returned by `preview`. Then pass its
 selected sessions through `SessionStore`; `preview` does not call the model.
 
 ```bash
-uv run --package dutchmate --extra debug-agent dutchmate debug preview \
+uv run --package dutchmate-debug-agent dutchmate-debug preview \
   --session-id SESSION_ID --provider ollama --model MODEL_ID
-uv run --package dutchmate --extra debug-agent dutchmate debug analyze \
+uv run --package dutchmate-debug-agent dutchmate-debug analyze \
   --session-id SESSION_ID --provider ollama --model MODEL_ID \
   --approved-digest MANIFEST_DIGEST
 ```
@@ -105,12 +103,13 @@ generation at 2,048 tokens; responses stopped by that cap are rejected as
 incomplete. Choose a local model that supports Ollama structured output and
 fits the selected evidence within that context.
 
-`dutchmate debug` is a host-facing CLI, not an MCP server. A coding agent in
-VS Code, Claude Code, or another terminal-capable host invokes the same command;
-there is no host-specific Debug Agent registration. Ollama is optional for the
-rest of the coding workflow: `preview` does not contact it, and the coding agent
-may skip `analyze` when no local model is installed. The MCP registrations below
-expose Device Core tools and are independent of Debug Agent analysis.
+`dutchmate-debug` is a host-facing workspace CLI, not an MCP server. A coding
+agent in VS Code, Claude Code, or another terminal-capable development host may
+invoke it directly from the checkout; there is no host-specific Debug Agent
+registration. Ollama is optional for the rest of the coding workflow: `preview`
+does not contact it, and the coding agent may skip `analyze` when no local model
+is installed. The MCP registrations below expose Device Core tools and are
+independent of Debug Agent analysis.
 
 Start and inspect the current local service:
 

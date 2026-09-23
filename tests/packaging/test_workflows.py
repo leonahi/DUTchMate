@@ -72,11 +72,21 @@ def test_release_build_and_publish_authority_are_separated() -> None:
     assert 'tags: ["v*.*.*"]' in workflow
     assert "validate_release_tag.py" in workflow
     assert "uv build --all-packages --no-sources" in workflow
-    assert "smoke_installed_distribution.py --dist dist" in workflow
+    assert "smoke_installed_distribution.py --dist workspace-dist" in workflow
+    assert "--dist dist --public-release" in workflow
     assert "environment: testpypi" in workflow
     assert "environment: pypi" in workflow
     assert workflow.count("id-token: write") == 2
     assert "verify_index_artifacts.py" in workflow
+    assert "dist/dutchmate_debug_agent-*" not in workflow
+    for artifact in (
+        "dist/dutchmate_core-*",
+        "dist/dutchmate_cli-*",
+        "dist/dutchmate_service-*",
+        "dist/dutchmate_mcp_server-*",
+        "dist/dutchmate-[0-9]*",
+    ):
+        assert artifact in workflow
 
     build = workflow[workflow.index("  build:\n") : workflow.index("  publish-testpypi:\n")]
     test_publish = workflow[

@@ -45,15 +45,14 @@ dutchmate-core
 └── dutchmate-debug-agent
 ```
 
-Add a sixth distribution, `dutchmate`, under `packages/dutchmate`. It is the
-normal user installation target and depends on:
+Add a sixth workspace distribution, `dutchmate`, under `packages/dutchmate`.
+It is the normal user installation target and, for `v0.1.0`, depends on:
 
 ```text
 dutchmate
 ├── dutchmate-cli
 ├── dutchmate-service
-├── dutchmate-mcp-server
-└── optional extra: dutchmate-debug-agent
+└── dutchmate-mcp-server
 ```
 
 Keep the existing distribution name `dutchmate-mcp-server`; `dutchmate-mcp` is
@@ -98,31 +97,31 @@ dutchmate-mcp
 Component packages remain importable implementation dependencies. Installing a
 component package directly is not the normal user interface.
 
-### Optional Debug Agent
+### Deferred Debug Agent Distribution
 
-The optional installation is:
+`dutchmate-debug-agent` remains an independently testable workspace package for
+`v0.1.0`. It retains its direct component-development command:
 
 ```text
-uv tool install "dutchmate[debug-agent]"
-dutchmate debug ...
+uv run --package dutchmate-debug-agent dutchmate-debug ...
 ```
 
-`dutchmate debug` must not locate or execute the dependency-owned
-`dutchmate-debug` command. `uv tool install` does not expose executables from
-dependency packages by default.
+The public `v0.1.0` aggregator does not declare a `debug-agent` extra or expose
+`dutchmate debug`, and the release artifact set excludes the Debug Agent wheel
+and source distribution. Normal CI still builds, installs, and tests the sixth
+workspace distribution so deferral does not allow it to decay.
 
-The aggregator is the composition boundary for this command. It lazily imports
-`dutchmate_debug_agent.cli.main`, forwards the Debug Agent arguments, and maps
-its integer return value to the public command's exit status. This keeps
-`dutchmate-cli` independent of the Debug Agent delivery package.
+The first public Debug Agent release is planned for the coordinated `v0.2.0`
+host release. That slice must confirm its coding-agent access model and public
+command surface before adding any aggregator extra or launcher. If
+`dutchmate debug` is introduced, it must invoke the installed Debug Agent's
+Python API directly rather than locating the dependency-owned executable on
+`PATH`, because `uv tool install` does not expose dependency executables by
+default.
 
-If the optional package itself is absent, report a bounded installation error
-that names `dutchmate[debug-agent]`. Do not convert an import error raised from
-inside an installed Debug Agent into a misleading missing-extra error.
-
-`dutchmate-debug-agent` may retain `dutchmate-debug` for direct component
-development, but the supported aggregator command does not depend on that
-executable being exposed on `PATH`.
+The `v0.2.0` acceptance slice must also preserve import failures raised inside
+the installed Debug Agent rather than converting them into misleading
+missing-feature errors.
 
 ### Console-script migration gate
 
@@ -151,7 +150,7 @@ The normal workspace development interface becomes:
 uv run --package dutchmate dutchmate --help
 uv run --package dutchmate dutchmate-service --help
 uv run --package dutchmate dutchmate-mcp --help
-uv run --package dutchmate --extra debug-agent dutchmate debug --help
+uv run --package dutchmate-debug-agent dutchmate-debug --help
 ```
 
 Component entry functions remain directly testable as Python APIs.
@@ -161,11 +160,11 @@ Component entry functions remain directly testable as Python APIs.
 ### Host software
 
 Use the non-published root `dutchmate-workspace` version as the logical host
-version authority. Keep versions declared in the six publishable
+version authority. Keep versions declared in the six workspace
 `pyproject.toml` files and validate them against the root rather than adding
 dynamic-version machinery.
 
-The initial synchronized host release is `0.1.0` for:
+The workspace version is initially synchronized at `0.1.0` for:
 
 - `dutchmate`;
 - `dutchmate-core`;
@@ -173,6 +172,11 @@ The initial synchronized host release is `0.1.0` for:
 - `dutchmate-service`;
 - `dutchmate-mcp-server`;
 - `dutchmate-debug-agent`.
+
+The public `v0.1.0` release contains the first five distributions only. The
+Debug Agent's first public release is planned for the coordinated `v0.2.0`
+release; its workspace `0.1.0` artifacts are private CI inputs, not published
+packages.
 
 CI fails if any distribution version differs or an internal dependency lacks
 the exact synchronized constraint. Future release tooling updates the root and
@@ -268,7 +272,7 @@ tests to enumerate every checked-in example.
 
 ## Clean-Artifact Acceptance
 
-Build all six distributions once with:
+Build all six workspace distributions once with:
 
 ```text
 uv build --all-packages --no-sources
@@ -279,7 +283,7 @@ and `PYTHONPATH` removed. Third-party dependencies may come from the configured
 index, but all first-party DUTchMate packages must resolve from the newly built
 artifact directory.
 
-Validate the following sequence:
+Validate the following sequence in normal CI:
 
 1. Inspect every wheel's metadata and console entry points.
 2. Reject duplicate console-script ownership across distributions.
@@ -287,14 +291,15 @@ Validate the following sequence:
 4. Install the base aggregator into a clean environment.
 5. Run `--help` for the four public executables.
 6. Verify service subprocess resolution and MCP process replacement.
-7. Verify `dutchmate debug` produces the missing-extra installation error.
-8. Install the aggregator with its Debug Agent extra from the same artifact set.
-9. Invoke Debug Agent `--help`, `preview`, and `analyze` through the direct Python
-   API path, including argument, exit-code, and stderr propagation.
-10. Confirm `dutchmate-debug` is not required in the exposed tool executable
-    directory.
-11. Start the installed MCP server, initialize it, list the nine expected tools
-    in deterministic order, and verify clean EOF.
+7. Verify the aggregator rejects the absent `debug` command.
+8. Install the standalone Debug Agent wheel from the same workspace artifact
+   set and invoke `dutchmate-debug --help`.
+9. Start the installed MCP server, initialize it, list the nine expected tools
+   in deterministic order, and verify clean EOF.
+
+For `v0.1.0`, copy only the five public wheel/source-distribution pairs into a
+separate release directory, rerun metadata, command, and MCP acceptance against
+that exact directory, and retain only those accepted artifacts for publishing.
 
 Also run an actual isolated `uv tool install` smoke test with temporary
 `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR` values. This verifies the published user
@@ -376,18 +381,20 @@ check configured in GitHub.
 
 `.github/workflows/release.yml` keeps its unprivileged build, TestPyPI publish,
 TestPyPI digest verification, and production publish jobs separate. Configure
-protected `testpypi` and `pypi` environments and Trusted Publishing for all six
-projects before pushing a release tag.
+protected `testpypi` and `pypi` environments and Trusted Publishing for the five
+`v0.1.0` public projects before pushing that release tag. Do not register or
+publish `dutchmate-debug-agent` until the `v0.2.0` release slice.
 
 The host release workflow must:
 
 1. accept only `vX.Y.Z` tags;
 2. verify the tag against the root and all six package versions;
-3. build all artifacts once;
-4. perform the complete clean-artifact acceptance gate;
-5. retain the accepted artifacts immutably;
+3. build and validate all six workspace artifact pairs once;
+4. select and revalidate the five `v0.1.0` public artifact pairs without
+   rebuilding;
+5. retain only those accepted public artifacts immutably;
 6. publish `dutchmate-core` to TestPyPI first;
-7. publish CLI, service, MCP server, and Debug Agent next;
+7. publish CLI, service, and MCP server next;
 8. publish the `dutchmate` aggregator last;
 9. verify every TestPyPI filename and SHA-256 digest against the retained
    artifacts;
@@ -416,8 +423,10 @@ The independently testable slices are:
 5. Add and validate the local coding-agent plugin.
 6. Record the approved license and public publisher metadata, add the DCO
    contribution policy, and add the separately gated release workflow.
-7. Validate the retained artifacts through TestPyPI.
-8. Publish the same artifacts to production PyPI.
+7. Limit the `v0.1.0` public artifact set to the five deterministic host
+   distributions while preserving Debug Agent workspace CI.
+8. Validate the retained artifacts through TestPyPI.
+9. Publish the same artifacts to production PyPI.
 
 Every completed slice runs Ruff, mypy, full pytest, and `git diff --check`, plus
 its focused acceptance tests. Structural slices update architecture
@@ -426,7 +435,8 @@ documentation and Graphify once near completion.
 ## Initial Support Boundaries
 
 - Linux and macOS are supported; Windows is not claimed.
-- The Debug Agent is optional and provider-disabled by default.
+- The Debug Agent is a provider-disabled workspace feature until its planned
+  public `v0.2.0` release.
 - Device Core HTTP endpoints, MCP tool schemas, Enhanced protocol v1, session
   formats, Basic/Enhanced backend isolation, and hardware ownership do not
   change.

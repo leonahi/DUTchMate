@@ -34,9 +34,21 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy
       - run: uv run --frozen pytest
-      - run: uv build --all-packages --no-sources --no-create-gitignore --out-dir dist
-      - name: Validate clean installed artifacts
-        run: uv run --frozen python scripts/ci/smoke_installed_distribution.py --dist dist
+      - run: uv build --all-packages --no-sources --no-create-gitignore --out-dir workspace-dist
+      - name: Validate all workspace artifacts
+        run: uv run --frozen python scripts/ci/smoke_installed_distribution.py --dist workspace-dist
+      - name: Select the five v0.1 public distributions
+        run: |
+          mkdir dist
+          cp workspace-dist/dutchmate_core-* dist/
+          cp workspace-dist/dutchmate_cli-* dist/
+          cp workspace-dist/dutchmate_service-* dist/
+          cp workspace-dist/dutchmate_mcp_server-* dist/
+          cp workspace-dist/dutchmate-[0-9]* dist/
+      - name: Validate the public release artifact set
+        run: >-
+          uv run --frozen python scripts/ci/smoke_installed_distribution.py
+          --dist dist --public-release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: python-release-distributions
@@ -68,8 +80,7 @@ jobs:
           uv publish --trusted-publishing always \
             dist/dutchmate_cli-* \
             dist/dutchmate_service-* \
-            dist/dutchmate_mcp_server-* \
-            dist/dutchmate_debug_agent-*
+            dist/dutchmate_mcp_server-*
           uv publish --trusted-publishing always dist/dutchmate-[0-9]*
 
   verify-testpypi:
@@ -115,6 +126,5 @@ jobs:
           uv publish --trusted-publishing always \
             dist/dutchmate_cli-* \
             dist/dutchmate_service-* \
-            dist/dutchmate_mcp_server-* \
-            dist/dutchmate_debug_agent-*
+            dist/dutchmate_mcp_server-*
           uv publish --trusted-publishing always dist/dutchmate-[0-9]*

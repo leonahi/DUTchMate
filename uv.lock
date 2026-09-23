@@ -322,19 +322,12 @@ dependencies = [
     { name = "dutchmate-service" },
 ]
 
-[package.optional-dependencies]
-debug-agent = [
-    { name = "dutchmate-debug-agent" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "dutchmate-cli", editable = "apps/cli" },
-    { name = "dutchmate-debug-agent", marker = "extra == 'debug-agent'", editable = "apps/debug_agent" },
     { name = "dutchmate-mcp-server", editable = "apps/mcp_server" },
     { name = "dutchmate-service", editable = "apps/service" },
 ]
-provides-extras = ["debug-agent"]
 
 [[package]]
 name = "dutchmate-cli"

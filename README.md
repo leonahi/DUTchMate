@@ -50,9 +50,9 @@ uv run --package dutchmate dutchmate stop
 
 The public distribution is `dutchmate`. After the protected PyPI publishing
 environments and Trusted Publishers are configured, the supported installation
-commands will be `uv tool install dutchmate` and `pipx install dutchmate`. The
-optional Debug Agent is selected with the `debug-agent` extra and invoked as
-`dutchmate debug`.
+commands will be `uv tool install dutchmate` and `pipx install dutchmate`.
+`dutchmate-debug-agent` remains a tested workspace component and is intentionally
+deferred from the public `v0.1.0` release to `v0.2.0`.
 
 ## Repository
 

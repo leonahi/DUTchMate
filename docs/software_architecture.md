@@ -427,9 +427,11 @@ stdin, stdout, and stderr.
 
 `packages/dutchmate` owns the public `dutchmate`, `dm`, `dutchmate-service`, and
 `dutchmate-mcp` executables. It is the only composition layer permitted to
-reference delivery entry APIs. Its optional `dutchmate debug` command lazily
-invokes the Debug Agent's Python entry API; CLI, service, MCP, and Debug Agent
-packages do not import one another.
+reference the CLI, service, and MCP delivery entry APIs. The Debug Agent remains
+a separate workspace package with its own `dutchmate-debug` development
+entrypoint; it is excluded from the public `v0.1.0` dependency and command
+surface and is planned for public release in `v0.2.0`. CLI, service, MCP, and
+Debug Agent packages do not import one another.
 
 ### MCP Server
 

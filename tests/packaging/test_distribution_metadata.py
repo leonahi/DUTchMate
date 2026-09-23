@@ -78,9 +78,7 @@ def test_first_party_dependencies_use_exact_host_version_constraints() -> None:
         }
 
     aggregator = _project(DISTRIBUTIONS["dutchmate"])
-    assert aggregator["optional-dependencies"] == {
-        "debug-agent": [f"dutchmate-debug-agent=={host_version}"]
-    }
+    assert "optional-dependencies" not in aggregator
 
 
 def test_console_scripts_have_one_authoritative_owner() -> None:

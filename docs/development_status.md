@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Delivery Infrastructure — private validation and release gating
-> Code baseline reviewed: `5691be518adbf5863c09a3b7c4a64526259d9a70` on 2026-09-23
+> Code baseline reviewed: `344921033c7048484607545d714fd4e1ede97f41` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
@@ -18,8 +18,11 @@ Read this document first whenever development resumes.
   package metadata now records the owner-approved mixed-license policy and
   publisher, and the tag-gated release workflow preserves accepted artifacts
   through TestPyPI digest verification and separately protected production
-  publishing. Publishing authority remains unusable until the GitHub
-  environments and six Trusted Publisher registrations are configured.
+  publishing. The owner has limited `v0.1.0` to five public distributions;
+  `dutchmate-debug-agent` remains workspace-tested and is deferred to the
+  coordinated `v0.2.0` release. Publishing authority remains unusable until
+  the GitHub environments and five Trusted Publisher registrations are
+  configured.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -403,7 +406,7 @@ Read this document first whenever development resumes.
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
 - **Next step:** Configure the `testpypi` and `pypi` GitHub environments,
-  register all six projects as Trusted Publishers for `release.yml`, and
+  register the five `v0.1.0` projects as Trusted Publishers for `release.yml`, and
   install/require the DCO status check before pushing `v0.1.0`. Authenticated
   Claude Code host acceptance remains paused until a subscription is available.
 - **Deferred hardware work:** Add the replacement KiCad design under
@@ -479,6 +482,26 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Five-distribution `v0.1.0` release staging, reviewed 2026-09-23:
+
+- The public aggregator no longer declares the deferred `debug-agent` extra or
+  exposes `dutchmate debug`. Its four deterministic executables and MCP surface
+  are unchanged.
+- Normal CI continues to build and clean-install all six workspace
+  distributions, including the standalone `dutchmate-debug` development
+  command. The release workflow selects only the five public wheel/source pairs,
+  revalidates that exact set, and retains it for TestPyPI and PyPI publication.
+- `dutchmate-debug-agent` remains provider-disabled, independently tested, and
+  source-available in the workspace. Its first public distribution is queued
+  for the coordinated `v0.2.0` release after its coding-agent access model and
+  public command surface are reconfirmed.
+- The artifact gate built and accepted 12 workspace artifacts, selected and
+  reaccepted exactly 10 public artifacts, and completed installed MCP discovery.
+  Lock verification, Ruff, mypy (89 source files), all 1,435 tests, release YAML
+  parsing, and `git diff --check` passed. Graphify was refreshed after removing
+  the aggregator-to-Debug-Agent dependency; its existing
+  `fixture_protocol.h` partial-extraction warning remains.
 
 PCB source-layout migration, reviewed 2026-09-23:
 
@@ -2191,7 +2214,9 @@ acceptance contracts; this section alone tracks its progress.
 - [x] Record owner approval of the mixed-license policy and Nahit Pawar as the
   public publisher; add artifact license contracts, DCO repository guidance,
   and the separately gated release workflow.
-- [ ] Configure protected `testpypi` and `pypi` GitHub environments, all six
+- [x] Limit the `v0.1.0` public artifact set to five distributions while
+  retaining clean installed-artifact coverage for all six workspace packages.
+- [ ] Configure protected `testpypi` and `pypi` GitHub environments, all five
   Trusted Publisher registrations, and the required DCO status check.
 - [ ] Validate the immutable accepted host artifacts through TestPyPI.
 - [ ] Publish those same artifacts to production PyPI in dependency order.
@@ -2199,6 +2224,17 @@ acceptance contracts; this section alone tracks its progress.
 Exit gate: the plan's host CI, packaging, firmware-build, plugin, and gated
 release contracts have fresh evidence, while HIL and public firmware binary
 release remain explicitly separate.
+
+## Deferred Queue — v0.2 Debug Agent Distribution
+
+- [ ] Reconfirm whether the public Coding Agent interface remains a host CLI or
+  adds a separate optional MCP analysis server without changing the deterministic
+  Device Core MCP boundary.
+- [ ] Restore an explicitly accepted aggregator extra/launcher only if the
+  selected access model requires it.
+- [ ] Publish `dutchmate-debug-agent` for the first time as part of the
+  coordinated `v0.2.0` host release, with clean-install and provider-disabled
+  default acceptance.
 
 ## Deferred Queue — Phase 1 Hardware
 

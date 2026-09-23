@@ -12,9 +12,6 @@ dependencies = [
   "dutchmate-service==0.1.0",
 ]
 
-[project.optional-dependencies]
-debug-agent = ["dutchmate-debug-agent==0.1.0"]
-
 [project.urls]
 Homepage = "https://github.com/leonahi/DUTchMate"
 Repository = "https://github.com/leonahi/DUTchMate"

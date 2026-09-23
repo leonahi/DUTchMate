@@ -1020,9 +1020,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790169897.5605836,
-    "seen": 1790170121.0656,
-    "ast_hash": "7dd83b97df3a0efa9b5abb0975071a69",
+    "mtime": 1790174816.4298944,
+    "seen": 1790175129.615639,
+    "ast_hash": "00a4d41844ca92e369a437170e59c5da",
     "semantic_hash": ""
   },
   "docs/debug_agent_context_contract.md": {
@@ -1032,15 +1032,15 @@
     "semantic_hash": ""
   },
   "docs/developer_guide.md": {
-    "mtime": 1790110156.836173,
-    "seen": 1790111191.884876,
-    "ast_hash": "3790d0a0a33765cea7c5307df999afc3",
+    "mtime": 1790174816.4790273,
+    "seen": 1790175129.615641,
+    "ast_hash": "b297b6e38c988b03034f51f7052d7707",
     "semantic_hash": ""
   },
   "docs/development_status.md": {
-    "mtime": 1790170076.9073122,
-    "seen": 1790170121.065603,
-    "ast_hash": "fa5243f92908bef81ed0ba4cccf55c9c",
+    "mtime": 1790174888.6550677,
+    "seen": 1790175129.615642,
+    "ast_hash": "59ae6dfa5e48302ecd1fb22bbd0b4c32",
     "semantic_hash": ""
   },
   "docs/gpio_configuration_semantics.md": {
@@ -1080,9 +1080,9 @@
     "semantic_hash": ""
   },
   "docs/software_architecture.md": {
-    "mtime": 1790110184.6730273,
-    "seen": 1790111191.884882,
-    "ast_hash": "d8849fa23ad824923f9e4f7023011255",
+    "mtime": 1790174816.5257838,
+    "seen": 1790175129.615647,
+    "ast_hash": "6c3dea10bdfffd70ea828bf22fa7793c",
     "semantic_hash": ""
   },
   "hardware/validation/phase1_ring_buffer.md": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "packages/dutchmate/pyproject.toml": {
-    "mtime": 1790158667.2718954,
-    "seen": 1790163440.995541,
-    "ast_hash": "9893e1fc317ced3731359e9a5234cdb6",
+    "mtime": 1790174620.2812939,
+    "seen": 1790175129.6155462,
+    "ast_hash": "8e2de8ac5cf60b93dca1a5dcb5cae2c4",
     "semantic_hash": ""
   },
   "packages/dutchmate/src/dutchmate/__init__.py": {
@@ -2202,9 +2202,9 @@
     "semantic_hash": ""
   },
   "packages/dutchmate/src/dutchmate/entrypoints.py": {
-    "mtime": 1790108603.5297816,
-    "seen": 1790111191.884786,
-    "ast_hash": "312a94e706bde76478444f304ecf2851",
+    "mtime": 1790174949.2275746,
+    "seen": 1790175129.615548,
+    "ast_hash": "485bbeabcc3d1b344c5feb9caac9f488",
     "semantic_hash": ""
   },
   "plugins/dutchmate/mcp.json": {
@@ -2220,9 +2220,9 @@
     "semantic_hash": ""
   },
   "scripts/ci/smoke_installed_distribution.py": {
-    "mtime": 1790163304.598044,
-    "seen": 1790163440.995546,
-    "ast_hash": "69f95e86cb63b3f63144dd6bed27d090",
+    "mtime": 1790174620.3735085,
+    "seen": 1790175129.615551,
+    "ast_hash": "dfb550ad5e9eb50810f1019d4b9eab40",
     "semantic_hash": ""
   },
   "scripts/ci/write_firmware_provenance.py": {
@@ -2250,15 +2250,15 @@
     "semantic_hash": ""
   },
   "tests/packaging/test_aggregator_entrypoint.py": {
-    "mtime": 1790108574.3457184,
-    "seen": 1790111191.884825,
-    "ast_hash": "f0a3c741380d6994dc16dd977ae50db2",
+    "mtime": 1790174543.6389525,
+    "seen": 1790175129.6155882,
+    "ast_hash": "7f516282d6dd0993ffcbe4254acd4409",
     "semantic_hash": ""
   },
   "tests/packaging/test_distribution_metadata.py": {
-    "mtime": 1790169897.7162602,
-    "seen": 1790170121.065547,
-    "ast_hash": "67bda4e43d882a03fece117fe87580eb",
+    "mtime": 1790174519.4178624,
+    "seen": 1790175129.6155882,
+    "ast_hash": "23b9409ea5b1c56afce5ac57b9f053ec",
     "semantic_hash": ""
   },
   "tests/packaging/test_firmware_provenance.py": {
@@ -2268,9 +2268,9 @@
     "semantic_hash": ""
   },
   "tests/packaging/test_workflows.py": {
-    "mtime": 1790158598.77821,
-    "seen": 1790163440.995589,
-    "ast_hash": "e73277a33e1be58fad6b29224c9c11a9",
+    "mtime": 1790174672.8996086,
+    "seen": 1790175129.6155908,
+    "ast_hash": "72a57d80b3e5a5cad6d1355a1bd05e39",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
@@ -2286,9 +2286,9 @@
     "semantic_hash": ""
   },
   "docs/ci_packaging_distribution_plan.md": {
-    "mtime": 1790170020.022383,
-    "seen": 1790170121.065601,
-    "ast_hash": "e4b1f4bea9114ee77473f93d76e3252c",
+    "mtime": 1790174855.1222672,
+    "seen": 1790175129.6156402,
+    "ast_hash": "a667378b303870b4157c1cefda025311",
     "semantic_hash": ""
   },
   "graphify-out/memory/query_20260921_213743_what_are_the_things_remaining_from_development_sid.md": {
@@ -2352,9 +2352,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/release.yml": {
-    "mtime": 1790158795.5260348,
-    "seen": 1790163440.995635,
-    "ast_hash": "5a62947f258bd76d679592c9c98e43fa",
+    "mtime": 1790174620.4180033,
+    "seen": 1790175129.615635,
+    "ast_hash": "784cbb638c835e35b9807e19c1d203b0",
     "semantic_hash": ""
   },
   "CONTRIBUTING.md": {
