@@ -1,7 +1,7 @@
 # Development Status
 
 > Active phase: Delivery Infrastructure — private validation and release gating
-> Code baseline reviewed: `3bd9a54efdff9a4027ce2aacad3d07f90b8a5889` on 2026-09-23
+> Code baseline reviewed: `5691be518adbf5863c09a3b7c4a64526259d9a70` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
 
