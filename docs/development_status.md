@@ -14,8 +14,9 @@ Read this document first whenever development resumes.
   migration, isolated built-wheel acceptance, three-target firmware CI with
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
   normalization, and the repo-local portable plugin are implemented and
-  locally validated. Public publishing authority remains withheld pending an
-  approved software license and publisher metadata.
+  validated. The host and firmware workflows are green on GitHub. Public
+  publishing authority remains withheld pending an approved software license
+  and publisher metadata.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -398,12 +399,10 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Run the corrected host and firmware workflows on GitHub, then
-  resolve any remaining runner-specific failures. Record the owner-approved
-  license and publisher metadata before adding TestPyPI or PyPI publishing
-  authority.
-  Phase 4 source-area suggestion review and authenticated Claude Code host
-  acceptance remain paused rather than discarded.
+- **Next step:** Record the owner-approved license and publisher metadata
+  before adding TestPyPI or PyPI publishing authority. Until that decision is
+  available, resume Phase 4 source-area suggestion review. Authenticated Claude
+  Code host acceptance remains paused until a subscription is available.
 - **Deferred hardware work:** Carry the 10 kOhm `UART_TX`-to-`DUT_VIO`
   correction into the next-revision schematic/BOM and verify the resulting
   design artifacts. Loaded hot-plug acceptance, the pre-test baseline
@@ -477,6 +476,15 @@ results from software tests.
 
 ## Latest Validation
 
+Hosted delivery-infrastructure acceptance, reported 2026-09-23:
+
+- All host CI jobs are green, including the Python 3.10 timeout-regression
+  paths and the clean package-build jobs.
+- All three firmware jobs are green after the runner-capacity and SDK
+  size-tool corrections. The successful firmware workflow took approximately
+  18 minutes; this is accepted for the initial path-filtered compile workflow
+  and does not block the delivery milestone.
+
 Firmware-CI SDK size-tool correction, reviewed 2026-09-23:
 
 - After the runner-capacity correction, all three hosted firmware builds
@@ -491,8 +499,8 @@ Firmware-CI SDK size-tool correction, reviewed 2026-09-23:
   executable produced size output for existing RP2040 and RP2350 ELFs, and the
   workflow YAML plus all six embedded Bash scripts parse locally. Locked
   resolution, Ruff, mypy (89 source files), all 1,426 tests, and
-  `git diff --check` passed. A fresh hosted firmware-workflow run remains
-  required before acceptance.
+  `git diff --check` passed. The subsequent hosted firmware workflow passed all
+  three configurations.
 
 Python 3.10 timeout-normalization correction, reviewed 2026-09-23:
 
@@ -508,8 +516,8 @@ Python 3.10 timeout-normalization correction, reviewed 2026-09-23:
 - The six reported cases and the additional provider-raised timeout case were
   reproduced under Python 3.10.19 before correction. All 1,425 tests then
   passed under Python 3.10.19; lock verification, Ruff, mypy (89 source files),
-  and `git diff --check` also passed. A fresh hosted host-CI run remains
-  required.
+  and `git diff --check` also passed. The subsequent hosted host-CI workflow
+  passed.
 
 Firmware-CI runner-capacity correction, reviewed 2026-09-22:
 
@@ -524,8 +532,8 @@ Firmware-CI runner-capacity correction, reviewed 2026-09-22:
   target, configuration, provenance, and artifact contracts are unchanged.
 - Workflow YAML and all embedded Bash scripts parse locally. A regression test
   enforces the absence of job-level containers and cleanup-before-pull ordering
-  in both jobs. A fresh hosted firmware-workflow run remains required before
-  this runner-capacity correction is accepted.
+  in both jobs. The subsequent hosted firmware workflow passed without the
+  runner-capacity failure.
 
 Host-CI portability corrections, reviewed 2026-09-22:
 
@@ -539,8 +547,8 @@ Host-CI portability corrections, reviewed 2026-09-22:
   them.
 - Full local validation passed after the corrections: locked resolution, Ruff,
   mypy (89 source files), 1,425 pytest tests, and `git diff --check`. The RP2350
-  Debug Helper also rebuilt successfully with Zephyr 4.4.2 and SDK 1.0.1. A
-  fresh hosted workflow run remains the next external acceptance check.
+  Debug Helper also rebuilt successfully with Zephyr 4.4.2 and SDK 1.0.1. The
+  subsequent hosted workflow passed.
 
 Delivery Infrastructure private-validation slices, reviewed 2026-09-22:
 
@@ -2132,7 +2140,7 @@ acceptance contracts; this section alone tracks its progress.
   direct-Python optional Debug Agent path and installed MCP discovery.
 - [x] Add independent Debug Helper firmware version authority, compile CI, and
   provenance artifacts for all three firmware configurations.
-- [ ] Confirm all three firmware configurations on the GitHub-hosted runner
+- [x] Confirm all three firmware configurations on the GitHub-hosted runner
   after the job-container disk-capacity and SDK size-tool corrections.
 - [x] Add and validate the repo-local portable coding-agent plugin against the
   installed MCP surface.
