@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Delivery Infrastructure — private validation and release gating
+> Active phase: None — v0.1.0 released; next milestone awaits owner selection
 > Code baseline reviewed: `618a8576db7b87fa71629110269d235d9799d7ef` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,7 +9,7 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Delivery Infrastructure is active by owner direction.
+- **Current milestone:** Delivery Infrastructure is complete.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
@@ -21,12 +21,11 @@ Read this document first whenever development resumes.
   verification, separately protected production publication, and final
   production digest verification. The owner has limited `v0.1.0` to five
   public distributions; `dutchmate-debug-agent` remains workspace-tested and
-  is deferred to the coordinated `v0.2.0` release. The protected GitHub
-  environments exist. The initial release now accounts for PyPI's
-  one-pending-publisher-per-identity
-  monorepo limitation by registering and converting one project at a time;
-  publication remains blocked until that reviewed operator sequence and the
-  required DCO status check are ready.
+  is deferred to the coordinated `v0.2.0` release. The DCO check is required,
+  the protected GitHub environments are active, and all five public projects
+  have been created through OIDC on TestPyPI and production PyPI. Both aggregate
+  filename/SHA-256 verification jobs passed against the single retained build
+  artifact, and the GitHub Release is published from the existing `v0.1.0` tag.
 - **Phase 4 context:** Phase 4 AI debug reports have started with an optional
   Debug Agent workspace package and its first deterministic, native-schema
   session-facts projection. The projection reads through `SessionStore`, keeps
@@ -409,14 +408,10 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Install and require the DCO status check, confirm both protected
-  publication environments require review and permit `v0.1.0`, and retain or
-  register only `dutchmate-core` as the pending `release.yml`/`testpypi`
-  publisher. Do not push `v0.1.0` until the revised workflow commit is reviewed;
-  then follow the documented one-project-at-a-time TestPyPI bootstrap and do
-  not configure or approve production until all five TestPyPI projects pass the
-  aggregate digest gate. Authenticated Claude Code host acceptance remains
-  paused until a subscription is available.
+- **Next step:** The owner selects and activates the next development milestone;
+  no implementation slice is currently active. Available deferred work is the
+  v0.2 Debug Agent distribution, the remaining Phase 1 hardware/KiCad queue, or
+  authenticated Claude Code acceptance when a subscription is available.
 - **Deferred hardware work:** Add the replacement KiCad design under
   `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
   `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
@@ -491,6 +486,28 @@ results from software tests.
 
 ## Latest Validation
 
+Public Python v0.1.0 release, reported 2026-09-23:
+
+- The `v0.1.0` tag built and retained the five accepted public wheel
+  and source-distribution pairs. `dutchmate-debug-agent` was not selected or
+  published.
+- All five projects were created on TestPyPI through Trusted Publishing. The
+  aggregate `verify-testpypi` job matched every remote filename and SHA-256
+  digest to the retained artifact before production approval became available.
+- All five projects were then created on production PyPI through the protected
+  `pypi` environment and OIDC. The final `verify-pypi` job passed the same
+  aggregate filename and digest contract.
+- GitHub treated the first environment approval on each index as sufficient for
+  later dependent jobs using that environment. Each not-yet-registered project
+  therefore failed safely before creation, was registered after the preceding
+  pending publisher converted, and succeeded through **Re-run failed jobs**.
+  Successful predecessors and the original retained artifact were not rebuilt.
+- The owner reports that the DCO App is installed and its status check is
+  required through branch protection, and that the GitHub Release is public.
+- The prepared GitHub Release body, public README installation guidance, and
+  corrected bootstrap runbook passed lock verification, Ruff, mypy (89 source
+  files), all 1,435 tests, and `git diff --check`.
+
 Sequential Trusted Publisher bootstrap revision, reviewed 2026-09-23:
 
 - The release workflow now publishes each of the five `v0.1.0` distributions
@@ -503,9 +520,9 @@ Sequential Trusted Publisher bootstrap revision, reviewed 2026-09-23:
   first production job, and an equivalent aggregate check follows production
   publication. The protected `testpypi` and `pypi` environments and the
   five-package allowlist remain unchanged.
-- The operator runbook records the one-at-a-time registration and approval
-  sequence and a tightly scoped temporary-token contingency. No tag was created
-  and no artifact was published during this revision.
+- The operator runbook records the one-at-a-time registration and failed-job
+  rerun sequence and a tightly scoped temporary-token contingency. No tag was
+  created and no artifact was published during this revision.
 - The workflow contract was observed failing before implementation and passing
   afterward. Release YAML syntax parsing, all 23 packaging tests, lock
   verification, Ruff, mypy (89 source files), all 1,435 tests, and
@@ -2219,7 +2236,7 @@ host-acceptance requirements all have fresh automated or conformance evidence.
 - [ ] Validate from Claude Code if an authenticated subscription becomes
   available; the current machine has no Claude Code subscription.
 
-## Active Queue — Delivery Infrastructure
+## Completed Queue — Delivery Infrastructure
 
 The owner activated this milestone on 2026-09-22. It does not wait for the
 deferred Phase 1 hardware queue.
@@ -2246,19 +2263,20 @@ acceptance contracts; this section alone tracks its progress.
   retaining clean installed-artifact coverage for all six workspace packages.
 - [x] Configure protected `testpypi` and `pypi` GitHub environments.
 - [x] Revise the first-publication workflow for PyPI's monorepo pending-publisher
-  constraint: one OIDC job and environment approval per project, one pending
-  registration at a time, aggregate TestPyPI verification before production,
-  and no artifact rebuilds.
-- [ ] Install and require the DCO status check.
-- [ ] Sequentially register and convert the five TestPyPI Trusted Publishers,
+  constraint: one OIDC job per project, one pending registration at a time,
+  aggregate TestPyPI verification before production, and no artifact rebuilds.
+- [x] Install and require the DCO status check.
+- [x] Sequentially register and convert the five TestPyPI Trusted Publishers,
   beginning with `dutchmate-core`.
-- [ ] Validate the immutable accepted host artifacts through TestPyPI.
-- [ ] Sequentially register and convert the five production Trusted Publishers,
+- [x] Validate the immutable accepted host artifacts through TestPyPI.
+- [x] Sequentially register and convert the five production Trusted Publishers,
   then publish and digest-verify those same artifacts in dependency order.
+- [x] Publish the GitHub Release from the existing `v0.1.0` tag using the
+  prepared release body without rebuilding or replacing Python artifacts.
 
-Exit gate: the plan's host CI, packaging, firmware-build, plugin, and gated
-release contracts have fresh evidence, while HIL and public firmware binary
-release remain explicitly separate.
+Exit gate passed: the plan's host CI, packaging, firmware-build, plugin, gated
+release, TestPyPI, production PyPI, and GitHub Release contracts have evidence.
+HIL and public firmware binary release remain explicitly separate.
 
 ## Deferred Queue — v0.2 Debug Agent Distribution
 

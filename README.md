@@ -48,11 +48,10 @@ uv run --package dutchmate dutchmate status
 uv run --package dutchmate dutchmate stop
 ```
 
-The public distribution is `dutchmate`. After the protected PyPI publishing
-environments and Trusted Publishers are configured, the supported installation
-commands will be `uv tool install dutchmate` and `pipx install dutchmate`.
-`dutchmate-debug-agent` remains a tested workspace component and is intentionally
-deferred from the public `v0.1.0` release to `v0.2.0`.
+The public distribution is `dutchmate`. Install the v0.1.0 release with
+`uv tool install dutchmate==0.1.0` or `pipx install dutchmate==0.1.0`.
+`dutchmate-debug-agent` remains a tested workspace component and is
+intentionally deferred from the public `v0.1.0` release to `v0.2.0`.
 
 ## Repository
 
@@ -85,6 +84,7 @@ The repository is a `uv` workspace with one committed `uv.lock`.
 | `docs/mcp_integration_plan.md` | Phase 2 stateless MCP `2026-07-28` transport, tool set, responses, and tests. |
 | `docs/debug_agent_context_contract.md` | Phase 4 bounded context, provider boundary, and report contract. |
 | `docs/ci_packaging_distribution_plan.md` | CI, package ownership, firmware identity, plugin, and gated release design. |
+| `docs/releases/v0.1.0.md` | GitHub Release notes for the first public Python host release. |
 
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
 Its schemas, examples, host models, tests, and firmware handling must change

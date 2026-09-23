@@ -408,8 +408,9 @@ The host release workflow must:
 7. publish to TestPyPI sequentially in this exact order: `dutchmate-core`,
    `dutchmate-cli`, `dutchmate-service`, `dutchmate-mcp-server`, then
    `dutchmate`;
-8. require each TestPyPI job to complete before the next job can reach the
-   `testpypi` environment approval gate;
+8. require each TestPyPI job to complete before the next job can run, without
+   assuming that GitHub will request a separate environment review for every
+   job using the same environment in one workflow run;
 9. verify every TestPyPI filename and SHA-256 digest against the retained
    artifacts;
 10. prevent the first production job from starting unless the complete
@@ -433,25 +434,31 @@ starting the workflow.
 After the build job accepts and retains the five-package artifact set:
 
 1. approve `publish-testpypi-core`;
-2. after it succeeds and its publisher is normal, register
-   `dutchmate-cli` as the sole pending publisher for the same tuple and approve
-   `publish-testpypi-cli`;
-3. repeat for `dutchmate-service`, `dutchmate-mcp-server`, and `dutchmate`,
-   approving only the corresponding waiting job each time;
-4. require `verify-testpypi` to validate all five projects and all ten retained
+2. expect GitHub to start the next dependency job without another environment
+   review; if its project is not yet registered, the OIDC upload fails before
+   creating or uploading that project;
+3. after the preceding pending publisher has converted, register the failed
+   project's exact distribution name as the sole pending publisher and use
+   **Re-run failed jobs** so GitHub reruns that job and its dependents against
+   the retained artifact;
+4. repeat that register-and-rerun cycle for `dutchmate-cli`,
+   `dutchmate-service`, `dutchmate-mcp-server`, and `dutchmate`;
+5. require `verify-testpypi` to validate all five projects and all ten retained
    files before any production action.
 
 Only after `verify-testpypi` succeeds, register `dutchmate-core` as the sole
 pending production publisher with the same repository and workflow but the
-`pypi` environment. Repeat the same one-at-a-time registration and approval
-sequence through `publish-pypi-dutchmate`. Every production job remains behind
-the protected `pypi` environment, and `verify-pypi` validates the exact retained
-files after the final upload.
+`pypi` environment. Approve the protected production deployment once, then
+repeat the same one-at-a-time registration and failed-job rerun sequence through
+`publish-pypi-dutchmate`. Every production job uses the protected `pypi`
+environment, and `verify-pypi` validates the exact retained files after the
+final upload.
 
-Do not bypass environment protection or approve a job until its matching
-pending or normal publisher is visible on the target index. Failed jobs may be
-retried against the retained artifacts; the configured index check prevents an
-identical existing file from being treated as a new build.
+Do not bypass environment protection. Register only one pending project for the
+shared tuple at a time, and do not use **Re-run all jobs**: **Re-run failed jobs**
+preserves successful predecessors and continues with the original retained
+artifact. The configured index check prevents an identical existing file from
+being treated as a new build.
 
 If sequential pending conversion fails because Warehouse behavior changes,
 stop before publishing the next project. The contingency is a temporary
