@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: None — v0.1.0 released; next milestone awaits owner selection
+> Active phase: Repository documentation cleanup — Task 1 complete
 > Code baseline reviewed: `618a8576db7b87fa71629110269d235d9799d7ef` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,7 +9,10 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Delivery Infrastructure is complete.
+- **Current milestone:** Repository documentation cleanup is active. Task 1
+  removed machine-specific hook configuration and generated Graphify artifacts
+  from version control while preserving local regeneration workflows. Delivery
+  Infrastructure remains complete.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
@@ -408,10 +411,8 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** The owner selects and activates the next development milestone;
-  no implementation slice is currently active. Available deferred work is the
-  v0.2 Debug Agent distribution, the remaining Phase 1 hardware/KiCad queue, or
-  authenticated Claude Code acceptance when a subscription is available.
+- **Next step:** Remove the completed working plans under `docs/superpowers/`
+  after verifying that active contracts are represented by authoritative docs.
 - **Deferred hardware work:** Add the replacement KiCad design under
   `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
   `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
@@ -485,6 +486,17 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Repository hygiene cleanup Task 1, reviewed 2026-09-24:
+
+- The machine-specific `.codex/hooks.json` and all generated `graphify-out/`
+  artifacts are untracked and ignored while their local files remain intact.
+  The tracked hook example parses as JSON, resolves `graphify hook-check` from
+  `PATH`, and contains no absolute user path.
+- Active tracked files contain no `/Users/` path. Developer guidance documents
+  both lightweight structural regeneration and the full semantic Graphify flow.
+- Ruff passed; mypy reported no issues in 89 source files; all 1,435 pytest
+  tests passed; and `git diff --check` passed.
 
 Public Python v0.1.0 release, reported 2026-09-23:
 

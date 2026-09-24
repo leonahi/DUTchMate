@@ -185,6 +185,19 @@ service disconnected in Enhanced mode.
 Use `uv lock` after dependency declarations change. Commit the shared
 `uv.lock` update with those declarations.
 
+### Optional: Graphify hooks
+
+Graphify integration is local developer tooling. To enable its optional hook,
+copy `.codex/hooks.example.json` to `.codex/hooks.json` and ensure `graphify`
+is available on `PATH`. The local file is intentionally ignored because hook
+configuration may depend on each developer's machine.
+
+Generated `graphify-out/` content is also local and untracked. Run
+`graphify update .` to regenerate the lightweight structural/code graph. For a
+full graph that semantically extracts documentation, papers, or images, use the
+installed Graphify skill or run `graphify extract .` followed by
+`graphify cluster-only .` with the required model backend configured.
+
 ## Package Boundaries
 
 - `packages/dutchmate` is the public composition root. It may import delivery
