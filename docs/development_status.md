@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Repository documentation cleanup — Task 1 complete
+> Active phase: Repository documentation cleanup — Task 2 complete
 > Code baseline reviewed: `618a8576db7b87fa71629110269d235d9799d7ef` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,10 +9,10 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Repository documentation cleanup is active. Task 1
-  removed machine-specific hook configuration and generated Graphify artifacts
-  from version control while preserving local regeneration workflows. Delivery
-  Infrastructure remains complete.
+- **Current milestone:** Repository documentation cleanup is active. Tasks 1–2
+  removed local/generated Graphify artifacts and completed working plans from
+  version control while preserving local regeneration and authoritative design
+  contracts. Delivery Infrastructure remains complete.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
@@ -411,8 +411,8 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Remove the completed working plans under `docs/superpowers/`
-  after verifying that active contracts are represented by authoritative docs.
+- **Next step:** Rewrite the repository README, add the documentation index and
+  glossary, and keep the public walkthrough grounded in verified CLI behavior.
 - **Deferred hardware work:** Add the replacement KiCad design under
   `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
   `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
@@ -486,6 +486,18 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Repository documentation cleanup Task 2, reviewed 2026-09-24:
+
+- All 13 completed working design/implementation plans (8,356 lines) were
+  removed. No active file referenced them, and the async adapter, service
+  ownership, coordinated reconnect, monitoring, and RP2350 invariants remain
+  represented in authoritative architecture, behavior, and firmware docs.
+- Planning guidance now routes durable decisions, current progress, and
+  completed evidence to their respective authoritative documents instead of a
+  permanent working-plan archive.
+- Ruff passed; mypy reported no issues in 89 source files; all 1,435 pytest
+  tests passed; and staged and unstaged `git diff --check` passed.
 
 Repository hygiene cleanup Task 1, reviewed 2026-09-24:
 

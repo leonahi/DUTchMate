@@ -186,6 +186,14 @@ A plan should normally:
 
 For migration or cleanup work, prefer an inventory of affected consumers and compatibility paths over a large design document.
 
+Working design and implementation plans are temporary implementation aids, not
+permanent progress records. After the work is complete, preserve durable
+decisions in the appropriate authoritative specification or architecture
+document, current progress and next steps in `docs/development_status.md`, and
+completed-slice evidence in `docs/development_history.md`; then remove the
+superseded working plan. High-risk work may still use a temporary written plan,
+but do not maintain a plan directory as a second status or history system.
+
 Example:
 
 ```text
