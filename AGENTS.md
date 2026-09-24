@@ -70,11 +70,15 @@ changes.
 ## Development Status
 
 - Read `docs/development_status.md` before selecting development work.
-- `docs/development_status.md` is the only source for progress, active phase,
-  completed slices, and the next step.
-- Update its review date, current milestone, next step, checklist, and
-  validation evidence in the same commit as each completed development slice.
-  Reconcile its code-baseline reference after commits are created.
+- `docs/development_status.md` is the only source for current progress, active
+  phase, blockers, and the next step. Keep its `Resume Here` section to
+  approximately 40 lines or fewer.
+- Update its review date, current milestone, next step, current checklist, and
+  concise validation result in the same commit as each completed development
+  slice. Reconcile its code-baseline reference after commits are created.
+- Append completed-slice records and detailed validation logs to
+  `docs/development_history.md`, newest first. That append-only record must not
+  acquire a competing current-status or next-step section.
 - Requirements, architecture, plans, and validation records must not maintain
   competing progress summaries or next-step lists.
 

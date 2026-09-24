@@ -28,8 +28,9 @@ work. Normal pull-request CI remains independent of physical hardware.
   the artifacts that passed acceptance.
 - MCP remains the common coding-agent boundary. Plugins contain registration and
   workflow guidance, not Device Core or hardware-control implementations.
-- `docs/development_status.md` remains the only progress tracker and owner of the
-  current next step.
+- `docs/development_status.md` remains the only current progress tracker and
+  owner of the current next step; completed records belong in
+  `docs/development_history.md`.
 
 ## Python Distribution Model
 

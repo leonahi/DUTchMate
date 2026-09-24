@@ -288,7 +288,11 @@ passes through fake backends.
 ## Documentation
 
 - `README.md` is the short repository entry point.
-- `docs/development_status.md` is the only progress tracker and next-step queue.
+- `docs/development_status.md` is the only current progress tracker and
+  next-step queue; keep its `Resume Here` section concise.
+- `docs/development_history.md` is the append-only, newest-first record of
+  completed slices and detailed validation. It must not define current status
+  or a next step.
 - `docs/project_context.md` owns durable product scope, safety, invariants, and
   phase definitions.
 - `docs/software_architecture.md` owns code structure and dependency boundaries.
@@ -296,6 +300,7 @@ passes through fake backends.
   criteria.
 - Focused contract documents own their named subsystem and are referenced
   rather than copied into broader documents.
-- Only `docs/development_status.md` may contain progress markers, completed
-  slices, or the next implementation step.
+- Only `docs/development_status.md` may define current progress or the next
+  implementation step; completed progress belongs in
+  `docs/development_history.md`.
 - Keep links and protocol examples valid when moving or renaming content.
