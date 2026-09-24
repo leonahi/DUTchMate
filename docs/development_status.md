@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Repository documentation cleanup — Task 2 complete
+> Active phase: Repository documentation cleanup — Task 3 complete
 > Code baseline reviewed: `618a8576db7b87fa71629110269d235d9799d7ef` on 2026-09-23
 > Hardware evidence reviewed: 2026-09-17
 > Authority: the only project progress tracker and next-step queue
@@ -9,10 +9,10 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Repository documentation cleanup is active. Tasks 1–2
-  removed local/generated Graphify artifacts and completed working plans from
-  version control while preserving local regeneration and authoritative design
-  contracts. Delivery Infrastructure remains complete.
+- **Current milestone:** Repository documentation cleanup is active. Tasks 1–3
+  removed local/generated Graphify artifacts and completed working plans, then
+  replaced the repository entry point with an installed-user walkthrough,
+  documentation index, and glossary. Delivery Infrastructure remains complete.
   Always-running host CI, the public aggregator and atomic executable-ownership
   migration, isolated built-wheel acceptance, three-target firmware CI with
   path-stable SDK size capture and provenance, Python 3.10-compatible timeout
@@ -411,8 +411,8 @@ Read this document first whenever development resumes.
   the next board revision. No required helper-side pull-up is added to the
   debugger-to-DUT `DUT_UART_RX` output; the DUT owns local RX idle bias when the
   cable is absent.
-- **Next step:** Rewrite the repository README, add the documentation index and
-  glossary, and keep the public walkthrough grounded in verified CLI behavior.
+- **Next step:** Separate current progress and next-step authority from
+  append-only completed-slice and validation history.
 - **Deferred hardware work:** Add the replacement KiCad design under
   `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
   `UART_TX`-to-`DUT_VIO` correction into its schematic/BOM, audit all design
@@ -486,6 +486,18 @@ and UART signal-integrity acceptance. The audit does not infer those physical
 results from software tests.
 
 ## Latest Validation
+
+Repository documentation cleanup Task 3, reviewed 2026-09-24:
+
+- The root README is 97 lines and now leads with an installed-user workflow,
+  verified Enhanced GPIO/boot-test syntax, a deterministic formatter-backed
+  first-error example, backend exclusivity, and the tools-only MCP surface.
+- The documentation index links current status, append-only history, glossary,
+  canonical contracts, hardware records, and release guidance. The glossary
+  defines recurring product, evidence, reconnect, and hardware terms without
+  placeholders.
+- Ruff passed; mypy reported no issues in 89 source files; all 1,435 pytest
+  tests passed; and `git diff --check` passed.
 
 Repository documentation cleanup Task 2, reviewed 2026-09-24:
 
