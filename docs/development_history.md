@@ -9,6 +9,48 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Phase 1 v2 Migration Stage 1 — 2026-09-25
+
+- Introduced `core/profile` as the single file-backed configuration authority.
+  Its resolved immutable DUT Profile owns backend mode, exact/discovery selector,
+  current path, reconnect timeout, topology, UART framing/flow/TX policy,
+  requested DTR/RTS open behavior, default line ending, and Enhanced GPIO
+  configuration.
+- Added a bounded deterministic canonical JSON projection and stable SHA-256
+  digest. Runtime, service status, and CLI status expose the effective projection,
+  name, digest, and concise UART settings without writing schema-v2 evidence.
+- Changed CLI/service startup to pass one validated effective profile into the
+  runtime. Physical adapters receive only a derived `BackendSettings` projection;
+  the superseded independent backend config parser/resolver and tests were
+  removed.
+- Preserved physical behavior: TX remains disabled by default, accepted framing
+  remains Basic 115200 8N1 or Enhanced 460800 8N1, flow control remains off,
+  existing device discovery/reconnect remains in place, and requested DTR/RTS
+  states are recorded but not physically manipulated.
+- Focused profile, CLI configuration/lifecycle/status, and service startup/status
+  validation passed (105 tests). Ruff passed; mypy reported no issues in 92
+  source files; all 1,432 pytest tests passed; the structural Graphify index was
+  refreshed; and `git diff --check` passed.
+
+## Phase 1 v2 Migration Stage 0 — 2026-09-25
+
+- Adopted `project_context.md` and `phase1_implementation_spec.md` as the
+  canonical product and Phase 1 behavior contracts and classified the migration
+  plan as a temporary execution aid.
+- Reopened Phase 1 against the v2 success criteria. Earlier Basic, Enhanced,
+  firmware, ring-buffer, and HIL results remain historical physical/backend
+  evidence but do not establish continuous ambient recording, schema v2,
+  Monitor, Interact, follow/console, or release/reacquire.
+- Marked all production migration stages as not started and Stage 1 DUT
+  Profile/effective serial provenance as the next development slice.
+- Scoped the existing architecture, reconnect/session, and MCP documents as
+  pre-v2 implementation references wherever their contracts conflict with the
+  new normative baseline. No production or test behavior changed.
+- Documentation validation confirmed that the normative files and migration
+  plan were unchanged from `efe93060`, all newly used relative links resolve,
+  superseded current-status acceptance claims are absent, only documentation
+  files changed, and `git diff --check` passed.
+
 ## Repository Documentation Cleanup Task 4 — 2026-09-24
 
 - Split the 2,580-line pre-task status into a 126-line current authority and an

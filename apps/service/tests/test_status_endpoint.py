@@ -24,6 +24,9 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "connected": False,
         "connection_state": "disconnected",
         "backend_mode": "enhanced",
+        "profile_name": None,
+        "profile_digest_sha256": None,
+        "effective_profile": None,
         "port": "/dev/ttyACM0",
         "firmware": None,
         "device": None,
@@ -163,6 +166,12 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                 ),
                 connection_state="connected",
                 active_workflow="capture",
+                profile_name="fixture",
+                profile_digest_sha256="a" * 64,
+                effective_profile={
+                    "name": "fixture",
+                    "backend": {"mode": "enhanced"},
+                },
             )
         )
     )
@@ -184,6 +193,12 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
     assert payload["connection_state"] == "connected"
     assert payload["active_workflow"] == "capture"
+    assert payload["profile_name"] == "fixture"
+    assert payload["profile_digest_sha256"] == "a" * 64
+    assert payload["effective_profile"] == {
+        "name": "fixture",
+        "backend": {"mode": "enhanced"},
+    }
     assert payload["commanded_boot_mode"] == "bootloader"
     assert payload["reconnect_remaining_s"] is None
     assert payload["control_channels"]["CTRL0"]["state"] == "configured"

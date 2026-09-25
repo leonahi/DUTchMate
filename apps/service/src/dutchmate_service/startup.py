@@ -14,13 +14,13 @@ from dutchmate_core.backends.basic import (
     open_basic_backend_connection,
 )
 from dutchmate_core.backends.contracts import ControlState
-from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.gpio_config.config import (
     HardwareGpioConfig,
     load_hardware_gpio_config,
     parse_hardware_gpio_config,
 )
 from dutchmate_core.gpio_config.modes import GpioControlChannelState, GpioRoleName
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError, DeviceCoreStatus
 from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
@@ -82,8 +82,7 @@ def build_startup_runtime(
     session_root: Path | str,
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     session_max_count: int | None = None,
-    backend_settings: BackendSettings | None = None,
-    dut_io_voltage: float | None = None,
+    profile: DutProfile | None = None,
     monotonic_clock: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
 ) -> DeviceCoreRuntime:
@@ -98,14 +97,15 @@ def build_startup_runtime(
     reconnect_clock = monotonic_clock or time.monotonic
     reconnect_sleep = sleep or time.sleep
 
-    if backend_settings is None:
+    if profile is None:
         return DeviceCoreRuntime(
             device_control=_UnavailableDeviceControl(),
             session_store=session_store,
             capture_clock=monotonic_clock,
         )
 
-    if backend_settings.mode == "basic":
+    backend_settings = profile.backend_settings
+    if profile.backend_mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
         initial_snapshot = basic_source.snapshot
@@ -132,11 +132,8 @@ def build_startup_runtime(
                 message_source=coordinator,
                 session_store=session_store,
                 capture_clock=monotonic_clock,
-                port=connection.info.port,
-                backend_mode="basic",
-                tx_policy_enabled=backend_settings.tx_enabled,
-                reconnect_timeout_s=backend_settings.reconnect_timeout_s,
                 backend_reconnect=reconnect,
+                profile=profile,
             )
             runtime.record_backend_connection(initial_snapshot.info)
             reconnect.start()
@@ -154,12 +151,11 @@ def build_startup_runtime(
         return DeviceCoreRuntime(
             device_control=_UnavailableDeviceControl(),
             session_store=session_store,
-            backend_mode="enhanced",
             capture_clock=monotonic_clock,
-            dut_io_voltage=dut_io_voltage,
+            profile=profile,
         )
 
-    if dut_io_voltage is None:
+    if profile.dut_io_voltage is None:
         raise DeviceCoreRuntimeError(
             "Enhanced backend requires hardware.dut_io_voltage before opening the Debug Helper"
         )
@@ -199,12 +195,8 @@ def build_startup_runtime(
             message_source=coordinator,
             session_store=session_store,
             capture_clock=monotonic_clock,
-            port=serial_port,
-            backend_mode="enhanced",
-            tx_policy_enabled=backend_settings.tx_enabled,
-            reconnect_timeout_s=backend_settings.reconnect_timeout_s,
             backend_reconnect=reconnect,
-            dut_io_voltage=dut_io_voltage,
+            profile=profile,
         )
         runtime.record_backend_connection(initial_snapshot.info)
         reconnect.start()

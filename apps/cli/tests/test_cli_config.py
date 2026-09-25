@@ -12,7 +12,7 @@ from dutchmate_cli.config import (
     load_cli_config,
     parse_cli_config,
 )
-from dutchmate_core.backends.settings import BackendConfig, UartConfig
+from dutchmate_core.profile import DutProfileConfig, UartProfileConfig
 
 
 def test_parse_empty_cli_config_uses_defaults() -> None:
@@ -60,11 +60,46 @@ def test_parse_backend_and_uart_config_for_startup() -> None:
         }
     )
 
-    assert config.backend == BackendConfig(
+    assert config.profile == DutProfileConfig(
+        name=None,
         mode="basic",
         serial_port="/dev/ttyUSB0",
         reconnect_timeout_s=3.0,
-        uart=UartConfig(baudrate=230400, tx_enabled=True),
+        uart=UartProfileConfig(baudrate=230400, tx_enabled=True),
+    )
+
+
+def test_cli_config_separates_delivery_settings_from_dut_profile() -> None:
+    config = parse_cli_config(
+        {
+            "daemon": {"port": 2041},
+            "sessions": {"max_size_mb": 10},
+            "profile": {"name": "fixture"},
+            "backend": {
+                "mode": "basic",
+                "serial_port": "/dev/ttyUSB0",
+                "topology": "native_usb_console",
+            },
+            "hardware": {
+                "uart": {
+                    "baudrate": 230400,
+                    "tx_enabled": True,
+                    "default_line_ending": "crlf",
+                }
+            },
+        }
+    )
+
+    assert config.profile == DutProfileConfig(
+        name="fixture",
+        mode="basic",
+        serial_port="/dev/ttyUSB0",
+        topology="native_usb_console",
+        uart=UartProfileConfig(
+            baudrate=230400,
+            tx_enabled=True,
+            default_line_ending="crlf",
+        ),
     )
 
 

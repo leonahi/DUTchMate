@@ -1,6 +1,13 @@
 # Software Architecture
 
 > Scope: host-side Python layers, dependency direction, data flow, and code ownership.
+>
+> **Migration status:** Stage 1 of the Phase 1 v2 migration is implemented. This
+> document describes that DUT Profile boundary plus the remaining pre-v2 runtime
+> structure. The target behavior is defined normatively by `project_context.md`
+> and `phase1_implementation_spec.md`; where schema-v1, finite-capture, or
+> service-owned ingestion descriptions differ, they remain implementation
+> inventory rather than the target contract.
 
 This document describes repository organization and ownership. Requirements
 belong to their contract documents; progress and next-step status belong only
@@ -30,9 +37,16 @@ apps/debug_agent
 
 apps/service
   -> process/runtime ownership
+  -> core/profile
   -> core
 
+core/profile
+  -> validated effective DUT/serial/GPIO configuration
+  -> backends.settings adapter projection
+  -> gpio_config
+
 core/runtime
+  -> profile status projection
   -> workflows
   -> gpio_config
   -> backends.contracts
@@ -59,6 +73,14 @@ core/workflows.device_actions, gpio_config
 core/device_connection
   -> no higher DUTchMate layer
 ```
+
+The CLI and service load `.dutchmate/config.toml` into the profile model and
+apply supported startup overrides before any backend opens. The resolved profile
+is immutable and owns backend selection, serial selector/current path, reconnect
+timeout, topology, UART policy, requested DTR/RTS open behavior, default line
+ending, and Enhanced GPIO configuration. Its bounded canonical JSON projection
+and SHA-256 digest are exposed through runtime status. Physical adapters consume
+only the derived `BackendSettings`; they do not resolve project configuration.
 
 The Debug Agent application reads native session evidence through the validated
 `SessionStore` query boundary. Its deterministic session-facts projection keeps

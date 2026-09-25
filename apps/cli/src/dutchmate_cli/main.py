@@ -40,14 +40,14 @@ from dutchmate_cli.send import format_uart_send
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
 from dutchmate_cli.wait import format_wait_pattern
-from dutchmate_core.backends.settings import (
-    BackendConfigError,
-    resolve_backend_mode,
-    resolve_backend_settings,
-)
 from dutchmate_core.device_connection.discovery import (
     list_dutchmate_candidates,
     list_serial_ports,
+)
+from dutchmate_core.profile import (
+    DutProfileError,
+    resolve_dut_profile,
+    resolve_profile_mode,
 )
 from dutchmate_core.validation import validate_capture_duration, validate_gpio_configuration
 
@@ -98,8 +98,14 @@ def start(
     resolved_host = host or config.daemon.host
     resolved_port = port or config.daemon.port
     try:
-        resolved_mode = resolve_backend_mode(config.backend, backend)
-        configured_serial_port = serial_port or config.backend.serial_port
+        resolved_mode = resolve_profile_mode(config.profile, backend)
+        initial_profile = resolve_dut_profile(
+            config.profile,
+            mode=resolved_mode,
+            serial_port=serial_port,
+            baudrate=baudrate,
+        )
+        configured_serial_port = initial_profile.current_serial_port
         resolved_serial_port = (
             resolve_start_serial_port(
                 configured_serial_port,
@@ -108,13 +114,13 @@ def start(
             if resolved_mode == "enhanced"
             else configured_serial_port
         )
-        backend_settings = resolve_backend_settings(
-            config.backend,
+        profile = resolve_dut_profile(
+            config.profile,
             mode=resolved_mode,
             serial_port=resolved_serial_port,
             baudrate=baudrate,
         )
-    except (BackendConfigError, DeviceSelectionError) as exc:
+    except (DutProfileError, DeviceSelectionError) as exc:
         _fail(str(exc))
 
     try:
@@ -124,7 +130,7 @@ def start(
             session_root=config.sessions.path,
             session_max_size_mb=config.sessions.max_size_mb,
             session_max_count=config.sessions.max_count,
-            backend_settings=backend_settings,
+            profile=profile,
         )
     except LifecycleError as exc:
         _fail(str(exc))

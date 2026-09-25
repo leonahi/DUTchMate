@@ -15,8 +15,9 @@ from dutchmate_cli.lifecycle import (
     start_service,
     stop_service,
 )
-from dutchmate_core.backends.settings import BackendConfig, BackendSettings
+from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.device_connection.discovery import SerialPortCandidate
+from dutchmate_core.profile import DutProfile, DutProfileConfig, resolve_dut_profile
 
 
 class FakeProcess:
@@ -52,6 +53,22 @@ def basic_settings(serial_port: str = "/dev/ttyUSB0", baudrate: int = 115200) ->
     )
 
 
+def enhanced_profile(serial_port: str | None = None) -> DutProfile:
+    return resolve_dut_profile(
+        DutProfileConfig(mode="enhanced", serial_port=serial_port)
+    )
+
+
+def basic_profile(
+    serial_port: str = "/dev/ttyUSB0",
+    baudrate: int = 115200,
+) -> DutProfile:
+    return resolve_dut_profile(
+        DutProfileConfig(mode="basic", serial_port=serial_port),
+        baudrate=baudrate,
+    )
+
+
 def test_start_service_spawns_background_process_and_writes_pid(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -68,7 +85,7 @@ def test_start_service_spawns_background_process_and_writes_pid(
     health_checks = iter((False, True))
 
     result = start_service(
-        backend_settings=enhanced_settings(),
+        profile=enhanced_profile(),
         host="127.0.0.1",
         port=2041,
         session_max_count=25,
@@ -94,6 +111,8 @@ def test_start_service_spawns_background_process_and_writes_pid(
             ".dutchmate/config.toml",
             "--backend",
             "enhanced",
+            "--topology",
+            "external_uart",
             "--baudrate",
             "460800",
             "--data-bits",
@@ -104,7 +123,15 @@ def test_start_service_spawns_background_process_and_writes_pid(
             "1",
             "--reconnect-timeout-s",
             "5.0",
+            "--no-rtscts",
+            "--no-xonxoff",
             "--no-tx-enabled",
+            "--default-line-ending",
+            "none",
+            "--dtr-on-open",
+            "driver_default",
+            "--rts-on-open",
+            "driver_default",
             "--session-max-count",
             "25",
         ]
@@ -133,7 +160,7 @@ def test_start_service_passes_serial_port_to_background_process(
     health_checks = iter((False, True))
 
     start_service(
-        backend_settings=enhanced_settings("/dev/ttyACM0"),
+        profile=enhanced_profile("/dev/ttyACM0"),
         host="127.0.0.1",
         port=2041,
         pid_file=tmp_path / "service.pid",
@@ -152,7 +179,7 @@ def test_start_service_rejects_existing_running_pid(tmp_path: Path) -> None:
 
     with pytest.raises(LifecycleError) as error:
         start_service(
-            backend_settings=enhanced_settings(),
+            profile=enhanced_profile(),
             pid_file=pid_file,
             log_file=tmp_path / "service.log",
             is_running=lambda _pid: True,
@@ -192,14 +219,14 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
         session_root: Path,
         session_max_size_mb: int,
         session_max_count: int | None,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> ServiceStartResult:
         assert host == "127.0.0.1"
         assert port == 2040
         assert session_root == Path(".dutchmate/sessions")
         assert session_max_size_mb == 50
         assert session_max_count is None
-        assert backend_settings == enhanced_settings()
+        assert profile.backend_settings == enhanced_settings()
         return ServiceStartResult(
             pid=4242,
             url="http://127.0.0.1:2040",
@@ -215,6 +242,53 @@ def test_start_command_reports_started_service(monkeypatch: pytest.MonkeyPatch) 
 
     assert result.exit_code == 0
     assert result.output == "Device Core Service started (pid 4242, http://127.0.0.1:2040)\n"
+
+
+def test_start_command_passes_one_resolved_profile_with_cli_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[DutProfile] = []
+
+    def fake_start_service(
+        *,
+        host: str,
+        port: int,
+        session_root: Path,
+        session_max_size_mb: int,
+        session_max_count: int | None,
+        profile: DutProfile,
+    ) -> ServiceStartResult:
+        del host, port, session_root, session_max_size_mb, session_max_count
+        received.append(profile)
+        return ServiceStartResult(
+            pid=4242,
+            url="http://127.0.0.1:2040",
+            pid_file=Path(".dutchmate/dutchmate-service.pid"),
+            log_file=Path(".dutchmate/dutchmate-service.log"),
+            ready=True,
+        )
+
+    monkeypatch.setattr(
+        main,
+        "load_cli_config",
+        lambda: CliConfig(
+            profile=DutProfileConfig(
+                name="fixture",
+                mode="basic",
+                serial_port="/dev/ttyUSB0",
+            )
+        ),
+    )
+    monkeypatch.setattr(main, "start_service", fake_start_service)
+
+    result = CliRunner().invoke(main.app, ["start", "--baudrate", "230400"])
+
+    assert result.exit_code == 0
+    assert len(received) == 1
+    assert received[0].name == "fixture"
+    assert received[0].backend_mode == "basic"
+    assert received[0].current_serial_port == "/dev/ttyUSB0"
+    assert received[0].uart.baudrate == 230400
 
 
 def test_start_command_requires_explicit_or_configured_backend(
@@ -241,11 +315,11 @@ def test_start_command_resolves_basic_without_enhanced_discovery(
         session_root: Path,
         session_max_size_mb: int,
         session_max_count: int | None,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
         assert session_max_count is None
-        assert backend_settings == basic_settings(baudrate=230400)
+        assert profile.backend_settings == basic_settings(baudrate=230400)
         return ServiceStartResult(
             pid=4242,
             url="http://127.0.0.1:2040",
@@ -282,7 +356,7 @@ def test_start_command_reports_lifecycle_error(monkeypatch: pytest.MonkeyPatch) 
         session_root: Path,
         session_max_size_mb: int,
         session_max_count: int | None,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
         assert session_max_count is None
@@ -305,14 +379,14 @@ def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> 
         session_root: Path,
         session_max_size_mb: int,
         session_max_count: int | None,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> ServiceStartResult:
         assert host == "localhost"
         assert port == 2041
         assert session_root == Path(".dutchmate/custom-sessions")
         assert session_max_size_mb == 10
         assert session_max_count == 25
-        assert backend_settings == enhanced_settings()
+        assert profile.backend_settings == enhanced_settings()
         return ServiceStartResult(
             pid=4242,
             url="http://localhost:2041",
@@ -331,7 +405,7 @@ def test_start_command_uses_config_defaults(monkeypatch: pytest.MonkeyPatch) -> 
                 max_size_mb=10,
                 max_count=25,
             ),
-            backend=BackendConfig(mode="enhanced"),
+            profile=DutProfileConfig(mode="enhanced"),
         ),
     )
     monkeypatch.setattr(main, "start_service", fake_start_service)
@@ -353,11 +427,11 @@ def test_start_command_auto_selects_single_dutchmate_candidate(
         session_root: Path,
         session_max_size_mb: int,
         session_max_count: int | None,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> ServiceStartResult:
         assert session_max_size_mb == 50
         assert session_max_count is None
-        assert backend_settings == enhanced_settings("/dev/ttyACM0")
+        assert profile.backend_settings == enhanced_settings("/dev/ttyACM0")
         return ServiceStartResult(
             pid=4242,
             url="http://127.0.0.1:2040",

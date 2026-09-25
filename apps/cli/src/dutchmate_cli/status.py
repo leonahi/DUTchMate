@@ -15,6 +15,8 @@ def format_status(payload: Mapping[str, object]) -> str:
     lines = [
         "Service: running",
         f"Backend: {_display(payload.get('backend_mode'))}",
+        f"Profile: {_format_profile(payload)}",
+        f"Effective UART: {_format_effective_uart(payload.get('effective_profile'))}",
         f"Workflow: {_format_workflow(payload.get('active_workflow'))}",
         f"Session: {_display(payload.get('active_session_id'))}",
         f"Commanded boot mode: {_display(payload.get('commanded_boot_mode'))}",
@@ -31,6 +33,47 @@ def format_status(payload: Mapping[str, object]) -> str:
     ]
     lines.extend(_format_control_channels(payload.get("control_channels")))
     return "\n".join(lines)
+
+
+def _format_profile(payload: Mapping[str, object]) -> str:
+    name = _display(payload.get("profile_name"))
+    digest = payload.get("profile_digest_sha256")
+    if not isinstance(digest, str) or not digest:
+        return name
+    return f"{name} (sha256={digest})"
+
+
+def _format_effective_uart(value: object) -> str:
+    profile = _as_mapping(value)
+    backend = _as_mapping(profile.get("backend")) if profile is not None else None
+    hardware = _as_mapping(profile.get("hardware")) if profile is not None else None
+    uart = _as_mapping(hardware.get("uart")) if hardware is not None else None
+    if backend is None or uart is None:
+        return "unknown"
+
+    parity = uart.get("parity")
+    parity_label = "N" if parity == "none" else _display(parity)
+    control_lines = _as_mapping(uart.get("control_lines"))
+    dtr = control_lines.get("dtr_on_open") if control_lines is not None else None
+    rts = control_lines.get("rts_on_open") if control_lines is not None else None
+    return (
+        f"{_display(backend.get('topology'))}, "
+        f"{_display(uart.get('baudrate'))} "
+        f"{_display(uart.get('data_bits'))}{parity_label}{_display(uart.get('stop_bits'))}, "
+        f"rtscts={_bool_display(uart.get('rtscts'))}, "
+        f"xonxoff={_bool_display(uart.get('xonxoff'))}, "
+        f"tx={_bool_display(uart.get('tx_enabled'))}, "
+        f"line-ending={_display(uart.get('default_line_ending'))}, "
+        f"DTR={_display(dtr)}, RTS={_display(rts)}"
+    )
+
+
+def _bool_display(value: object) -> str:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    return "unknown"
 
 
 def _format_workflow(value: object) -> str:

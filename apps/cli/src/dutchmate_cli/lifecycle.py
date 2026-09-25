@@ -19,7 +19,7 @@ from dutchmate_cli.config import (
     DEFAULT_DAEMON_PORT,
     DEFAULT_SESSION_PATH,
 )
-from dutchmate_core.backends.settings import BackendSettings
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.validation import DEFAULT_SESSION_MAX_SIZE_MB
 
 DEFAULT_HOST: Final = DEFAULT_DAEMON_HOST
@@ -62,7 +62,7 @@ class ServiceStopResult:
 
 def start_service(
     *,
-    backend_settings: BackendSettings,
+    profile: DutProfile,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     config_path: Path = DEFAULT_CONFIG_PATH,
@@ -90,6 +90,7 @@ def start_service(
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.parent.mkdir(parents=True, exist_ok=True)
     if command is None:
+        backend_settings = profile.backend_settings
         service_command = [
             "dutchmate-service",
             "--host",
@@ -103,19 +104,31 @@ def start_service(
             "--config",
             str(config_path),
             "--backend",
-            backend_settings.mode,
+            profile.backend_mode,
+            "--topology",
+            profile.topology,
             "--baudrate",
-            str(backend_settings.baudrate),
+            str(profile.uart.baudrate),
             "--data-bits",
-            str(backend_settings.data_bits),
+            str(profile.uart.data_bits),
             "--parity",
-            backend_settings.parity,
+            profile.uart.parity,
             "--stop-bits",
-            str(backend_settings.stop_bits),
+            str(profile.uart.stop_bits),
             "--reconnect-timeout-s",
-            str(backend_settings.reconnect_timeout_s),
-            "--tx-enabled" if backend_settings.tx_enabled else "--no-tx-enabled",
+            str(profile.reconnect_timeout_s),
+            "--rtscts" if profile.uart.rtscts else "--no-rtscts",
+            "--xonxoff" if profile.uart.xonxoff else "--no-xonxoff",
+            "--tx-enabled" if profile.uart.tx_enabled else "--no-tx-enabled",
+            "--default-line-ending",
+            profile.uart.default_line_ending,
+            "--dtr-on-open",
+            profile.uart.dtr_on_open,
+            "--rts-on-open",
+            profile.uart.rts_on_open,
         ]
+        if profile.name is not None:
+            service_command.extend(["--profile-name", profile.name])
         if backend_settings.serial_port is not None:
             service_command.extend(["--serial-port", backend_settings.serial_port])
         if session_max_count is not None:

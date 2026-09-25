@@ -8,11 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, cast
 
-from dutchmate_core.backends.settings import (
-    BackendConfig,
-    BackendConfigError,
-    parse_backend_config,
-)
+from dutchmate_core.profile import DutProfileConfig, DutProfileError, parse_dut_profile_config
 from dutchmate_core.validation import (
     DEFAULT_SESSION_MAX_SIZE_MB,
     validate_session_max_size_mb,
@@ -51,7 +47,7 @@ class CliConfig:
 
     daemon: DaemonConfig = DaemonConfig()
     sessions: SessionsConfig = SessionsConfig()
-    backend: BackendConfig = BackendConfig()
+    profile: DutProfileConfig = DutProfileConfig()
 
     @property
     def service_url(self) -> str:
@@ -78,10 +74,10 @@ def parse_cli_config(raw_config: Mapping[str, object]) -> CliConfig:
     daemon = _parse_daemon_config(_optional_table(raw_config, "daemon"))
     sessions = _parse_sessions_config(_optional_table(raw_config, "sessions"))
     try:
-        backend = parse_backend_config(raw_config)
-    except BackendConfigError as exc:
+        profile = parse_dut_profile_config(raw_config)
+    except DutProfileError as exc:
         raise CliConfigError(str(exc)) from exc
-    return CliConfig(daemon=daemon, sessions=sessions, backend=backend)
+    return CliConfig(daemon=daemon, sessions=sessions, profile=profile)
 
 
 def _parse_daemon_config(raw_daemon: Mapping[str, object]) -> DaemonConfig:

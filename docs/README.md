@@ -5,12 +5,18 @@ the next implementation step live only in
 [development status](development_status.md); completed evidence is preserved in
 the append-only [development history](development_history.md).
 
+[Project context](project_context.md) and the
+[Phase 1 implementation specification](phase1_implementation_spec.md) are the
+normative product and Phase 1 behavior contracts. The Phase 1 v2 migration plan
+is an execution aid and must not redefine them.
+
 | Document | Canonical purpose |
 |---|---|
 | [Development status](development_status.md) | Current milestone, blockers, next step, and ordered queue. |
 | [Development history](development_history.md) | Append-only completed-slice and validation record; not a progress tracker. |
 | [Project context](project_context.md) | Durable product scope, safety, invariants, and phase definitions. |
 | [Phase 1 implementation specification](phase1_implementation_spec.md) | Normative Phase 1 backend, API, session, protocol, test, and done criteria. |
+| [Phase 1 v2 migration plan](dutchmate_phase1_v2_coding_agent_plan.md) | Temporary staged repository migration from the pre-v2 implementation to the normative Phase 1 contracts. |
 | [Software architecture](software_architecture.md) | Python data flow, module ownership, and dependency boundaries. |
 | [Developer guide](developer_guide.md) | Workspace setup, commands, package boundaries, and contribution workflow. |
 | [Glossary](glossary.md) | Short definitions of recurring DUTchMate terms. |

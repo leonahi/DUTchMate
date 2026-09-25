@@ -414,8 +414,8 @@ def open_basic_backend_connection(
         stopbits=settings.stop_bits,
         timeout=timeout_s,
         write_timeout=timeout_s,
-        xonxoff=False,
-        rtscts=False,
+        xonxoff=settings.xonxoff,
+        rtscts=settings.rtscts,
         dsrdtr=False,
     )
     return BasicBackendConnection(serial_port=serial_port, settings=settings)

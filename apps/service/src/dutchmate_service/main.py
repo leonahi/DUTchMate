@@ -8,18 +8,18 @@ from pathlib import Path
 
 import uvicorn
 
-from dutchmate_core.backends.settings import (
-    BackendConfig,
-    BackendConfigError,
-    load_backend_config,
-    resolve_backend_settings,
+from dutchmate_core.profile import (
+    DutProfileConfig,
+    DutProfileError,
+    load_dut_profile_config,
+    resolve_dut_profile,
 )
 from dutchmate_core.validation import (
     DEFAULT_SESSION_MAX_SIZE_MB,
     session_evidence_budget_bytes,
 )
 from dutchmate_service.app import create_app
-from dutchmate_service.startup import DEFAULT_CONFIG_PATH, load_startup_hardware_config
+from dutchmate_service.startup import DEFAULT_CONFIG_PATH
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -36,16 +36,37 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--session-max-count", type=int)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--profile-name")
     parser.add_argument("--backend", choices=("basic", "enhanced"))
     parser.add_argument("--serial-port")
+    parser.add_argument("--topology", choices=("external_uart", "native_usb_console"))
     parser.add_argument("--baudrate", type=int)
     parser.add_argument("--data-bits", type=int)
     parser.add_argument("--parity")
     parser.add_argument("--stop-bits", type=int)
     parser.add_argument(
+        "--rtscts",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
+        "--xonxoff",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
         "--tx-enabled",
         action=argparse.BooleanOptionalAction,
         default=None,
+    )
+    parser.add_argument("--default-line-ending", choices=("none", "lf", "cr", "crlf"))
+    parser.add_argument(
+        "--dtr-on-open",
+        choices=("driver_default", "asserted", "deasserted"),
+    )
+    parser.add_argument(
+        "--rts-on-open",
+        choices=("driver_default", "asserted", "deasserted"),
     )
     parser.add_argument("--reconnect-timeout-s", type=float)
     args = parser.parse_args(argv)
@@ -55,24 +76,30 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error(str(exc))
     if args.session_max_count is not None and args.session_max_count <= 0:
         parser.error("session max count must be a positive integer")
-    hardware_config = load_startup_hardware_config(args.config)
     try:
         try:
-            backend_config = load_backend_config(args.config)
+            profile_config = load_dut_profile_config(args.config)
         except FileNotFoundError:
-            backend_config = BackendConfig()
-        backend_settings = resolve_backend_settings(
-            backend_config,
+            profile_config = DutProfileConfig()
+        profile = resolve_dut_profile(
+            profile_config,
+            name=args.profile_name,
             mode=args.backend,
             serial_port=args.serial_port,
+            topology=args.topology,
             baudrate=args.baudrate,
             data_bits=args.data_bits,
             parity=args.parity,
             stop_bits=args.stop_bits,
+            rtscts=args.rtscts,
+            xonxoff=args.xonxoff,
             tx_enabled=args.tx_enabled,
+            default_line_ending=args.default_line_ending,
+            dtr_on_open=args.dtr_on_open,
+            rts_on_open=args.rts_on_open,
             reconnect_timeout_s=args.reconnect_timeout_s,
         )
-    except BackendConfigError as exc:
+    except DutProfileError as exc:
         parser.error(str(exc))
 
     uvicorn.run(
@@ -80,8 +107,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             session_root=args.session_root,
             session_evidence_budget_bytes=session_budget_bytes,
             session_max_count=args.session_max_count,
-            hardware_config=hardware_config,
-            backend_settings=backend_settings,
+            profile=profile,
         ),
         host=args.host,
         port=args.port,

@@ -39,6 +39,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioRoleName,
 )
 from dutchmate_core.log_processing.patterns import DEFAULT_PATTERNS, PatternDetector
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
     CommandedBootMode,
@@ -154,6 +155,9 @@ class DeviceCoreStatus:
     active_workflow: SessionWorkflow | None = None
     reconnect_remaining_s: float | None = None
     retention: SessionRetentionStatus = SessionRetentionStatus()
+    profile_name: str | None = None
+    profile_digest_sha256: str | None = None
+    effective_profile: dict[str, object] | None = None
 
 
 class _SessionCaptureSource:
@@ -224,7 +228,15 @@ class DeviceCoreRuntime:
         uart_wall_clock: Callable[[], datetime] | None = None,
         uart_monotonic_ns: Callable[[], int] | None = None,
         uart_attempt_id_factory: Callable[[], str] | None = None,
+        profile: DutProfile | None = None,
     ) -> None:
+        if profile is not None:
+            port = profile.current_serial_port
+            backend_mode = profile.backend_mode
+            tx_policy_enabled = profile.uart.tx_enabled
+            reconnect_timeout_s = profile.reconnect_timeout_s
+            dut_io_voltage = profile.dut_io_voltage
+        self._profile = profile
         self._message_source = message_source
         self._reconnect_source: CaptureEventSource | None = None
         self._capture_clock = capture_clock
@@ -508,6 +520,13 @@ class DeviceCoreRuntime:
                 active_workflow=self._active_workflow,
                 reconnect_remaining_s=reconnect_remaining_s,
                 retention=retention,
+                profile_name=(self._profile.name if self._profile is not None else None),
+                profile_digest_sha256=(
+                    self._profile.digest_sha256 if self._profile is not None else None
+                ),
+                effective_profile=(
+                    self._profile.projection() if self._profile is not None else None
+                ),
             )
 
     def apply_hardware_config(

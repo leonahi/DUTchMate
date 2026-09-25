@@ -10,9 +10,9 @@ from typing import Annotated, Protocol
 
 from fastapi import FastAPI, Query
 
-from dutchmate_core.backends.settings import BackendSettings
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.runtime import (
     DeviceCoreStatus,
 )
@@ -136,7 +136,7 @@ def create_app(
     session_evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     session_max_count: int | None = None,
     hardware_config: HardwareGpioConfig | None = None,
-    backend_settings: BackendSettings | None = None,
+    profile: DutProfile | None = None,
 ) -> FastAPI:
     """Create the Device Core Service application."""
 
@@ -147,14 +147,14 @@ def create_app(
             session_root=session_root,
             session_evidence_budget_bytes=session_evidence_budget_bytes,
             session_max_count=session_max_count,
-            backend_settings=backend_settings,
-            dut_io_voltage=(
-                hardware_config.dut_io_voltage if hardware_config is not None else None
-            ),
+            profile=profile,
         )
-    if hardware_config is not None:
+    effective_hardware_config = (
+        profile.hardware_gpio_config if profile is not None else hardware_config
+    )
+    if effective_hardware_config is not None:
         try:
-            apply_startup_hardware_config(runtime_provider, hardware_config)
+            apply_startup_hardware_config(runtime_provider, effective_hardware_config)
         except BaseException:
             if owns_runtime:
                 with suppress(BaseException):

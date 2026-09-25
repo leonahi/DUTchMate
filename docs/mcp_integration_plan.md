@@ -1,5 +1,13 @@
 # MCP Integration Plan
 
+> **Status:** pre-v2 Phase 2 implementation reference. Its capture/wait,
+> schema-v1, implicit line-ending, `capture_active`, and `force` semantics are not
+> the target contracts. `project_context.md` and `phase1_implementation_spec.md`
+> are authoritative. Stage 1 DUT Profile/provenance is implemented, while the
+> schema-v2 and operation-contract migration is not; MCP remapping remains
+> deferred until the new Device Core/service/CLI behavior passes Phase 1
+> acceptance.
+>
 > Scope: Phase 2 MCP server transport, launch model, and tool contract.
 
 ## Decision Summary

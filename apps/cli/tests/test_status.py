@@ -14,6 +14,27 @@ def test_format_status_renders_channel_first_state() -> None:
         "connected": True,
         "connection_state": "connected",
         "backend_mode": "enhanced",
+        "profile_name": "fixture-board",
+        "profile_digest_sha256": "0123456789abcdef",
+        "effective_profile": {
+            "backend": {"topology": "external_uart"},
+            "hardware": {
+                "uart": {
+                    "baudrate": 460800,
+                    "data_bits": 8,
+                    "parity": "none",
+                    "stop_bits": 1,
+                    "rtscts": False,
+                    "xonxoff": False,
+                    "tx_enabled": False,
+                    "default_line_ending": "none",
+                    "control_lines": {
+                        "dtr_on_open": "driver_default",
+                        "rts_on_open": "driver_default",
+                    },
+                }
+            },
+        },
         "port": "/dev/ttyACM0",
         "firmware": "0.1.0",
         "device": "dutchmate-rp2350",
@@ -70,6 +91,10 @@ def test_format_status_renders_channel_first_state() -> None:
         [
             "Service: running",
             "Backend: enhanced",
+            "Profile: fixture-board (sha256=0123456789abcdef)",
+            "Effective UART: external_uart, 460800 8N1, rtscts=false, "
+            "xonxoff=false, tx=false, line-ending=none, "
+            "DTR=driver_default, RTS=driver_default",
             "Workflow: none",
             "Session: none",
             "Commanded boot mode: bootloader",

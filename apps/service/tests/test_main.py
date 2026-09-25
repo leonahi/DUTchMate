@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from dutchmate_core.backends.settings import BackendSettings
+from dutchmate_core.profile import DutProfile
 from dutchmate_service import main
 
 
@@ -35,6 +35,9 @@ def test_service_main_passes_config_to_app_and_host_port_to_uvicorn(
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
+[profile]
+name = "fixture"
+
 [backend]
 mode = "enhanced"
 
@@ -55,16 +58,17 @@ active_level = "low"
         session_root: object,
         session_evidence_budget_bytes: int,
         session_max_count: int | None,
-        hardware_config: object,
-        backend_settings: BackendSettings,
+        profile: DutProfile,
     ) -> object:
         session_roots.append(session_root)
         session_budgets.append(session_evidence_budget_bytes)
         session_counts.append(session_max_count)
-        hardware_configs.append(hardware_config)
-        assert backend_settings.mode == "enhanced"
-        assert backend_settings.serial_port == "/dev/ttyACM0"
-        assert backend_settings.baudrate == 460800
+        hardware_configs.append(profile.hardware_gpio_config)
+        assert profile.name == "fixture"
+        assert profile.backend_mode == "enhanced"
+        assert profile.current_serial_port == "/dev/ttyACM0"
+        assert profile.uart.baudrate == 460800
+        assert len(profile.digest_sha256) == 64
         return object()
 
     def fake_run(app: object, *, host: str, port: int) -> None:

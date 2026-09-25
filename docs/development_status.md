@@ -1,128 +1,103 @@
 # Development Status
 
-> Active phase: Repository documentation cleanup — complete
-> Code baseline reviewed: `6d54acf0a11a3fa7a43eccfa753c2230cdaaad88` on 2026-09-24
-> Hardware evidence reviewed: 2026-09-17
-> Authority: the only source for current progress, active phase, blockers, and next step
-> History: completed slices and dated validation live in [Development History](development_history.md)
+> Active phase: Phase 1 v2 semantic migration — Stage 1 DUT Profile and
+> effective serial provenance implemented
+> Repository baseline reviewed: `efe93060c4a4c3733d1f32b53c75f4f5d4c55c26`
+> on 2026-09-25
+> Stage 1 working tree: uncommitted
+> Authority: the only source for current progress, active phase, blockers, and
+> next step
+> History: completed slices and dated validation live in
+> [Development History](development_history.md)
 
 ## Resume Here
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Repository documentation cleanup is complete. Local and
-  generated Graphify artifacts are untracked, completed working plans are removed,
-  the repository entry point and documentation navigation are streamlined, and
-  completed progress is separated from current status. Delivery Infrastructure is
-  complete and the five-distribution `v0.1.0` release is published.
-- **Active phase:** No development slice is active. The remaining Phase 1 hardware
-  work is deferred by the user; Phase 4 evidence packaging is paused after VS Code
-  host acceptance; the Debug Agent's public distribution remains deferred to
-  `v0.2.0`.
-- **Next step:** When the user resumes Phase 1 hardware work, add the replacement
-  KiCad design under `hardware/pcb/debug-helper/rev-a/`, carry the 10 kOhm
-  `UART_TX`-to-`DUT_VIO` correction into its schematic and BOM, audit all design
-  assets, and verify the resulting artifacts.
-- **Open blockers:** The populated-part and continuity audit, loaded hot-plug
-  acceptance, pre-test baseline rejection, and 75 uA current correlation remain
-  open. Analog UART edge and series-resistor waveform measurements require an
-  oscilloscope. Claude Code host validation requires an authenticated subscription.
+- **Current milestone:** Stage 1 implements one resolved immutable DUT Profile,
+  effective serial/GPIO provenance, a bounded canonical projection and SHA-256
+  digest, CLI-to-service profile startup, and service/CLI status exposure.
+- **Implementation status:** The Phase 1 v2 migration is **partially
+  implemented through Stage 1 only**. Physical backend behavior, schema-v1
+  persistence, finite workflows, and service-owned idle ingestion remain
+  unchanged. No session-v2, recorder, Monitor/Interact, follow/console, or
+  release/reacquire work has begun.
+- **Historical evidence:** Existing Basic, Enhanced, firmware, ring-buffer, and
+  HIL results remain valid evidence for the physical/backend behavior they tested.
+  They do not establish the new continuous ambient recording, schema-v2,
+  Monitor, Interact, follow/console, or release/reacquire requirements.
+- **Next step:** Execute migration **Stage 2 only**: build session schema-v2
+  persistence before runtime migration. Do not begin the Stage 3 continuous
+  recorder in that slice.
+- **Open blockers:** No contradiction requiring a new design decision was found
+  between the two normative documents. Previously recorded Revision A physical
+  evidence gaps remain deferred acceptance work for Stage 8; they do not change
+  the Stage 2 scope.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
 detailed completed-slice and dated validation evidence to
 `docs/development_history.md`; do not create another progress tracker.
 
-`docs/phase1_implementation_spec.md` remains the normative source for Phase 1
-behavior and done criteria. Reference documents define durable contracts; they
-must not duplicate this progress checklist.
+## Phase 1 v2 Baseline
 
-## Phase 1 Assessment
+The approved Phase 1 contract changes the product semantics, so completion under
+the earlier contract cannot be carried forward as current Phase 1A/1B acceptance.
+The implementation starts from proven components, but target completion must be
+demonstrated again against the new normative done criteria.
 
-Phase 1 is not complete. Phase 1A is accepted on the real Basic hardware path.
-Phase 1B protocol, async host ownership, continuous ingestion, reconnect behavior,
-RP2350 firmware, 32 KiB ring-buffer acceptance, configured reset/boot-test,
-UART-send, boot-mode, and shared evidence-shape gates pass. The Enhanced stack is
-async-only and production startup/replacement owns exactly one host connection.
-
-The remaining Phase 1 gate is physical Revision A prototype acceptance. Committed
-evidence covers supported-voltage UART loopback and controls, supply ordering,
-missing-supply isolation, control high impedance, representative reset behavior,
-ring-buffer load profiles, and real Basic/Enhanced workflows. It does not replace
-the outstanding populated-part/continuity, corrected-board, loaded-hot-plug,
-current-correlation, and analog signal-integrity evidence required by the
-normative done criteria.
-
-| Delivery area | Current status | Remaining gate |
+| Area | Current baseline | Phase 1 v2 status |
 |---|---|---|
-| Phase 1A Basic backend | Accepted | None. |
-| Shared sessions, workflows, control, and reconnect | Implemented | Final Phase 1 audit after physical gates. |
-| Phase 1B Enhanced host and firmware | Implemented; real workflow HIL passed | Revision A physical acceptance. |
-| RP2350 32 KiB ring buffer | `accepted_32k` | None. |
-| Revision A prototype | In progress and deferred | Corrected design plus remaining electrical evidence. |
+| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Historical evidence only; final v2 acceptance remains open |
+| DUT Profile and effective serial provenance | One immutable resolved profile owns backend, selector/topology, UART policy, DTR/RTS request, GPIO config, projection, and digest | Stage 1 complete; exposed through runtime/service/CLI status without v2 storage |
+| Native session schema v2 | New writes use the pre-v2 session model | Not implemented |
+| Continuous ambient evidence recording | Current idle path drains/discards rather than recording all admissible UART | Not implemented |
+| Monitor and Interact | Existing capture/wait/send workflows use pre-v2 semantics | Not implemented |
+| Follow and console | Target durable-cursor views do not exist | Not implemented |
+| Release and reacquire | Target explicit ownership handoff does not exist | Not implemented |
+| MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Deferred until Phase 1 CLI acceptance |
 
-Automated coverage is necessary evidence, but it cannot substitute for a done
-criterion that explicitly requires real hardware measurements.
+Historical sessions and validation records must not be rewritten as though they
+never existed. Schema-v0/v1 evidence remains read-only compatibility data under
+the new contract.
 
-## Ordered Work Queue
+## Migration Checklist
 
-No deferred item becomes active without user approval. If work resumes, use this
-order unless the user explicitly selects a different milestone.
-
-### 1. Deferred Phase 1 Hardware
-
-1. Add and audit the replacement KiCad schematic, PCB, and BOM with the accepted
-   10 kOhm `UART_TX`-to-`DUT_VIO` correction; keep EVENT pins reserved.
-2. Inspect populated U1/U2/U3/U5/U6 markings and verify unpowered physical
-   Pico-pin/net continuity.
-3. Repeat loaded UART hot-plug acceptance on the corrected design and resolve the
-   pre-test baseline rejection.
-4. Correlate the unexplained 75 uA reading; perform analog UART cable/edge and
-   series-resistor measurements when an oscilloscope is available.
-5. Map every remaining physical criterion, run the final Phase 1 validation gate,
-   remove any stale migration wording, and declare Phase 1 complete only if no
-   criterion remains open.
-
-### 2. Paused Phase 4 Evidence Packaging
-
-- Review model-suggested source areas against the repository.
-- Validate the Debug Agent CLI from Claude Code if an authenticated subscription
-  becomes available. VS Code host invocation and local Ollama analysis already pass.
-
-### 3. Deferred `v0.2.0` Debug Agent Distribution
-
-1. Reconfirm whether the public interface remains a host CLI or adds an optional
-   MCP analysis server without changing the deterministic Device Core MCP boundary.
-2. Restore an aggregator extra or launcher only if that access model requires it.
-3. Publish `dutchmate-debug-agent` with clean-install and provider-disabled-default
-   acceptance as part of the coordinated `v0.2.0` host release.
-
-### 4. Later Phase Roadmap
-
-| Phase | Status | Resume condition |
+| Stage | Status | Exit/next action |
 |---|---|---|
-| Phase 3 — hardware/protocol refinement | Deferred | Phase 1 measurements identify concrete refinements. |
-| Phase 4 — AI debug reports | Paused | Source-area review or authenticated Claude Code host becomes available. |
-| Phase 5 — advanced hardware evidence | Not started | Earlier phases are accepted and a concrete evidence requirement is approved. |
+| 0 — normative baseline and truthful status | Complete | Superseded working baseline retained in history |
+| 1 — DUT Profile and provenance | Complete | Effective profile and digest exposed; physical behavior preserved |
+| 2 — session schema v2 persistence | Not started | **Next development slice** |
+| 3 — authoritative continuous recorder | Not started | Wait for Stage 2 |
+| 4 — Monitor | Not started | Wait for Stage 3 |
+| 5 — audited TX, Interact, Control/boot-test | Not started | Wait for Stage 4 |
+| 6 — durable cursor, follow, console | Not started | Wait for Stage 5 |
+| 7 — release/reacquire, DTR/RTS, native USB | Not started | Wait for Stage 6 |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Not started | Wait for Stage 7 |
+| Post-Phase-1 MCP migration | Not started | Wait for Stage 8 acceptance |
 
-Phase 2 MCP integration and Delivery Infrastructure are complete; neither closes
-nor waives a deferred Phase 1 hardware criterion.
+Implementation details, invariants, tests, and exit criteria for each stage live
+only in the migration plan and normative specification. This checklist records
+progress; it does not redefine either document.
+
+## Deferred Work Outside the Active Slice
+
+- Revision A corrected-design and remaining physical measurements are preserved
+  as open Phase 1 acceptance evidence for Stage 8.
+- Phase 4 Debug Agent evidence packaging remains paused after VS Code host
+  acceptance; authenticated Claude Code host validation remains unavailable.
+- Public `dutchmate-debug-agent` distribution remains deferred to `v0.2.0`.
+- Delivery Infrastructure and the five-distribution `v0.1.0` release remain
+  completed historical work; they do not satisfy any Phase 1 v2 semantic gate.
 
 ## Current Validation Requirements
 
-For every development slice, run Ruff, mypy, the full pytest suite, and
-`git diff --check`. Use focused tests and source checks where the change requires
-them. Record the concise current result here and append detailed dated evidence to
-[Development History](development_history.md).
+Stage 1 validation, 2026-09-25: profile, CLI configuration/lifecycle/status, and
+service startup/status focused tests passed (105 tests); Ruff passed; mypy
+reported no issues in 92 source files; all 1,432 pytest tests passed; the
+structural Graphify index was refreshed; and `git diff --check` passed. Detailed
+evidence is recorded in [Development History](development_history.md).
 
-Repository documentation cleanup Task 4 migration checks, reviewed 2026-09-24:
-
-- The pre-task committed status contained 2,580 lines. Five inventoried historical
-  blocks—detailed validation, delivery infrastructure, completed Phase 4 work,
-  Phase 2, and the already-complete summary—were mechanically compared and appear
-  exactly once, byte-for-byte, in Development History.
-- Rewritten current prose is limited to the former `Resume Here`, `Phase 1
-  Assessment`, paused/deferred queues, and later-phase roadmap. Their active state,
-  open blockers, ordering, and next step are represented above.
-- Ruff passed; mypy reported no issues in 89 source files; all 1,435 pytest tests
-  passed; and `git diff --check` passed.
+For Stage 2, run focused persistence tests during development and the
+repository-required Ruff, mypy, full pytest, and `git diff --check` gate before
+declaring the stage complete.

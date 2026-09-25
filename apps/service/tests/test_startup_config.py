@@ -31,7 +31,13 @@ from dutchmate_core.device_connection.messages import (
     HelloMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
-from dutchmate_core.gpio_config.config import parse_hardware_gpio_config
+from dutchmate_core.gpio_config.config import HardwareGpioConfig, parse_hardware_gpio_config
+from dutchmate_core.profile import (
+    DutProfile,
+    DutProfileConfig,
+    UartProfileConfig,
+    resolve_dut_profile,
+)
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
 from dutchmate_core.workflows.capture import CaptureEventSource, CaptureWorkflow
@@ -305,6 +311,33 @@ def backend_settings(
     )
 
 
+def profile_for(
+    settings: BackendSettings,
+    *,
+    dut_io_voltage: float | None = None,
+) -> DutProfile:
+    return resolve_dut_profile(
+        DutProfileConfig(
+            mode=settings.mode,
+            serial_port=settings.serial_port,
+            reconnect_timeout_s=settings.reconnect_timeout_s,
+            uart=UartProfileConfig(
+                baudrate=settings.baudrate,
+                data_bits=settings.data_bits,
+                parity=settings.parity,
+                stop_bits=settings.stop_bits,
+                rtscts=settings.rtscts,
+                xonxoff=settings.xonxoff,
+                tx_enabled=settings.tx_enabled,
+            ),
+            hardware=HardwareGpioConfig(
+                dut_io_voltage=dut_io_voltage,
+                controls={},
+            ),
+        )
+    )
+
+
 def test_load_startup_hardware_config_returns_empty_config_when_missing(tmp_path: Path) -> None:
     config = load_startup_hardware_config(tmp_path / "missing.toml")
 
@@ -344,6 +377,22 @@ def test_build_startup_runtime_without_serial_port_is_disconnected(tmp_path: Pat
     assert runtime.session_store.root == tmp_path
 
 
+def test_build_startup_runtime_exposes_resolved_profile_while_disconnected(
+    tmp_path: Path,
+) -> None:
+    profile = resolve_dut_profile(
+        DutProfileConfig(name="fixture", mode="enhanced")
+    )
+
+    runtime = build_startup_runtime(session_root=tmp_path, profile=profile)
+
+    status = runtime.status()
+    assert status.backend_mode == "enhanced"
+    assert status.profile_name == "fixture"
+    assert status.profile_digest_sha256 == profile.digest_sha256
+    assert status.effective_profile == profile.projection()
+
+
 def test_build_startup_runtime_passes_session_evidence_budget_to_store(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -379,10 +428,12 @@ def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
 ) -> None:
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port=None,
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port=None,
+                baudrate=460800,
+            )
         ),
     )
 
@@ -408,10 +459,12 @@ def test_enhanced_startup_requires_declared_voltage_before_opening_host(
     with pytest.raises(DeviceCoreRuntimeError, match="hardware.dut_io_voltage"):
         build_startup_runtime(
             session_root=tmp_path,
-            backend_settings=backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
+            profile=profile_for(
+                backend_settings(
+                    "enhanced",
+                    serial_port="/dev/ttyACM0",
+                    baudrate=460800,
+                )
             ),
         )
 
@@ -461,11 +514,13 @@ def test_enhanced_startup_selects_one_async_host(
     )
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
         ),
     )
     request.addfinalizer(runtime.close)
@@ -519,11 +574,13 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
         ),
     )
     coordinator = runtime._message_source  # noqa: SLF001
@@ -597,11 +654,13 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
-            dut_io_voltage=3.3,
-            backend_settings=backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
+            profile=profile_for(
+                backend_settings(
+                    "enhanced",
+                    serial_port="/dev/ttyACM0",
+                    baudrate=460800,
+                ),
+                dut_io_voltage=3.3,
             ),
         )
 
@@ -653,11 +712,13 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
-            dut_io_voltage=3.3,
-            backend_settings=backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
+            profile=profile_for(
+                backend_settings(
+                    "enhanced",
+                    serial_port="/dev/ttyACM0",
+                    baudrate=460800,
+                ),
+                dut_io_voltage=3.3,
             ),
         )
 
@@ -700,11 +761,13 @@ def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
     with pytest.raises(RuntimeError) as raised:
         build_startup_runtime(
             session_root=tmp_path,
-            dut_io_voltage=3.3,
-            backend_settings=backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
+            profile=profile_for(
+                backend_settings(
+                    "enhanced",
+                    serial_port="/dev/ttyACM0",
+                    baudrate=460800,
+                ),
+                dut_io_voltage=3.3,
             ),
         )
 
@@ -721,11 +784,13 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
         ),
     )
     config = parse_hardware_gpio_config(
@@ -770,11 +835,13 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
         ),
         monotonic_clock=clock,
         sleep=clock.sleep,
@@ -826,12 +893,14 @@ def test_enhanced_uart_send_projects_malformed_response_without_input(
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
-            tx_enabled=True,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+                tx_enabled=True,
+            ),
+            dut_io_voltage=3.3,
         ),
     )
     request.addfinalizer(runtime.close)
@@ -879,11 +948,13 @@ def test_enhanced_capture_closes_source_on_malformed_input(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=backend_settings(
-            "enhanced",
-            serial_port="/dev/ttyACM0",
-            baudrate=460800,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
         ),
         monotonic_clock=clock,
         sleep=clock.sleep,
@@ -969,7 +1040,7 @@ def test_build_startup_runtime_opens_basic_without_hello(
         raising=False,
     )
 
-    runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+    runtime = build_startup_runtime(session_root=tmp_path, profile=profile_for(settings))
     request.addfinalizer(runtime.close)
 
     assert len(coordinator_factory_calls) == 1
@@ -1049,7 +1120,7 @@ def test_basic_startup_idle_reconnect_restores_existing_status(
     monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        backend_settings=settings,
+        profile=profile_for(settings),
     )
     coordinator = runtime._message_source  # noqa: SLF001
     assert isinstance(coordinator, ContinuousIngestionCoordinator)
@@ -1149,7 +1220,7 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        backend_settings=settings,
+        profile=profile_for(settings),
         monotonic_clock=clock,
         sleep=clock.sleep,
     )
@@ -1241,8 +1312,7 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=settings,
+        profile=profile_for(settings, dut_io_voltage=3.3),
         monotonic_clock=clock,
         sleep=clock.sleep,
     )
@@ -1341,8 +1411,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
     clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
-        dut_io_voltage=3.3,
-        backend_settings=settings,
+        profile=profile_for(settings, dut_io_voltage=3.3),
         monotonic_clock=clock,
         sleep=clock.sleep,
     )
@@ -1408,7 +1477,7 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
         fake_open,
     )
 
-    runtime = build_startup_runtime(session_root=tmp_path, backend_settings=settings)
+    runtime = build_startup_runtime(session_root=tmp_path, profile=profile_for(settings))
     assert serial.read_started.wait(timeout=1)
     runtime.close()
 
