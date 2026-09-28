@@ -15,6 +15,7 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionPersistenceError,
     SessionQueryError,
+    V2SessionDetail,
 )
 from dutchmate_core.session_store.retrieval import get_session_detail as _get_session_detail
 
@@ -64,7 +65,7 @@ def read_baseline_pointer(
         operation=operation,
         pointer_target=True,
     )
-    if not isinstance(detail, NativeSessionDetail):
+    if not isinstance(detail, (NativeSessionDetail, V2SessionDetail)):
         raise _persistence_fault(
             operation=operation,
             session_id=session_id,
@@ -95,13 +96,13 @@ def mark_baseline(
         operation="mark_baseline",
         pointer_target=False,
     )
-    if not isinstance(detail, NativeSessionDetail):
+    if not isinstance(detail, (NativeSessionDetail, V2SessionDetail)):
         raise BaselineError(
             error="unsupported_session_schema",
             operation="mark_baseline",
             session_id=session_name,
             detected_schema_version=detail.summary.schema_version,
-            detail="Only native schema-v1 sessions can be marked as baseline",
+            detail="Only native schema-v1/v2 sessions can be marked as baseline",
         )
     reason = _ineligibility_reason(detail)
     if reason is not None:
@@ -120,7 +121,11 @@ def mark_baseline(
             previous_session_id=session_name,
             changed=False,
             marked_at=current.marked_at,
-            integrity=detail.summary.integrity,
+            integrity=(
+                detail.summary.integrity
+                if isinstance(detail, NativeSessionDetail)
+                else None
+            ),
         )
 
     marked_at = _metadata._format_utc_timestamp(clock())
@@ -144,7 +149,7 @@ def mark_baseline(
         previous_session_id=current.session_id if current is not None else None,
         changed=True,
         marked_at=marked_at,
-        integrity=detail.summary.integrity,
+        integrity=(detail.summary.integrity if isinstance(detail, NativeSessionDetail) else None),
     )
 
 
@@ -208,17 +213,30 @@ def _target_detail(
         ) from exc
 
 
-def _ineligibility_reason(detail: NativeSessionDetail) -> str | None:
-    summary = detail.summary
-    if summary.state != "completed":
+def _ineligibility_reason(detail: NativeSessionDetail | V2SessionDetail) -> str | None:
+    if detail.summary.state != "completed":
         return "state_not_completed"
-    if summary.workflow not in {"capture", "boot_test"}:
+    if isinstance(detail, V2SessionDetail):
+        v2_summary = detail.summary
+        local_recording = v2_summary.evidence_quality.get("local_recording")
+        backend_integrity = v2_summary.evidence_quality.get("backend_integrity")
+        if local_recording != "complete":
+            return "local_recording_incomplete"
+        if not isinstance(backend_integrity, dict):
+            return "backend_integrity_invalid"
+        if backend_integrity.get("loss_status") == "loss_reported":
+            return "loss_reported"
+        if detail.continuity.get("observation_gap_count") != 0:
+            return "observation_gap"
+        return None
+    native_summary = detail.summary
+    if native_summary.workflow not in {"capture", "boot_test"}:
         return "workflow_not_baseline_eligible"
-    if summary.truncated:
+    if native_summary.truncated:
         return "truncated"
-    if summary.interrupted:
+    if native_summary.interrupted:
         return "interrupted"
-    if summary.integrity.loss_status == "loss_reported":
+    if native_summary.integrity.loss_status == "loss_reported":
         return "loss_reported"
     return None
 

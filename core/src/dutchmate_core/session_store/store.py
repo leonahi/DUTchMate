@@ -1,12 +1,14 @@
 """Filesystem-backed debug session storage."""
 
+import base64
 import json
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
-from typing import Literal
+from typing import Final, Literal, cast
 
 import dutchmate_core.session_store.baseline as _baseline
 import dutchmate_core.session_store.comparison as _comparison
@@ -22,6 +24,7 @@ from dutchmate_core.backends.contracts import (
     SegmentContext,
     UartReceiveEvent,
 )
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.log_replay import (
     DEFAULT_RECENT_LOG_LINES,
 )
@@ -52,6 +55,9 @@ from dutchmate_core.session_store.models import (
     SessionState,
     SessionSummary,
     SessionWorkflow,
+    V2EvidenceAdmission,
+    V2SessionDetail,
+    V2SessionListItem,
     WaitPatternResult,
 )
 from dutchmate_core.session_store.retrieval import (
@@ -95,10 +101,24 @@ __all__ = [
     "SessionSummary",
     "SessionWorkflow",
     "WaitPatternResult",
+    "V2EvidenceAdmission",
+    "V2SessionDetail",
+    "V2SessionListItem",
 ]
 
 DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES = session_evidence_budget_bytes(
     DEFAULT_SESSION_MAX_SIZE_MB
+)
+_V2_OPERATION_OUTCOMES: Final = frozenset(
+    {
+        "elapsed",
+        "matched",
+        "timeout",
+        "disconnected",
+        "released",
+        "cancelled",
+        "error",
+    }
 )
 
 
@@ -139,6 +159,8 @@ class SessionStore:
         self._uart_tx_result_reservations: dict[
             tuple[str, str], tuple[int, int, int]
         ] = {}
+        self._v2_profiles: dict[str, DutProfile] = {}
+        self._v2_snapshots: dict[str, BackendSnapshot] = {}
 
     @property
     def root(self) -> Path:
@@ -242,7 +264,7 @@ class SessionStore:
                     )
                 )
                 continue
-            if schema_version != 1:
+            if schema_version not in {1, 2}:
                 diagnostics.append(
                     SessionRecoveryDiagnostic(
                         session_id=session_id,
@@ -360,6 +382,1022 @@ class SessionStore:
                 wait_pattern=wait_pattern,
                 timeout_s=timeout_s,
             )
+
+    def create_v2_session(
+        self,
+        *,
+        profile: DutProfile,
+        backend_snapshot: BackendSnapshot,
+    ) -> SessionHandle:
+        """Create and durably publish one active schema-v2 ownership session."""
+
+        with self._store_lock:
+            return self._create_v2_session_locked(
+                profile=profile,
+                backend_snapshot=backend_snapshot,
+                predecessor_session_id=None,
+            )
+
+    def _create_v2_session_locked(
+        self,
+        *,
+        profile: DutProfile,
+        backend_snapshot: BackendSnapshot,
+        predecessor_session_id: str | None,
+    ) -> SessionHandle:
+        if self._evidence_budget_bytes < _metadata.MIN_V2_EVIDENCE_BUDGET_BYTES:
+            raise ValueError(
+                "schema-v2 evidence budget must be at least "
+                f"{_metadata.MIN_V2_EVIDENCE_BUDGET_BYTES} bytes"
+            )
+        if backend_snapshot.info.mode != profile.backend_mode:
+            raise ValueError("v2 backend snapshot mode must match the DUT Profile")
+        if backend_snapshot.segment is None:
+            raise ValueError("v2 session creation requires timestamp provenance")
+        if backend_snapshot.info.port != profile.current_serial_port:
+            raise ValueError("v2 backend snapshot port must match the DUT Profile")
+
+        started_at = self._clock()
+        session_id = _metadata._validate_session_id(
+            f"{_metadata._format_session_id_timestamp(started_at)}-{self._id_factory()}"
+        )
+        paths = _persistence.session_paths(self._root / session_id)
+        _persistence.create_directory(paths.root)
+        metadata = _metadata._initial_v2_metadata(
+            session_id=session_id,
+            started_at=_metadata._format_utc_timestamp(started_at),
+            profile=profile,
+            backend_snapshot=backend_snapshot,
+            evidence_budget_bytes=self._evidence_budget_bytes,
+            predecessor_session_id=predecessor_session_id,
+        )
+        try:
+            _persistence.write_serialized(
+                paths.terminal_reserve,
+                b"\0" * _metadata.METADATA_MAX_BYTES,
+            )
+            _persistence.write_serialized(paths.uart_raw, b"")
+            _persistence.write_serialized(paths.uart_events, b"")
+            _persistence.write_serialized(paths.operation_events, b"")
+            _persistence.write_serialized(paths.hardware_events, b"")
+            _persistence.write_serialized(paths.connection_events, b"")
+            _persistence.write_serialized(
+                paths.detected_patterns,
+                _persistence.serialize_compact_json([]),
+            )
+            serialized_metadata = _persistence.serialize_compact_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            _persistence.write_serialized(paths.metadata, serialized_metadata)
+        except BaseException as exc:
+            try:
+                _persistence.remove_session_directory(paths.root)
+            except SessionPersistenceError as cleanup_error:
+                raise cleanup_error from exc
+            raise
+        handle = SessionHandle(session_id=session_id, paths=paths)
+        self._v2_profiles[session_id] = profile
+        self._v2_snapshots[session_id] = backend_snapshot
+        return handle
+
+    def append_v2_uart_receive(
+        self,
+        handle: SessionHandle,
+        *,
+        event: UartReceiveEvent,
+        detected_patterns: Sequence[dict[str, object]] = (),
+    ) -> V2EvidenceAdmission:
+        """Atomically admit exact UART RX bytes and their schema-v2 record."""
+
+        if not event.data or len(event.data) > 32768:
+            raise ValueError("v2 UART RX payload must contain 1..32768 bytes")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            admitted_event = event
+            admitted_patterns = detected_patterns
+            unit = self._v2_uart_unit(
+                handle,
+                metadata=metadata,
+                event=admitted_event,
+                detected_patterns=admitted_patterns,
+            )
+            rolled_over = False
+            if not self._v2_unit_fits(metadata, unit_bytes=unit[1]):
+                handle = self._rollover_v2_locked(handle, end_reason="rollover_size")
+                metadata = self._require_active_v2_metadata(handle)
+                successor_segment_id = _current_v2_segment_id(metadata)
+                admitted_event = replace(event, segment_id=successor_segment_id)
+                admitted_patterns = tuple(
+                    {**pattern, "segment_id": successor_segment_id}
+                    for pattern in detected_patterns
+                )
+                unit = self._v2_uart_unit(
+                    handle,
+                    metadata=metadata,
+                    event=admitted_event,
+                    detected_patterns=admitted_patterns,
+                )
+                rolled_over = True
+                if not self._v2_unit_fits(metadata, unit_bytes=unit[1]):
+                    raise SessionPersistenceError(
+                        operation="preflight v2 evidence",
+                        path=handle.paths.root,
+                        detail="one schema-valid UART unit exceeds the session budget",
+                    )
+
+            record, _unit_bytes, serialized_patterns = unit
+            evidence_seq = record["evidence_seq"]
+            if not isinstance(evidence_seq, int):
+                raise ValueError("v2 evidence sequence is invalid")
+            serialized_record = _persistence.serialize_jsonl(record)
+            try:
+                with _transactions.evidence_transaction(
+                    handle.paths,
+                    append_paths=[handle.paths.uart_raw, handle.paths.uart_events],
+                    replace_detected_patterns=serialized_patterns is not None,
+                ) as transaction:
+                    _persistence.append_serialized(handle.paths.uart_raw, admitted_event.data)
+                    _persistence.append_serialized(handle.paths.uart_events, serialized_record)
+                    if serialized_patterns is not None:
+                        _persistence.write_serialized(
+                            handle.paths.detected_patterns,
+                            serialized_patterns,
+                        )
+                    metadata["next_evidence_seq"] = evidence_seq + 1
+                    _persistence.refresh_storage_accounting(metadata, handle.paths)
+                    serialized_metadata = _persistence.serialize_compact_json(metadata)
+                    _require_metadata_capacity(serialized_metadata)
+                    transaction.prepare_metadata(serialized_metadata)
+                    _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+            except SessionPersistenceError as exc:
+                self._fail_active_v2_persistence_locked(handle, cause=exc)
+                raise
+            return V2EvidenceAdmission(
+                handle=handle,
+                evidence_seq=evidence_seq,
+                rolled_over=rolled_over,
+            )
+
+    def _v2_uart_unit(
+        self,
+        handle: SessionHandle,
+        *,
+        metadata: dict[str, object],
+        event: UartReceiveEvent,
+        detected_patterns: Sequence[dict[str, object]],
+    ) -> tuple[dict[str, object], int, bytes | None]:
+        segments = metadata.get("segments")
+        if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
+            raise ValueError("v2 session must contain a current segment")
+        if event.segment_id != segments[-1].get("segment_id"):
+            raise ValueError("v2 UART event must reference the current segment")
+        evidence_seq = metadata.get("next_evidence_seq")
+        if isinstance(evidence_seq, bool) or not isinstance(evidence_seq, int):
+            raise ValueError("v2 next_evidence_seq must be a non-negative integer")
+        try:
+            raw_start = handle.paths.uart_raw.stat().st_size
+        except OSError as exc:
+            raise SessionPersistenceError(
+                operation="read UART offset",
+                path=handle.paths.uart_raw,
+                detail=str(exc),
+            ) from exc
+        record: dict[str, object] = {
+            "evidence_seq": evidence_seq,
+            "type": "uart_rx",
+            "segment_id": event.segment_id,
+            "timestamp_us": event.timestamp_us,
+            "recorded_at": _metadata._format_utc_timestamp(self._clock()),
+            "channel": event.channel,
+            "data_b64": base64.b64encode(event.data).decode("ascii"),
+            "raw_offset_start": raw_start,
+            "raw_offset_end": raw_start + len(event.data),
+        }
+        record_bytes = _persistence.serialize_jsonl(record)
+        if len(record_bytes) > _metadata.MAX_V2_JSONL_RECORD_BYTES:
+            raise ValueError("schema-v2 primary JSONL record exceeds its size limit")
+        serialized_patterns, pattern_growth = _v2_pattern_document(
+            handle,
+            source_evidence_seq=evidence_seq,
+            event=event,
+            detected_patterns=detected_patterns,
+        )
+        return (
+            record,
+            len(event.data) + len(record_bytes) + pattern_growth,
+            serialized_patterns,
+        )
+
+    def _fail_active_v2_persistence_locked(
+        self,
+        handle: SessionHandle,
+        *,
+        cause: SessionPersistenceError,
+    ) -> None:
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        if metadata.get("schema_version") != 2 or metadata.get("state") != "active":
+            return
+
+        def record_persistence_fault(updated: dict[str, object]) -> None:
+            quality = updated.get("evidence_quality")
+            if not isinstance(quality, dict):
+                raise ValueError("v2 evidence_quality must be an object")
+            quality["local_recording"] = "persistence_fault"
+
+        self._terminalize_session_locked(
+            handle,
+            state="failed",
+            end_reason="persistence_error",
+            error=_metadata._bounded_error("persistence_fault", str(cause)),
+            truncation=None,
+            metadata_mutator=record_persistence_fault,
+        )
+
+    @staticmethod
+    def _v2_unit_fits(metadata: dict[str, object], *, unit_bytes: int) -> bool:
+        storage = metadata.get("storage")
+        if not isinstance(storage, dict):
+            raise ValueError("v2 storage metadata must be an object")
+        written = storage.get("evidence_bytes_written")
+        budget = storage.get("evidence_budget_bytes")
+        if (
+            isinstance(written, bool)
+            or not isinstance(written, int)
+            or isinstance(budget, bool)
+            or not isinstance(budget, int)
+        ):
+            raise ValueError("v2 evidence accounting is invalid")
+        return written + unit_bytes <= budget
+
+    def _require_active_v2_metadata(self, handle: SessionHandle) -> dict[str, object]:
+        metadata = _persistence.read_json_object(handle.paths.metadata)
+        if metadata.get("schema_version") != 2 or metadata.get("state") != "active":
+            raise ValueError("schema-v2 evidence can only append while active")
+        if metadata.get("session_id") != handle.session_id:
+            raise ValueError("schema-v2 handle does not match session metadata")
+        return metadata
+
+    def _rollover_v2_locked(
+        self,
+        handle: SessionHandle,
+        *,
+        end_reason: Literal["rollover_size", "rollover_segments"],
+        successor_snapshot: BackendSnapshot | None = None,
+    ) -> SessionHandle:
+        predecessor_metadata = self._require_active_v2_metadata(handle)
+        pending_attempts = {
+            key: dict(value)
+            for key, value in _v2_pending_attempts(predecessor_metadata).items()
+        }
+        raw_active_operations = predecessor_metadata.get("active_operations")
+        if not isinstance(raw_active_operations, dict):
+            raise ValueError("v2 active_operations must be an object")
+        active_operations: dict[str, dict[str, object]] = {}
+        for operation_id, raw_operation in raw_active_operations.items():
+            if not isinstance(operation_id, str) or not isinstance(raw_operation, dict):
+                raise ValueError("v2 active operation metadata is malformed")
+            raw_ranges = raw_operation.get("ranges")
+            if not isinstance(raw_ranges, list) or not raw_ranges:
+                raise ValueError("v2 active operation ranges are malformed")
+            ranges = [dict(item) for item in raw_ranges if isinstance(item, dict)]
+            if len(ranges) != len(raw_ranges):
+                raise ValueError("v2 active operation range is malformed")
+            ranges[-1]["end_evidence_seq_exclusive"] = _v2_next_sequence(
+                predecessor_metadata
+            )
+            active_operations[operation_id] = {
+                "operation_type": raw_operation.get("operation_type"),
+                "ranges": ranges,
+            }
+        try:
+            profile = self._v2_profiles[handle.session_id]
+            snapshot = successor_snapshot or self._v2_snapshots[handle.session_id]
+        except KeyError as exc:
+            raise SessionPersistenceError(
+                operation="create v2 successor",
+                path=handle.paths.root,
+                detail="effective profile or backend snapshot is unavailable",
+            ) from exc
+        try:
+            successor = self._create_v2_session_locked(
+                profile=profile,
+                backend_snapshot=snapshot,
+                predecessor_session_id=handle.session_id,
+            )
+        except SessionPersistenceError as exc:
+
+            def record_persistence_fault(metadata: dict[str, object]) -> None:
+                quality = metadata.get("evidence_quality")
+                if not isinstance(quality, dict):
+                    raise ValueError("v2 evidence_quality must be an object")
+                quality["local_recording"] = "persistence_fault"
+
+            self._terminalize_session_locked(
+                handle,
+                state="failed",
+                end_reason="persistence_error",
+                error=_metadata._bounded_error("persistence_fault", str(exc)),
+                truncation=None,
+                metadata_mutator=record_persistence_fault,
+            )
+            raise
+
+        try:
+            def transfer_rollover_ownership(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                updated["pending_attempts"] = {
+                    key: dict(value) for key, value in pending_attempts.items()
+                }
+
+            rollover_admission = self._append_v2_record_locked(
+                successor,
+                stream="connection",
+                record_type="rollover_succeeded",
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "segment_id": _current_v2_segment_id(updated),
+                    "detail": {
+                        "predecessor_session_id": handle.session_id,
+                        "reason": end_reason,
+                    },
+                },
+                metadata_mutator=transfer_rollover_ownership,
+            )
+            successor = rollover_admission.handle
+            for operation_id, operation in active_operations.items():
+                operation_type = operation.get("operation_type")
+                previous_ranges = cast(list[dict[str, object]], operation["ranges"])
+
+                def continue_operation(
+                    updated: dict[str, object],
+                    admission: V2EvidenceAdmission,
+                    *,
+                    operation_id: str = operation_id,
+                    operation_type: object = operation_type,
+                    previous_ranges: list[dict[str, object]] = previous_ranges,
+                ) -> None:
+                    operations = updated.get("active_operations")
+                    summary = updated.get("operation_summary")
+                    if not isinstance(operations, dict) or not isinstance(summary, dict):
+                        raise ValueError("v2 operation metadata is malformed")
+                    operations[operation_id] = {
+                        "operation_type": operation_type,
+                        "ranges": [
+                            *[dict(item) for item in previous_ranges],
+                            {
+                                "session_id": admission.handle.session_id,
+                                "start_evidence_seq": admission.evidence_seq,
+                                "end_evidence_seq_exclusive": None,
+                            },
+                        ],
+                    }
+                    summary["active"] = _v2_count(summary, "active") + 1
+
+                admission = self._append_v2_record_locked(
+                    successor,
+                    stream="operation",
+                    record_type="operation_continued",
+                    fields={
+                        "operation_id": operation_id,
+                        "operation_type": operation_type,
+                        "previous_session_id": handle.session_id,
+                    },
+                    metadata_mutator=continue_operation,
+                )
+                successor = admission.handle
+        except SessionPersistenceError as exc:
+            self._fail_active_v2_persistence_locked(handle, cause=exc)
+            raise
+
+        def link_successor(metadata: dict[str, object]) -> None:
+            metadata["successor_session_id"] = successor.session_id
+            operations = metadata.get("active_operations")
+            summary = metadata.get("operation_summary")
+            predecessor_pending = metadata.get("pending_attempts")
+            if not isinstance(operations, dict) or not isinstance(summary, dict):
+                raise ValueError("v2 operation metadata is malformed")
+            if not isinstance(predecessor_pending, dict):
+                raise ValueError("v2 pending_attempts must be an object")
+            for operation in operations.values():
+                if not isinstance(operation, dict):
+                    raise ValueError("v2 active operation metadata is malformed")
+                ranges = operation.get("ranges")
+                if not isinstance(ranges, list) or not ranges or not isinstance(ranges[-1], dict):
+                    raise ValueError("v2 active operation ranges are malformed")
+                ranges[-1]["end_evidence_seq_exclusive"] = _v2_next_sequence(metadata)
+            if _v2_count(summary, "active") != len(operations):
+                raise ValueError("v2 active operation summary disagrees with ownership")
+            summary["active"] = 0
+            operations.clear()
+            predecessor_pending.clear()
+
+        self._terminalize_session_locked(
+            handle,
+            state="completed",
+            end_reason=end_reason,
+            error=None,
+            truncation=None,
+            metadata_mutator=link_successor,
+        )
+        if not self._recovering:
+            self._apply_retention_locked(
+                held_session_ids=frozenset({successor.session_id})
+            )
+        return successor
+
+    def append_v2_segment(
+        self,
+        handle: SessionHandle,
+        *,
+        backend_snapshot: BackendSnapshot,
+    ) -> SessionHandle:
+        """Publish the next contiguous segment or roll before segment 33."""
+
+        segment_context = backend_snapshot.segment
+        if segment_context is None:
+            raise ValueError("v2 segment requires timestamp provenance")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            segments = metadata.get("segments")
+            if not isinstance(segments, list) or not segments:
+                raise ValueError("v2 session must contain a current segment")
+            expected_id = len(segments)
+            if segment_context.segment_id != expected_id:
+                raise ValueError("v2 segment ID must be the next contiguous ID")
+            if len(segments) == _metadata.MAX_SESSION_SEGMENTS:
+                normalized_snapshot = replace(
+                    backend_snapshot,
+                    segment=replace(segment_context, segment_id=0),
+                )
+                return self._rollover_v2_locked(
+                    handle,
+                    end_reason="rollover_segments",
+                    successor_snapshot=normalized_snapshot,
+                )
+
+            started_at = _metadata._format_utc_timestamp(self._clock())
+
+            def publish_segment(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                updated_segments = updated.get("segments")
+                if (
+                    not isinstance(updated_segments, list)
+                    or not updated_segments
+                    or not isinstance(updated_segments[-1], dict)
+                ):
+                    raise ValueError("v2 session segments are malformed")
+                current = updated_segments[-1]
+                if current.get("ended_at") is None:
+                    current["ended_at"] = started_at
+                    current["end_reason"] = "reconnect"
+                segment_id = len(updated_segments)
+                published_snapshot = replace(
+                    backend_snapshot,
+                    segment=replace(segment_context, segment_id=segment_id),
+                )
+                updated_segments.append(
+                    _metadata._backend_segment_json(
+                        published_snapshot,
+                        started_at=started_at,
+                    )
+                )
+
+            def segment_fields(
+                _current_handle: SessionHandle,
+                updated: dict[str, object],
+                _evidence_seq: int,
+            ) -> dict[str, object]:
+                updated_segments = updated.get("segments")
+                if not isinstance(updated_segments, list) or not updated_segments:
+                    raise ValueError("v2 session segments are malformed")
+                return {"segment_id": len(updated_segments)}
+
+            admission = self._append_v2_record_locked(
+                handle,
+                stream="connection",
+                record_type="segment_opened",
+                fields=segment_fields,
+                metadata_mutator=publish_segment,
+            )
+            published_segment_id = _current_v2_segment_id(
+                self._require_active_v2_metadata(admission.handle)
+            )
+            self._v2_snapshots[admission.handle.session_id] = replace(
+                backend_snapshot,
+                segment=replace(segment_context, segment_id=published_segment_id),
+            )
+            return admission.handle
+
+    def start_v2_operation(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        operation_type: Literal["monitor", "interact", "boot_test"],
+        parameters: dict[str, object],
+    ) -> V2EvidenceAdmission:
+        """Persist an operation start before operation-owned activity begins.
+
+        The Device Core caller owns globally unique ID generation. This bounded
+        persistence layer rejects collisions visible in the current session's
+        evidence without retaining an ever-growing historical ID registry.
+        """
+
+        _validate_v2_identifier(operation_id, field="operation_id")
+        if operation_type not in {"monitor", "interact", "boot_test"}:
+            raise ValueError("unsupported v2 operation type")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            active = metadata.get("active_operations")
+            if not isinstance(active, dict):
+                raise ValueError("v2 active_operations must be an object")
+            if operation_id in active or _v2_operation_id_seen(
+                handle.paths.operation_events, operation_id
+            ):
+                raise ValueError("v2 operation ID has already been used")
+
+            def start_fields(
+                current_handle: SessionHandle,
+                _updated: dict[str, object],
+                evidence_seq: int,
+            ) -> dict[str, object]:
+                return {
+                    "operation_id": operation_id,
+                    "operation_type": operation_type,
+                    "parameters": parameters,
+                    "start_cursor": {
+                        "session_id": current_handle.session_id,
+                        "next_evidence_seq": evidence_seq,
+                    },
+                }
+
+            def started(updated: dict[str, object], admission: V2EvidenceAdmission) -> None:
+                operations = updated.get("active_operations")
+                summary = updated.get("operation_summary")
+                if not isinstance(operations, dict) or not isinstance(summary, dict):
+                    raise ValueError("v2 operation metadata is malformed")
+                if operation_id in operations:
+                    raise ValueError("v2 operation ID has already been used")
+                operations[operation_id] = {
+                    "operation_type": operation_type,
+                    "ranges": [
+                        {
+                            "session_id": admission.handle.session_id,
+                            "start_evidence_seq": admission.evidence_seq,
+                            "end_evidence_seq_exclusive": None,
+                        }
+                    ],
+                }
+                summary["started"] = _v2_count(summary, "started") + 1
+                summary["active"] = _v2_count(summary, "active") + 1
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="operation",
+                record_type="operation_started",
+                fields=start_fields,
+                metadata_mutator=started,
+            )
+
+    def complete_v2_operation(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        outcome: str,
+        error: dict[str, object] | None = None,
+    ) -> V2EvidenceAdmission:
+        """Persist one operation terminal record with durable evidence ranges."""
+
+        _validate_v2_identifier(operation_id, field="operation_id")
+        if outcome not in _V2_OPERATION_OUTCOMES:
+            raise ValueError("outcome must use the normalized Phase 1 vocabulary")
+        if outcome == "error":
+            if error is None:
+                raise ValueError("error outcome requires bounded error data")
+            operation_error = _bounded_v2_operation_error(error)
+        else:
+            if error is not None:
+                raise ValueError("operation error data is only valid for the error outcome")
+            operation_error = None
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            active = metadata.get("active_operations")
+            if not isinstance(active, dict) or not isinstance(active.get(operation_id), dict):
+                raise ValueError("v2 operation is not active")
+            def terminal_fields(
+                current_handle: SessionHandle,
+                updated: dict[str, object],
+                terminal_seq: int,
+            ) -> dict[str, object]:
+                operations = updated.get("active_operations")
+                if not isinstance(operations, dict):
+                    raise ValueError("v2 active_operations must be an object")
+                operation = operations.get(operation_id)
+                if not isinstance(operation, dict):
+                    raise ValueError("v2 operation is not active")
+                ranges = operation.get("ranges")
+                if (
+                    not isinstance(ranges, list)
+                    or not ranges
+                    or not isinstance(ranges[-1], dict)
+                ):
+                    raise ValueError("v2 operation ranges are malformed")
+                final_ranges = [dict(item) for item in ranges if isinstance(item, dict)]
+                if len(final_ranges) != len(ranges):
+                    raise ValueError("v2 operation range is malformed")
+                final_ranges[-1]["end_evidence_seq_exclusive"] = terminal_seq + 1
+                return {
+                    "operation_id": operation_id,
+                    "operation_type": operation.get("operation_type"),
+                    "outcome": outcome,
+                    "error": operation_error,
+                    "end_cursor": {
+                        "session_id": current_handle.session_id,
+                        "next_evidence_seq": terminal_seq + 1,
+                    },
+                    "evidence_ranges": final_ranges,
+                }
+
+            def terminal(updated: dict[str, object], _admission: V2EvidenceAdmission) -> None:
+                operations = updated.get("active_operations")
+                summary = updated.get("operation_summary")
+                if not isinstance(operations, dict) or not isinstance(summary, dict):
+                    raise ValueError("v2 operation metadata is malformed")
+                del operations[operation_id]
+                summary["active"] = _v2_count(summary, "active") - 1
+                key = "failed" if outcome == "error" else "completed"
+                summary[key] = _v2_count(summary, key) + 1
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="operation",
+                record_type="operation_terminal",
+                fields=terminal_fields,
+                metadata_mutator=terminal,
+            )
+
+    def append_v2_uart_tx_attempt(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        data: bytes,
+        operation_id: str | None,
+        transformation: dict[str, object],
+    ) -> V2EvidenceAdmission:
+        """Persist exact UART TX intent before transport dispatch."""
+
+        _validate_v2_identifier(attempt_id, field="attempt_id")
+        if operation_id is not None:
+            _validate_v2_identifier(operation_id, field="operation_id")
+        if not data or len(data) > 1024:
+            raise ValueError("v2 UART TX payload must contain 1..1024 bytes")
+        with self._store_lock:
+            seen, _pending = _v2_attempt_ids(
+                handle.paths.operation_events,
+                attempt_type="uart_tx_attempt",
+                result_type="uart_tx_result",
+            )
+            if attempt_id in seen:
+                raise ValueError("v2 UART TX attempt ID must be unique")
+            metadata = self._require_active_v2_metadata(handle)
+            _require_v2_operation_active(metadata, operation_id)
+            if _v2_pending_attempt(metadata, "uart_tx_attempt", attempt_id) is not None:
+                raise ValueError("v2 UART TX attempt ID must be unique")
+
+            def record_pending_attempt(
+                updated: dict[str, object],
+                admission: V2EvidenceAdmission,
+            ) -> None:
+                pending = _v2_pending_attempts(updated)
+                key = _v2_attempt_key("uart_tx_attempt", attempt_id)
+                if key in pending:
+                    raise ValueError("v2 UART TX attempt ID must be unique")
+                pending[key] = {
+                    "attempt_type": "uart_tx_attempt",
+                    "attempt_id": attempt_id,
+                    "session_id": admission.handle.session_id,
+                    "evidence_seq": admission.evidence_seq,
+                }
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="operation",
+                record_type="uart_tx_attempt",
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "attempt_id": attempt_id,
+                    "operation_id": operation_id,
+                    "data_b64": base64.b64encode(data).decode("ascii"),
+                    "byte_length": len(data),
+                    "transformation": transformation,
+                    "segment_id": _current_v2_segment_id(updated),
+                },
+                metadata_mutator=record_pending_attempt,
+            )
+
+    def append_v2_uart_tx_result(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        status: str,
+        accepted_bytes: int | None,
+    ) -> V2EvidenceAdmission:
+        """Persist the known terminal transport result for one TX attempt."""
+
+        _validate_v2_identifier(attempt_id, field="attempt_id")
+        _validate_v2_identifier(status, field="status")
+        if accepted_bytes is not None and (
+            isinstance(accepted_bytes, bool)
+            or not isinstance(accepted_bytes, int)
+            or accepted_bytes < 0
+        ):
+            raise ValueError("accepted_bytes must be a non-negative integer or null")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if _v2_pending_attempt(metadata, "uart_tx_attempt", attempt_id) is None:
+                raise ValueError("v2 result requires a preceding unresolved UART TX attempt")
+
+            def result_fields(
+                _current_handle: SessionHandle,
+                updated: dict[str, object],
+                _evidence_seq: int,
+            ) -> dict[str, object]:
+                attempt = _v2_pending_attempt(updated, "uart_tx_attempt", attempt_id)
+                if attempt is None:
+                    raise ValueError(
+                        "v2 result requires a preceding unresolved UART TX attempt"
+                    )
+                return {
+                    "attempt_id": attempt_id,
+                    "attempt_session_id": attempt["session_id"],
+                    "attempt_evidence_seq": attempt["evidence_seq"],
+                    "status": status,
+                    "accepted_bytes": accepted_bytes,
+                }
+
+            def resolve_attempt(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                del _v2_pending_attempts(updated)[
+                    _v2_attempt_key("uart_tx_attempt", attempt_id)
+                ]
+
+            admission = self._append_v2_record_locked(
+                handle,
+                stream="operation",
+                record_type="uart_tx_result",
+                fields=result_fields,
+                metadata_mutator=resolve_attempt,
+            )
+            if not self._recovering:
+                self._apply_retention_locked(
+                    held_session_ids=frozenset({admission.handle.session_id})
+                )
+            return admission
+
+    def append_v2_control_attempt(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        role: str,
+        provider: str,
+        parameters: dict[str, object],
+        operation_id: str | None,
+    ) -> V2EvidenceAdmission:
+        """Persist resolved semantic-control intent before dispatch."""
+
+        for value, field in ((attempt_id, "attempt_id"), (role, "role"), (provider, "provider")):
+            _validate_v2_identifier(value, field=field)
+        if operation_id is not None:
+            _validate_v2_identifier(operation_id, field="operation_id")
+        with self._store_lock:
+            seen, _pending = _v2_attempt_ids(
+                handle.paths.hardware_events,
+                attempt_type="control_attempt",
+                result_type="control_result",
+            )
+            if attempt_id in seen:
+                raise ValueError("v2 control attempt ID must be unique")
+            metadata = self._require_active_v2_metadata(handle)
+            _require_v2_operation_active(metadata, operation_id)
+            if _v2_pending_attempt(metadata, "control_attempt", attempt_id) is not None:
+                raise ValueError("v2 control attempt ID must be unique")
+
+            def record_pending_attempt(
+                updated: dict[str, object],
+                admission: V2EvidenceAdmission,
+            ) -> None:
+                pending = _v2_pending_attempts(updated)
+                key = _v2_attempt_key("control_attempt", attempt_id)
+                if key in pending:
+                    raise ValueError("v2 control attempt ID must be unique")
+                pending[key] = {
+                    "attempt_type": "control_attempt",
+                    "attempt_id": attempt_id,
+                    "session_id": admission.handle.session_id,
+                    "evidence_seq": admission.evidence_seq,
+                }
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="control_attempt",
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "attempt_id": attempt_id,
+                    "operation_id": operation_id,
+                    "role": role,
+                    "provider": provider,
+                    "parameters": parameters,
+                    "segment_id": _current_v2_segment_id(updated),
+                },
+                metadata_mutator=record_pending_attempt,
+            )
+
+    def append_v2_control_result(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        status: str,
+        device_timestamp_us: int | None = None,
+    ) -> V2EvidenceAdmission:
+        """Persist a known control result without claiming electrical readback."""
+
+        _validate_v2_identifier(attempt_id, field="attempt_id")
+        _validate_v2_identifier(status, field="status")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if _v2_pending_attempt(metadata, "control_attempt", attempt_id) is None:
+                raise ValueError("v2 result requires a preceding unresolved control attempt")
+
+            def result_fields(
+                _current_handle: SessionHandle,
+                updated: dict[str, object],
+                _evidence_seq: int,
+            ) -> dict[str, object]:
+                attempt = _v2_pending_attempt(updated, "control_attempt", attempt_id)
+                if attempt is None:
+                    raise ValueError(
+                        "v2 result requires a preceding unresolved control attempt"
+                    )
+                return {
+                    "attempt_id": attempt_id,
+                    "attempt_session_id": attempt["session_id"],
+                    "attempt_evidence_seq": attempt["evidence_seq"],
+                    "status": status,
+                    "device_timestamp_us": device_timestamp_us,
+                }
+
+            def resolve_attempt(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                del _v2_pending_attempts(updated)[
+                    _v2_attempt_key("control_attempt", attempt_id)
+                ]
+
+            admission = self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="control_result",
+                fields=result_fields,
+                metadata_mutator=resolve_attempt,
+            )
+            if not self._recovering:
+                self._apply_retention_locked(
+                    held_session_ids=frozenset({admission.handle.session_id})
+                )
+            return admission
+
+    def append_v2_connection_event(
+        self,
+        handle: SessionHandle,
+        *,
+        event_type: str,
+        segment_id: int | None,
+        detail: dict[str, object],
+    ) -> V2EvidenceAdmission:
+        """Persist one bounded connection lifecycle fact."""
+
+        _validate_v2_identifier(event_type, field="event_type")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if segment_id is not None and segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 connection event must reference the current segment")
+            return self._append_v2_record_locked(
+                handle,
+                stream="connection",
+                record_type=event_type,
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "segment_id": (
+                        _current_v2_segment_id(updated) if segment_id is not None else None
+                    ),
+                    "detail": detail,
+                },
+            )
+
+    def _append_v2_record_locked(
+        self,
+        handle: SessionHandle,
+        *,
+        stream: Literal["operation", "hardware", "connection"],
+        record_type: str,
+        fields: dict[str, object]
+        | Callable[[SessionHandle, dict[str, object], int], dict[str, object]],
+        metadata_mutator: Callable[
+            [dict[str, object], V2EvidenceAdmission], None
+        ]
+        | None = None,
+    ) -> V2EvidenceAdmission:
+        metadata = self._require_active_v2_metadata(handle)
+        evidence_seq = _v2_next_sequence(metadata)
+        record = self._v2_record(
+            handle,
+            metadata=metadata,
+            evidence_seq=evidence_seq,
+            record_type=record_type,
+            fields=fields,
+        )
+        serialized_record = _persistence.serialize_jsonl(record)
+        if len(serialized_record) > _metadata.MAX_V2_JSONL_RECORD_BYTES:
+            raise ValueError("schema-v2 primary JSONL record exceeds its size limit")
+        if not self._v2_unit_fits(metadata, unit_bytes=len(serialized_record)):
+            handle = self._rollover_v2_locked(handle, end_reason="rollover_size")
+            metadata = self._require_active_v2_metadata(handle)
+            evidence_seq = _v2_next_sequence(metadata)
+            record = self._v2_record(
+                handle,
+                metadata=metadata,
+                evidence_seq=evidence_seq,
+                record_type=record_type,
+                fields=fields,
+            )
+            serialized_record = _persistence.serialize_jsonl(record)
+            if len(serialized_record) > _metadata.MAX_V2_JSONL_RECORD_BYTES:
+                raise ValueError("schema-v2 primary JSONL record exceeds its size limit")
+            if not self._v2_unit_fits(metadata, unit_bytes=len(serialized_record)):
+                raise SessionPersistenceError(
+                    operation="preflight v2 evidence",
+                    path=handle.paths.root,
+                    detail="one schema-valid record exceeds the session budget",
+                )
+            rolled_over = True
+        else:
+            rolled_over = False
+        path = {
+            "operation": handle.paths.operation_events,
+            "hardware": handle.paths.hardware_events,
+            "connection": handle.paths.connection_events,
+        }[stream]
+        admission = V2EvidenceAdmission(
+            handle=handle,
+            evidence_seq=evidence_seq,
+            rolled_over=rolled_over,
+        )
+        try:
+            with _transactions.evidence_transaction(
+                handle.paths,
+                append_paths=[path],
+            ) as transaction:
+                _persistence.append_serialized(path, serialized_record)
+                metadata["next_evidence_seq"] = evidence_seq + 1
+                if metadata_mutator is not None:
+                    metadata_mutator(metadata, admission)
+                _persistence.refresh_storage_accounting(metadata, handle.paths)
+                serialized_metadata = _persistence.serialize_compact_json(metadata)
+                _require_metadata_capacity(serialized_metadata)
+                transaction.prepare_metadata(serialized_metadata)
+                _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+        except SessionPersistenceError as exc:
+            self._fail_active_v2_persistence_locked(handle, cause=exc)
+            raise
+        return admission
+
+    def _v2_record(
+        self,
+        handle: SessionHandle,
+        *,
+        metadata: dict[str, object],
+        evidence_seq: int,
+        record_type: str,
+        fields: dict[str, object]
+        | Callable[[SessionHandle, dict[str, object], int], dict[str, object]],
+    ) -> dict[str, object]:
+        record_fields = (
+            fields(handle, metadata, evidence_seq) if callable(fields) else fields
+        )
+        return {
+            "evidence_seq": evidence_seq,
+            "type": record_type,
+            "recorded_at": _metadata._format_utc_timestamp(self._clock()),
+            **record_fields,
+        }
 
     def _create_session_locked(
         self,
@@ -565,13 +1603,18 @@ class SessionStore:
         metadata_mutator: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         metadata = _persistence.read_json_object(handle.paths.metadata)
-        if metadata.get("schema_version") != 1:
-            raise ValueError("only native schema-v1 sessions can be terminalized")
+        schema_version = metadata.get("schema_version")
+        if schema_version not in {1, 2}:
+            raise ValueError("only native schema-v1/v2 sessions can be terminalized")
         if metadata.get("state") != "active":
             raise ValueError("session lifecycle transition requires active state")
         if metadata_mutator is not None:
             metadata_mutator(metadata)
-        if metadata.get("workflow") == "wait_pattern" and metadata.get("matched") is None:
+        if schema_version == 2:
+            _relinquish_v2_ownership(metadata)
+        if schema_version == 1 and metadata.get("workflow") == "wait_pattern" and metadata.get(
+            "matched"
+        ) is None:
             metadata["matched"] = False
             metadata["detected_pattern_index"] = None
         ended_at = _metadata._format_utc_timestamp(self._clock())
@@ -593,13 +1636,19 @@ class SessionStore:
         elif segments[-1].get("end_reason") is None:
             raise ValueError("closed session segment must have an end reason")
         _persistence.refresh_storage_accounting(metadata, handle.paths)
-        serialized_metadata = _persistence.serialize_json(metadata)
+        serialized_metadata = (
+            _persistence.serialize_compact_json(metadata)
+            if schema_version == 2
+            else _persistence.serialize_json(metadata)
+        )
         _require_metadata_capacity(serialized_metadata)
         _persistence.remove_file(handle.paths.terminal_reserve, missing_ok=True)
         _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
         for reservation_key in tuple(self._uart_tx_result_reservations):
             if reservation_key[0] == handle.session_id:
                 del self._uart_tx_result_reservations[reservation_key]
+        self._v2_profiles.pop(handle.session_id, None)
+        self._v2_snapshots.pop(handle.session_id, None)
 
     def load_metadata(self, session_id: str) -> dict[str, object]:
         """Load a session's metadata JSON."""
@@ -1580,6 +2629,262 @@ class SessionStore:
 def _require_metadata_capacity(serialized_metadata: bytes) -> None:
     if len(serialized_metadata) > _metadata.METADATA_MAX_BYTES:
         raise ValueError("session metadata exceeds its fixed size limit")
+
+
+def _v2_pattern_document(
+    handle: SessionHandle,
+    *,
+    source_evidence_seq: int,
+    event: UartReceiveEvent,
+    detected_patterns: Sequence[dict[str, object]],
+) -> tuple[bytes | None, int]:
+    if not detected_patterns:
+        return None, 0
+    if len(detected_patterns) > _metadata.MAX_V2_DETECTED_PATTERNS_PER_UART_EVENT:
+        raise ValueError("one v2 UART unit may contain at most 12 detected patterns")
+    existing = _persistence.read_json_list(handle.paths.detected_patterns)
+    projected = list(existing)
+    for supplied in detected_patterns:
+        pattern = dict(supplied)
+        pattern["source_evidence_seq"] = source_evidence_seq
+        pattern_name = pattern.get("pattern")
+        if (
+            not isinstance(pattern_name, str)
+            or not 1 <= len(pattern_name.encode("utf-8")) <= 256
+            or "\r" in pattern_name
+            or "\n" in pattern_name
+        ):
+            raise ValueError("v2 detected pattern must contain 1..256 UTF-8 bytes without CR/LF")
+        if pattern.get("segment_id") != event.segment_id:
+            raise ValueError("v2 detected pattern segment does not match source UART")
+        if pattern.get("timestamp_us") != event.timestamp_us:
+            raise ValueError("v2 detected pattern timestamp does not match source UART")
+        if pattern.get("channel") != event.channel:
+            raise ValueError("v2 detected pattern channel does not match source UART")
+        serialized_record = _persistence.serialize_compact_json(pattern)
+        if len(serialized_record) > _metadata.MAX_V2_JSONL_RECORD_BYTES:
+            raise ValueError("schema-v2 detected pattern exceeds its size limit")
+        projected.append(pattern)
+        _evidence.detected_pattern_at(projected, len(projected) - 1)
+    serialized = _persistence.serialize_compact_json(projected)
+    try:
+        current_size = handle.paths.detected_patterns.stat().st_size
+    except OSError as exc:
+        raise SessionPersistenceError(
+            operation="read detected-pattern size",
+            path=handle.paths.detected_patterns,
+            detail=str(exc),
+        ) from exc
+    growth = len(serialized) - current_size
+    if growth < 0:
+        raise ValueError("v2 detected-pattern document cannot shrink during append")
+    return serialized, growth
+
+
+def _v2_next_sequence(metadata: dict[str, object]) -> int:
+    value = metadata.get("next_evidence_seq")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("v2 next_evidence_seq must be a non-negative integer")
+    return value
+
+
+def _v2_count(summary: dict[str, object], key: str) -> int:
+    value = summary.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"v2 operation summary {key} count is invalid")
+    return value
+
+
+def _current_v2_segment_id(metadata: dict[str, object]) -> int:
+    segments = metadata.get("segments")
+    if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
+        raise ValueError("v2 session must contain a current segment")
+    segment_id = segments[-1].get("segment_id")
+    if isinstance(segment_id, bool) or not isinstance(segment_id, int) or segment_id < 0:
+        raise ValueError("v2 current segment ID is invalid")
+    return segment_id
+
+
+def _validate_v2_identifier(value: object, *, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must contain 1..128 UTF-8 bytes")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{field} must not contain Unicode control characters") from exc
+    if len(encoded) > 128:
+        raise ValueError(f"{field} must contain 1..128 UTF-8 bytes")
+    if value[0].isspace() or value[-1].isspace():
+        raise ValueError(f"{field} must not contain edge whitespace")
+    if any(unicodedata.category(character) == "Cc" for character in value):
+        raise ValueError(f"{field} must not contain Unicode control characters")
+    return value
+
+
+def _bounded_v2_operation_error(error: dict[str, object]) -> dict[str, object]:
+    if not isinstance(error, dict):
+        raise ValueError("operation error data must be an object")
+    code = _validate_v2_identifier(error.get("code"), field="operation error code")
+    detail = error.get("detail")
+    if not isinstance(detail, str):
+        raise ValueError("operation error detail must be a string")
+    return _metadata._bounded_error(code, detail)
+
+
+def _require_v2_operation_active(
+    metadata: dict[str, object],
+    operation_id: str | None,
+) -> None:
+    if operation_id is None:
+        return
+    operations = metadata.get("active_operations")
+    if not isinstance(operations, dict):
+        raise ValueError("v2 active_operations must be an object")
+    if not isinstance(operations.get(operation_id), dict):
+        raise ValueError("v2 action operation_id must reference an active operation")
+
+
+def _v2_operation_id_seen(path: Path, operation_id: str) -> bool:
+    try:
+        with path.open(encoding="utf-8") as records:
+            for line in records:
+                value = json.loads(line)
+                if not isinstance(value, dict):
+                    raise ValueError(f"{path.name} record must be a JSON object")
+                if value.get("type") not in {
+                    "operation_started",
+                    "operation_continued",
+                    "operation_terminal",
+                }:
+                    continue
+                recorded_id = value.get("operation_id")
+                if not isinstance(recorded_id, str):
+                    raise ValueError(f"{path.name} operation_id is invalid")
+                if recorded_id == operation_id:
+                    return True
+    except OSError as exc:
+        raise SessionPersistenceError(
+            operation="read operation IDs",
+            path=path,
+            detail=str(exc),
+        ) from exc
+    return False
+
+
+def _v2_attempt_key(attempt_type: str, attempt_id: str) -> str:
+    return f"{attempt_type}:{attempt_id}"
+
+
+def _v2_pending_attempts(
+    metadata: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    raw_pending = metadata.get("pending_attempts")
+    if not isinstance(raw_pending, dict):
+        raise ValueError("v2 pending_attempts must be an object")
+    for key, attempt in raw_pending.items():
+        if not isinstance(key, str) or not isinstance(attempt, dict):
+            raise ValueError("v2 pending attempt metadata is malformed")
+        attempt_type = attempt.get("attempt_type")
+        attempt_id = attempt.get("attempt_id")
+        session_id = attempt.get("session_id")
+        evidence_seq = attempt.get("evidence_seq")
+        if attempt_type not in {"uart_tx_attempt", "control_attempt"}:
+            raise ValueError("v2 pending attempt type is invalid")
+        if not isinstance(attempt_id, str) or key != _v2_attempt_key(
+            attempt_type, attempt_id
+        ):
+            raise ValueError("v2 pending attempt identity is invalid")
+        if not isinstance(session_id, str):
+            raise ValueError("v2 pending attempt session ID is invalid")
+        _metadata._validate_session_id(session_id)
+        if (
+            isinstance(evidence_seq, bool)
+            or not isinstance(evidence_seq, int)
+            or evidence_seq < 0
+        ):
+            raise ValueError("v2 pending attempt evidence sequence is invalid")
+    return cast(dict[str, dict[str, object]], raw_pending)
+
+
+def _v2_pending_attempt(
+    metadata: dict[str, object],
+    attempt_type: Literal["uart_tx_attempt", "control_attempt"],
+    attempt_id: str,
+) -> dict[str, object] | None:
+    return _v2_pending_attempts(metadata).get(_v2_attempt_key(attempt_type, attempt_id))
+
+
+def _relinquish_v2_ownership(metadata: dict[str, object]) -> None:
+    active = metadata.get("active_operations")
+    interrupted = metadata.get("interrupted_operations")
+    summary = metadata.get("operation_summary")
+    if not isinstance(active, dict) or not isinstance(interrupted, dict):
+        raise ValueError("v2 operation ownership metadata is malformed")
+    if not isinstance(summary, dict):
+        raise ValueError("v2 operation summary is malformed")
+    if _v2_count(summary, "active") != len(active):
+        raise ValueError("v2 active operation summary disagrees with ownership")
+    end_evidence_seq = _v2_next_sequence(metadata)
+    for operation_id, raw_operation in active.items():
+        if not isinstance(operation_id, str) or not isinstance(raw_operation, dict):
+            raise ValueError("v2 active operation metadata is malformed")
+        if operation_id in interrupted:
+            raise ValueError("v2 interrupted operation ID is duplicated")
+        raw_ranges = raw_operation.get("ranges")
+        if not isinstance(raw_ranges, list) or not raw_ranges:
+            raise ValueError("v2 active operation ranges are malformed")
+        ranges = [dict(item) for item in raw_ranges if isinstance(item, dict)]
+        if len(ranges) != len(raw_ranges):
+            raise ValueError("v2 active operation range is malformed")
+        if ranges[-1].get("end_evidence_seq_exclusive") is not None:
+            raise ValueError("v2 active operation range is already closed")
+        ranges[-1]["end_evidence_seq_exclusive"] = end_evidence_seq
+        interrupted[operation_id] = {
+            "operation_type": raw_operation.get("operation_type"),
+            "ranges": ranges,
+        }
+    active.clear()
+    summary["active"] = 0
+
+
+def _v2_attempt_ids(
+    path: Path,
+    *,
+    attempt_type: str,
+    result_type: str,
+) -> tuple[set[str], set[str]]:
+    seen: set[str] = set()
+    pending: set[str] = set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise SessionPersistenceError(
+            operation="read attempts",
+            path=path,
+            detail=str(exc),
+        ) from exc
+    for line in lines:
+        value = json.loads(line)
+        if not isinstance(value, dict):
+            raise ValueError(f"{path.name} record must be a JSON object")
+        event_type = value.get("type")
+        if event_type not in {attempt_type, result_type}:
+            continue
+        attempt_id = value.get("attempt_id")
+        if not isinstance(attempt_id, str):
+            raise ValueError(f"{path.name} attempt_id is invalid")
+        if event_type == attempt_type:
+            if attempt_id in seen:
+                raise ValueError(f"{path.name} contains a duplicate attempt ID")
+            seen.add(attempt_id)
+            pending.add(attempt_id)
+        elif value.get("attempt_session_id", path.parent.name) != path.parent.name:
+            continue
+        elif attempt_id not in pending:
+            raise ValueError(f"{path.name} result has no preceding unresolved attempt")
+        else:
+            pending.remove(attempt_id)
+    return seen, pending
 
 
 def _session_evidence_record(

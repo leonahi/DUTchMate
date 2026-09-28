@@ -21,7 +21,9 @@ def session_paths(root: Path) -> SessionPaths:
         metadata=root / "metadata.json",
         uart_raw=root / "uart_raw.log",
         uart_events=root / "uart_events.jsonl",
+        operation_events=root / "operation_events.jsonl",
         hardware_events=root / "hardware_events.jsonl",
+        connection_events=root / "connection_events.jsonl",
         detected_patterns=root / "detected_patterns.json",
         terminal_reserve=root / ".terminal-reserve",
     )
@@ -94,9 +96,12 @@ def evidence_file_bytes(paths: SessionPaths) -> int:
             for path in (
                 paths.uart_raw,
                 paths.uart_events,
+                paths.operation_events,
                 paths.hardware_events,
+                paths.connection_events,
                 paths.detected_patterns,
             )
+            if path.exists()
         )
     except OSError as exc:
         raise _error("account evidence", paths.root, exc) from exc
@@ -141,6 +146,14 @@ def serialize_json(value: object) -> bytes:
 
 def serialize_jsonl(value: dict[str, object]) -> bytes:
     return (json.dumps(value, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def serialize_compact_json(value: object) -> bytes:
+    """Serialize one bounded deterministic JSON document."""
+
+    return (json.dumps(value, separators=(",", ":"), sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
 
 
 def write_serialized(path: Path, data: bytes) -> None:

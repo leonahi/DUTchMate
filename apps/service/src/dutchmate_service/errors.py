@@ -279,7 +279,7 @@ def _session_query_context(exc: SessionQueryError) -> dict[str, object]:
         context.update(
             {
                 "detected_schema_version": exc.detected_schema_version,
-                "supported_schema_versions": [1],
+                "supported_schema_versions": [1, 2],
             }
         )
     return context
@@ -295,7 +295,7 @@ def _baseline_context(exc: BaselineError) -> dict[str, object]:
         context.update(
             {
                 "detected_schema_version": exc.detected_schema_version,
-                "supported_schema_versions": [1],
+                "supported_schema_versions": [1, 2],
             }
         )
     return context
@@ -311,7 +311,7 @@ def _comparison_context(exc: SessionComparisonError) -> dict[str, object]:
         context.update(
             {
                 "detected_schema_version": exc.detected_schema_version,
-                "supported_schema_versions": [1],
+                "supported_schema_versions": [1, 2],
             }
         )
     return context

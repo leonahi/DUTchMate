@@ -12,6 +12,8 @@ from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
+    FirstError,
+    FirstErrorReference,
     LegacySessionDetail,
     LegacySessionListItem,
     NativeSessionListItem,
@@ -20,6 +22,10 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionListItem,
     SessionListPage,
+    V2FirstError,
+    V2FirstErrorReference,
+    V2SessionDetail,
+    V2SessionListItem,
     WaitPatternResult,
 )
 from dutchmate_core.session_store.store import SessionSummary
@@ -325,6 +331,27 @@ def session_detail_payload(detail: SessionDetail) -> dict[str, object]:
         payload = _session_list_item_payload(detail.summary)
         payload["artifact_manifest"] = [asdict(artifact) for artifact in detail.artifacts]
         return payload
+    if isinstance(detail, V2SessionDetail):
+        payload = _session_list_item_payload(detail.summary)
+        payload.update(
+            {
+                "effective_profile": detail.effective_profile,
+                "reconnect_policy": detail.reconnect_policy,
+                "backend_identity": detail.backend_identity,
+                "continuity": detail.continuity,
+                "segments": list(detail.segments),
+                "operation_counts": detail.summary.operation_counts,
+                "action_counts": detail.action_counts,
+                "pattern_counts": {
+                    count.type: count.count for count in detail.pattern_counts
+                },
+                "first_error": _first_error_payload(detail.first_error),
+                "unresolved_uart_tx_attempts": detail.unresolved_uart_tx_attempts,
+                "unresolved_control_attempts": detail.unresolved_control_attempts,
+                "artifact_manifest": [asdict(artifact) for artifact in detail.artifacts],
+            }
+        )
+        return payload
 
     payload = _session_list_item_payload(detail.summary)
     payload.update(
@@ -340,7 +367,7 @@ def session_detail_payload(detail: SessionDetail) -> dict[str, object]:
             "commanded_boot_mode": detail.commanded_boot_mode,
             "storage": detail.storage,
             "segments": list(detail.segments),
-            "first_error": asdict(detail.first_error) if detail.first_error is not None else None,
+            "first_error": _first_error_payload(detail.first_error),
             "pattern_counts": {
                 count.type: count.count for count in detail.pattern_counts
             },
@@ -445,6 +472,10 @@ def _compact_json_size(payload: dict[str, object]) -> int:
 def _session_list_item_payload(item: SessionListItem) -> dict[str, object]:
     if isinstance(item, LegacySessionListItem):
         return asdict(item)
+    if isinstance(item, V2SessionListItem):
+        payload = asdict(item)
+        payload["first_error"] = _first_error_payload(item.first_error)
+        return payload
     return _native_session_list_item_payload(item)
 
 
@@ -467,8 +498,20 @@ def _native_session_list_item_payload(item: NativeSessionListItem) -> dict[str, 
         "segment_count": item.segment_count,
         "integrity": asdict(item.integrity),
         "line_processing": asdict(item.line_processing),
-        "first_error": asdict(item.first_error) if item.first_error is not None else None,
+        "first_error": _first_error_payload(item.first_error),
     }
+
+
+def _first_error_payload(
+    error: FirstError
+    | FirstErrorReference
+    | V2FirstError
+    | V2FirstErrorReference
+    | None,
+) -> dict[str, object] | None:
+    if error is None:
+        return None
+    return asdict(error)
 
 
 def device_action_payload(result: DeviceActionResult) -> dict[str, object]:

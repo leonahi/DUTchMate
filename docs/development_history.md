@@ -9,6 +9,88 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Phase 1 v2 Migration Stage 2 Final Review Fixes — 2026-09-28
+
+- Made every schema-v2 terminalization path relinquish active-operation
+  ownership, close open evidence ranges into `interrupted_operations`, and set
+  the active count to zero without fabricating `operation_terminal` evidence.
+  This includes normal completion, failure, abandonment/recovery, and
+  persistence-fault terminalization.
+- Added explicit pending UART-TX/Control attempt ownership to v2 metadata.
+  Rollover transfers that ownership to the successor, retention protects each
+  attempt's origin session until its linked result is durable, result evidence
+  references the origin session/sequence, and resolution reruns retention. If a
+  successor terminalizes or is recovered as abandoned first, the pending state
+  remains an explicit unresolved/unknown outcome while operation ownership is
+  relinquished; terminal pending state does not indefinitely protect its origin
+  from retention.
+- Removed the unbounded historical operation-ID metadata registry. Persistence
+  rejects collisions visible in the bounded current-session operation evidence,
+  including continued operations, while globally unique ID generation remains
+  the responsibility of Device Core operation callers in their later stages.
+- Unified v2 `operation_counts` as the four operation-state counters (`started`,
+  `completed`, `failed`, `active`) across list, detail, model, and service
+  projections. Detail no longer maintains a competing event-type count shape.
+- Added targeted regressions for normal/failure/abandonment and persistence
+  terminalization, recovery, both attempt kinds across rollover, result and
+  crash paths, bounded operation-ID metadata, and list/detail/service count
+  equality. Runtime ownership, continuous ingestion, and Monitor execution were
+  not changed; Stage 3 and Stage 4 were not started.
+- Validation: 181 session-store tests passed; configured mypy reported no issues
+  in 92 source files; Ruff passed; `uv lock --check` passed; all 1,482 pytest
+  tests passed; and `git diff --check` passed.
+
+## Phase 1 v2 Migration Stage 2 Review Fixes — 2026-09-28
+
+- Moved active-operation ownership entirely into the rollover successor. The
+  predecessor now closes its ranges and clears active ownership while the
+  successor owns the continued operation and its open range.
+- Rebuilt rollover-sensitive session-local fields against the admitted
+  successor: operation cursors/ranges, segment IDs, UART raw offsets and pattern
+  references, connection records, and TX/Control attempts. Operation IDs remain
+  unique across a retained rollover chain and action ownership references must
+  name an active operation.
+- Added stable schema-v2 list/detail snapshots using transaction-marker and
+  metadata-before/after checks, explicit `rollover_succeeded` connection
+  evidence, and an immediate retention pass after rollover.
+- Restricted terminal outcomes to the normalized Phase 1 vocabulary, required
+  bounded error data to agree with the `error` outcome, and rejected operation
+  identities with edge whitespace or Unicode control characters.
+- Added regressions for each review finding, including nonzero-segment rollover,
+  active-operation transfer, start/terminal cursor rebasing, action and segment
+  rebasing, stable concurrent retrieval, lifecycle evidence, retention, and
+  identity/outcome validation. Runtime ownership and continuous ingestion were
+  not changed; Stage 3 was not started.
+- Validation: 172 session-store tests passed; configured mypy reported no issues
+  in 92 source files; Ruff passed; `uv lock --check` passed; all 1,473 pytest
+  tests passed; and `git diff --check` passed.
+
+## Phase 1 v2 Migration Stage 2 — 2026-09-26
+
+- Added an independently usable native schema-v2 session store with the seven
+  required evidence artifacts plus an active-only terminal reserve. Creation
+  publishes compact bounded metadata only after all required files are durably
+  initialized; failed creation removes the partial directory.
+- Added one contiguous primary `evidence_seq` across UART RX, operation,
+  UART-TX, Control, and connection records. UART admission preserves exact raw
+  offsets/base64 equivalence and atomically stores derived pattern references;
+  action attempt/result matching exposes unresolved outcomes after restart.
+- Added whole-unit evidence preflight, exact-boundary admission, linked
+  `rollover_size`, rollover before segment 33, and operation continuation ranges
+  across successors. Successor or authoritative append failures terminalize the
+  affected active sessions with explicit local persistence-fault evidence.
+- Added stale-active abandonment without invented connection evidence,
+  discriminated v2/v1/v0 list/detail projections, v2 log replay, first-error
+  projection, baseline/comparison rules, and retention protection for active,
+  baseline, active-operation-range, and in-progress-reader sessions. Historical
+  v0/v1 directories remain read-only and are not upgraded in place.
+- Added bounded v2 service serialization while leaving Device Core runtime
+  creation and ingestion on v1 for the Stage 3 migration. The Debug Agent
+  continues to reject non-v1 evidence explicitly.
+- Validation: 154 focused session-store tests passed; configured mypy reported
+  no issues in 92 source files; Ruff passed; all 1,455 pytest tests passed; the
+  structural Graphify index was refreshed; and `git diff --check` passed.
+
 ## Phase 1 v2 Migration Stage 1 — 2026-09-25
 
 - Introduced `core/profile` as the single file-backed configuration authority.

@@ -8,7 +8,7 @@ from dutchmate_core.backends.contracts import (
     BufferStatusEvent,
     UartReceiveEvent,
 )
-from dutchmate_core.session_store.models import FirstError, MatchExcerpt
+from dutchmate_core.session_store.models import FirstError, MatchExcerpt, V2FirstError
 from dutchmate_core.uart_capture.line_buffer import OversizedUartLine
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 
@@ -101,6 +101,35 @@ def first_error(
                     segment_order.get(segment_id, len(segment_order) + segment_id),
                     ingestion_index,
                     line_index_in_event,
+                    detected_pattern_index,
+                ),
+                error,
+            )
+        )
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def v2_first_error(detected_patterns: list[object]) -> V2FirstError | None:
+    """Return the earliest stored v2 failure match by primary evidence order."""
+
+    candidates: list[tuple[tuple[int, int, int], V2FirstError]] = []
+    for detected_pattern_index, raw_pattern in enumerate(detected_patterns):
+        if not isinstance(raw_pattern, dict):
+            raise ValueError("detected patterns must contain JSON objects")
+        pattern = cast(dict[str, object], raw_pattern)
+        source_evidence_seq = _pattern_int(pattern, "source_evidence_seq")
+        base_error = detected_pattern_at(detected_patterns, detected_pattern_index)
+        if base_error.pattern not in _FAILURE_PATTERNS:
+            continue
+        error = _v2_first_error(base_error, source_evidence_seq=source_evidence_seq)
+        candidates.append(
+            (
+                (
+                    source_evidence_seq,
+                    base_error.line_index_in_event,
                     detected_pattern_index,
                 ),
                 error,
@@ -393,6 +422,27 @@ def _pattern_int(pattern: dict[str, object], key: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"detected pattern '{key}' must be a non-negative integer")
     return value
+
+
+def _v2_first_error(error: FirstError, *, source_evidence_seq: int) -> V2FirstError:
+    return V2FirstError(
+        pattern=error.pattern,
+        detected_pattern_index=error.detected_pattern_index,
+        segment_id=error.segment_id,
+        timestamp_us=error.timestamp_us,
+        channel=error.channel,
+        ingestion_index=error.ingestion_index,
+        line_index_in_event=error.line_index_in_event,
+        line_start_ingestion_index=error.line_start_ingestion_index,
+        line_start_event_offset=error.line_start_event_offset,
+        line_end_ingestion_index=error.line_end_ingestion_index,
+        line_end_event_offset=error.line_end_event_offset,
+        total_line_bytes=error.total_line_bytes,
+        match_start_byte=error.match_start_byte,
+        match_end_byte=error.match_end_byte,
+        match_excerpt=error.match_excerpt,
+        source_evidence_seq=source_evidence_seq,
+    )
 
 
 def _pattern_excerpt(value: object) -> MatchExcerpt:

@@ -22,6 +22,7 @@ from dutchmate_core.session_store.models import (
     FirstErrorReference,
     LegacySessionDetail,
     LegacySessionListItem,
+    LineProcessing,
     NativeSessionDetail,
     NativeSessionListItem,
     SessionArtifact,
@@ -32,6 +33,10 @@ from dutchmate_core.session_store.models import (
     SessionPersistenceError,
     SessionQueryError,
     SessionSummary,
+    V2FirstError,
+    V2FirstErrorReference,
+    V2SessionDetail,
+    V2SessionListItem,
 )
 from dutchmate_core.validation import InputValidationError, validate_serial_port
 
@@ -185,6 +190,12 @@ def get_session_detail(
             summary=summary,
             artifacts=_legacy_artifacts(paths, operation="get_session"),
         )
+    if schema_version == 2:
+        return _v2_detail(
+            paths,
+            metadata,
+            baseline_session_id=baseline_session_id,
+        )
     if schema_version != 1:
         raise _unsupported_schema(
             operation="get_session",
@@ -213,6 +224,12 @@ def _list_item(
     )
     if schema_version == 0:
         return _legacy_item(metadata, session_id, operation=operation)
+    if schema_version == 2:
+        return _v2_list_item(
+            paths,
+            metadata,
+            baseline_session_id=baseline_session_id,
+        )
     if schema_version != 1:
         raise _unsupported_schema(
             operation=operation,
@@ -287,6 +304,276 @@ def _native_detail(
         operation=operation,
         session_id=paths.root.name,
         detail="Session changed continuously while creating a stable detail snapshot",
+    )
+
+
+def _v2_detail(
+    paths: SessionPaths,
+    metadata: dict[str, object],
+    *,
+    baseline_session_id: str | None,
+) -> V2SessionDetail:
+    operation: Literal["get_session"] = "get_session"
+    for _attempt in range(_SNAPSHOT_ATTEMPTS):
+        if _transaction_active(paths):
+            time.sleep(0.001)
+            metadata = _read_metadata(paths, operation=operation)
+            continue
+        try:
+            detail = _build_v2_detail(
+                paths,
+                metadata,
+                baseline_session_id=baseline_session_id,
+            )
+            metadata_after = _read_metadata(paths, operation=operation)
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            SessionPersistenceError,
+            ValueError,
+        ) as exc:
+            if _transaction_active(paths):
+                time.sleep(0.001)
+                metadata = _read_metadata(paths, operation=operation)
+                continue
+            metadata_after = _read_metadata(paths, operation=operation)
+            if metadata_after != metadata:
+                metadata = metadata_after
+                time.sleep(0.001)
+                continue
+            raise _query_fault(
+                operation=operation,
+                session_id=paths.root.name,
+                detail=f"Session evidence is invalid: {_exception_detail(exc)}",
+            ) from exc
+        if not _transaction_active(paths) and metadata_after == metadata:
+            return detail
+        metadata = metadata_after
+        time.sleep(0.001)
+    raise _query_fault(
+        operation=operation,
+        session_id=paths.root.name,
+        detail="Session changed continuously while creating a stable detail snapshot",
+    )
+
+
+def _build_v2_detail(
+    paths: SessionPaths,
+    metadata: dict[str, object],
+    *,
+    baseline_session_id: str | None,
+) -> V2SessionDetail:
+    patterns = _persistence.read_json_list(paths.detected_patterns)
+    summary = _v2_summary(
+        paths,
+        metadata,
+        baseline_session_id=baseline_session_id,
+        patterns=patterns,
+    )
+    uart_records = list(_iter_jsonl_objects(paths.uart_events))
+    operation_records = list(_iter_jsonl_objects(paths.operation_events))
+    hardware_records = list(_iter_jsonl_objects(paths.hardware_events))
+    connection_records = list(_iter_jsonl_objects(paths.connection_events))
+    _validate_v2_primary_order(
+        metadata,
+        uart_records=uart_records,
+        operation_records=operation_records,
+        hardware_records=hardware_records,
+        connection_records=connection_records,
+    )
+    _validate_v2_uart_records(paths.uart_raw, uart_records)
+    operation_counts = Counter(
+        _required_string(record, "type") for record in operation_records
+    )
+    hardware_counts = Counter(
+        _required_string(record, "type") for record in hardware_records
+    )
+    tx_pending = _unresolved_attempts(
+        operation_records,
+        attempt_type="uart_tx_attempt",
+        result_type="uart_tx_result",
+        session_id=summary.session_id,
+    )
+    tx_pending.update(_v2_pending_attempt_ids(metadata, "uart_tx_attempt"))
+    control_pending = _unresolved_attempts(
+        hardware_records,
+        attempt_type="control_attempt",
+        result_type="control_result",
+        session_id=summary.session_id,
+    )
+    control_pending.update(_v2_pending_attempt_ids(metadata, "control_attempt"))
+    artifacts = _v2_artifacts(
+        paths,
+        uart_records=len(uart_records),
+        operation_records=len(operation_records),
+        hardware_records=len(hardware_records),
+        connection_records=len(connection_records),
+        pattern_records=len(patterns),
+    )
+    _validate_storage(_required_object(metadata, "storage"), artifacts)
+    segments = metadata.get("segments")
+    if not isinstance(segments, list):
+        raise ValueError("v2 segments must be an array")
+    return V2SessionDetail(
+        summary=summary,
+        effective_profile=_required_object(metadata, "effective_profile").copy(),
+        reconnect_policy=_required_object(metadata, "reconnect_policy").copy(),
+        backend_identity=_required_object(metadata, "backend_identity").copy(),
+        continuity=_required_object(metadata, "continuity").copy(),
+        segments=tuple(dict(segment) for segment in segments if isinstance(segment, dict)),
+        action_counts={
+            key: count
+            for key, count in sorted((operation_counts + hardware_counts).items())
+            if key
+            not in {
+                "operation_started",
+                "operation_terminal",
+                "operation_continued",
+            }
+        },
+        pattern_counts=_pattern_counts(patterns),
+        first_error=_evidence.v2_first_error(patterns),
+        unresolved_uart_tx_attempts=len(tx_pending),
+        unresolved_control_attempts=len(control_pending),
+        artifacts=artifacts,
+    )
+
+
+def _v2_list_item(
+    paths: SessionPaths,
+    metadata: dict[str, object],
+    *,
+    baseline_session_id: str | None,
+) -> V2SessionListItem:
+    operation: Literal["list_sessions"] = "list_sessions"
+    for _attempt in range(_SNAPSHOT_ATTEMPTS):
+        if _transaction_active(paths):
+            time.sleep(0.001)
+            metadata = _read_metadata(paths, operation=operation)
+            continue
+        try:
+            summary = _v2_summary(
+                paths,
+                metadata,
+                baseline_session_id=baseline_session_id,
+            )
+            metadata_after = _read_metadata(paths, operation=operation)
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            SessionPersistenceError,
+            ValueError,
+        ) as exc:
+            if _transaction_active(paths):
+                time.sleep(0.001)
+                metadata = _read_metadata(paths, operation=operation)
+                continue
+            metadata_after = _read_metadata(paths, operation=operation)
+            if metadata_after != metadata:
+                metadata = metadata_after
+                time.sleep(0.001)
+                continue
+            raise _query_fault(
+                operation=operation,
+                session_id=paths.root.name,
+                detail=f"Session metadata is invalid: {_exception_detail(exc)}",
+            ) from exc
+        if not _transaction_active(paths) and metadata_after == metadata:
+            return summary
+        metadata = metadata_after
+        time.sleep(0.001)
+    raise _query_fault(
+        operation=operation,
+        session_id=paths.root.name,
+        detail="Session changed continuously while creating a stable list snapshot",
+    )
+
+
+def _v2_summary(
+    paths: SessionPaths,
+    metadata: dict[str, object],
+    *,
+    baseline_session_id: str | None,
+    patterns: list[object] | None = None,
+) -> V2SessionListItem:
+    if metadata.get("schema_version") != 2:
+        raise ValueError("v2 projection requires schema version 2")
+    session_id = _required_string(metadata, "session_id")
+    if session_id != paths.root.name:
+        raise ValueError("session metadata ID does not match its directory")
+    started_at = _required_string(metadata, "started_at")
+    _validate_timestamp(started_at, "started_at")
+    state = metadata.get("state")
+    if state not in {"active", "completed", "failed", "abandoned"}:
+        raise ValueError("v2 lifecycle state is invalid")
+    ended_at = metadata.get("ended_at")
+    end_reason = metadata.get("end_reason")
+    if ended_at is not None:
+        if not isinstance(ended_at, str):
+            raise ValueError("v2 ended_at is invalid")
+        _validate_timestamp(ended_at, "ended_at")
+    if end_reason is not None and not isinstance(end_reason, str):
+        raise ValueError("v2 end_reason is invalid")
+    if (state == "active") != (ended_at is None and end_reason is None):
+        raise ValueError("v2 lifecycle fields disagree")
+    profile_name = metadata.get("profile_name")
+    if profile_name is not None and not isinstance(profile_name, str):
+        raise ValueError("v2 profile_name is invalid")
+    profile_digest = _required_string(metadata, "profile_digest_sha256")
+    if len(profile_digest) != 64 or any(c not in "0123456789abcdef" for c in profile_digest):
+        raise ValueError("v2 profile digest is invalid")
+    backend_mode = metadata.get("backend_mode")
+    if backend_mode not in {"basic", "enhanced"}:
+        raise ValueError("v2 backend mode is invalid")
+    segments = metadata.get("segments")
+    if not isinstance(segments, list) or not 1 <= len(segments) <= 32:
+        raise ValueError("v2 session must contain 1..32 segments")
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict) or segment.get("segment_id") != index:
+            raise ValueError("v2 segment IDs must be contiguous from zero")
+    predecessor = metadata.get("predecessor_session_id")
+    successor = metadata.get("successor_session_id")
+    for value in (predecessor, successor):
+        if value is not None:
+            if not isinstance(value, str):
+                raise ValueError("v2 rollover linkage is invalid")
+            _metadata._validate_session_id(value)
+    line = _required_object(metadata, "line_processing")
+    line_processing = LineProcessing(
+        status=cast(Literal["complete", "limit_exceeded"], line.get("status")),
+        max_line_bytes=cast(int, line.get("max_line_bytes")),
+        oversized_line_count=cast(int, line.get("oversized_line_count")),
+    )
+    operation_summary = _required_object(metadata, "operation_summary")
+    operation_counts = {
+        key: _required_non_negative_int(operation_summary, key)
+        for key in ("started", "completed", "failed", "active")
+    }
+    storage = _required_object(metadata, "storage")
+    evidence_quality = _required_object(metadata, "evidence_quality")
+    if patterns is None:
+        patterns = _persistence.read_json_list(paths.detected_patterns)
+    first_error = _evidence.v2_first_error(patterns)
+    return V2SessionListItem(
+        session_id=session_id,
+        started_at=started_at,
+        state=state,
+        ended_at=ended_at,
+        end_reason=end_reason,
+        profile_name=profile_name,
+        profile_digest_sha256=profile_digest,
+        backend_mode=backend_mode,
+        baseline=session_id == baseline_session_id,
+        segment_count=len(segments),
+        predecessor_session_id=cast(str | None, predecessor),
+        successor_session_id=cast(str | None, successor),
+        evidence_quality=evidence_quality.copy(),
+        line_processing=line_processing,
+        operation_counts=operation_counts,
+        storage=storage.copy(),
+        first_error=_v2_first_error_reference(first_error),
     )
 
 
@@ -570,6 +857,156 @@ def _native_artifacts(
     )
 
 
+def _v2_artifacts(
+    paths: SessionPaths,
+    *,
+    uart_records: int,
+    operation_records: int,
+    hardware_records: int,
+    connection_records: int,
+    pattern_records: int,
+) -> tuple[SessionArtifact, ...]:
+    return (
+        SessionArtifact("metadata.json", _artifact_size(paths.metadata), 1),
+        SessionArtifact("uart_raw.log", _artifact_size(paths.uart_raw), None),
+        SessionArtifact("uart_events.jsonl", _artifact_size(paths.uart_events), uart_records),
+        SessionArtifact(
+            "operation_events.jsonl",
+            _artifact_size(paths.operation_events),
+            operation_records,
+        ),
+        SessionArtifact(
+            "hardware_events.jsonl",
+            _artifact_size(paths.hardware_events),
+            hardware_records,
+        ),
+        SessionArtifact(
+            "connection_events.jsonl",
+            _artifact_size(paths.connection_events),
+            connection_records,
+        ),
+        SessionArtifact(
+            "detected_patterns.json",
+            _artifact_size(paths.detected_patterns),
+            pattern_records,
+        ),
+    )
+
+
+def _validate_v2_primary_order(
+    metadata: dict[str, object],
+    *,
+    uart_records: list[dict[str, object]],
+    operation_records: list[dict[str, object]],
+    hardware_records: list[dict[str, object]],
+    connection_records: list[dict[str, object]],
+) -> None:
+    records = [
+        *uart_records,
+        *operation_records,
+        *hardware_records,
+        *connection_records,
+    ]
+    sequences: list[int] = []
+    for record in records:
+        sequence = record.get("evidence_seq")
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
+            raise ValueError("v2 evidence_seq is invalid")
+        _required_string(record, "type")
+        recorded_at = _required_string(record, "recorded_at")
+        _validate_timestamp(recorded_at, "recorded_at")
+        sequences.append(sequence)
+    next_sequence = metadata.get("next_evidence_seq")
+    if (
+        isinstance(next_sequence, bool)
+        or not isinstance(next_sequence, int)
+        or next_sequence < 0
+    ):
+        raise ValueError("v2 next_evidence_seq is invalid")
+    if sorted(sequences) != list(range(next_sequence)):
+        raise ValueError("v2 primary evidence sequence is not contiguous")
+
+
+def _validate_v2_uart_records(
+    raw_path: Path,
+    records: list[dict[str, object]],
+) -> None:
+    raw = raw_path.read_bytes()
+    expected_start = 0
+    for record in records:
+        if record.get("type") != "uart_rx":
+            raise ValueError("v2 UART event type is invalid")
+        start = record.get("raw_offset_start")
+        end = record.get("raw_offset_end")
+        if (
+            isinstance(start, bool)
+            or not isinstance(start, int)
+            or isinstance(end, bool)
+            or not isinstance(end, int)
+            or start != expected_start
+            or end <= start
+            or end > len(raw)
+        ):
+            raise ValueError("v2 UART raw offsets are invalid")
+        encoded = _required_string(record, "data_b64")
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except binascii.Error as exc:
+            raise ValueError("v2 UART data_b64 is invalid") from exc
+        if decoded != raw[start:end]:
+            raise ValueError("v2 UART base64 does not match exact raw bytes")
+        expected_start = end
+    if expected_start != len(raw):
+        raise ValueError("v2 UART raw bytes are not fully referenced")
+
+
+def _unresolved_attempts(
+    records: list[dict[str, object]],
+    *,
+    attempt_type: str,
+    result_type: str,
+    session_id: str,
+) -> set[str]:
+    pending: set[str] = set()
+    for record in sorted(records, key=lambda item: cast(int, item.get("evidence_seq"))):
+        event_type = record.get("type")
+        if event_type == attempt_type:
+            attempt_id = _required_string(record, "attempt_id")
+            if attempt_id in pending:
+                raise ValueError(f"duplicate unresolved {attempt_type} ID")
+            pending.add(attempt_id)
+        elif event_type == result_type:
+            attempt_id = _required_string(record, "attempt_id")
+            attempt_session_id = record.get("attempt_session_id", session_id)
+            if not isinstance(attempt_session_id, str):
+                raise ValueError(f"{result_type} attempt_session_id is invalid")
+            _metadata._validate_session_id(attempt_session_id)
+            if attempt_session_id != session_id:
+                continue
+            if attempt_id not in pending:
+                raise ValueError(f"{result_type} has no preceding unresolved attempt")
+            pending.remove(attempt_id)
+    return pending
+
+
+def _v2_pending_attempt_ids(
+    metadata: dict[str, object],
+    attempt_type: Literal["uart_tx_attempt", "control_attempt"],
+) -> set[str]:
+    pending = _required_object(metadata, "pending_attempts")
+    attempt_ids: set[str] = set()
+    for attempt in pending.values():
+        if not isinstance(attempt, dict):
+            raise ValueError("v2 pending attempt metadata is malformed")
+        if attempt.get("attempt_type") != attempt_type:
+            continue
+        attempt_id = _required_string(attempt, "attempt_id")
+        if attempt_id in attempt_ids:
+            raise ValueError("v2 pending attempt ID is duplicated")
+        attempt_ids.add(attempt_id)
+    return attempt_ids
+
+
 def _legacy_artifacts(
     paths: SessionPaths,
     *,
@@ -686,6 +1123,23 @@ def _first_error_reference(error: FirstError | None) -> FirstErrorReference | No
     )
 
 
+def _v2_first_error_reference(
+    error: V2FirstError | None,
+) -> V2FirstErrorReference | None:
+    if error is None:
+        return None
+    return V2FirstErrorReference(
+        pattern=error.pattern,
+        detected_pattern_index=error.detected_pattern_index,
+        segment_id=error.segment_id,
+        timestamp_us=error.timestamp_us,
+        channel=error.channel,
+        ingestion_index=error.ingestion_index,
+        line_index_in_event=error.line_index_in_event,
+        source_evidence_seq=error.source_evidence_seq,
+    )
+
+
 def _validate_page_limit(limit: object) -> None:
     if (
         isinstance(limit, bool)
@@ -755,6 +1209,13 @@ def _required_object(value: dict[str, object], key: str) -> dict[str, object]:
     if not isinstance(result, dict):
         raise ValueError(f"'{key}' must be a JSON object")
     return cast(dict[str, object], result)
+
+
+def _required_non_negative_int(value: dict[str, object], key: str) -> int:
+    result = value.get(key)
+    if isinstance(result, bool) or not isinstance(result, int) or result < 0:
+        raise ValueError(f"'{key}' must be a non-negative integer")
+    return result
 
 
 def _legacy_identity(value: object, field: str) -> str | None:

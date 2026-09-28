@@ -15,7 +15,6 @@ from dutchmate_core.session_store.models import (
     CommandedBootMode,
     EvidenceTypeCount,
     FirstError,
-    LegacySessionDetail,
     LineProcessing,
     NativeSessionDetail,
     SessionQueryError,
@@ -69,13 +68,13 @@ def load_session_facts(store: SessionStore, session_id: str) -> SessionFacts:
 
 def _require_native_detail(store: SessionStore, session_id: str) -> NativeSessionDetail:
     detail = store.get_session_detail(session_id)
-    if isinstance(detail, LegacySessionDetail):
+    if not isinstance(detail, NativeSessionDetail):
         raise SessionQueryError(
             error="unsupported_session_schema",
             operation="get_session",
             detail="Debug Agent evidence requires native session schema version 1",
             session_id=detail.summary.session_id,
-            detected_schema_version=0,
+            detected_schema_version=detail.summary.schema_version,
         )
     return detail
 

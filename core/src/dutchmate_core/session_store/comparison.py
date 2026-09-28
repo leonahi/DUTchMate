@@ -24,6 +24,7 @@ from dutchmate_core.session_store.models import (
     SessionComparison,
     SessionComparisonError,
     SessionQueryError,
+    V2SessionDetail,
 )
 from dutchmate_core.session_store.retrieval import get_session_detail
 
@@ -98,7 +99,7 @@ def _native_detail(
     session_id: str,
     *,
     pointer_target: bool,
-) -> NativeSessionDetail:
+) -> NativeSessionDetail | V2SessionDetail:
     try:
         detail = get_session_detail(root, session_id)
     except SessionQueryError as exc:
@@ -130,19 +131,21 @@ def _native_detail(
     return detail
 
 
-def _require_comparable_subject(detail: NativeSessionDetail) -> None:
-    summary = detail.summary
-    if summary.state not in _TERMINAL_STATES:
+def _require_comparable_subject(detail: NativeSessionDetail | V2SessionDetail) -> None:
+    if detail.summary.state not in _TERMINAL_STATES:
         raise SessionComparisonError(
             error="invalid_session_state",
-            session_id=summary.session_id,
+            session_id=detail.summary.session_id,
             reason="state_not_terminal",
             detail="Comparison subject must be terminal",
         )
-    if summary.workflow not in _COMPARABLE_WORKFLOWS:
+    if (
+        isinstance(detail, NativeSessionDetail)
+        and detail.summary.workflow not in _COMPARABLE_WORKFLOWS
+    ):
         raise SessionComparisonError(
             error="invalid_session_state",
-            session_id=summary.session_id,
+            session_id=detail.summary.session_id,
             reason="workflow_not_comparable",
             detail="Comparison subject must be a capture or boot-test session",
         )
@@ -171,8 +174,8 @@ def _logs(root: Path, session_id: str, *, pointer_target: bool) -> RecentLogs:
 
 
 def _compare_pattern_counts(
-    baseline: NativeSessionDetail,
-    subject: NativeSessionDetail,
+    baseline: NativeSessionDetail | V2SessionDetail,
+    subject: NativeSessionDetail | V2SessionDetail,
 ) -> tuple[PatternCountComparison, ...]:
     baseline_counts = {item.type: item.count for item in baseline.pattern_counts}
     subject_counts = {item.type: item.count for item in subject.pattern_counts}
@@ -250,19 +253,19 @@ def _line_excerpt(line: RecentLogLine) -> tuple[str, bool]:
 
 
 def _evidence_summary(
-    detail: NativeSessionDetail,
+    detail: NativeSessionDetail | V2SessionDetail,
     logs: RecentLogs,
 ) -> ComparisonSessionEvidence:
     summary = detail.summary
     return ComparisonSessionEvidence(
         session_id=summary.session_id,
         state=summary.state,
-        workflow=summary.workflow,
+        workflow=(detail.summary.workflow if isinstance(detail, NativeSessionDetail) else None),
         backend_mode=summary.backend_mode,
-        integrity=summary.integrity,
-        truncated=summary.truncated,
-        interrupted=summary.interrupted,
-        resumed=summary.resumed,
+        integrity=logs.integrity,
+        truncated=logs.truncated,
+        interrupted=logs.interrupted,
+        resumed=logs.resumed,
         segment_count=summary.segment_count,
         complete_lines_in_window=len(logs.complete_lines),
         omitted_complete_lines=logs.omitted_complete_lines,
@@ -274,12 +277,22 @@ def _evidence_summary(
 
 
 def _timing_incompatibility_reason(
-    baseline: NativeSessionDetail,
-    subject: NativeSessionDetail,
+    baseline: NativeSessionDetail | V2SessionDetail,
+    subject: NativeSessionDetail | V2SessionDetail,
 ) -> str | None:
-    if baseline.summary.interrupted:
+    baseline_continuity = (
+        baseline.summary.interrupted
+        if isinstance(baseline, NativeSessionDetail)
+        else baseline.continuity.get("observation_gap_count") != 0
+    )
+    subject_continuity = (
+        subject.summary.interrupted
+        if isinstance(subject, NativeSessionDetail)
+        else subject.continuity.get("observation_gap_count") != 0
+    )
+    if baseline_continuity:
         return "baseline_interrupted"
-    if subject.summary.interrupted:
+    if subject_continuity:
         return "subject_interrupted"
     if baseline.summary.segment_count != 1:
         return "baseline_multiple_segments"
@@ -294,7 +307,9 @@ def _timing_incompatibility_reason(
     return None
 
 
-def _timestamp_identity(detail: NativeSessionDetail) -> tuple[object, ...] | None:
+def _timestamp_identity(
+    detail: NativeSessionDetail | V2SessionDetail,
+) -> tuple[object, ...] | None:
     if len(detail.segments) != 1:
         return None
     timestamp = detail.segments[0].get("timestamp")

@@ -76,7 +76,9 @@ class SessionPaths:
     metadata: Path
     uart_raw: Path
     uart_events: Path
+    operation_events: Path
     hardware_events: Path
+    connection_events: Path
     detected_patterns: Path
     terminal_reserve: Path
 
@@ -87,6 +89,15 @@ class SessionHandle:
 
     session_id: str
     paths: SessionPaths
+
+
+@dataclass(frozen=True, slots=True)
+class V2EvidenceAdmission:
+    """Location and owning session for one admitted schema-v2 evidence unit."""
+
+    handle: SessionHandle
+    evidence_seq: int
+    rolled_over: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +217,13 @@ class FirstError:
 
 
 @dataclass(frozen=True, slots=True)
+class V2FirstError(FirstError):
+    """Schema-v2 failure match tied to its primary UART evidence position."""
+
+    source_evidence_seq: int
+
+
+@dataclass(frozen=True, slots=True)
 class LineProcessing:
     """Bounded derived-line processing status for one session."""
 
@@ -281,6 +299,13 @@ class FirstErrorReference:
 
 
 @dataclass(frozen=True, slots=True)
+class V2FirstErrorReference(FirstErrorReference):
+    """Compact schema-v2 first-error location in primary evidence order."""
+
+    source_evidence_seq: int
+
+
+@dataclass(frozen=True, slots=True)
 class NativeSessionListItem:
     """Bounded native lifecycle projection for one session list item."""
 
@@ -305,6 +330,31 @@ class NativeSessionListItem:
 
 
 @dataclass(frozen=True, slots=True)
+class V2SessionListItem:
+    """Bounded schema-v2 ownership-session list projection."""
+
+    session_id: str
+    started_at: str
+    state: SessionState
+    ended_at: str | None
+    end_reason: str | None
+    profile_name: str | None
+    profile_digest_sha256: str
+    backend_mode: BackendMode
+    baseline: bool
+    segment_count: int
+    predecessor_session_id: str | None
+    successor_session_id: str | None
+    evidence_quality: dict[str, object]
+    line_processing: LineProcessing
+    operation_counts: dict[str, int]
+    storage: dict[str, object]
+    first_error: V2FirstErrorReference | None
+    schema_version: Literal[2] = 2
+    compatibility: Literal["native"] = "native"
+
+
+@dataclass(frozen=True, slots=True)
 class LegacySessionListItem:
     """Bounded read-only identity projection for one unversioned session."""
 
@@ -319,7 +369,7 @@ class LegacySessionListItem:
     migration_available: Literal[False] = False
 
 
-SessionListItem = NativeSessionListItem | LegacySessionListItem
+SessionListItem = V2SessionListItem | NativeSessionListItem | LegacySessionListItem
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,7 +403,7 @@ class ComparisonSessionEvidence:
 
     session_id: str
     state: SessionState
-    workflow: SessionWorkflow
+    workflow: SessionWorkflow | None
     backend_mode: BackendMode
     integrity: UartIntegrity
     truncated: bool
@@ -467,6 +517,30 @@ class NativeSessionDetail:
 
 
 @dataclass(frozen=True, slots=True)
+class V2SessionDetail:
+    """Bounded schema-v2 detail without expanded primary evidence arrays."""
+
+    summary: V2SessionListItem
+    effective_profile: dict[str, object]
+    reconnect_policy: dict[str, object]
+    backend_identity: dict[str, object]
+    continuity: dict[str, object]
+    segments: tuple[dict[str, object], ...]
+    action_counts: dict[str, int]
+    pattern_counts: tuple[EvidenceTypeCount, ...]
+    first_error: V2FirstError | None
+    unresolved_uart_tx_attempts: int
+    unresolved_control_attempts: int
+    artifacts: tuple[SessionArtifact, ...]
+
+    @property
+    def operation_counts(self) -> dict[str, int]:
+        """Expose the canonical operation-state counts from the summary."""
+
+        return self.summary.operation_counts
+
+
+@dataclass(frozen=True, slots=True)
 class LegacySessionDetail:
     """Bounded legacy identity and artifact-size compatibility projection."""
 
@@ -474,7 +548,7 @@ class LegacySessionDetail:
     artifacts: tuple[SessionArtifact, ...]
 
 
-SessionDetail = NativeSessionDetail | LegacySessionDetail
+SessionDetail = V2SessionDetail | NativeSessionDetail | LegacySessionDetail
 
 
 @dataclass(frozen=True, slots=True)
@@ -544,4 +618,4 @@ class RecentLogs:
     omitted_complete_lines: int = 0
     omitted_partial_lines: int = 0
     omitted_oversized_lines: int = 0
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1

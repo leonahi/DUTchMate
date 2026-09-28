@@ -16,6 +16,7 @@ from dutchmate_core.backends.contracts import (
     UartSendCapabilityPolicy,
 )
 from dutchmate_core.diagnostics import project_diagnostic_detail
+from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.evidence import first_error as _first_error
 from dutchmate_core.session_store.models import (
     CommandedBootMode,
@@ -33,6 +34,9 @@ from dutchmate_core.validation import (
 
 METADATA_MAX_BYTES = 262144
 MAX_SESSION_SEGMENTS = 32
+MIN_V2_EVIDENCE_BUDGET_BYTES = 1048576
+MAX_V2_JSONL_RECORD_BYTES = 65536
+MAX_V2_DETECTED_PATTERNS_PER_UART_EVENT = 12
 
 
 def _validate_session_id(session_id: str) -> str:
@@ -217,6 +221,71 @@ def _initial_metadata(
                 }
             )
     return metadata
+
+
+def _initial_v2_metadata(
+    *,
+    session_id: str,
+    started_at: str,
+    profile: DutProfile,
+    backend_snapshot: BackendSnapshot,
+    evidence_budget_bytes: int,
+    predecessor_session_id: str | None = None,
+) -> dict[str, object]:
+    """Build compact schema-v2 ownership metadata before it is published."""
+
+    segment = _backend_segment_json(backend_snapshot, started_at=started_at)
+    segment["segment_id"] = 0
+    return {
+        "schema_version": 2,
+        "session_id": session_id,
+        "started_at": started_at,
+        "state": "active",
+        "ended_at": None,
+        "end_reason": None,
+        "error": None,
+        "profile_name": profile.name,
+        "profile_digest_sha256": profile.digest_sha256,
+        "effective_profile": profile.projection(),
+        "backend_mode": profile.backend_mode,
+        "backend_identity": {
+            "port": backend_snapshot.info.port,
+            "device": backend_snapshot.info.device,
+            "firmware": backend_snapshot.info.firmware,
+        },
+        "reconnect_policy": {
+            "timeout_s": profile.reconnect_timeout_s,
+            "topology": profile.topology,
+            "selector": {
+                "strategy": profile.selector.strategy,
+                "exact_path": profile.selector.exact_path,
+            },
+        },
+        "storage": {
+            "evidence_budget_bytes": evidence_budget_bytes,
+            "evidence_bytes_written": 3,
+            "metadata_max_bytes": METADATA_MAX_BYTES,
+        },
+        "evidence_quality": {
+            "backend_integrity": _integrity_json(backend_snapshot.integrity),
+            "local_recording": "complete",
+        },
+        "line_processing": _line_processing_json(LineProcessing()),
+        "continuity": {"observation_gap_count": 0},
+        "operation_summary": {
+            "started": 0,
+            "completed": 0,
+            "failed": 0,
+            "active": 0,
+        },
+        "active_operations": {},
+        "interrupted_operations": {},
+        "pending_attempts": {},
+        "next_evidence_seq": 0,
+        "segments": [segment],
+        "predecessor_session_id": predecessor_session_id,
+        "successor_session_id": None,
+    }
 
 
 def _summary_from_metadata(

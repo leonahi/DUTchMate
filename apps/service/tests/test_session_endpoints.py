@@ -28,6 +28,8 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionListPage,
     SessionQueryError,
+    V2SessionDetail,
+    V2SessionListItem,
 )
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
@@ -155,6 +157,36 @@ def test_get_session_endpoint_serializes_bounded_native_detail() -> None:
     assert "detected_patterns" not in payload
 
 
+def test_session_endpoints_serialize_discriminated_v2_projections() -> None:
+    detail = _v2_detail()
+    runtime = SessionRuntime(
+        page=SessionListPage(items=(detail.summary,), next_cursor=None),
+        detail=detail,
+    )
+    client = TestClient(create_app(runtime))
+
+    listed = client.get("/sessions")
+    returned = client.get(f"/sessions/{detail.summary.session_id}")
+
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["schema_version"] == 2
+    assert listed.json()["items"][0]["profile_digest_sha256"] == "a" * 64
+    assert returned.status_code == 200
+    payload = returned.json()
+    assert payload["schema_version"] == 2
+    assert payload["effective_profile"]["backend_mode"] == "enhanced"
+    assert listed.json()["items"][0]["operation_counts"] == {
+        "started": 1,
+        "completed": 1,
+        "failed": 0,
+        "active": 0,
+    }
+    assert payload["operation_counts"] == listed.json()["items"][0]["operation_counts"]
+    assert payload["action_counts"] == {"uart_tx_attempt": 1}
+    assert payload["unresolved_control_attempts"] == 1
+    assert "uart_events" not in payload
+
+
 def test_session_endpoints_use_validation_and_query_error_contracts(tmp_path: Path) -> None:
     runtime = SessionRuntime(store=SessionStore(root=tmp_path))
     client = TestClient(create_app(runtime))
@@ -197,7 +229,7 @@ def test_unsupported_session_schema_returns_exact_context() -> None:
         "operation": "get_session",
         "session_id": "20260820T120000Z-unknown",
         "detected_schema_version": 7,
-        "supported_schema_versions": [1],
+        "supported_schema_versions": [1, 2],
     }
 
 
@@ -404,4 +436,40 @@ def _native_detail() -> NativeSessionDetail:
             SessionArtifact(name="metadata.json", bytes=1000, records=1),
             SessionArtifact(name="uart_raw.log", bytes=12, records=None),
         ),
+    )
+
+
+def _v2_detail() -> V2SessionDetail:
+    summary = V2SessionListItem(
+        session_id="20260820T120000Z-v2",
+        started_at="2026-08-20T12:00:00Z",
+        state="completed",
+        ended_at="2026-08-20T12:00:01Z",
+        end_reason="service_shutdown",
+        profile_name="fixture",
+        profile_digest_sha256="a" * 64,
+        backend_mode="enhanced",
+        baseline=False,
+        segment_count=1,
+        predecessor_session_id=None,
+        successor_session_id=None,
+        evidence_quality={"local_recording": "complete"},
+        line_processing=LineProcessing(),
+        operation_counts={"started": 1, "completed": 1, "failed": 0, "active": 0},
+        storage={"evidence_bytes_written": 12},
+        first_error=None,
+    )
+    return V2SessionDetail(
+        summary=summary,
+        effective_profile={"backend_mode": "enhanced"},
+        reconnect_policy={"timeout_s": 5.0},
+        backend_identity={"port": "/dev/ttyACM0"},
+        continuity={"observation_gap_count": 0},
+        segments=({"segment_id": 0},),
+        action_counts={"uart_tx_attempt": 1},
+        pattern_counts=(),
+        first_error=None,
+        unresolved_uart_tx_attempts=0,
+        unresolved_control_attempts=1,
+        artifacts=(SessionArtifact(name="metadata.json", bytes=1000, records=1),),
     )

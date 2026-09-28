@@ -9,7 +9,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Generic, TypeVar, cast
+from typing import Final, Generic, Literal, TypeVar, cast
 
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
@@ -21,6 +21,7 @@ from dutchmate_core.session_store.models import (
     SessionPaths,
     SessionQueryError,
     SessionSelection,
+    V2SessionDetail,
 )
 from dutchmate_core.session_store.retrieval import (
     _exception_detail,
@@ -29,6 +30,7 @@ from dutchmate_core.session_store.retrieval import (
     _schema_version,
     _transaction_active,
     _unsupported_schema,
+    _v2_summary,
     _validated_summary,
     get_session_detail,
 )
@@ -46,6 +48,19 @@ _UART_EVENT_KEYS: Final = frozenset(
         "channel",
         "data_b64",
         "text",
+    }
+)
+_V2_UART_EVENT_KEYS: Final = frozenset(
+    {
+        "evidence_seq",
+        "type",
+        "segment_id",
+        "timestamp_us",
+        "recorded_at",
+        "channel",
+        "data_b64",
+        "raw_offset_start",
+        "raw_offset_end",
     }
 )
 _TERMINAL_STATES: Final = frozenset({"completed", "failed", "abandoned"})
@@ -69,24 +84,71 @@ def replay_recent_logs(
     )
     uart_prefix, metadata = _stable_uart_snapshot(paths)
     try:
-        summary = _validated_summary(metadata, [], paths, operation="get_logs")
-        if summary.state is None or summary.integrity is None:
-            raise ValueError("native log session is missing required lifecycle facts")
-        if summary.reconnect_timeout_s is None:
-            raise ValueError("native log session is missing reconnect timeout")
+        schema_version = _schema_version(
+            metadata,
+            operation="get_logs",
+            session_id=paths.root.name,
+        )
         storage = metadata.get("storage")
         if not isinstance(storage, dict):
             raise ValueError("native log session storage must be an object")
-        segments = _metadata._contiguous_native_segments(metadata)
+        if schema_version == 1:
+            summary = _validated_summary(metadata, [], paths, operation="get_logs")
+            if summary.state is None or summary.integrity is None:
+                raise ValueError("native log session is missing required lifecycle facts")
+            if summary.reconnect_timeout_s is None:
+                raise ValueError("native log session is missing reconnect timeout")
+            state = summary.state
+            integrity = summary.integrity
+            line_processing = summary.line_processing
+            reconnect_timeout_s = summary.reconnect_timeout_s
+            interrupted = summary.interrupted
+            resumed = summary.resumed
+            truncated = summary.truncated
+            truncation = summary.truncation
+            segments = _metadata._contiguous_native_segments(metadata)
+        else:
+            v2_summary = _v2_summary(paths, metadata, baseline_session_id=None)
+            state = v2_summary.state
+            quality = v2_summary.evidence_quality.get("backend_integrity")
+            if not isinstance(quality, dict):
+                raise ValueError("v2 backend integrity is invalid")
+            parsed_integrity = _metadata._optional_integrity(quality)
+            if parsed_integrity is None:
+                raise ValueError("v2 backend integrity is required")
+            integrity = parsed_integrity
+            line_processing = v2_summary.line_processing
+            reconnect = metadata.get("reconnect_policy")
+            if not isinstance(reconnect, dict):
+                raise ValueError("v2 reconnect policy is required")
+            timeout = reconnect.get("timeout_s")
+            if isinstance(timeout, bool) or not isinstance(timeout, int | float):
+                raise ValueError("v2 reconnect timeout is invalid")
+            reconnect_timeout_s = float(timeout)
+            continuity = metadata.get("continuity")
+            if not isinstance(continuity, dict):
+                raise ValueError("v2 continuity is required")
+            gap_count = continuity.get("observation_gap_count")
+            if isinstance(gap_count, bool) or not isinstance(gap_count, int):
+                raise ValueError("v2 observation gap count is invalid")
+            interrupted = gap_count > 0
+            resumed = v2_summary.segment_count > 1
+            truncated = False
+            truncation = None
+            raw_segments = metadata.get("segments")
+            if not isinstance(raw_segments, list):
+                raise ValueError("v2 segments are required")
+            segments = cast(list[dict[str, object]], raw_segments)
         replay = _replay_uart_prefix(
             uart_prefix,
             lines=lines,
             valid_segment_ids=frozenset(range(len(segments))),
+            schema_version=schema_version,
         )
         replayed_oversized_count = (
             len(replay.oversized_lines) + replay.omitted_oversized_lines
         )
-        if replayed_oversized_count != summary.line_processing.oversized_line_count:
+        if replayed_oversized_count != line_processing.oversized_line_count:
             raise ValueError(
                 "replayed oversized-line count does not match session metadata"
             )
@@ -114,23 +176,24 @@ def replay_recent_logs(
     return RecentLogs(
         session_selection=selection,
         session_id=paths.root.name,
-        active=summary.state == "active",
+        active=state == "active",
         snapshot_event_count=replay.snapshot_event_count,
         complete_lines=replay.complete_lines,
         partial_lines=replay.partial_lines,
         oversized_lines=replay.oversized_lines,
-        integrity=summary.integrity,
-        line_processing=summary.line_processing,
-        reconnect_timeout_s=summary.reconnect_timeout_s,
-        interrupted=summary.interrupted,
-        resumed=summary.resumed,
+        integrity=integrity,
+        line_processing=line_processing,
+        reconnect_timeout_s=reconnect_timeout_s,
+        interrupted=interrupted,
+        resumed=resumed,
         storage=cast(dict[str, object], storage).copy(),
-        truncated=summary.truncated,
-        truncation=summary.truncation.copy() if summary.truncation is not None else None,
+        truncated=truncated,
+        truncation=truncation.copy() if truncation is not None else None,
         timestamp_provenance=provenance,
         omitted_complete_lines=replay.omitted_complete_lines,
         omitted_partial_lines=replay.omitted_partial_lines,
         omitted_oversized_lines=replay.omitted_oversized_lines,
+        schema_version=cast(Literal[1, 2], schema_version),
     )
 
 
@@ -159,7 +222,7 @@ def _select_session(
                 operation="get_logs",
                 session_id=active_name,
             )
-            if schema_version == 1 and metadata.get("state") == "active":
+            if schema_version in {1, 2} and metadata.get("state") == "active":
                 return paths, "active"
 
     latest_paths = _latest_terminal_native(root)
@@ -217,7 +280,7 @@ def _latest_terminal_native(root: Path) -> SessionPaths | None:
             operation="get_logs",
             session_id=session_root.name,
         )
-        if schema_version != 1:
+        if schema_version not in {1, 2}:
             continue
         state = metadata.get("state")
         if state == "active":
@@ -228,8 +291,11 @@ def _latest_terminal_native(root: Path) -> SessionPaths | None:
                 session_id=session_root.name,
                 detail="Native session lifecycle state is malformed",
             )
-        summary = _validated_summary(metadata, [], paths, operation="get_logs")
-        candidates.append((summary.started_at, summary.session_id, paths))
+        started_at = metadata.get("started_at")
+        session_id = metadata.get("session_id")
+        if not isinstance(started_at, str) or not isinstance(session_id, str):
+            raise ValueError("native session identity is malformed")
+        candidates.append((started_at, session_id, paths))
     if not candidates:
         return None
     return max(candidates, key=lambda candidate: (candidate[0], candidate[1]))[2]
@@ -241,7 +307,7 @@ def _require_native_schema(metadata: dict[str, object], session_id: str) -> None
         operation="get_logs",
         session_id=session_id,
     )
-    if schema_version != 1:
+    if schema_version not in {1, 2}:
         raise _unsupported_schema(
             operation="get_logs",
             session_id=session_id,
@@ -262,7 +328,7 @@ def _validate_terminal_detail(paths: SessionPaths, metadata: dict[str, object]) 
             detected_schema_version=exc.detected_schema_version,
             detail=str(exc),
         ) from exc
-    if not isinstance(detail, NativeSessionDetail):
+    if not isinstance(detail, (NativeSessionDetail, V2SessionDetail)):
         raise _unsupported_schema(
             operation="get_logs",
             session_id=paths.root.name,
@@ -345,6 +411,7 @@ def _replay_uart_prefix(
     *,
     lines: int,
     valid_segment_ids: frozenset[int],
+    schema_version: int,
 ) -> _ReplayResult:
     buffers: dict[tuple[int, int], UartLineBuffer] = {}
     last_timestamps: dict[tuple[int, int], int] = {}
@@ -353,9 +420,14 @@ def _replay_uart_prefix(
     oversized = _BoundedNewest[OversizedLogLine](lines)
     event_count = 0
 
-    for ingestion_index, raw_record in enumerate(prefix.splitlines(keepends=True)):
-        event = _decode_uart_event(raw_record, valid_segment_ids=valid_segment_ids)
-        segment_id, channel, timestamp_us, data = event
+    for file_index, raw_record in enumerate(prefix.splitlines(keepends=True)):
+        event = _decode_uart_event(
+            raw_record,
+            valid_segment_ids=valid_segment_ids,
+            schema_version=schema_version,
+        )
+        segment_id, channel, timestamp_us, data, evidence_seq = event
+        ingestion_index = evidence_seq if evidence_seq is not None else file_index
         key = segment_id, channel
         buffer = buffers.setdefault(key, UartLineBuffer())
         result = buffer.feed_result(
@@ -426,14 +498,17 @@ def _decode_uart_event(
     raw_record: bytes,
     *,
     valid_segment_ids: frozenset[int],
-) -> tuple[int, int, int, bytes]:
+    schema_version: int,
+) -> tuple[int, int, int, bytes, int | None]:
     if not raw_record.endswith(b"\n") or raw_record == b"\n":
         raise ValueError("uart_events.jsonl contains an incomplete or empty record")
     value = json.loads(raw_record.decode("utf-8"))
-    if not isinstance(value, dict) or set(value) != _UART_EVENT_KEYS:
+    expected_keys = _V2_UART_EVENT_KEYS if schema_version == 2 else _UART_EVENT_KEYS
+    if not isinstance(value, dict) or set(value) != expected_keys:
         raise ValueError("UART evidence record fields are invalid")
     event = cast(dict[str, object], value)
-    if event.get("type") != "uart":
+    expected_type = "uart_rx" if schema_version == 2 else "uart"
+    if event.get("type") != expected_type:
         raise ValueError("UART evidence record type is invalid")
     segment_id = _non_negative_int(event.get("segment_id"), "segment_id")
     if segment_id not in valid_segment_ids:
@@ -447,9 +522,14 @@ def _decode_uart_event(
         data = base64.b64decode(data_b64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ValueError("UART evidence data_b64 is invalid") from exc
-    if event.get("text") != data.decode("utf-8", errors="replace"):
+    if schema_version == 1 and event.get("text") != data.decode("utf-8", errors="replace"):
         raise ValueError("UART evidence text projection does not match exact bytes")
-    return segment_id, channel, timestamp_us, data
+    evidence_seq = (
+        _non_negative_int(event.get("evidence_seq"), "evidence_seq")
+        if schema_version == 2
+        else None
+    )
+    return segment_id, channel, timestamp_us, data, evidence_seq
 
 
 def _normal_record(
@@ -539,7 +619,9 @@ def _validate_snapshot_storage(metadata: dict[str, object], paths: SessionPaths)
     evidence_paths = (
         paths.uart_raw,
         paths.uart_events,
+        *((paths.operation_events,) if metadata.get("schema_version") == 2 else ()),
         paths.hardware_events,
+        *((paths.connection_events,) if metadata.get("schema_version") == 2 else ()),
         paths.detected_patterns,
     )
     for path in evidence_paths:

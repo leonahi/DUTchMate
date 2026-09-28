@@ -20,7 +20,9 @@ _APPEND_FILES = frozenset(
     {
         "uart_raw.log",
         "uart_events.jsonl",
+        "operation_events.jsonl",
         "hardware_events.jsonl",
+        "connection_events.jsonl",
     }
 )
 _TransactionState = Literal["prepared", "evidence_written", "committed"]
