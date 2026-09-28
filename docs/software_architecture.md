@@ -45,6 +45,7 @@ core/profile
 core/runtime
   -> profile status projection
   -> evidence
+  -> operations
   -> workflows
   -> gpio_config
   -> backends.contracts
@@ -61,6 +62,10 @@ core/uart_capture
 
 core/evidence
   -> session_store
+  -> uart_capture
+  -> backends.contracts
+
+core/operations
   -> uart_capture
   -> backends.contracts
 
@@ -178,6 +183,8 @@ EnhancedAsyncHost (one owner loop and one async adapter)
   -> ContinuousEvidenceRecorder (core/evidence)
   -> schema-v2 SessionStore admission
   -> durable tail notification
+  -> DeviceCoreRuntime bounded Monitor
+  -> operation-local MonitorMatcher over durable UART records
 ```
 
 `DeviceCoreRuntime` publishes an active schema-v2 ownership session for the
@@ -186,7 +193,9 @@ running. The recorder owns the only normalized receive path, persists UART and
 telemetry before advancing its durable tail, maintains continuous line/pattern
 projections, and transfers a validated replacement source into the same session
 with a new session-local segment. Basic and Enhanced use the same recorder
-contract.
+contract. Monitor waiters observe published durable tails and read stable UART
+records through operation-local seek cursors; they never call the physical
+backend source or rescan accumulated UART history under the store mutation lock.
 
 ## Supported Core Facades
 
@@ -253,6 +262,26 @@ and faults and closes physical ownership when authoritative persistence cannot
 continue. Clean shutdown first stops physical input, drains already-normalized
 source events, and then terminalizes the active v2 session.
 
+It also serializes Monitor lifecycle admissions with receive/connection
+admissions, snapshots the operation start cursor and pre-cursor partial-line
+state in the final start session, flushes continuous line state before a
+lifecycle admission rolls over, exposes incremental cursor-bounded UART reads,
+and resolves lifecycle-owned terminal records. Each reader owns a bounded
+retention lease that terminal persistence atomically extends across its final
+evidence ranges and runtime result construction releases. Reconnect replacement
+and failure use the same admission ordering, so bounded operations cannot create
+a second physical reader.
+
+### `operations`
+
+Owns framework-independent bounded Monitor request/result values, validation,
+active-operation summaries, evidence cursors/ranges, and operation-local literal
+matching. `MonitorMatcher` reconstructs lines independently by
+session/segment/channel from persisted UART records, excludes pre-cursor partial
+lines and oversized physical lines, and returns exact raw coordinates and a
+bounded excerpt using the normative deterministic tie-break. It owns neither
+backend receive nor persistence writes.
+
 ### `session_store`
 
 Owns filesystem-backed sessions under
@@ -273,6 +302,10 @@ Owns filesystem-backed sessions under
 - stores buffer overflow/status telemetry and detected patterns
 - stores bounded detected-pattern excerpts and derives deterministic
   reference-bearing `first_error` summaries in segment/event order
+- records schema-v2 operation start/terminal evidence, transfers active ranges
+  across rollover, opens seek-based incremental UART readers for Monitor, and
+  derives operation result integrity from telemetry inside exact half-open
+  ranges plus timestamp provenance across every range
 - stores `line_processing` status/counts and finalized `line_limit_exceeded`
   descriptors without changing UART integrity or session truncation
 - preflights exact whole-unit evidence for UART receive, buffer telemetry, and
@@ -372,6 +405,11 @@ protocol validation. Current behavior includes:
 - text-only bounded UART send through an injected backend sender port
 - forced-send attempt/result persistence under the same mutation guard as
   capture evidence and terminalization
+
+Runtime capture/wait compatibility entry points always delegate to
+`operations.Monitor` semantics and require the continuous recorder; they cannot
+invoke a finite v1 session or independent reader. The older finite capture
+infrastructure remains only for boot-test until its Stage 5 migration.
 
 Capture and boot-test validation consistently enforces the Phase 1
 `0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.

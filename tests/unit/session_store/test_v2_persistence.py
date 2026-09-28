@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -9,7 +10,13 @@ import pytest
 from session_store_support import enhanced_snapshot, fixed_clock, read_jsonl
 
 import dutchmate_core.session_store.persistence as persistence
-from dutchmate_core.backends import BackendSnapshot, UartReceiveEvent
+from dutchmate_core.backends import (
+    BackendSnapshot,
+    BufferOverflowEvent,
+    UartIntegrity,
+    UartReceiveEvent,
+)
+from dutchmate_core.operations import EvidenceCursor, EvidenceRange
 from dutchmate_core.profile import DutProfile, DutProfileConfig, resolve_dut_profile
 from dutchmate_core.session_store.metadata import (
     MAX_V2_JSONL_RECORD_BYTES,
@@ -820,7 +827,7 @@ def test_v2_operation_start_rebuilds_cursor_when_start_record_rolls_over(
     record = read_jsonl(admission.handle.paths.operation_events)[0]
     assert record["start_cursor"] == {
         "session_id": admission.handle.session_id,
-        "next_evidence_seq": admission.evidence_seq,
+        "next_evidence_seq": admission.evidence_seq + 1,
     }
     active = store.load_metadata(admission.handle.session_id)["active_operations"]
     assert active["monitor-1"]["ranges"][0] == {  # type: ignore[index]
@@ -869,6 +876,103 @@ def test_v2_operation_terminal_rebuilds_cursor_and_ranges_when_it_rolls_over(
         "start_evidence_seq": 1,
         "end_evidence_seq_exclusive": admission.evidence_seq + 1,
     }
+
+
+def test_v2_monitor_reader_starts_at_durable_uart_offset_and_avoids_store_lock(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=lambda: "abc12345")
+    handle = store.create_v2_session(
+        profile=_profile(),
+        backend_snapshot=enhanced_snapshot(),
+    )
+    store.append_v2_uart_receive(
+        handle,
+        event=UartReceiveEvent(0, 1, 0, b"history\n"),
+    )
+    started = store.start_v2_operation(
+        handle,
+        operation_id="monitor-1",
+        operation_type="monitor",
+        parameters={"duration_s": 1.0},
+    )
+    start = EvidenceCursor(started.handle.session_id, started.evidence_seq + 1)
+    reader = store.open_v2_monitor_evidence_reader(
+        start=start,
+        operation_id="monitor-1",
+    )
+    admitted = store.append_v2_uart_receive(
+        started.handle,
+        event=UartReceiveEvent(0, 2, 0, b"new\n"),
+    )
+    end = EvidenceCursor(admitted.handle.session_id, admitted.evidence_seq + 1)
+
+    store._store_lock.acquire()  # noqa: SLF001
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            evidence = executor.submit(reader.read_to, end).result(timeout=0.5)
+    finally:
+        store._store_lock.release()  # noqa: SLF001
+
+    assert [(item.evidence_seq, item.data) for item in evidence] == [
+        (admitted.evidence_seq, b"new\n")
+    ]
+    reader.close()
+
+
+def test_v2_monitor_integrity_uses_only_exact_half_open_evidence_ranges(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=lambda: "abc12345")
+    handle = store.create_v2_session(
+        profile=_profile(),
+        backend_snapshot=enhanced_snapshot(),
+    )
+    store.append_v2_buffer_overflow(
+        handle,
+        event=BufferOverflowEvent(0, 1, 0, 3),
+    )
+    started = store.start_v2_operation(
+        handle,
+        operation_id="monitor-1",
+        operation_type="monitor",
+        parameters={"duration_s": 1.0},
+    )
+    store.append_v2_buffer_overflow(
+        started.handle,
+        event=BufferOverflowEvent(0, 2, 0, 7),
+    )
+    terminal = store.complete_v2_operation(
+        started.handle,
+        operation_id="monitor-1",
+        outcome="elapsed",
+    )
+    store.append_v2_buffer_overflow(
+        terminal.handle,
+        event=BufferOverflowEvent(0, 3, 0, 11),
+    )
+    terminal_record = store.load_v2_operation_terminal(
+        session_id=terminal.handle.session_id,
+        operation_id="monitor-1",
+    )
+    raw_ranges = terminal_record["evidence_ranges"]
+    assert isinstance(raw_ranges, list)
+    ranges = tuple(
+        EvidenceRange(
+            session_id=item["session_id"],
+            start_evidence_seq=item["start_evidence_seq"],
+            end_evidence_seq_exclusive=item["end_evidence_seq_exclusive"],
+        )
+        for item in raw_ranges
+    )
+
+    integrity, _provenance = store.summarize_v2_monitor_evidence(ranges)
+
+    assert integrity == UartIntegrity(
+        "loss_reported",
+        "debug_helper_rx_buffer",
+        7,
+    )
 
 
 @pytest.mark.parametrize("attempt_kind", ["uart_tx", "control"])

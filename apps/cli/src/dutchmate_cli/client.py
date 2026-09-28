@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 import httpx
 
+from dutchmate_core.operations import MonitorCondition
+from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.validation import (
     prepare_uart_send_payload,
     validate_capture_duration,
@@ -181,6 +183,52 @@ def wait_for_pattern(
         ),
     )
     return _response_payload(response, description="wait-pattern response")
+
+
+def monitor_uart(
+    *,
+    duration_s: object | None = None,
+    until: object | None = None,
+    timeout_s: object | None = None,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Run one bounded Monitor operation through the Device Core Service."""
+
+    conditions = (
+        (MonitorCondition(pattern=until),) if isinstance(until, str) else None
+    )
+    if until is not None and not isinstance(until, str):
+        raise ValueError("Monitor until condition must be a string")
+    request = validate_monitor_request(
+        duration_s=duration_s,
+        conditions=conditions,
+        timeout_s=timeout_s,
+    )
+    if request.mode == "duration":
+        payload: dict[str, object] = {"duration_s": request.duration_s}
+        bound_s = request.duration_s
+    else:
+        payload = {
+            "conditions": [
+                {"pattern": condition.pattern} for condition in request.conditions
+            ],
+            "timeout_s": request.timeout_s,
+        }
+        bound_s = request.timeout_s
+    assert bound_s is not None
+    response = _request_service(
+        method="POST",
+        path="/dut/monitor",
+        service_url=service_url,
+        transport=transport,
+        json=payload,
+        timeout_s=max(
+            DEFAULT_TIMEOUT_SECONDS,
+            bound_s + CAPTURE_TIMEOUT_GRACE_SECONDS,
+        ),
+    )
+    return _response_payload(response, description="monitor response")
 
 
 def send_uart_command(

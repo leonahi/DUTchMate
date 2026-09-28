@@ -34,6 +34,24 @@ from dutchmate_core.workflows.capture import CaptureSourceHealth
 from dutchmate_core.workflows.uart_send import UartSendError
 
 
+@pytest.fixture(autouse=True)
+def _exercise_boot_test_capture_infrastructure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def legacy_capture(
+        runtime: DeviceCoreRuntime,
+        *,
+        duration_s: float,
+    ) -> object:
+        return runtime._run_capture_workflow(  # noqa: SLF001
+            duration_s=duration_s,
+            command=f"capture --seconds {duration_s:g}",
+            workflow="capture",
+        )
+
+    monkeypatch.setattr(DeviceCoreRuntime, "capture_uart", legacy_capture)
+
+
 class FakeSender:
     def __init__(self, *outcomes: BackendUartSendResult | BackendWriteError) -> None:
         self.outcomes = list(outcomes)

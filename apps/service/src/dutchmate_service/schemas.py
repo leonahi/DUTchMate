@@ -9,6 +9,8 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
+from dutchmate_core.operations import MonitorCondition, MonitorResult
+from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
@@ -73,6 +75,9 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
         "active_workflow": status.active_workflow,
+        "active_operations": [
+            asdict(operation) for operation in status.active_operations
+        ],
         "commanded_boot_mode": status.commanded_boot_mode,
         "reconnect_remaining_s": status.reconnect_remaining_s,
         "retention": asdict(status.retention),
@@ -207,6 +212,52 @@ class WaitPatternRequest(BaseModel):
         return validate_wait_timeout(value)
 
 
+class MonitorConditionRequest(BaseModel):
+    """One named or anonymous case-sensitive Monitor literal."""
+
+    pattern: str
+    name: str | None = None
+
+    @field_validator("pattern", mode="before")
+    @classmethod
+    def validate_pattern(cls, value: object) -> str:
+        return validate_wait_pattern(value)
+
+
+class MonitorRequest(BaseModel):
+    """Exactly one finite Monitor completion mode."""
+
+    duration_s: float | None = None
+    conditions: tuple[MonitorConditionRequest, ...] | None = None
+    timeout_s: float | None = None
+
+    @field_validator("duration_s", mode="before")
+    @classmethod
+    def validate_duration(cls, value: object) -> float | None:
+        return None if value is None else validate_capture_duration(value)
+
+    @field_validator("timeout_s", mode="before")
+    @classmethod
+    def validate_timeout(cls, value: object) -> float | None:
+        return None if value is None else validate_wait_timeout(value)
+
+    @model_validator(mode="after")
+    def validate_completion_mode(self) -> MonitorRequest:
+        validate_monitor_request(
+            duration_s=self.duration_s,
+            conditions=(
+                tuple(
+                    MonitorCondition(pattern=item.pattern, name=item.name)
+                    for item in self.conditions
+                )
+                if self.conditions is not None
+                else None
+            ),
+            timeout_s=self.timeout_s,
+        )
+        return self
+
+
 class UartSendRequest(BaseModel):
     """Public text-only UART-send request."""
 
@@ -301,6 +352,31 @@ def wait_pattern_payload(result: WaitPatternResult) -> dict[str, object]:
         }
     )
     return payload
+
+
+def monitor_result_payload(result: MonitorResult) -> dict[str, object]:
+    """Serialize one terminal bounded Monitor result."""
+
+    return {
+        "ok": True,
+        "operation_id": result.operation_id,
+        "outcome": result.outcome,
+        "mode": result.mode,
+        "duration_s": result.duration_s,
+        "conditions": [asdict(condition) for condition in result.conditions],
+        "timeout_s": result.timeout_s,
+        "start_cursor": asdict(result.start_cursor),
+        "end_cursor": asdict(result.end_cursor),
+        "evidence_ranges": [asdict(item) for item in result.evidence_ranges],
+        "matched_condition": (
+            result.match.persistence_projection() if result.match is not None else None
+        ),
+        "line_processing_limited": result.line_processing_limited,
+        "integrity": asdict(result.integrity) if result.integrity is not None else None,
+        "timestamp_provenance": [
+            asdict(item) for item in result.timestamp_provenance
+        ],
+    }
 
 
 def uart_send_payload(result: UartSendResult) -> dict[str, object]:

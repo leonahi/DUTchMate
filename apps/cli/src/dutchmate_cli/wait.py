@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from dutchmate_cli.monitor import format_monitor_result
+
 
 def format_wait_pattern(payload: Mapping[str, object]) -> str:
     """Format a matched or ordinary unmatched wait outcome."""
 
+    if "operation_id" in payload:
+        return format_monitor_result(payload).replace("Monitor", "Wait", 1)
     session_id = _display(payload.get("session_id"))
     if payload.get("matched") is not True:
         return f"No match\nSession: {session_id}"

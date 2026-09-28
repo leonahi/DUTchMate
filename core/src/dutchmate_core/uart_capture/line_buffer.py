@@ -67,6 +67,12 @@ class UartLineBuffer:
 
         return self._pending
 
+    @property
+    def has_unterminated_line(self) -> bool:
+        """Whether normal or oversized derived state crosses the current boundary."""
+
+        return bool(self._pending) or self._oversized_total_bytes is not None
+
     def feed(
         self,
         data: bytes,
@@ -87,11 +93,18 @@ class UartLineBuffer:
         *,
         ingestion_index: int | None = None,
         timestamp_us: int | None = None,
+        event_offset_base: int = 0,
     ) -> UartLineBufferResult:
         """Consume bytes and return normal lines plus bounded overflow facts."""
 
         if not isinstance(data, bytes):
             raise TypeError("UART line buffer data must be bytes")
+        if (
+            isinstance(event_offset_base, bool)
+            or not isinstance(event_offset_base, int)
+            or event_offset_base < 0
+        ):
+            raise ValueError("UART event offset base must be a non-negative integer")
         if not data:
             return UartLineBufferResult()
 
@@ -107,7 +120,7 @@ class UartLineBuffer:
             if self._oversized_total_bytes is not None:
                 self._oversized_total_bytes += end_event_offset - event_offset
                 self._oversized_end_ingestion_index = ingestion_index
-                self._oversized_end_event_offset = end_event_offset
+                self._oversized_end_event_offset = event_offset_base + end_event_offset
                 self._oversized_line_index_in_event = line_index_in_event
                 self._oversized_timestamp_us = timestamp_us
                 if newline_offset < 0:
@@ -125,13 +138,13 @@ class UartLineBuffer:
                     start_event_offset = self._pending_start_event_offset
                 else:
                     start_ingestion_index = ingestion_index
-                    start_event_offset = event_offset
+                    start_event_offset = event_offset_base + event_offset
                 self._clear_pending()
                 self._oversized_total_bytes = total_bytes
                 self._oversized_start_ingestion_index = start_ingestion_index
                 self._oversized_start_event_offset = start_event_offset
                 self._oversized_end_ingestion_index = ingestion_index
-                self._oversized_end_event_offset = end_event_offset
+                self._oversized_end_event_offset = event_offset_base + end_event_offset
                 self._oversized_line_index_in_event = line_index_in_event
                 self._oversized_timestamp_us = timestamp_us
                 newly_oversized_line_count += 1
@@ -146,10 +159,10 @@ class UartLineBuffer:
                 trailing = data[event_offset:]
                 if not self._pending:
                     self._pending_start_ingestion_index = ingestion_index
-                    self._pending_start_event_offset = event_offset
+                    self._pending_start_event_offset = event_offset_base + event_offset
                 self._pending += trailing
                 self._pending_end_ingestion_index = ingestion_index
-                self._pending_end_event_offset = len(data)
+                self._pending_end_event_offset = event_offset_base + len(data)
                 self._pending_line_index_in_event = line_index_in_event
                 break
 
@@ -160,7 +173,7 @@ class UartLineBuffer:
             else:
                 raw = data[event_offset:end_event_offset]
                 start_ingestion_index = ingestion_index
-                start_event_offset = event_offset
+                start_event_offset = event_offset_base + event_offset
             lines.append(
                 UartLine(
                     raw=raw,
@@ -170,7 +183,7 @@ class UartLineBuffer:
                     start_ingestion_index=start_ingestion_index,
                     start_event_offset=start_event_offset,
                     end_ingestion_index=ingestion_index,
-                    end_event_offset=end_event_offset,
+                    end_event_offset=event_offset_base + end_event_offset,
                 )
             )
             self._clear_pending()

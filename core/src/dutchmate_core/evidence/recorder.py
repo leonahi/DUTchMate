@@ -19,6 +19,13 @@ from dutchmate_core.backends import (
     UartIntegrity,
     UartReceiveEvent,
 )
+from dutchmate_core.operations.monitor import (
+    EvidenceCursor,
+    EvidenceRange,
+    MonitorEvidence,
+    MonitorEvidenceReader,
+    MonitorTimestampProvenance,
+)
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.models import (
     SessionHandle,
@@ -142,6 +149,65 @@ class EvidenceRecorderStore(Protocol):
 
     def load_metadata(self, session_id: str) -> dict[str, object]: ...
 
+    def start_v2_operation(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        operation_type: Literal["monitor", "interact", "boot_test"],
+        parameters: dict[str, object],
+    ) -> V2EvidenceAdmission: ...
+
+    def v2_operation_start_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        operation_type: Literal["monitor", "interact", "boot_test"],
+        parameters: dict[str, object],
+    ) -> bool: ...
+
+    def complete_v2_operation(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        outcome: str,
+        error: dict[str, object] | None = None,
+        matched_condition: dict[str, object] | None = None,
+        line_processing_limited: bool = False,
+    ) -> V2EvidenceAdmission: ...
+
+    def v2_operation_terminal_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        outcome: str,
+        error: dict[str, object] | None = None,
+        matched_condition: dict[str, object] | None = None,
+        line_processing_limited: bool = False,
+    ) -> bool: ...
+
+    def open_v2_monitor_evidence_reader(
+        self,
+        *,
+        start: EvidenceCursor,
+        operation_id: str,
+    ) -> MonitorEvidenceReader: ...
+
+    def summarize_v2_monitor_evidence(
+        self,
+        ranges: Sequence[EvidenceRange],
+    ) -> tuple[UartIntegrity | None, tuple[MonitorTimestampProvenance, ...]]: ...
+
+    def load_v2_operation_terminal(
+        self,
+        *,
+        session_id: str,
+        operation_id: str,
+    ) -> dict[str, object]: ...
+
 
 class ContinuousEvidenceRecorder:
     """Persist every normalized backend event through one serialized path."""
@@ -159,6 +225,7 @@ class ContinuousEvidenceRecorder:
         if backend_snapshot.segment is None or source_segment != backend_snapshot.segment:
             raise ValueError("recorder source segment must match its backend snapshot")
         self._condition = Condition(RLock())
+        self._admission_lock = RLock()
         self._session_store = session_store
         self._profile = profile
         self._source: CaptureEventSource | None = source
@@ -262,6 +329,143 @@ class ContinuousEvidenceRecorder:
         with self._condition:
             return self._tail
 
+    def start_monitor_operation(
+        self,
+        *,
+        operation_id: str,
+        parameters: dict[str, object],
+    ) -> tuple[
+        EvidenceCursor,
+        frozenset[tuple[str, int, int]],
+        MonitorEvidenceReader,
+    ]:
+        """Durably start Monitor and snapshot pre-cursor partial-line state."""
+
+        with self._admission_lock:
+            with self._condition:
+                if self._closing or self._closed or self._fault is not None:
+                    raise RuntimeError("evidence recorder cannot start Monitor")
+                handle = self._handle
+            if self._session_store.v2_operation_start_will_rollover(
+                handle,
+                operation_id=operation_id,
+                operation_type="monitor",
+                parameters=parameters,
+            ):
+                self._flush_line_state()
+                with self._condition:
+                    handle = self._handle
+            admission = self._session_store.start_v2_operation(
+                handle,
+                operation_id=operation_id,
+                operation_type="monitor",
+                parameters=parameters,
+            )
+            self._publish_admission(admission)
+            if admission.rolled_over:
+                with self._condition:
+                    self._reset_integrity_after_rollover()
+            start = EvidenceCursor(
+                admission.handle.session_id,
+                _next_sequence(admission),
+            )
+            try:
+                with self._condition:
+                    session_id = admission.handle.session_id
+                    stored_segment_id = self._stored_segment_id
+                    incomplete_channels = frozenset(
+                        (session_id, stored_segment_id, channel)
+                        for segment_id, channel in self._processor.incomplete_line_keys()
+                        if segment_id == stored_segment_id
+                    )
+                reader = self._session_store.open_v2_monitor_evidence_reader(
+                    start=start,
+                    operation_id=operation_id,
+                )
+            except SessionPersistenceError as exc:
+                self._record_fatal(exc, end_reason="persistence_error")
+                raise
+            except BaseException as exc:
+                self.complete_monitor_operation(
+                    operation_id=operation_id,
+                    outcome="error",
+                    error={"code": "monitor_error", "detail": str(exc)},
+                )
+                raise
+            return (
+                start,
+                incomplete_channels,
+                reader,
+            )
+
+    def read_monitor_evidence(
+        self,
+        *,
+        reader: MonitorEvidenceReader,
+        end: EvidenceCursor,
+    ) -> tuple[MonitorEvidence, ...]:
+        """Read UART evidence admitted between two durable recorder positions."""
+
+        return reader.read_to(end)
+
+    def complete_monitor_operation(
+        self,
+        *,
+        operation_id: str,
+        outcome: str,
+        error: dict[str, object] | None = None,
+        matched_condition: dict[str, object] | None = None,
+        line_processing_limited: bool = False,
+    ) -> dict[str, object]:
+        """Durably terminalize Monitor or return its lifecycle-owned terminal record."""
+
+        with self._admission_lock:
+            with self._condition:
+                handle = self._handle
+            metadata = self._session_store.load_metadata(handle.session_id)
+            active = metadata.get("active_operations")
+            if isinstance(active, dict) and operation_id in active:
+                if self._session_store.v2_operation_terminal_will_rollover(
+                    handle,
+                    operation_id=operation_id,
+                    outcome=outcome,
+                    error=error,
+                    matched_condition=matched_condition,
+                    line_processing_limited=line_processing_limited,
+                ):
+                    self._flush_line_state()
+                    with self._condition:
+                        handle = self._handle
+                try:
+                    admission = self._session_store.complete_v2_operation(
+                        handle,
+                        operation_id=operation_id,
+                        outcome=outcome,
+                        error=error,
+                        matched_condition=matched_condition,
+                        line_processing_limited=line_processing_limited,
+                    )
+                except SessionPersistenceError as exc:
+                    self._record_fatal(exc, end_reason="persistence_error")
+                    raise
+                self._publish_admission(admission)
+                if admission.rolled_over:
+                    with self._condition:
+                        self._reset_integrity_after_rollover()
+                handle = admission.handle
+            return self._session_store.load_v2_operation_terminal(
+                session_id=handle.session_id,
+                operation_id=operation_id,
+            )
+
+    def summarize_monitor_evidence(
+        self,
+        ranges: Sequence[EvidenceRange],
+    ) -> tuple[UartIntegrity | None, tuple[MonitorTimestampProvenance, ...]]:
+        """Return range-wide integrity and timestamp provenance."""
+
+        return self._session_store.summarize_v2_monitor_evidence(ranges)
+
     def wait_for_durable_tail(
         self,
         previous: DurableEvidenceTail,
@@ -336,6 +540,18 @@ class ContinuousEvidenceRecorder:
     ) -> None:
         """Durably publish a replacement segment before resuming receive."""
 
+        with self._admission_lock:
+            self._replace_source_admitted(
+                replacement,
+                backend_snapshot=backend_snapshot,
+            )
+
+    def _replace_source_admitted(
+        self,
+        replacement: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot | None,
+    ) -> None:
         if backend_snapshot is None or backend_snapshot.segment is None:
             with suppress(BaseException):
                 _close_source(replacement)
@@ -435,18 +651,36 @@ class ContinuousEvidenceRecorder:
             handle = self._handle
             segment_id = self._stored_segment_id
         try:
-            failed = self._session_store.append_v2_connection_event(
-                handle,
-                event_type="reconnect_failed",
-                segment_id=segment_id,
-                detail={"error": "reconnect_timeout"},
-            )
-            self._session_store.fail_session(
-                failed.handle,
-                end_reason="reconnect_timeout",
-                error_code="reconnect_timeout",
-                detail="backend reconnect deadline expired",
-            )
+            with self._admission_lock:
+                failed = self._session_store.append_v2_connection_event(
+                    handle,
+                    event_type="reconnect_failed",
+                    segment_id=segment_id,
+                    detail={"error": "reconnect_timeout"},
+                )
+                self._publish_admission(failed)
+                metadata = self._session_store.load_metadata(failed.handle.session_id)
+                active = metadata.get("active_operations")
+                if not isinstance(active, dict):
+                    raise ValueError("v2 active_operations must be an object")
+                for operation_id, operation in tuple(active.items()):
+                    if not isinstance(operation, dict):
+                        raise ValueError("v2 active operation is malformed")
+                    if operation.get("operation_type") != "monitor":
+                        continue
+                    terminal = self._session_store.complete_v2_operation(
+                        failed.handle,
+                        operation_id=operation_id,
+                        outcome="disconnected",
+                    )
+                    self._publish_admission(terminal)
+                    failed = terminal
+                self._session_store.fail_session(
+                    failed.handle,
+                    end_reason="reconnect_timeout",
+                    error_code="reconnect_timeout",
+                    detail="backend reconnect deadline expired",
+                )
         except BaseException as exc:
             self._record_fatal(exc, end_reason="persistence_error")
             return
@@ -464,7 +698,7 @@ class ContinuousEvidenceRecorder:
     def read_event(self) -> BackendEvent | None:
         """Reject obsolete finite-workflow ownership of the physical reader."""
 
-        raise RuntimeError("bounded Monitor over durable evidence is not implemented yet")
+        raise RuntimeError("continuous evidence recorder owns the physical reader")
 
     def close(self) -> None:
         """Stop receive, close the source, and terminalize active ownership."""
@@ -583,11 +817,12 @@ class ContinuousEvidenceRecorder:
                 return
             normalized = replace(event, segment_id=stored_segment_id)
             try:
-                admission = self._record_event(normalized)
+                with self._admission_lock:
+                    admission = self._record_event(normalized)
+                    self._publish_admission(admission)
             except BaseException as exc:
                 self._record_fatal(exc, end_reason="persistence_error", source=source)
                 return
-            self._publish_admission(admission)
 
     def _record_event(self, event: BackendEvent) -> V2EvidenceAdmission:
         if isinstance(event, UartReceiveEvent):
@@ -734,26 +969,30 @@ class ContinuousEvidenceRecorder:
             if self._closing or source is not self._source:
                 return
         try:
-            self._flush_line_state()
-            with self._condition:
-                handle = self._handle
-                segment_id = self._stored_segment_id
-            admission = self._session_store.append_v2_connection_event(
-                handle,
-                event_type="unexpected_disconnect",
-                segment_id=segment_id,
-                detail={"error": str(error)},
-            )
-            self._publish_admission(admission)
-            if admission.rolled_over:
+            with self._admission_lock:
                 with self._condition:
-                    self._reset_integrity_after_rollover()
-            reconnect_started = self._session_store.append_v2_connection_event(
-                admission.handle,
-                event_type="reconnect_started",
-                segment_id=self._stored_segment_id,
-                detail={"timeout_s": self._profile.reconnect_timeout_s},
-            )
+                    if self._closing or source is not self._source:
+                        return
+                self._flush_line_state()
+                with self._condition:
+                    handle = self._handle
+                    segment_id = self._stored_segment_id
+                admission = self._session_store.append_v2_connection_event(
+                    handle,
+                    event_type="unexpected_disconnect",
+                    segment_id=segment_id,
+                    detail={"error": str(error)},
+                )
+                self._publish_admission(admission)
+                if admission.rolled_over:
+                    with self._condition:
+                        self._reset_integrity_after_rollover()
+                reconnect_started = self._session_store.append_v2_connection_event(
+                    admission.handle,
+                    event_type="reconnect_started",
+                    segment_id=self._stored_segment_id,
+                    detail={"timeout_s": self._profile.reconnect_timeout_s},
+                )
         except BaseException as exc:
             self._record_fatal(exc, end_reason="persistence_error", source=source)
             return
@@ -816,26 +1055,62 @@ class ContinuousEvidenceRecorder:
             self._state = "faulted"
             self._source = None
             self._health = replace(self._health, connected=False)
-            handle = self._handle
             self._condition.notify_all()
         if current is not None:
             with suppress(BaseException):
                 _close_source(current)
         if isinstance(error, SessionPersistenceError):
+            try:
+                with self._admission_lock:
+                    with self._condition:
+                        handle = self._handle
+                    metadata = self._session_store.load_metadata(handle.session_id)
+                    if metadata.get("state") == "active":
+                        self._session_store.fail_session(
+                            handle,
+                            end_reason=end_reason,
+                            error_code="persistence_fault",
+                            detail=str(error),
+                        )
+            except BaseException as terminal_error:
+                with self._condition:
+                    if self._close_error is None:
+                        self._close_error = terminal_error
             return
         try:
-            metadata = self._session_store.load_metadata(handle.session_id)
-            if metadata.get("state") == "active":
-                self._session_store.fail_session(
-                    handle,
-                    end_reason=end_reason,
-                    error_code=(
-                        "backend_input_error"
-                        if end_reason == "backend_input_error"
-                        else "persistence_fault"
-                    ),
-                    detail=str(error),
+            with self._admission_lock:
+                with self._condition:
+                    handle = self._handle
+                error_code = (
+                    "backend_input_error"
+                    if end_reason == "backend_input_error"
+                    else "persistence_fault"
                 )
+                metadata = self._session_store.load_metadata(handle.session_id)
+                active = metadata.get("active_operations")
+                if not isinstance(active, dict):
+                    raise ValueError("v2 active_operations must be an object")
+                for operation_id, operation in tuple(active.items()):
+                    if not isinstance(operation, dict):
+                        raise ValueError("v2 active operation is malformed")
+                    if operation.get("operation_type") != "monitor":
+                        continue
+                    terminal = self._session_store.complete_v2_operation(
+                        handle,
+                        operation_id=operation_id,
+                        outcome="error",
+                        error={"code": error_code, "detail": str(error)},
+                    )
+                    self._publish_admission(terminal)
+                    handle = terminal.handle
+                metadata = self._session_store.load_metadata(handle.session_id)
+                if metadata.get("state") == "active":
+                    self._session_store.fail_session(
+                        handle,
+                        end_reason=end_reason,
+                        error_code=error_code,
+                        detail=str(error),
+                    )
         except BaseException as terminal_error:
             with self._condition:
                 if self._close_error is None:

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from dutchmate_cli.monitor import format_monitor_result
+
 
 def format_capture_result(payload: Mapping[str, object]) -> str:
     """Format a completed capture session summary."""
 
+    if "operation_id" in payload:
+        return format_monitor_result(payload).replace("Monitor", "Capture", 1)
     return _format_capture_summary("Capture complete", payload)
 
 

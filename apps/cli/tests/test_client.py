@@ -14,6 +14,7 @@ from dutchmate_cli.client import (
     get_debug_session,
     list_debug_sessions,
     mark_session_baseline,
+    monitor_uart,
     reset_dut,
     run_boot_test,
     set_boot_mode,
@@ -167,6 +168,28 @@ def test_wait_for_pattern_forwards_literal_and_timeout() -> None:
     )
 
     assert payload == {"matched": False, "session_id": "wait-1"}
+
+
+def test_monitor_uart_forwards_duration_and_condition_modes() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"operation_id": "monitor-1"})
+
+    transport = httpx.MockTransport(handler)
+
+    monitor_uart(duration_s=0.25, transport=transport)
+    monitor_uart(until="READY", timeout_s=2.5, transport=transport)
+
+    assert [request.url.path for request in requests] == [
+        "/dut/monitor",
+        "/dut/monitor",
+    ]
+    assert requests[0].read() == b'{"duration_s":0.25}'
+    assert requests[1].read() == (
+        b'{"conditions":[{"pattern":"READY"}],"timeout_s":2.5}'
+    )
 
 
 @pytest.mark.parametrize(

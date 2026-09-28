@@ -73,6 +73,15 @@ class UartCaptureProcessor:
             return b""
         return buffer.pending_bytes
 
+    def incomplete_line_keys(self) -> frozenset[tuple[int, int]]:
+        """Return segment/channel keys whose physical line began before now."""
+
+        return frozenset(
+            key
+            for key, buffer in self._line_buffers.items()
+            if buffer.has_unterminated_line
+        )
+
     def flush_channel(self, channel: int, *, segment_id: int = 0) -> UartCaptureResult | None:
         """Flush one segment/channel's trailing partial line, if any."""
 

@@ -35,8 +35,28 @@ from dutchmate_core.runtime import (
     DeviceCoreStatus,
 )
 from dutchmate_core.session_store.store import SessionPersistenceError, SessionStore
+from dutchmate_core.validation import validate_capture_duration
 from dutchmate_core.workflows.capture import CaptureSourceHealth, ReconnectedCaptureSource
 from dutchmate_core.workflows.device_actions import DeviceActionError
+
+
+@pytest.fixture(autouse=True)
+def _exercise_boot_test_capture_infrastructure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def legacy_capture(
+        runtime: DeviceCoreRuntime,
+        *,
+        duration_s: float,
+    ) -> object:
+        duration = validate_capture_duration(duration_s)
+        return runtime._run_capture_workflow(  # noqa: SLF001
+            duration_s=duration,
+            command=f"capture --seconds {duration:g}",
+            workflow="capture",
+        )
+
+    monkeypatch.setattr(DeviceCoreRuntime, "capture_uart", legacy_capture)
 
 
 def test_capture_uart_records_transport_messages_and_connection_metadata(
@@ -386,8 +406,6 @@ def test_capture_uart_exposes_active_session_and_rejects_hardware_operations(
             runtime.capture_uart(duration_s=0.1)
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.run_boot_test(duration_s=0.1)
-        with pytest.raises(DeviceActionError, match="capture is already active"):
-            runtime.wait_pattern(pattern="READY", timeout_s=0.1)
         with pytest.raises(DeviceActionError, match="capture is already active"):
             runtime.reset_dut()
         with pytest.raises(DeviceActionError, match="capture is already active"):

@@ -375,7 +375,11 @@ def test_session_capture_source_delegates_cursor_lifecycle_for_nonzero_segment(
     )
     runtime.record_backend_connection(enhanced_info())
 
-    summary = runtime.capture_uart(duration_s=0.1)
+    summary = runtime._run_capture_workflow(  # noqa: SLF001
+        duration_s=0.1,
+        command="capture --seconds 0.1",
+        workflow="capture",
+    )
 
     assert trace.count("begin") == 1
     assert trace.count("end") == 1

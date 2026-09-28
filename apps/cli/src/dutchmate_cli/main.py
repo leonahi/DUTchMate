@@ -19,6 +19,7 @@ from dutchmate_cli.client import (
     get_debug_session,
     list_debug_sessions,
     mark_session_baseline,
+    monitor_uart,
     reset_dut,
     run_boot_test,
     send_uart_command,
@@ -36,6 +37,7 @@ from dutchmate_cli.lifecycle import (
 )
 from dutchmate_cli.logs import format_recent_logs
 from dutchmate_cli.mcp import McpLaunchError, McpLogLevel, launch_mcp
+from dutchmate_cli.monitor import format_monitor_result
 from dutchmate_cli.send import format_uart_send
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 from dutchmate_cli.status import format_status
@@ -44,6 +46,8 @@ from dutchmate_core.device_connection.discovery import (
     list_dutchmate_candidates,
     list_serial_ports,
 )
+from dutchmate_core.operations import MonitorCondition
+from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.profile import (
     DutProfileError,
     resolve_dut_profile,
@@ -390,6 +394,52 @@ def send_command(
     except ServiceClientError as exc:
         _fail(str(exc))
     typer.echo(format_uart_send(payload))
+
+
+@app.command("monitor")
+def monitor_command(
+    seconds: Annotated[
+        float | None,
+        typer.Option("--seconds", help="Bounded observation duration in seconds."),
+    ] = None,
+    until: Annotated[
+        str | None,
+        typer.Option("--until", help="Case-sensitive literal completion condition."),
+    ] = None,
+    timeout_s: Annotated[
+        float | None,
+        typer.Option("--timeout", help="Condition deadline in seconds."),
+    ] = None,
+    service_url: Annotated[
+        str | None,
+        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
+    ] = None,
+) -> None:
+    """Observe the continuous UART evidence stream through a bounded window."""
+
+    try:
+        validate_monitor_request(
+            duration_s=seconds,
+            conditions=(MonitorCondition(pattern=until),) if until is not None else None,
+            timeout_s=timeout_s,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    resolved_service_url = _resolve_service_url(service_url)
+    try:
+        payload = monitor_uart(
+            duration_s=seconds,
+            until=until,
+            timeout_s=timeout_s,
+            service_url=resolved_service_url,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceUnavailableError as exc:
+        _fail(str(exc))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(format_monitor_result(payload))
 
 
 @app.command()

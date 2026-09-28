@@ -6,12 +6,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from threading import Event
 from typing import Annotated, Protocol
 
 from fastapi import FastAPI, Query
 
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
+from dutchmate_core.operations import MonitorCondition, MonitorResult
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.runtime import (
     DeviceCoreStatus,
@@ -24,7 +26,6 @@ from dutchmate_core.session_store.store import (
     SessionDetail,
     SessionListPage,
     SessionSummary,
-    WaitPatternResult,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_core.workflows.uart_send import UartSendResult
@@ -34,6 +35,7 @@ from dutchmate_service.schemas import (
     BootTestRequest,
     CaptureRequest,
     GpioModeRequest,
+    MonitorRequest,
     ResetRequest,
     UartSendRequest,
     WaitPatternRequest,
@@ -41,6 +43,7 @@ from dutchmate_service.schemas import (
     capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
+    monitor_result_payload,
     recent_logs_payload,
     session_comparison_payload,
     session_detail_payload,
@@ -76,14 +79,29 @@ class RuntimeProvider(Protocol):
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
         """Set the configured DUT boot/control role."""
 
-    def capture_uart(self, *, duration_s: float) -> SessionSummary:
-        """Capture UART and telemetry messages into a session."""
+    def capture_uart(self, *, duration_s: float) -> MonitorResult:
+        """Run the legacy capture spelling as a Monitor alias."""
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
         """Reset the DUT and capture boot evidence into a session."""
 
-    def wait_pattern(self, *, pattern: str, timeout_s: float) -> WaitPatternResult:
-        """Wait for one literal in new UART evidence."""
+    def wait_pattern(
+        self,
+        *,
+        pattern: str,
+        timeout_s: float,
+    ) -> MonitorResult:
+        """Run the legacy wait spelling as a Monitor alias."""
+
+    def monitor(
+        self,
+        *,
+        duration_s: object | None = None,
+        conditions: tuple[MonitorCondition, ...] | None = None,
+        timeout_s: object | None = None,
+        cancellation: Event | None = None,
+    ) -> MonitorResult:
+        """Run one bounded Monitor window over durable evidence."""
 
     def send_uart(
         self,
@@ -233,8 +251,38 @@ def create_app(
 
     @app.post("/dut/capture")
     def capture_uart(request: CaptureRequest) -> dict[str, object]:
-        summary = runtime_provider.capture_uart(duration_s=request.duration_s)
-        return capture_summary_payload(summary)
+        result = runtime_provider.capture_uart(duration_s=request.duration_s)
+        return (
+            monitor_result_payload(result)
+            if isinstance(result, MonitorResult)
+            else capture_summary_payload(result)
+        )
+
+    @app.post("/dut/monitor")
+    async def monitor(request: MonitorRequest) -> dict[str, object]:
+        cancellation = Event()
+        conditions = (
+            tuple(
+                MonitorCondition(pattern=item.pattern, name=item.name)
+                for item in request.conditions
+            )
+            if request.conditions is not None
+            else None
+        )
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                runtime_provider.monitor,
+                duration_s=request.duration_s,
+                conditions=conditions,
+                timeout_s=request.timeout_s,
+                cancellation=cancellation,
+            )
+        )
+        try:
+            return monitor_result_payload(await task)
+        except asyncio.CancelledError:
+            cancellation.set()
+            raise
 
     @app.post("/dut/boot-test")
     def run_boot_test(request: BootTestRequest) -> dict[str, object]:
@@ -243,11 +291,14 @@ def create_app(
 
     @app.post("/dut/wait-pattern")
     def wait_pattern(request: WaitPatternRequest) -> dict[str, object]:
-        return wait_pattern_payload(
-            runtime_provider.wait_pattern(
-                pattern=request.pattern,
-                timeout_s=request.timeout_s,
-            )
+        result = runtime_provider.wait_pattern(
+            pattern=request.pattern,
+            timeout_s=request.timeout_s,
+        )
+        return (
+            monitor_result_payload(result)
+            if isinstance(result, MonitorResult)
+            else wait_pattern_payload(result)
         )
 
     @app.post("/dut/uart/send")

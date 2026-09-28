@@ -47,6 +47,7 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "integrity": None,
         "active_session_id": None,
         "active_workflow": None,
+        "active_operations": [],
         "commanded_boot_mode": None,
         "reconnect_remaining_s": None,
         "retention": {

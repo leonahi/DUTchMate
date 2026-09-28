@@ -1,10 +1,10 @@
 # Development Status
 
-> Active phase: Phase 1 v2 semantic migration — Stage 3 continuous evidence
-> recorder implemented and review-corrected; Stage 4 is next
-> Repository baseline reviewed: `f0cf53d3b3abbee38b1e6ed8e96eb20ce76029cc`
+> Active phase: Phase 1 v2 semantic migration — Stage 4 bounded Monitor
+> implemented; Stage 5 is next
+> Repository baseline reviewed: Stage 4 completion commit (current `HEAD`)
 > on 2026-09-28
-> Stage 3 working tree: uncommitted
+> Stage 4 state: committed; Stage 5 has not started
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -14,29 +14,34 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Stage 3 replaces service-owned idle drain/discard with
-  one core-owned recorder. Connected Basic/Enhanced startup creates an active
-  v2 session, continuously persists ambient UART and telemetry, maintains
-  line/pattern/integrity projections, publishes only durable tails, and keeps
-  one ownership interval across profile-bounded reconnect segments and linked
-  rollover sessions. Disconnect, rollover, and shutdown boundaries flush line
-  state, and shutdown drains already-normalized backend events—including an
-  Enhanced event blocked on bounded FIFO admission—before terminalizing.
+- **Current milestone:** Stage 4 adds bounded duration/condition Monitor
+  operations over the Stage 3 durable stream. Monitor records globally unique
+  operation IDs, accepted parameters, cursors, rollover-spanning ranges,
+  terminal outcomes, exact requested matches, line-limit quality, and
+  cancellation. Matching reads no pre-start history or pre-cursor partial line,
+  lifecycle rollover flushes continuous line state, reconnect preserves one
+  operation while both deadlines remain valid, and failed reconnect produces a
+  durable `disconnected` outcome. Incremental seek cursors read only newly
+  admitted UART evidence outside the store mutation lock. Results aggregate
+  integrity from exact half-open evidence ranges and timestamp provenance across
+  every range. A bounded reader lease protects rollover predecessors through
+  terminal result construction. Service/CLI expose Monitor; legacy capture/wait
+  always require and delegate to Monitor.
 - **Implementation status:** The Phase 1 v2 migration is **partially
-  implemented through Stage 3 only**. Production runtime ownership now uses
-  schema v2 and continuous acquisition. Monitor/Interact, audited action
+  implemented through Stage 4**. Production runtime ownership uses schema v2,
+  continuous acquisition, and bounded Monitor. Interact, audited action
   migration, follow/console, and release/reacquire are not implemented.
 - **Historical evidence:** Existing Basic, Enhanced, firmware, ring-buffer, and
   HIL results remain valid evidence for the physical/backend behavior they tested.
   They do not establish the new continuous ambient recording, schema-v2,
   Monitor, Interact, follow/console, or release/reacquire requirements.
-- **Next step:** Execute migration **Stage 4 only**: implement Monitor as a
-  bounded operation over durable evidence. Do not begin Stage 5 action/Interact
-  migration in that slice.
+- **Next step:** Execute migration **Stage 5 only**: make UART TX always audited,
+  add Interact, and migrate Control/boot-test auditing. Do not begin Stage 6
+  durable-cursor/follow/console work in that slice.
 - **Open blockers:** No contradiction requiring a new design decision was found
   between the two normative documents. Previously recorded Revision A physical
   evidence gaps remain deferred acceptance work for Stage 8; they do not change
-  the Stage 3 scope.
+  the Stage 4 scope.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -56,7 +61,8 @@ demonstrated again against the new normative done criteria.
 | DUT Profile and effective serial provenance | One immutable resolved profile owns backend, selector/topology, UART policy, DTR/RTS request, GPIO config, projection, and digest | Stage 1 complete; exposed through runtime/service/CLI status without v2 storage |
 | Native session schema v2 | Deterministic v2 store/recovery/retrieval/retention is implemented | Stage 2 complete; production runtime ownership adopted in Stage 3 |
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
-| Monitor and Interact | Existing capture/wait/send workflows use pre-v2 semantics | Not implemented |
+| Monitor | Bounded duration/condition observation uses the continuous durable stream with v2 operation lifecycle evidence | Stage 4 complete |
+| Interact and audited actions | Existing send/Control/boot-test paths retain pre-Stage-5 semantics | Not implemented |
 | Follow and console | Target durable-cursor views do not exist | Not implemented |
 | Release and reacquire | Target explicit ownership handoff does not exist | Not implemented |
 | MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Deferred until Phase 1 CLI acceptance |
@@ -73,8 +79,8 @@ the new contract.
 | 1 — DUT Profile and provenance | Complete | Effective profile and digest exposed; physical behavior preserved |
 | 2 — session schema v2 persistence | Complete | Review findings resolved; deterministic storage contract and compatibility readers validated |
 | 3 — authoritative continuous recorder | Complete | Profile-bounded reconnect, provenance, capacity-blocked shutdown drain, boundary-flush, and queue review findings resolved |
-| 4 — Monitor | Not started | **Next development slice** |
-| 5 — audited TX, Interact, Control/boot-test | Not started | Wait for Stage 4 |
+| 4 — Monitor | Complete | Review fixes validated; rollover-safe lifecycle, deterministic terminalization, exact-range quality, leased incremental reads, and Monitor-only aliases |
+| 5 — audited TX, Interact, Control/boot-test | Not started | **Next development slice** |
 | 6 — durable cursor, follow, console | Not started | Wait for Stage 5 |
 | 7 — release/reacquire, DTR/RTS, native USB | Not started | Wait for Stage 6 |
 | 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Not started | Wait for Stage 7 |
@@ -96,9 +102,9 @@ progress; it does not redefine either document.
 
 ## Current Validation Requirements
 
-Stage 3 validation, 2026-09-28: focused recorder/backend/service tests passed;
-the lockfile check passed; Ruff passed; configured mypy reported no issues in
-93 source files; all 1,441 pytest tests passed; `git diff --check` passed; and
-the structural Graphify index was refreshed with its reported partial-extraction
-warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h`. Detailed
-evidence is recorded in [Development History](development_history.md).
+Stage 4 review-fix validation, 2026-09-28: 79 focused Monitor, persistence, and
+status regressions passed; the lockfile check and Ruff passed; configured mypy
+reported no issues in 94 source files; all 1,488 pytest tests passed; and
+`git diff --check` passed. Graphify was refreshed with its existing partial
+extraction warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h`.
+Detailed evidence is recorded in [Development History](development_history.md).

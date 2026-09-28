@@ -759,7 +759,7 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
         runtime.close()
 
 
-def test_enhanced_startup_does_not_start_stage4_monitor_execution(
+def test_enhanced_legacy_capture_uses_stage4_monitor_execution(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -782,8 +782,12 @@ def test_enhanced_startup_does_not_start_stage4_monitor_execution(
     )
 
     try:
-        with pytest.raises(DeviceCoreRuntimeError, match="Stage 4"):
-            runtime.capture_uart(duration_s=0.2)
+        result = runtime.capture_uart(duration_s=0.01)
+
+        assert result.outcome == "elapsed"
+        assert result.mode == "duration"
+        assert result.duration_s == 0.01
+        assert result.operation_id.startswith("monitor-")
     finally:
         runtime.close()
 

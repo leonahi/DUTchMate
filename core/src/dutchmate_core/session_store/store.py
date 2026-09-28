@@ -1,10 +1,11 @@
 """Filesystem-backed debug session storage."""
 
 import base64
+import binascii
 import json
 import unicodedata
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
@@ -22,7 +23,16 @@ from dutchmate_core.backends.contracts import (
     BufferOverflowEvent,
     BufferStatusEvent,
     SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
     UartReceiveEvent,
+)
+from dutchmate_core.operations.monitor import (
+    EvidenceCursor,
+    EvidenceRange,
+    MonitorEvidence,
+    MonitorEvidenceReader,
+    MonitorTimestampProvenance,
 )
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.log_replay import (
@@ -122,6 +132,118 @@ _V2_OPERATION_OUTCOMES: Final = frozenset(
 )
 
 
+class _V2MonitorEvidenceReader:
+    """Seek-based operation reader that never takes the store mutation lock."""
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        start: EvidenceCursor,
+        uart_offset: int,
+        release_lease: Callable[[], None],
+    ) -> None:
+        self._root = root
+        self._session_id = start.session_id
+        self._next_evidence_seq = start.next_evidence_seq
+        self._uart_offset = uart_offset
+        self._release_lease = release_lease
+        self._closed = False
+
+    def read_to(self, end: EvidenceCursor) -> tuple[MonitorEvidence, ...]:
+        _validate_v2_cursor(end, field="end")
+        evidence: list[MonitorEvidence] = []
+        visited: set[str] = set()
+        while True:
+            if self._session_id in visited:
+                raise ValueError("schema-v2 rollover chain contains a cycle")
+            visited.add(self._session_id)
+            paths = _persistence.session_paths(self._root / self._session_id)
+            metadata = _persistence.read_json_object(paths.metadata)
+            if metadata.get("schema_version") != 2:
+                raise ValueError("Monitor evidence requires schema-v2 sessions")
+            session_end = (
+                end.next_evidence_seq
+                if self._session_id == end.session_id
+                else _v2_next_sequence(metadata)
+            )
+            if session_end < self._next_evidence_seq:
+                raise ValueError("Monitor evidence cursor moved backwards")
+            evidence.extend(self._read_session(paths.uart_events, session_end))
+            self._next_evidence_seq = session_end
+            if self._session_id == end.session_id:
+                return tuple(evidence)
+            successor = metadata.get("successor_session_id")
+            if not isinstance(successor, str) or not successor:
+                raise ValueError("Monitor evidence end cursor is not rollover-reachable")
+            self._session_id = successor
+            self._next_evidence_seq = 0
+            self._uart_offset = 0
+
+    def _read_session(
+        self,
+        path: Path,
+        session_end: int,
+    ) -> list[MonitorEvidence]:
+        evidence: list[MonitorEvidence] = []
+        with path.open("rb") as stream:
+            stream.seek(self._uart_offset)
+            while True:
+                record_offset = stream.tell()
+                raw = stream.readline()
+                if not raw:
+                    break
+                if not raw.endswith(b"\n"):
+                    break
+                record = json.loads(raw)
+                if not isinstance(record, dict):
+                    raise ValueError("schema-v2 UART evidence record must be an object")
+                evidence_seq = _required_record_int(record, "evidence_seq")
+                if evidence_seq >= session_end:
+                    stream.seek(record_offset)
+                    break
+                self._uart_offset = stream.tell()
+                if evidence_seq < self._next_evidence_seq:
+                    continue
+                if record.get("type") != "uart_rx":
+                    raise ValueError("schema-v2 UART stream record type is invalid")
+                data_b64 = record.get("data_b64")
+                if not isinstance(data_b64, str):
+                    raise ValueError("schema-v2 UART data_b64 is invalid")
+                try:
+                    data = base64.b64decode(data_b64, validate=True)
+                except (ValueError, binascii.Error) as exc:
+                    raise ValueError("schema-v2 UART data_b64 is invalid") from exc
+                evidence.append(
+                    MonitorEvidence(
+                        session_id=self._session_id,
+                        evidence_seq=evidence_seq,
+                        segment_id=_required_record_int(record, "segment_id"),
+                        timestamp_us=_required_record_int(record, "timestamp_us"),
+                        channel=_required_record_int(record, "channel"),
+                        data=data,
+                    )
+                )
+        return evidence
+
+    def close(self) -> None:
+        """Release this reader's operation-range retention lease once."""
+
+        if self._closed:
+            return
+        self._closed = True
+        self._release_lease()
+
+
+@dataclass(slots=True)
+class _V2IntegrityWindow:
+    explicit_dropped_bytes: int = 0
+    status_baseline_dropped_bytes: int | None = None
+    status_baseline_overflow_events: int | None = None
+    status_dropped_bytes: int = 0
+    reported_loss: bool = False
+
+
 class SessionStore:
     """Create filesystem-backed debug sessions."""
 
@@ -161,6 +283,7 @@ class SessionStore:
         ] = {}
         self._v2_profiles: dict[str, DutProfile] = {}
         self._v2_snapshots: dict[str, BackendSnapshot] = {}
+        self._v2_monitor_range_leases: dict[str, set[str]] = {}
 
     @property
     def root(self) -> Path:
@@ -1049,6 +1172,43 @@ class SessionStore:
             )
             return admission.handle
 
+    def v2_operation_start_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        operation_type: Literal["monitor", "interact", "boot_test"],
+        parameters: dict[str, object],
+    ) -> bool:
+        """Return whether the exact operation-start unit requires rollover."""
+
+        _validate_v2_identifier(operation_id, field="operation_id")
+        if operation_type not in {"monitor", "interact", "boot_test"}:
+            raise ValueError("unsupported v2 operation type")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            active = metadata.get("active_operations")
+            if not isinstance(active, dict):
+                raise ValueError("v2 active_operations must be an object")
+            if operation_id in active or _v2_operation_id_seen(
+                handle.paths.operation_events, operation_id
+            ):
+                raise ValueError("v2 operation ID has already been used")
+            return self._v2_record_will_rollover_locked(
+                handle,
+                metadata=metadata,
+                record_type="operation_started",
+                fields=lambda current_handle, _updated, evidence_seq: {
+                    "operation_id": operation_id,
+                    "operation_type": operation_type,
+                    "parameters": parameters,
+                    "start_cursor": {
+                        "session_id": current_handle.session_id,
+                        "next_evidence_seq": evidence_seq + 1,
+                    },
+                },
+            )
+
     def start_v2_operation(
         self,
         handle: SessionHandle,
@@ -1088,7 +1248,7 @@ class SessionStore:
                     "parameters": parameters,
                     "start_cursor": {
                         "session_id": current_handle.session_id,
-                        "next_evidence_seq": evidence_seq,
+                        "next_evidence_seq": evidence_seq + 1,
                     },
                 }
 
@@ -1120,6 +1280,59 @@ class SessionStore:
                 metadata_mutator=started,
             )
 
+    def v2_operation_terminal_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        operation_id: str,
+        outcome: str,
+        error: dict[str, object] | None = None,
+        matched_condition: dict[str, object] | None = None,
+        line_processing_limited: bool = False,
+    ) -> bool:
+        """Return whether the exact operation-terminal unit requires rollover."""
+
+        _validate_v2_identifier(operation_id, field="operation_id")
+        operation_error, matched_projection = _v2_terminal_projection(
+            outcome=outcome,
+            error=error,
+            matched_condition=matched_condition,
+            line_processing_limited=line_processing_limited,
+        )
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            active = metadata.get("active_operations")
+            if not isinstance(active, dict) or not isinstance(active.get(operation_id), dict):
+                raise ValueError("v2 operation is not active")
+
+            def terminal_fields(
+                current_handle: SessionHandle,
+                updated: dict[str, object],
+                terminal_seq: int,
+            ) -> dict[str, object]:
+                operation = _v2_active_operation(updated, operation_id)
+                ranges = _v2_terminal_ranges(operation, terminal_seq)
+                return {
+                    "operation_id": operation_id,
+                    "operation_type": operation.get("operation_type"),
+                    "outcome": outcome,
+                    "error": operation_error,
+                    "matched_condition": matched_projection,
+                    "line_processing_limited": line_processing_limited,
+                    "end_cursor": {
+                        "session_id": current_handle.session_id,
+                        "next_evidence_seq": terminal_seq + 1,
+                    },
+                    "evidence_ranges": ranges,
+                }
+
+            return self._v2_record_will_rollover_locked(
+                handle,
+                metadata=metadata,
+                record_type="operation_terminal",
+                fields=terminal_fields,
+            )
+
     def complete_v2_operation(
         self,
         handle: SessionHandle,
@@ -1127,20 +1340,18 @@ class SessionStore:
         operation_id: str,
         outcome: str,
         error: dict[str, object] | None = None,
+        matched_condition: dict[str, object] | None = None,
+        line_processing_limited: bool = False,
     ) -> V2EvidenceAdmission:
         """Persist one operation terminal record with durable evidence ranges."""
 
         _validate_v2_identifier(operation_id, field="operation_id")
-        if outcome not in _V2_OPERATION_OUTCOMES:
-            raise ValueError("outcome must use the normalized Phase 1 vocabulary")
-        if outcome == "error":
-            if error is None:
-                raise ValueError("error outcome requires bounded error data")
-            operation_error = _bounded_v2_operation_error(error)
-        else:
-            if error is not None:
-                raise ValueError("operation error data is only valid for the error outcome")
-            operation_error = None
+        operation_error, matched_projection = _v2_terminal_projection(
+            outcome=outcome,
+            error=error,
+            matched_condition=matched_condition,
+            line_processing_limited=line_processing_limited,
+        )
         with self._store_lock:
             metadata = self._require_active_v2_metadata(handle)
             active = metadata.get("active_operations")
@@ -1151,28 +1362,15 @@ class SessionStore:
                 updated: dict[str, object],
                 terminal_seq: int,
             ) -> dict[str, object]:
-                operations = updated.get("active_operations")
-                if not isinstance(operations, dict):
-                    raise ValueError("v2 active_operations must be an object")
-                operation = operations.get(operation_id)
-                if not isinstance(operation, dict):
-                    raise ValueError("v2 operation is not active")
-                ranges = operation.get("ranges")
-                if (
-                    not isinstance(ranges, list)
-                    or not ranges
-                    or not isinstance(ranges[-1], dict)
-                ):
-                    raise ValueError("v2 operation ranges are malformed")
-                final_ranges = [dict(item) for item in ranges if isinstance(item, dict)]
-                if len(final_ranges) != len(ranges):
-                    raise ValueError("v2 operation range is malformed")
-                final_ranges[-1]["end_evidence_seq_exclusive"] = terminal_seq + 1
+                operation = _v2_active_operation(updated, operation_id)
+                final_ranges = _v2_terminal_ranges(operation, terminal_seq)
                 return {
                     "operation_id": operation_id,
                     "operation_type": operation.get("operation_type"),
                     "outcome": outcome,
                     "error": operation_error,
+                    "matched_condition": matched_projection,
+                    "line_processing_limited": line_processing_limited,
                     "end_cursor": {
                         "session_id": current_handle.session_id,
                         "next_evidence_seq": terminal_seq + 1,
@@ -1190,13 +1388,153 @@ class SessionStore:
                 key = "failed" if outcome == "error" else "completed"
                 summary[key] = _v2_count(summary, key) + 1
 
-            return self._append_v2_record_locked(
+            admission = self._append_v2_record_locked(
                 handle,
                 stream="operation",
                 record_type="operation_terminal",
                 fields=terminal_fields,
                 metadata_mutator=terminal,
             )
+            lease = self._v2_monitor_range_leases.get(operation_id)
+            if lease is not None:
+                terminal_record = _find_v2_operation_terminal(
+                    admission.handle.paths.operation_events,
+                    operation_id,
+                )
+                for evidence_range in _v2_terminal_evidence_ranges(terminal_record):
+                    lease.add(evidence_range.session_id)
+            return admission
+
+    def open_v2_monitor_evidence_reader(
+        self,
+        *,
+        start: EvidenceCursor,
+        operation_id: str,
+    ) -> MonitorEvidenceReader:
+        """Open an incremental UART reader at an operation's durable cursor."""
+
+        _validate_v2_cursor(start, field="start")
+        _validate_v2_identifier(operation_id, field="operation_id")
+        with self._store_lock:
+            paths = _persistence.session_paths(self._root / start.session_id)
+            metadata = _persistence.read_json_object(paths.metadata)
+            if metadata.get("schema_version") != 2:
+                raise ValueError("Monitor evidence requires schema-v2 sessions")
+            if start.next_evidence_seq > _v2_next_sequence(metadata):
+                raise ValueError("Monitor evidence start cursor is beyond the durable tail")
+            operation = _v2_active_operation(metadata, operation_id)
+            ranges = operation.get("ranges")
+            if (
+                operation.get("operation_type") != "monitor"
+                or not isinstance(ranges, list)
+                or not ranges
+                or not isinstance(ranges[-1], dict)
+                or ranges[-1].get("session_id") != start.session_id
+                or ranges[-1].get("start_evidence_seq") != start.next_evidence_seq - 1
+                or ranges[-1].get("end_evidence_seq_exclusive") is not None
+            ):
+                raise ValueError("Monitor evidence reader start does not match ownership")
+            if operation_id in self._v2_monitor_range_leases:
+                raise ValueError("Monitor evidence reader already exists")
+            try:
+                uart_offset = paths.uart_events.stat().st_size
+            except OSError as exc:
+                raise SessionPersistenceError(
+                    operation="open Monitor evidence reader",
+                    path=paths.uart_events,
+                    detail=str(exc),
+                ) from exc
+            self._v2_monitor_range_leases[operation_id] = {start.session_id}
+            return _V2MonitorEvidenceReader(
+                root=self._root,
+                start=start,
+                uart_offset=uart_offset,
+                release_lease=lambda: self._release_v2_monitor_range_lease(
+                    operation_id
+                ),
+            )
+
+    def summarize_v2_monitor_evidence(
+        self,
+        ranges: Sequence[EvidenceRange],
+    ) -> tuple[UartIntegrity | None, tuple[MonitorTimestampProvenance, ...]]:
+        """Aggregate quality and timestamp provenance over every operation range."""
+
+        if not ranges:
+            raise ValueError("Monitor evidence ranges must not be empty")
+        with self._store_lock:
+            observable = True
+            reported_loss = False
+            dropped_bytes = 0
+            provenance: list[MonitorTimestampProvenance] = []
+            for evidence_range in ranges:
+                paths = _persistence.session_paths(
+                    self._root / evidence_range.session_id
+                )
+                metadata = _persistence.read_json_object(paths.metadata)
+                range_integrity = _v2_range_integrity(
+                    metadata,
+                    paths.hardware_events,
+                    evidence_range,
+                )
+                if range_integrity is None:
+                    observable = False
+                else:
+                    range_reported_loss, range_dropped_bytes = range_integrity
+                    reported_loss = reported_loss or range_reported_loss
+                    dropped_bytes += range_dropped_bytes
+                segment_ids = _v2_range_segment_ids(
+                    paths.connection_events,
+                    evidence_range,
+                )
+                segments = metadata.get("segments")
+                if not isinstance(segments, list):
+                    raise ValueError("v2 segments must be an array")
+                by_id = {
+                    segment.get("segment_id"): segment
+                    for segment in segments
+                    if isinstance(segment, dict)
+                }
+                for segment_id in segment_ids:
+                    segment = by_id.get(segment_id)
+                    if not isinstance(segment, dict):
+                        raise ValueError("Monitor range references an unknown segment")
+                    provenance.append(
+                        MonitorTimestampProvenance(
+                            session_id=evidence_range.session_id,
+                            segment=_v2_segment_context(segment),
+                        )
+                    )
+            integrity = (
+                UartIntegrity("not_observable", None, None)
+                if not observable
+                else UartIntegrity(
+                    "loss_reported" if reported_loss else "none_reported",
+                    "debug_helper_rx_buffer",
+                    dropped_bytes,
+                )
+            )
+            return integrity, tuple(provenance)
+
+    def load_v2_operation_terminal(
+        self,
+        *,
+        session_id: str,
+        operation_id: str,
+    ) -> dict[str, object]:
+        """Return one exact durable terminal record from its owning session."""
+
+        _metadata._validate_session_id(session_id)
+        _validate_v2_identifier(operation_id, field="operation_id")
+        with self._store_lock:
+            paths = _persistence.session_paths(self._root / session_id)
+            for record in reversed(_read_jsonl_records(paths.operation_events)):
+                if (
+                    record.get("type") == "operation_terminal"
+                    and record.get("operation_id") == operation_id
+                ):
+                    return dict(record)
+        raise ValueError("v2 operation terminal record was not found")
 
     def append_v2_uart_tx_attempt(
         self,
@@ -1763,6 +2101,28 @@ class SessionStore:
             raise
         return admission
 
+    def _v2_record_will_rollover_locked(
+        self,
+        handle: SessionHandle,
+        *,
+        metadata: dict[str, object],
+        record_type: str,
+        fields: dict[str, object]
+        | Callable[[SessionHandle, dict[str, object], int], dict[str, object]],
+    ) -> bool:
+        evidence_seq = _v2_next_sequence(metadata)
+        record = self._v2_record(
+            handle,
+            metadata=metadata,
+            evidence_seq=evidence_seq,
+            record_type=record_type,
+            fields=fields,
+        )
+        serialized = _persistence.serialize_jsonl(record)
+        if len(serialized) > _metadata.MAX_V2_JSONL_RECORD_BYTES:
+            raise ValueError("schema-v2 primary JSONL record exceeds its size limit")
+        return not self._v2_unit_fits(metadata, unit_bytes=len(serialized))
+
     def _v2_record(
         self,
         handle: SessionHandle,
@@ -2189,12 +2549,21 @@ class SessionStore:
         if self._max_count is None:
             self._retention_status = SessionRetentionStatus()
             return self._retention_status
+        leased_session_ids = frozenset(
+            session_id
+            for lease in self._v2_monitor_range_leases.values()
+            for session_id in lease
+        )
         self._retention_status = _retention.apply_session_retention(
             self._root,
             max_count=self._max_count,
-            held_session_ids=held_session_ids,
+            held_session_ids=held_session_ids | leased_session_ids,
         )
         return self._retention_status
+
+    def _release_v2_monitor_range_lease(self, operation_id: str) -> None:
+        with self._store_lock:
+            self._v2_monitor_range_leases.pop(operation_id, None)
 
     def append_uart_capture(
         self,
@@ -3115,6 +3484,262 @@ def _bounded_v2_operation_error(error: dict[str, object]) -> dict[str, object]:
     return _metadata._bounded_error(code, detail)
 
 
+def _v2_terminal_projection(
+    *,
+    outcome: str,
+    error: dict[str, object] | None,
+    matched_condition: dict[str, object] | None,
+    line_processing_limited: bool,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    if outcome not in _V2_OPERATION_OUTCOMES:
+        raise ValueError("outcome must use the normalized Phase 1 vocabulary")
+    if outcome == "error":
+        if error is None:
+            raise ValueError("error outcome requires bounded error data")
+        operation_error = _bounded_v2_operation_error(error)
+    else:
+        if error is not None:
+            raise ValueError("operation error data is only valid for the error outcome")
+        operation_error = None
+    if not isinstance(line_processing_limited, bool):
+        raise ValueError("line_processing_limited must be a boolean")
+    if outcome == "matched":
+        if not isinstance(matched_condition, dict):
+            raise ValueError("matched outcome requires matched condition evidence")
+        matched_projection: dict[str, object] | None = dict(matched_condition)
+    else:
+        if matched_condition is not None:
+            raise ValueError("matched condition evidence requires matched outcome")
+        matched_projection = None
+    return operation_error, matched_projection
+
+
+def _v2_active_operation(
+    metadata: dict[str, object],
+    operation_id: str,
+) -> dict[str, object]:
+    operations = metadata.get("active_operations")
+    if not isinstance(operations, dict):
+        raise ValueError("v2 active_operations must be an object")
+    operation = operations.get(operation_id)
+    if not isinstance(operation, dict):
+        raise ValueError("v2 operation is not active")
+    return operation
+
+
+def _v2_terminal_ranges(
+    operation: dict[str, object],
+    terminal_seq: int,
+) -> list[dict[str, object]]:
+    ranges = operation.get("ranges")
+    if not isinstance(ranges, list) or not ranges or not isinstance(ranges[-1], dict):
+        raise ValueError("v2 operation ranges are malformed")
+    final_ranges = [dict(item) for item in ranges if isinstance(item, dict)]
+    if len(final_ranges) != len(ranges):
+        raise ValueError("v2 operation range is malformed")
+    final_ranges[-1]["end_evidence_seq_exclusive"] = terminal_seq + 1
+    return final_ranges
+
+
+def _v2_range_integrity(
+    metadata: dict[str, object],
+    path: Path,
+    evidence_range: EvidenceRange,
+) -> tuple[bool, int] | None:
+    backend_mode = metadata.get("backend_mode")
+    if backend_mode == "basic":
+        return None
+    if backend_mode != "enhanced":
+        raise ValueError("v2 backend_mode is invalid")
+    windows: dict[int, _V2IntegrityWindow] = {}
+    for record in _read_jsonl_records(path):
+        evidence_seq = _required_record_int(record, "evidence_seq")
+        if evidence_seq >= evidence_range.end_evidence_seq_exclusive:
+            break
+        record_type = record.get("type")
+        if record_type not in {"buffer_overflow", "buffer_status"}:
+            continue
+        segment_id = _required_record_int(record, "segment_id")
+        window = windows.setdefault(segment_id, _V2IntegrityWindow())
+        if evidence_seq < evidence_range.start_evidence_seq:
+            _advance_v2_integrity_baseline(window, record)
+            continue
+        if record_type == "buffer_overflow":
+            window.explicit_dropped_bytes += _required_record_int(
+                record,
+                "dropped_bytes",
+            )
+            window.reported_loss = True
+            continue
+        dropped_total = _required_record_int(record, "dropped_bytes_total")
+        overflow_events = _required_record_int(record, "overflow_events")
+        if window.status_baseline_dropped_bytes is None:
+            window.status_baseline_dropped_bytes = dropped_total
+            window.status_baseline_overflow_events = overflow_events
+            continue
+        baseline_overflows = window.status_baseline_overflow_events
+        if baseline_overflows is None:
+            raise ValueError("v2 buffer-status integrity baseline is malformed")
+        observed_dropped = max(
+            0,
+            dropped_total - window.status_baseline_dropped_bytes,
+        )
+        window.status_dropped_bytes = max(
+            window.status_dropped_bytes,
+            observed_dropped,
+        )
+        window.reported_loss = (
+            window.reported_loss
+            or observed_dropped > 0
+            or overflow_events > baseline_overflows
+        )
+    return (
+        any(window.reported_loss for window in windows.values()),
+        sum(
+            max(window.explicit_dropped_bytes, window.status_dropped_bytes)
+            for window in windows.values()
+        ),
+    )
+
+
+def _advance_v2_integrity_baseline(
+    window: _V2IntegrityWindow,
+    record: dict[str, object],
+) -> None:
+    if record.get("type") == "buffer_status":
+        window.status_baseline_dropped_bytes = _required_record_int(
+            record,
+            "dropped_bytes_total",
+        )
+        window.status_baseline_overflow_events = _required_record_int(
+            record,
+            "overflow_events",
+        )
+        return
+    dropped_bytes = _required_record_int(record, "dropped_bytes")
+    if window.status_baseline_dropped_bytes is not None:
+        window.status_baseline_dropped_bytes += dropped_bytes
+        if window.status_baseline_overflow_events is None:
+            raise ValueError("v2 buffer-status integrity baseline is malformed")
+        window.status_baseline_overflow_events += 1
+
+
+def _find_v2_operation_terminal(
+    path: Path,
+    operation_id: str,
+) -> dict[str, object]:
+    for record in reversed(_read_jsonl_records(path)):
+        if (
+            record.get("type") == "operation_terminal"
+            and record.get("operation_id") == operation_id
+        ):
+            return record
+    raise ValueError("v2 operation terminal record was not found")
+
+
+def _v2_terminal_evidence_ranges(
+    terminal_record: dict[str, object],
+) -> tuple[EvidenceRange, ...]:
+    raw_ranges = terminal_record.get("evidence_ranges")
+    if not isinstance(raw_ranges, list) or not raw_ranges:
+        raise ValueError("v2 operation terminal evidence ranges are malformed")
+    ranges: list[EvidenceRange] = []
+    for raw_range in raw_ranges:
+        if not isinstance(raw_range, dict):
+            raise ValueError("v2 operation terminal evidence range is malformed")
+        session_id = raw_range.get("session_id")
+        start = raw_range.get("start_evidence_seq")
+        end = raw_range.get("end_evidence_seq_exclusive")
+        if (
+            not isinstance(session_id, str)
+            or isinstance(start, bool)
+            or not isinstance(start, int)
+            or start < 0
+            or isinstance(end, bool)
+            or not isinstance(end, int)
+            or end < start
+        ):
+            raise ValueError("v2 operation terminal evidence range is malformed")
+        ranges.append(
+            EvidenceRange(
+                session_id=_metadata._validate_session_id(session_id),
+                start_evidence_seq=start,
+                end_evidence_seq_exclusive=end,
+            )
+        )
+    return tuple(ranges)
+
+
+def _v2_range_segment_ids(path: Path, evidence_range: EvidenceRange) -> tuple[int, ...]:
+    current_segment_id = 0
+    included: list[int] = []
+    for record in _read_jsonl_records(path):
+        evidence_seq = _required_record_int(record, "evidence_seq")
+        if record.get("type") != "segment_opened":
+            continue
+        segment_id = _required_record_int(record, "segment_id")
+        if evidence_seq < evidence_range.start_evidence_seq:
+            current_segment_id = segment_id
+            continue
+        if evidence_seq >= evidence_range.end_evidence_seq_exclusive:
+            break
+        if not included:
+            included.append(current_segment_id)
+        if segment_id not in included:
+            included.append(segment_id)
+        current_segment_id = segment_id
+    if not included:
+        included.append(current_segment_id)
+    return tuple(included)
+
+
+def _v2_segment_context(segment: dict[str, object]) -> SegmentContext:
+    segment_id = segment.get("segment_id")
+    timestamp = segment.get("timestamp")
+    if (
+        isinstance(segment_id, bool)
+        or not isinstance(segment_id, int)
+        or segment_id < 0
+        or not isinstance(timestamp, dict)
+    ):
+        raise ValueError("v2 segment timestamp provenance is invalid")
+    source = timestamp.get("source")
+    clock = timestamp.get("clock")
+    unit = timestamp.get("unit")
+    origin = timestamp.get("origin")
+    source_origin_us = timestamp.get("source_origin_us")
+    observation_point = timestamp.get("observation_point")
+    event_granularity = timestamp.get("event_granularity")
+    if (
+        source not in {"host", "device"}
+        or clock not in {"monotonic", "rp2040_timer", "rp2350_timer"}
+        or unit != "us"
+        or origin != "segment_start"
+        or isinstance(source_origin_us, bool)
+        or not isinstance(source_origin_us, int)
+        or not isinstance(observation_point, str)
+        or not observation_point
+        or not isinstance(event_granularity, str)
+        or not event_granularity
+    ):
+        raise ValueError("v2 segment timestamp provenance is invalid")
+    return SegmentContext(
+        segment_id=segment_id,
+        timestamp=SegmentTimestamp(
+            source=cast(Literal["host", "device"], source),
+            clock=cast(
+                Literal["monotonic", "rp2040_timer", "rp2350_timer"],
+                clock,
+            ),
+            unit="us",
+            origin="segment_start",
+            source_origin_us=source_origin_us,
+            observation_point=observation_point,
+            event_granularity=event_granularity,
+        ),
+    )
+
+
 def _require_v2_operation_active(
     metadata: dict[str, object],
     operation_id: str | None,
@@ -3311,6 +3936,46 @@ def _v2_attempt_ids(
         else:
             pending.remove(attempt_id)
     return seen, pending
+
+
+def _validate_v2_cursor(cursor: EvidenceCursor, *, field: str) -> None:
+    if not isinstance(cursor, EvidenceCursor):
+        raise ValueError(f"Monitor {field} cursor is invalid")
+    _metadata._validate_session_id(cursor.session_id)
+    if (
+        isinstance(cursor.next_evidence_seq, bool)
+        or not isinstance(cursor.next_evidence_seq, int)
+        or cursor.next_evidence_seq < 0
+    ):
+        raise ValueError(f"Monitor {field} cursor sequence is invalid")
+
+
+def _read_jsonl_records(path: Path) -> list[dict[str, object]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise SessionPersistenceError(
+            operation="read evidence",
+            path=path,
+            detail=str(exc),
+        ) from exc
+    records: list[dict[str, object]] = []
+    for line in lines:
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path.name} contains invalid JSON") from exc
+        if not isinstance(value, dict):
+            raise ValueError(f"{path.name} record must be a JSON object")
+        records.append(cast(dict[str, object], value))
+    return records
+
+
+def _required_record_int(record: dict[str, object], field: str) -> int:
+    value = record.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"schema-v2 evidence {field} is invalid")
+    return value
 
 
 def _session_evidence_record(

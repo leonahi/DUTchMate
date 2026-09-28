@@ -123,7 +123,7 @@ def test_status_reconciles_idle_terminal_and_clears_connection_state(
     runtime.close()
 
 
-def test_connection_required_operation_reconciles_before_admission(
+def test_monitor_alias_requires_continuous_recorder_before_admission(
     tmp_path: Path,
 ) -> None:
     source = MutableHealthSource(CaptureSourceHealth(True, None))
@@ -131,7 +131,7 @@ def test_connection_required_operation_reconciles_before_admission(
     runtime.record_backend_connection(enhanced_info())
     source.health = CaptureSourceHealth(False, None)
 
-    with pytest.raises(DeviceCoreRuntimeError, match="not connected"):
+    with pytest.raises(DeviceCoreRuntimeError, match="recorder is unavailable"):
         runtime.capture_uart(duration_s=0.1)
 
     assert runtime.status().active_session_id is None

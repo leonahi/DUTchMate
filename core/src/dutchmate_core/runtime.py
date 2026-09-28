@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import partial
 from threading import Event, RLock
 from typing import Literal, Protocol
+from uuid import uuid4
 
 from dutchmate_core.backends.contracts import (
     BackendCapability,
@@ -28,7 +29,10 @@ from dutchmate_core.backends.contracts import (
     integrity_for_backend,
 )
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
-from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
+from dutchmate_core.evidence.recorder import (
+    ContinuousEvidenceRecorder,
+    DurableEvidenceTail,
+)
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
@@ -39,7 +43,19 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
-from dutchmate_core.log_processing.patterns import DEFAULT_PATTERNS, PatternDetector
+from dutchmate_core.operations.monitor import (
+    ActiveMonitor,
+    ActiveMonitorSummary,
+    EvidenceCursor,
+    EvidenceRange,
+    MonitorCondition,
+    MonitorMatch,
+    MonitorMatcher,
+    MonitorOutcome,
+    MonitorRequest,
+    MonitorResult,
+    validate_monitor_request,
+)
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.models import (
     BaselineMutationResult,
@@ -53,7 +69,6 @@ from dutchmate_core.session_store.models import (
     SessionRetentionStatus,
     SessionSummary,
     SessionWorkflow,
-    WaitPatternResult,
 )
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import (
@@ -159,6 +174,7 @@ class DeviceCoreStatus:
     profile_name: str | None = None
     profile_digest_sha256: str | None = None
     effective_profile: dict[str, object] | None = None
+    active_operations: tuple[ActiveMonitorSummary, ...] = ()
 
 
 class _SessionCaptureSource:
@@ -231,6 +247,7 @@ class DeviceCoreRuntime:
         uart_attempt_id_factory: Callable[[], str] | None = None,
         profile: DutProfile | None = None,
         evidence_recorder: ContinuousEvidenceRecorder | None = None,
+        monitor_id_factory: Callable[[], str] | None = None,
     ) -> None:
         if profile is not None:
             port = profile.current_serial_port
@@ -240,6 +257,9 @@ class DeviceCoreRuntime:
             dut_io_voltage = profile.dut_io_voltage
         self._profile = profile
         self._evidence_recorder = evidence_recorder
+        self._monitor_id_factory = monitor_id_factory or (
+            lambda: f"monitor-{uuid4()}"
+        )
         self._message_source = message_source
         self._reconnect_source: CaptureEventSource | None = None
         self._capture_clock = capture_clock
@@ -307,6 +327,7 @@ class DeviceCoreRuntime:
         self._reconnect_timeout_s = reconnect_timeout_s
         self._reconnect_deadline: float | None = None
         self._operation_lock = RLock()
+        self._active_monitors: dict[str, ActiveMonitor] = {}
         self._closing = False
         self._closed = False
         self._close_complete = Event()
@@ -350,6 +371,9 @@ class DeviceCoreRuntime:
                     self._message_source = None
                     self._reconnect_source = None
                 self._mark_backend_disconnected()
+                active_monitors = tuple(self._active_monitors.values())
+                for monitor in active_monitors:
+                    monitor.cancellation.set()
 
         if not first_closer:
             self._close_complete.wait()
@@ -360,6 +384,8 @@ class DeviceCoreRuntime:
             return
 
         close_error: BaseException | None = None
+        for monitor in active_monitors:
+            monitor.completed.wait()
         reconnect_close = getattr(self._backend_reconnect, "close", None)
         if callable(reconnect_close):
             try:
@@ -548,6 +574,17 @@ class DeviceCoreRuntime:
                 effective_profile=(
                     self._profile.projection() if self._profile is not None else None
                 ),
+                active_operations=tuple(
+                    ActiveMonitorSummary(
+                        operation_id=monitor.operation_id,
+                        mode=monitor.mode,
+                        deadline_remaining_s=max(
+                            0.0,
+                            monitor.deadline - self._status_clock(),
+                        ),
+                    )
+                    for monitor in self._active_monitors.values()
+                ),
             )
 
     def apply_hardware_config(
@@ -668,19 +705,184 @@ class DeviceCoreRuntime:
             self._commanded_boot_mode = result.mode
             return result
 
-    def capture_uart(self, *, duration_s: float) -> SessionSummary:
-        """Capture UART and telemetry messages into one filesystem session."""
+    def capture_uart(self, *, duration_s: float) -> MonitorResult:
+        """Run the legacy capture spelling as a bounded Monitor alias."""
 
         duration_s = validate_capture_duration(duration_s)
-        if self._evidence_recorder is not None:
-            raise DeviceCoreRuntimeError(
-                "Monitor over continuous evidence is not implemented until Stage 4"
-            )
-        return self._run_capture_workflow(
+        return self.monitor(duration_s=duration_s)
+
+    def monitor(
+        self,
+        *,
+        duration_s: object | None = None,
+        conditions: Sequence[MonitorCondition] | None = None,
+        timeout_s: object | None = None,
+        cancellation: Event | None = None,
+    ) -> MonitorResult:
+        """Run one bounded read-only window over already-authoritative evidence."""
+
+        request = validate_monitor_request(
             duration_s=duration_s,
-            command=f"capture --seconds {duration_s:g}",
-            workflow="capture",
+            conditions=conditions,
+            timeout_s=timeout_s,
         )
+        recorder = self._evidence_recorder
+        if recorder is None:
+            raise DeviceCoreRuntimeError("Continuous evidence recorder is unavailable")
+        cancellation = cancellation or Event()
+        completion = Event()
+        bound_s = request.duration_s or request.timeout_s
+        assert bound_s is not None
+        with self._operation_lock:
+            if self._closing or self._closed:
+                raise DeviceCoreRuntimeError("Device Core runtime is closing")
+            recorder_state = recorder.state
+            if recorder_state not in {"connected", "reconnecting"}:
+                raise DeviceCoreRuntimeError(
+                    "Monitor requires a connected or reconnecting backend"
+                )
+            health = recorder.capture_source_health()
+            snapshot = health.backend_snapshot
+            capabilities = (
+                snapshot.capabilities
+                if snapshot is not None
+                else apply_capability_policy(
+                    self._backend_capabilities,
+                    self._capability_policy,
+                )
+            )
+            if "uart_receive" not in capabilities:
+                raise DeviceCoreRuntimeError(
+                    "Monitor requires effective capability 'uart_receive'"
+                )
+            operation_id = self._monitor_id_factory()
+            deadline = self._status_clock() + bound_s
+            active = ActiveMonitor(
+                operation_id=operation_id,
+                mode=request.mode,
+                deadline=deadline,
+                cancellation=cancellation,
+                completed=completion,
+            )
+            start_cursor, incomplete_channels, evidence_reader = (
+                recorder.start_monitor_operation(
+                    operation_id=operation_id,
+                    parameters=_monitor_parameters(request),
+                )
+            )
+            try:
+                self._active_monitors[operation_id] = active
+            except BaseException as exc:
+                try:
+                    recorder.complete_monitor_operation(
+                        operation_id=operation_id,
+                        outcome="error",
+                        error={"code": "monitor_error", "detail": str(exc)},
+                    )
+                except BaseException as terminal_error:
+                    evidence_reader.close()
+                    raise terminal_error from exc
+                evidence_reader.close()
+                raise
+
+        matcher: MonitorMatcher | None = None
+        cursor = start_cursor
+        match = None
+        outcome: MonitorOutcome
+        terminalized = False
+        try:
+            matcher = (
+                MonitorMatcher(
+                    request.conditions,
+                    incomplete_channels=incomplete_channels,
+                )
+                if request.mode == "conditions"
+                else None
+            )
+            while True:
+                if cancellation.is_set():
+                    outcome = "cancelled"
+                    break
+                recorder_state = recorder.state
+                if recorder_state == "disconnected":
+                    outcome = "disconnected"
+                    break
+                if recorder_state == "faulted":
+                    raise DeviceCoreRuntimeError(
+                        "Authoritative evidence recording faulted during Monitor"
+                    )
+                remaining_s = deadline - self._status_clock()
+                if remaining_s <= 0:
+                    outcome = "elapsed" if request.mode == "duration" else "timeout"
+                    break
+                tail = recorder.wait_for_durable_tail(
+                    DurableEvidenceTail(
+                        session_id=cursor.session_id,
+                        next_evidence_seq=cursor.next_evidence_seq,
+                    ),
+                    timeout_s=min(remaining_s, 0.05),
+                )
+                if tail is None:
+                    continue
+                next_cursor = EvidenceCursor(
+                    session_id=tail.session_id,
+                    next_evidence_seq=tail.next_evidence_seq,
+                )
+                evidence = recorder.read_monitor_evidence(
+                    reader=evidence_reader,
+                    end=next_cursor,
+                )
+                cursor = next_cursor
+                if matcher is not None:
+                    match = matcher.process(evidence)
+                    if match is not None:
+                        outcome = "matched"
+                        break
+
+            terminal = recorder.complete_monitor_operation(
+                operation_id=operation_id,
+                outcome=outcome,
+                matched_condition=(
+                    match.persistence_projection() if match is not None else None
+                ),
+                line_processing_limited=(
+                    matcher.line_processing_limited if matcher is not None else False
+                ),
+            )
+            terminalized = True
+            return _monitor_result(
+                operation_id=operation_id,
+                request=request,
+                start_cursor=start_cursor,
+                terminal=terminal,
+                match=match,
+                line_processing_limited=(
+                    matcher.line_processing_limited if matcher is not None else False
+                ),
+                recorder=recorder,
+            )
+        except BaseException as exc:
+            if not terminalized and recorder.state != "faulted":
+                try:
+                    recorder.complete_monitor_operation(
+                        operation_id=operation_id,
+                        outcome="error",
+                        error={"code": "monitor_error", "detail": str(exc)},
+                        matched_condition=None,
+                        line_processing_limited=(
+                            matcher.line_processing_limited
+                            if matcher is not None
+                            else False
+                        ),
+                    )
+                except BaseException as terminal_error:
+                    raise terminal_error from exc
+            raise
+        finally:
+            evidence_reader.close()
+            with self._operation_lock:
+                self._active_monitors.pop(operation_id, None)
+            completion.set()
 
     def run_boot_test(self, *, duration_s: float) -> SessionSummary:
         """Reset the DUT and capture its boot UART into one session."""
@@ -703,48 +905,14 @@ class DeviceCoreRuntime:
         *,
         pattern: str,
         timeout_s: float,
-    ) -> WaitPatternResult:
-        """Capture new UART evidence until one literal completes or time expires."""
+    ) -> MonitorResult:
+        """Run the legacy wait spelling as a conditional Monitor alias."""
 
         validated_pattern = validate_wait_pattern(pattern)
         validated_timeout = validate_wait_timeout(timeout_s)
-        if self._evidence_recorder is not None:
-            raise DeviceCoreRuntimeError(
-                "Monitor conditions are not implemented until Stage 4"
-            )
-        detector_patterns = (validated_pattern,) + tuple(
-            pattern_name
-            for pattern_name in DEFAULT_PATTERNS
-            if pattern_name != validated_pattern
-        )
-        summary = self._run_capture_workflow(
-            duration_s=validated_timeout,
-            command="wait-pattern",
-            workflow="wait_pattern",
-            required_capability="uart_receive",
-            uart_processor=UartCaptureProcessor(
-                pattern_detector=PatternDetector(detector_patterns)
-            ),
-            requested_pattern=validated_pattern,
-            discard_preexisting=True,
-        )
-        if summary.matched is None or summary.wait_pattern != validated_pattern:
-            raise DeviceCoreRuntimeError("Wait-pattern session result is incomplete")
-        match = (
-            self._session_store.load_detected_pattern(
-                summary.session_id,
-                summary.detected_pattern_index,
-            )
-            if summary.detected_pattern_index is not None
-            else None
-        )
-        if match is not None and match.pattern != validated_pattern:
-            raise DeviceCoreRuntimeError("Wait-pattern detected record does not match request")
-        return WaitPatternResult(
-            summary=summary,
-            pattern=validated_pattern,
-            matched=summary.matched,
-            match=match,
+        return self.monitor(
+            conditions=(MonitorCondition(pattern=validated_pattern),),
+            timeout_s=validated_timeout,
         )
 
     def send_uart(
@@ -1143,3 +1311,102 @@ class DeviceCoreRuntime:
             segment=(segment_context if segment_context is not None else self._segment_context),
             integrity=self._integrity,
         )
+
+
+def _monitor_parameters(request: MonitorRequest) -> dict[str, object]:
+    if request.mode == "duration":
+        return {
+            "mode": "duration",
+            "duration_s": request.duration_s,
+        }
+    return {
+        "mode": "conditions",
+        "conditions": [
+            {"pattern": condition.pattern, "name": condition.name}
+            for condition in request.conditions
+        ],
+        "timeout_s": request.timeout_s,
+    }
+
+
+def _monitor_result(
+    *,
+    operation_id: str,
+    request: MonitorRequest,
+    start_cursor: EvidenceCursor,
+    terminal: dict[str, object],
+    match: MonitorMatch | None,
+    line_processing_limited: bool,
+    recorder: ContinuousEvidenceRecorder,
+) -> MonitorResult:
+    if terminal.get("operation_id") != operation_id:
+        raise DeviceCoreRuntimeError("Monitor terminal operation identity changed")
+    outcome = terminal.get("outcome")
+    if outcome not in {
+        "elapsed",
+        "matched",
+        "timeout",
+        "disconnected",
+        "released",
+        "cancelled",
+        "error",
+    }:
+        raise DeviceCoreRuntimeError("Monitor terminal outcome is invalid")
+    end_cursor = _monitor_cursor(terminal.get("end_cursor"), field="end")
+    raw_ranges = terminal.get("evidence_ranges")
+    if not isinstance(raw_ranges, list) or not raw_ranges:
+        raise DeviceCoreRuntimeError("Monitor terminal evidence ranges are invalid")
+    ranges = tuple(_monitor_range(item) for item in raw_ranges)
+    integrity, timestamp_provenance = recorder.summarize_monitor_evidence(ranges)
+    return MonitorResult(
+        operation_id=operation_id,
+        outcome=outcome,
+        mode=request.mode,
+        duration_s=request.duration_s,
+        conditions=request.conditions,
+        timeout_s=request.timeout_s,
+        start_cursor=start_cursor,
+        end_cursor=end_cursor,
+        evidence_ranges=ranges,
+        match=match,
+        line_processing_limited=line_processing_limited
+        or terminal.get("line_processing_limited") is True,
+        integrity=integrity,
+        timestamp_provenance=timestamp_provenance,
+    )
+
+
+def _monitor_cursor(value: object, *, field: str) -> EvidenceCursor:
+    if not isinstance(value, dict):
+        raise DeviceCoreRuntimeError(f"Monitor terminal {field} cursor is invalid")
+    session_id = value.get("session_id")
+    next_evidence_seq = value.get("next_evidence_seq")
+    if (
+        not isinstance(session_id, str)
+        or not session_id
+        or isinstance(next_evidence_seq, bool)
+        or not isinstance(next_evidence_seq, int)
+        or next_evidence_seq < 0
+    ):
+        raise DeviceCoreRuntimeError(f"Monitor terminal {field} cursor is invalid")
+    return EvidenceCursor(session_id, next_evidence_seq)
+
+
+def _monitor_range(value: object) -> EvidenceRange:
+    if not isinstance(value, dict):
+        raise DeviceCoreRuntimeError("Monitor terminal evidence range is invalid")
+    session_id = value.get("session_id")
+    start = value.get("start_evidence_seq")
+    end = value.get("end_evidence_seq_exclusive")
+    if (
+        not isinstance(session_id, str)
+        or not session_id
+        or isinstance(start, bool)
+        or not isinstance(start, int)
+        or start < 0
+        or isinstance(end, bool)
+        or not isinstance(end, int)
+        or end < start
+    ):
+        raise DeviceCoreRuntimeError("Monitor terminal evidence range is invalid")
+    return EvidenceRange(session_id, start, end)

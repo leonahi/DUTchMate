@@ -9,6 +9,73 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Phase 1 v2 Migration Stage 4 Review Fixes — 2026-09-28
+
+- Made Monitor lifecycle admissions rollover-boundary aware. Continuous line
+  state is finalized before a start or terminal record rolls, and the start
+  cursor plus pre-cursor incomplete-line snapshot are taken from the actual
+  start session.
+- Guaranteed terminal ownership after a durable start. Operation-local reader,
+  matcher, and initialization failures persist an `error` terminal while
+  storage remains usable; terminal persistence failure faults authoritative
+  recording and fails session ownership without fabricating a result.
+- Derived terminal integrity and timestamp provenance from every operation
+  evidence range. Integrity now uses only telemetry inside each exact half-open
+  range, excluding cumulative loss observed before the start or after the end,
+  while preserving in-range loss across rollover/reconnect and each relevant
+  session-local timestamp provenance segment.
+- Replaced lock-held full UART JSONL rescans with operation-local seek readers
+  opened at the durable start byte offset. Each poll reads only newly admitted
+  UART evidence and does not acquire the global store mutation lock. A bounded
+  operation reader lease is extended atomically with terminal persistence so
+  retention cannot delete predecessor ranges until result construction ends;
+  runtime cleanup then releases it on every exit path.
+- Removed the runtime's public v1 capture/wait fallbacks. Both legacy spellings
+  now require and call Monitor; only finite capture infrastructure needed by
+  the not-yet-migrated Stage 5 boot-test remains. Obsolete v1 wait execution
+  tests were removed, while retained boot-test infrastructure tests call the
+  internal workflow explicitly.
+- Added deterministic regressions for start/terminal rollover with partial
+  lines, reader/matcher/post-start initialization failures, terminal persistence
+  failure, earlier-range loss/provenance, incremental unlocked reading, and
+  Monitor-only aliases. Stage 5 behavior was not started.
+- Validation: 79 focused Monitor/persistence/status regressions passed;
+  `uv lock --check`, Ruff, configured mypy (94 source files), all 1,488 pytest
+  tests, and `git diff --check` passed. Graphify was refreshed with its existing
+  partial extraction warning for
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h`.
+
+## Phase 1 v2 Migration Stage 4 — 2026-09-28
+
+- Added one common bounded Monitor model with validated duration or ordered
+  literal-condition completion, globally unique Device Core operation IDs,
+  monotonic deadlines, cancellation, active-operation status, durable start/end
+  cursors, rollover-spanning ranges, normalized terminal outcomes, exact match
+  references/excerpts, and line-processing quality.
+- Monitor consumes only schema-v2 UART records after its durable start cursor.
+  Operation-local line buffers never search history or join across session,
+  segment, or pre-cursor partial-line boundaries; oversized lines are excluded,
+  and match selection uses evidence order, byte offset, then request order.
+- Preserved Monitor across successful reconnect with the same operation ID and
+  terminalized reconnect-deadline failure as durable `disconnected` evidence.
+  Backend-input faults produce durable `error` operation terminals, while HTTP
+  cancellation produces `cancelled`; continuous ingestion remains the only
+  physical reader throughout.
+- Added `POST /dut/monitor`, `dutchmate monitor --seconds`, and `dutchmate
+  monitor --until ... --timeout ...`. Legacy capture/wait runtime, service, and
+  CLI paths are temporary wrappers over Monitor whenever continuous recording
+  is active; boot-test and action semantics remain deferred to Stage 5.
+- Added focused validation for bounds and condition metadata, no-side-effect
+  rejection, pre-start/pre-cursor exclusion, oversized boundary handling,
+  deterministic tie-breaks, normal timeout, exact durable match projection,
+  reconnect success/failure, cancellation, backend fault, concurrent observers,
+  rollover ranges, active status, HTTP responses, CLI behavior, and aliases.
+- Validation: `uv lock --check` passed; Ruff passed; configured mypy reported no
+  issues in 96 source files; all 1,487 pytest tests passed; and
+  `git diff --check` passed. The structural Graphify index was refreshed; it
+  reported the existing partial extraction of
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` after a syntax warning.
+
 ## Phase 1 v2 Migration Stage 3 Review Fixes — 2026-09-28
 
 - Replaced indefinite idle reopen with the profile-snapshotted reconnect
