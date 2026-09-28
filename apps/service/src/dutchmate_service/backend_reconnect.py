@@ -62,6 +62,9 @@ class ReplaceableCaptureSource(CaptureEventSource, Protocol):
     ) -> None:
         """Accept ownership of one validated concrete replacement."""
 
+    def reconnect_timed_out(self) -> None:
+        """Terminalize the active ownership session after the profile deadline."""
+
     def close(self) -> None:
         """Terminalize the stable facade and its current concrete source."""
 
@@ -130,6 +133,7 @@ class BackendReconnectCoordinator:
         active_retry_interval_s: float = 0.1,
         idle_initial_retry_s: float = 0.1,
         idle_max_retry_s: float = 2.0,
+        reconnect_timeout_s: float = 5.0,
     ) -> None:
         if active_retry_interval_s <= 0:
             raise ValueError("active reconnect retry interval must be positive")
@@ -141,6 +145,8 @@ class BackendReconnectCoordinator:
             raise ValueError(
                 "idle reconnect initial retry interval must not exceed maximum"
             )
+        if reconnect_timeout_s <= 0:
+            raise ValueError("reconnect timeout must be positive")
 
         self._source_owner = source_owner
         self._open_replacement = open_replacement
@@ -150,6 +156,7 @@ class BackendReconnectCoordinator:
         self._active_retry_interval_s = active_retry_interval_s
         self._idle_initial_retry_s = idle_initial_retry_s
         self._idle_max_retry_s = idle_max_retry_s
+        self._reconnect_timeout_s = reconnect_timeout_s
         self._condition = Condition()
         self._stop_requested = Event()
         self._wait_for_idle_retry = (
@@ -284,7 +291,10 @@ class BackendReconnectCoordinator:
                     if self._stop_requested.is_set():
                         return
                     self._source_owner.close_current_source_for_reconnect(idle=True)
-                    self._retry_idle()
+                    deadline = self._clock() + self._reconnect_timeout_s
+                    reconnected = self._retry_idle(deadline=deadline)
+                    if not reconnected and not self._stop_requested.is_set():
+                        self._source_owner.reconnect_timed_out()
                 finally:
                     with self._condition:
                         self._attempt_active = False
@@ -325,30 +335,34 @@ class BackendReconnectCoordinator:
             return self._publish(replacement)
         return None
 
-    def _retry_idle(self) -> None:
+    def _retry_idle(self, *, deadline: float) -> bool:
         retry_delay_s = self._idle_initial_retry_s
-        while not self._stop_requested.is_set():
+        while not self._stop_requested.is_set() and self._clock() < deadline:
             try:
                 replacement = self._open_replacement(
                     segment_id=0,
-                    deadline=None,
+                    deadline=deadline,
                     stop_requested=self._stop_requested,
                 )
             except _CandidateCleanupFailure as exc:
                 self._retain_close_error(exc.cleanup_error)
-                return
+                return False
             except Exception:
                 if self._stop_requested.is_set():
-                    return
-                if self._wait_for_idle_retry(retry_delay_s):
-                    return
+                    return False
+                remaining_s = deadline - self._clock()
+                if remaining_s <= 0:
+                    return False
+                if self._wait_for_idle_retry(min(retry_delay_s, remaining_s)):
+                    return False
                 retry_delay_s = min(retry_delay_s * 2, self._idle_max_retry_s)
                 continue
-            if self._stop_requested.is_set():
+            if self._stop_requested.is_set() or self._clock() >= deadline:
                 self._close_rejected(replacement)
-                return
+                return False
             self._publish(replacement)
-            return
+            return True
+        return False
 
     def _wait_for_active_retry(self, deadline: float) -> bool:
         remaining_s = deadline - self._clock()
@@ -530,6 +544,7 @@ def build_basic_capture_reconnect(
         on_rejected=discard_sender,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
+        reconnect_timeout_s=settings.reconnect_timeout_s,
     )
 
 
@@ -600,16 +615,17 @@ def _build_async_enhanced_capture_reconnect(
                     tx_enabled=settings.tx_enabled,
                 ),
             )
-            if deadline is not None:
-                while host.segment is None:
-                    if stop_requested.is_set():
-                        raise RuntimeError("backend reconnect coordinator is closing")
-                    remaining_s = deadline - monotonic_clock()
-                    if remaining_s <= 0:
-                        raise TimeoutError(
-                            "Enhanced timestamp provenance was not established"
-                        )
-                    host.wait_for_segment(min(0.1, remaining_s))
+            if deadline is None:
+                raise ValueError("Enhanced reconnect requires a finite deadline")
+            while host.segment is None:
+                if stop_requested.is_set():
+                    raise RuntimeError("backend reconnect coordinator is closing")
+                remaining_s = deadline - monotonic_clock()
+                if remaining_s <= 0:
+                    raise TimeoutError(
+                        "Enhanced timestamp provenance was not established"
+                    )
+                host.wait_for_segment(min(0.1, remaining_s))
             return ReconnectedCaptureSource(
                 source=host,
                 backend_snapshot=backend_snapshot(
@@ -638,6 +654,7 @@ def _build_async_enhanced_capture_reconnect(
         on_connected=publish_host,
         monotonic_clock=monotonic_clock,
         sleep=sleep,
+        reconnect_timeout_s=settings.reconnect_timeout_s,
     )
 
 

@@ -11,6 +11,8 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
 )
 from dutchmate_core.backends.basic import (
+    DEFAULT_BASIC_EVENT_QUEUE_CAPACITY,
+    BasicBackendConnection,
     BasicBackendEventSource,
     open_basic_backend_connection,
 )
@@ -88,6 +90,17 @@ def _settings(*, tx_enabled: bool = False) -> BackendSettings:
         stop_bits=1,
         tx_enabled=tx_enabled,
     )
+
+
+def test_basic_event_source_queue_is_bounded() -> None:
+    settings = _settings()
+    source = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=FakeRawSerial(), settings=settings),
+        segment_id=0,
+    )
+
+    assert source.event_queue_capacity == DEFAULT_BASIC_EVENT_QUEUE_CAPACITY
+    source.close()
 
 
 def test_open_basic_connection_uses_raw_8n1_without_reading_hello() -> None:

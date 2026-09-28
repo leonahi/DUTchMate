@@ -6,14 +6,24 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, disconnected_status
 
-from dutchmate_core.backends import BackendEvent
+from dutchmate_core.backends import (
+    BackendCapabilityPolicy,
+    BackendEvent,
+    BackendInfo,
+    BackendSnapshot,
+    SegmentContext,
+    SegmentTimestamp,
+    UartIntegrity,
+    UartSendCapabilityPolicy,
+)
 from dutchmate_core.backends.contracts import ControlState
+from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
 from dutchmate_core.gpio_config.config import HardwareGpioConfig, parse_hardware_gpio_config
+from dutchmate_core.profile import DutProfileConfig, resolve_dut_profile
 from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionStore
 from dutchmate_service import app as app_module
 from dutchmate_service.backend_reconnect import BackendReconnectCoordinator
-from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 
 
 class ClosableFakeRuntime(FakeRuntime):
@@ -30,6 +40,7 @@ class ClosableFakeRuntime(FakeRuntime):
 
 class BlockingCaptureSource:
     def __init__(self) -> None:
+        self.segment = _segment()
         self.read_started = Event()
         self.close_count = 0
         self._condition = Condition()
@@ -84,26 +95,40 @@ def test_app_lifespan_closes_internally_constructed_runtime(
     assert runtime.close_count == 1
 
 
-def test_app_lifespan_closes_runtime_coordinator_and_ingestion_thread(
+def test_app_lifespan_closes_runtime_recorder_and_ingestion_thread(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """Catch app-owned shutdown returning with a source or ingestion thread alive."""
 
     source = BlockingCaptureSource()
-    coordinator = ContinuousIngestionCoordinator(source)
+    store = SessionStore(root=tmp_path)
+    profile = resolve_dut_profile(
+        DutProfileConfig(),
+        mode="enhanced",
+        serial_port="/dev/ttyACM0",
+    )
+    snapshot = _snapshot()
+    recorder = ContinuousEvidenceRecorder(
+        source=source,
+        session_store=store,
+        profile=profile,
+        backend_snapshot=snapshot,
+    )
     reconnect = BackendReconnectCoordinator(
-        source_owner=coordinator,
+        source_owner=recorder,
         open_replacement=lambda **_kwargs: pytest.fail(
             "connected source unexpectedly attempted reconnect"
         ),
     )
     runtime = DeviceCoreRuntime(
         device_control=NoopDeviceControl(),
-        message_source=coordinator,
-        session_store=SessionStore(root=tmp_path),
+        session_store=store,
         backend_reconnect=reconnect,
+        profile=profile,
+        evidence_recorder=recorder,
     )
+    runtime.record_backend_connection(snapshot.info)
     reconnect.start()
     reconnect_worker = reconnect._worker  # noqa: SLF001 - lifecycle assertion.
     assert reconnect_worker is not None
@@ -115,21 +140,21 @@ def test_app_lifespan_closes_runtime_coordinator_and_ingestion_thread(
             assert client.get("/status").status_code == 200
             assert reconnect_worker.is_alive()
             assert any(
-                thread.name == "dutchmate-continuous-ingestion"
+                thread.name == "dutchmate-evidence-recorder"
                 for thread in threading.enumerate()
             )
         worker_alive_after_lifespan = reconnect_worker.is_alive()
     finally:
         if reconnect_worker.is_alive():
             reconnect.close()
-        if coordinator._thread.is_alive():  # noqa: SLF001 - failed-test cleanup.
-            coordinator.close()
+        if recorder._thread.is_alive():  # noqa: SLF001 - failed-test cleanup.
+            recorder.close()
 
     assert source.close_count == 1
     assert worker_alive_after_lifespan is False
     assert all(
         thread.name
-        not in {"dutchmate-backend-reconnect", "dutchmate-continuous-ingestion"}
+        not in {"dutchmate-backend-reconnect", "dutchmate-evidence-recorder"}
         for thread in threading.enumerate()
     )
 
@@ -184,4 +209,39 @@ def _hardware_config() -> HardwareGpioConfig:
                 }
             }
         }
+    )
+
+
+def _segment() -> SegmentContext:
+    return SegmentContext(
+        segment_id=0,
+        timestamp=SegmentTimestamp(
+            source="device",
+            clock="rp2350_timer",
+            unit="us",
+            origin="segment_start",
+            source_origin_us=0,
+            observation_point="debug_helper_uart_rx",
+            event_granularity="firmware_uart_event",
+        ),
+    )
+
+
+def _snapshot() -> BackendSnapshot:
+    info = BackendInfo(
+        mode="enhanced",
+        port="/dev/ttyACM0",
+        firmware="0.1.0",
+        device="dutchmate-rp2350",
+        capabilities=frozenset({"uart_receive"}),
+    )
+    policy = BackendCapabilityPolicy(
+        uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
+    )
+    return BackendSnapshot(
+        info=info,
+        capabilities=info.capabilities,
+        capability_policy=policy,
+        segment=_segment(),
+        integrity=UartIntegrity("none_reported", "debug_helper_rx_buffer", 0),
     )

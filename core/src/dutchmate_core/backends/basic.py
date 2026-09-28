@@ -7,8 +7,9 @@ import importlib
 import math
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
 from typing import Final, Protocol, cast
 
@@ -35,6 +36,7 @@ from dutchmate_core.backends.settings import BackendSettings
 DEFAULT_SERIAL_TIMEOUT_S: Final = 1.0
 DEFAULT_EVENT_READ_TIMEOUT_S: Final = 0.1
 DEFAULT_READ_SIZE: Final = 4096
+DEFAULT_BASIC_EVENT_QUEUE_CAPACITY: Final = 256
 
 
 class BasicSerialPort(Protocol):
@@ -181,12 +183,19 @@ class BasicBackendEventSource:
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
         read_size: int = DEFAULT_READ_SIZE,
         read_timeout_s: float = DEFAULT_EVENT_READ_TIMEOUT_S,
+        event_queue_capacity: int = DEFAULT_BASIC_EVENT_QUEUE_CAPACITY,
     ) -> None:
         if not isinstance(segment_id, int) or isinstance(segment_id, bool) or segment_id < 0:
             raise ValueError("Basic segment ID must be a non-negative integer")
         if not isinstance(read_size, int) or isinstance(read_size, bool) or read_size <= 0:
             raise ValueError("Basic serial read size must be a positive integer")
         _validate_timeout(read_timeout_s, field="Basic event read timeout")
+        if (
+            not isinstance(event_queue_capacity, int)
+            or isinstance(event_queue_capacity, bool)
+            or event_queue_capacity <= 0
+        ):
+            raise ValueError("Basic event queue capacity must be a positive integer")
 
         source_origin_ns = monotonic_ns()
         if not isinstance(source_origin_ns, int) or isinstance(source_origin_ns, bool):
@@ -211,7 +220,7 @@ class BasicBackendEventSource:
         self._monotonic_ns = monotonic_ns
         self._read_size = read_size
         self._read_timeout_s = read_timeout_s
-        self._outcomes: Queue[_ReaderOutcome] = Queue()
+        self._outcomes: Queue[_ReaderOutcome] = Queue(maxsize=event_queue_capacity)
         self._stop = Event()
         self._start_lock = Lock()
         self._reader: Thread | None = None
@@ -246,6 +255,12 @@ class BasicBackendEventSource:
             segment=self._segment,
             integrity=integrity_for_backend("basic"),
         )
+
+    @property
+    def event_queue_capacity(self) -> int:
+        """Return the fixed backend-to-recorder queue bound."""
+
+        return self._outcomes.maxsize
 
     async def receive_event(self, timeout_s: float | None = None) -> BackendEvent | None:
         """Return the next FIFO event, or ``None`` for an ordinary timeout."""
@@ -285,7 +300,8 @@ class BasicBackendEventSource:
             reader = self._reader
             if reader is not None:
                 reader.join(timeout=DEFAULT_SERIAL_TIMEOUT_S + 0.1)
-            self._outcomes.put(_SourceClosed())
+            with suppress(Full):
+                self._outcomes.put_nowait(_SourceClosed())
 
     def _ensure_reader_started(self) -> None:
         if self._reader is not None:
@@ -361,12 +377,28 @@ class BasicBackendEventSource:
         self._ensure_reader_started()
         if self._terminal_error is not None:
             raise self._terminal_error
+        reader = self._reader
+        if (
+            self._stop.is_set()
+            and self._outcomes.empty()
+            and (reader is None or not reader.is_alive())
+        ):
+            self._terminal_error = BackendDisconnectedError(
+                "Basic backend event source is closed"
+            )
+            raise self._terminal_error
         try:
             if timeout_s is None:
                 outcome = self._outcomes.get()
             else:
                 outcome = self._outcomes.get(timeout=timeout_s)
         except Empty:
+            reader = self._reader
+            if self._stop.is_set() and (reader is None or not reader.is_alive()):
+                self._terminal_error = BackendDisconnectedError(
+                    "Basic backend event source is closed"
+                )
+                raise self._terminal_error from None
             return None
 
         if isinstance(outcome, _ReaderFailure):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from threading import Condition, Thread
+from threading import Condition
 from threading import Event as ThreadEvent
 
 import pytest
@@ -14,7 +14,6 @@ from dutchmate_core.backends import (
     BackendEvent,
     BackendInfo,
     BackendInputError,
-    BackendSnapshot,
     BackendUartSendResult,
     DeviceControlError,
     SegmentContext,
@@ -31,6 +30,7 @@ from dutchmate_core.device_connection.messages import (
     HelloMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
 from dutchmate_core.gpio_config.config import HardwareGpioConfig, parse_hardware_gpio_config
 from dutchmate_core.profile import (
     DutProfile,
@@ -40,11 +40,9 @@ from dutchmate_core.profile import (
 )
 from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
-from dutchmate_core.workflows.capture import CaptureEventSource, CaptureWorkflow
 from dutchmate_service import startup
 from dutchmate_service.app import create_app
 from dutchmate_service.backend_reconnect import BackendReconnectCoordinator
-from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.startup import (
     apply_startup_hardware_config,
     build_startup_runtime,
@@ -247,51 +245,6 @@ class FakeEnhancedAsyncHost:
             raise self._close_error
 
 
-class WorkflowBarrierCoordinator(ContinuousIngestionCoordinator):
-    def __init__(
-        self,
-        source: CaptureEventSource,
-        *,
-        backend_snapshot: BackendSnapshot | None = None,
-    ) -> None:
-        self.workflow_started = ThreadEvent()
-        super().__init__(source, backend_snapshot=backend_snapshot)
-
-    def begin_workflow(self) -> None:
-        super().begin_workflow()
-        self.workflow_started.set()
-
-
-class ConditionBackedBasicSource:
-    def __init__(self) -> None:
-        self.segment = _basic_segment(segment_id=0)
-        self.idle_drained = ThreadEvent()
-        self._condition = Condition()
-        self._outcomes: list[BackendEvent] = []
-        self._closed = False
-
-    def publish(self, event: BackendEvent) -> None:
-        with self._condition:
-            self._outcomes.append(event)
-            self._condition.notify_all()
-
-    def read_event(self) -> BackendEvent | None:
-        with self._condition:
-            while not self._outcomes and not self._closed:
-                self._condition.wait()
-            if self._closed:
-                return None
-            event = self._outcomes.pop(0)
-        if isinstance(event, UartReceiveEvent) and event.data == b"IDLE\n":
-            self.idle_drained.set()
-        return event
-
-    def close(self) -> None:
-        with self._condition:
-            self._closed = True
-            self._condition.notify_all()
-
-
 def backend_settings(
     mode: str,
     *,
@@ -476,10 +429,12 @@ def test_enhanced_startup_selects_one_async_host(
     tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
-    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
     opened: list[tuple[str, int, int]] = []
-    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
-    coordinators: list[ContinuousIngestionCoordinator] = []
 
     def fake_open_host(
         *,
@@ -490,28 +445,7 @@ def test_enhanced_startup_selects_one_async_host(
         opened.append((port, baudrate, segment_id))
         return host
 
-    def track_coordinator(
-        source: FakeEnhancedAsyncHost,
-        *,
-        backend_snapshot: BackendSnapshot,
-    ) -> ContinuousIngestionCoordinator:
-        coordinator_factory_calls.append(source)
-        assert backend_snapshot.info == host.info
-        assert backend_snapshot.segment == host.segment
-        coordinator = ContinuousIngestionCoordinator(
-            source,
-            backend_snapshot=backend_snapshot,
-        )
-        coordinators.append(coordinator)
-        return coordinator
-
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        track_coordinator,
-        raising=False,
-    )
     runtime = build_startup_runtime(
         session_root=tmp_path,
         profile=profile_for(
@@ -526,8 +460,8 @@ def test_enhanced_startup_selects_one_async_host(
     request.addfinalizer(runtime.close)
 
     assert opened == [("/dev/ttyACM0", 460800, 0)]
-    assert coordinator_factory_calls == [host]
-    assert runtime._message_source is coordinators[0]  # noqa: SLF001
+    assert isinstance(runtime._evidence_recorder, ContinuousEvidenceRecorder)  # noqa: SLF001
+    assert runtime._message_source is None  # noqa: SLF001
     assert host.close_count == 0
     assert runtime.status().connected is True
     assert runtime.status().device == "dutchmate-rp2350"
@@ -539,6 +473,59 @@ def test_enhanced_startup_selects_one_async_host(
     runtime.close()
     assert host.close_count == 1
     assert not worker.is_alive()
+
+
+def test_enhanced_startup_persists_idle_uart_in_active_v2_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
+        ),
+    )
+
+    try:
+        recorder = runtime._evidence_recorder  # noqa: SLF001
+        assert isinstance(recorder, ContinuousEvidenceRecorder)
+        initial_tail = recorder.durable_tail()
+        assert runtime.status().active_session_id == initial_tail.session_id
+        host.publish(
+            UartReceiveEvent(
+                segment_id=0,
+                timestamp_us=25,
+                channel=0,
+                data=b"ambient before monitor\n",
+            )
+        )
+
+        tail = recorder.wait_for_durable_tail(initial_tail, timeout_s=1)
+
+        assert tail is not None
+        metadata = runtime.session_store.load_metadata(tail.session_id)
+        assert metadata["schema_version"] == 2
+        assert metadata["state"] == "active"
+        assert (tmp_path / tail.session_id / "uart_raw.log").read_bytes() == (
+            b"ambient before monitor\n"
+        )
+    finally:
+        runtime.close()
+
+    metadata = runtime.session_store.load_metadata(initial_tail.session_id)
+    assert metadata["state"] == "completed"
+    assert metadata["end_reason"] == "service_shutdown"
 
 
 def test_enhanced_startup_idle_reconnect_restores_existing_status(
@@ -583,23 +570,23 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
             dut_io_voltage=3.3,
         ),
     )
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, ContinuousIngestionCoordinator)
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
 
     try:
         initial_host.publish(BackendDisconnectedError("removed while idle"))
         assert replacement_opened.wait(timeout=1)
-        condition = coordinator._condition  # noqa: SLF001 - deterministic barrier.
+        condition = recorder._condition  # noqa: SLF001 - deterministic barrier.
         with condition:
             assert condition.wait_for(
-                lambda: coordinator.capture_source_health().connection_generation == 1,
+                lambda: recorder.capture_source_health().connection_generation == 1,
                 timeout=1,
             )
         status = runtime.status()
         assert status.connected is True
         assert status.connection_state == "connected"
         assert status.device == "dutchmate-rp2350"
-        assert status.timestamp_provenance == replacement_host.segment
+        assert status.timestamp_provenance == _enhanced_segment(segment_id=1)
     finally:
         runtime.close()
 
@@ -616,20 +603,12 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
     primary_error = RuntimeError("connection recording failed")
-    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
-
-    def track_coordinator(
-        source: FakeEnhancedAsyncHost,
-        *,
-        backend_snapshot: BackendSnapshot,
-    ) -> ContinuousIngestionCoordinator:
-        coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(
-            source,
-            backend_snapshot=backend_snapshot,
-        )
 
     def fail_connection_recording(
         self: DeviceCoreRuntime,
@@ -639,12 +618,6 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
         raise primary_error
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        track_coordinator,
-        raising=False,
-    )
     monkeypatch.setattr(
         DeviceCoreRuntime,
         "record_backend_connection",
@@ -665,7 +638,6 @@ def test_enhanced_startup_closes_host_when_connection_recording_fails(
         )
 
     assert raised.value is primary_error
-    assert coordinator_factory_calls == [host]
     assert host.close_count == 1
 
 
@@ -678,31 +650,14 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
     host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
         segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
         close_error=cleanup_error,
     )
-    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
-
-    def track_coordinator(
-        source: FakeEnhancedAsyncHost,
-        *,
-        backend_snapshot: BackendSnapshot,
-    ) -> ContinuousIngestionCoordinator:
-        coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(
-            source,
-            backend_snapshot=backend_snapshot,
-        )
 
     def fail_reconnect_composition(**_kwargs: object) -> None:
         raise primary_error
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        track_coordinator,
-        raising=False,
-    )
     monkeypatch.setattr(
         startup,
         "build_enhanced_capture_reconnect",
@@ -723,39 +678,24 @@ def test_enhanced_startup_preserves_primary_error_when_host_cleanup_fails(
         )
 
     assert raised.value is primary_error
-    assert coordinator_factory_calls == [host]
     assert host.close_count == 1
 
 
-def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
+def test_enhanced_startup_closes_recorder_when_runtime_construction_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
     primary_error = RuntimeError("runtime construction failed")
-    coordinator_factory_calls: list[FakeEnhancedAsyncHost] = []
-
-    def track_coordinator(
-        source: FakeEnhancedAsyncHost,
-        *,
-        backend_snapshot: BackendSnapshot,
-    ) -> ContinuousIngestionCoordinator:
-        coordinator_factory_calls.append(source)
-        return ContinuousIngestionCoordinator(
-            source,
-            backend_snapshot=backend_snapshot,
-        )
 
     def fail_runtime_construction(**_kwargs: object) -> None:
         raise primary_error
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        track_coordinator,
-        raising=False,
-    )
     monkeypatch.setattr(startup, "DeviceCoreRuntime", fail_runtime_construction)
 
     with pytest.raises(RuntimeError) as raised:
@@ -772,7 +712,6 @@ def test_enhanced_startup_closes_coordinator_when_runtime_construction_fails(
         )
 
     assert raised.value is primary_error
-    assert coordinator_factory_calls == [host]
     assert host.close_count == 1
 
 
@@ -780,7 +719,11 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = FakeEnhancedAsyncHost(info=_enhanced_info(), segment_id=0)
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
     runtime = build_startup_runtime(
         session_root=tmp_path,
@@ -816,7 +759,7 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
         runtime.close()
 
 
-def test_enhanced_startup_captures_normalized_events_from_async_host(
+def test_enhanced_startup_does_not_start_stage4_monitor_execution(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -826,13 +769,6 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
         segment=_enhanced_segment(segment_id=0),
     )
     monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        WorkflowBarrierCoordinator,
-        raising=False,
-    )
-    clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
         profile=profile_for(
@@ -843,155 +779,56 @@ def test_enhanced_startup_captures_normalized_events_from_async_host(
             ),
             dut_io_voltage=3.3,
         ),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
     )
 
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, WorkflowBarrierCoordinator)
-
-    def publish_workflow_event() -> None:
-        assert coordinator.workflow_started.wait(timeout=1)
-        host.publish(
-            UartReceiveEvent(
-                segment_id=0,
-                timestamp_us=25,
-                channel=0,
-                data=b"READY\n",
-            )
-        )
-
-    publisher = Thread(target=publish_workflow_event)
-    publisher.start()
     try:
-        summary = runtime.capture_uart(duration_s=0.2)
-    finally:
-        publisher.join(timeout=1)
-        runtime.close()
-
-    assert not publisher.is_alive()
-    assert summary.state == "completed"
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
-
-
-def test_enhanced_uart_send_projects_malformed_response_without_input(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    request: pytest.FixtureRequest,
-) -> None:
-    secret = "DUT-SECRET-MESSAGE-TYPE"
-    host = FakeEnhancedAsyncHost(
-        info=_enhanced_info(),
-        segment_id=0,
-        send_outcomes=[
-            BackendInputError(
-                "Enhanced protocol message does not match the expected schema",
-                backend_mode="enhanced",
-            )
-        ],
-    )
-    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    runtime = build_startup_runtime(
-        session_root=tmp_path,
-        profile=profile_for(
-            backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
-                tx_enabled=True,
-            ),
-            dut_io_voltage=3.3,
-        ),
-    )
-    request.addfinalizer(runtime.close)
-
-    response = TestClient(create_app(runtime)).post(
-        "/dut/uart/send",
-        json={"cmd": "go"},
-    )
-
-    assert response.status_code == 502
-    assert response.json() == {
-        "ok": False,
-        "error": "backend_input_error",
-        "detail": "Enhanced protocol message does not match the expected schema",
-        "detail_truncated": False,
-        "context": {
-            "operation": "uart_send",
-            "backend_mode": "enhanced",
-            "input_error": "invalid_message",
-        },
-    }
-    assert secret not in json.dumps(response.json())
-    assert list(tmp_path.iterdir()) == []
-    assert host.uart_requests == [b"go\n"]
-    assert host.closed is True
-    assert runtime.status().connection_state == "disconnected"
-
-
-def test_enhanced_capture_closes_source_on_malformed_input(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    secret = "DUT-SECRET-MESSAGE-TYPE"
-    host = FakeEnhancedAsyncHost(
-        info=_enhanced_info(),
-        segment_id=0,
-    )
-    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        WorkflowBarrierCoordinator,
-        raising=False,
-    )
-    clock = AdvancingClock()
-    runtime = build_startup_runtime(
-        session_root=tmp_path,
-        profile=profile_for(
-            backend_settings(
-                "enhanced",
-                serial_port="/dev/ttyACM0",
-                baudrate=460800,
-            ),
-            dut_io_voltage=3.3,
-        ),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, WorkflowBarrierCoordinator)
-
-    def publish_malformed_input() -> None:
-        assert coordinator.workflow_started.wait(timeout=1)
-        host.publish(
-            BackendInputError(
-                "Enhanced protocol message does not match the expected schema",
-                backend_mode="enhanced",
-            )
-        )
-
-    publisher = Thread(target=publish_malformed_input)
-    publisher.start()
-    try:
-        with pytest.raises(
-            BackendInputError,
-            match="Enhanced protocol message does not match the expected schema",
-        ) as raised:
+        with pytest.raises(DeviceCoreRuntimeError, match="Stage 4"):
             runtime.capture_uart(duration_s=0.2)
     finally:
-        publisher.join(timeout=1)
         runtime.close()
 
-    assert not publisher.is_alive()
-    summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
-    assert secret not in str(raised.value)
-    assert summary.state == "failed"
-    assert summary.error is not None
-    assert secret not in json.dumps(summary.error)
+
+def test_enhanced_recorder_closes_source_on_malformed_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    host = FakeEnhancedAsyncHost(
+        info=_enhanced_info(),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
+    )
+    monkeypatch.setattr(startup, "open_enhanced_async_host", lambda **_kwargs: host)
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        profile=profile_for(
+            backend_settings(
+                "enhanced",
+                serial_port="/dev/ttyACM0",
+                baudrate=460800,
+            ),
+            dut_io_voltage=3.3,
+        ),
+    )
+
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
+    try:
+        host.publish(
+            BackendInputError(
+                "Enhanced protocol message does not match the expected schema",
+                backend_mode="enhanced",
+            )
+        )
+        assert recorder.wait_for_fault(timeout_s=1)
+        connection_state = runtime.status().connection_state
+    finally:
+        runtime.close()
+
+    metadata = runtime.session_store.load_metadata(recorder.active_session_id)
+    assert metadata["state"] == "failed"
+    assert metadata["end_reason"] == "backend_input_error"
     assert host.closed is True
-    assert runtime.status().connection_state == "disconnected"
+    assert connection_state == "faulted"
 
 
 def test_build_startup_runtime_opens_basic_without_hello(
@@ -1006,8 +843,6 @@ def test_build_startup_runtime_opens_basic_without_hello(
         tx_enabled=True,
     )
     serial = ScriptedBasicSerial([])
-    coordinator_factory_calls: list[BasicBackendEventSource] = []
-    coordinators: list[ContinuousIngestionCoordinator] = []
 
     def fake_open_basic_backend_connection(
         received_settings: BackendSettings,
@@ -1015,39 +850,20 @@ def test_build_startup_runtime_opens_basic_without_hello(
         assert received_settings == settings
         return BasicBackendConnection(serial_port=serial, settings=settings)
 
-    def track_coordinator(
-        source: BasicBackendEventSource,
-        *,
-        backend_snapshot: BackendSnapshot,
-    ) -> ContinuousIngestionCoordinator:
-        coordinator_factory_calls.append(source)
-        assert backend_snapshot == source.snapshot
-        coordinator = ContinuousIngestionCoordinator(
-            source,
-            backend_snapshot=backend_snapshot,
-        )
-        coordinators.append(coordinator)
-        return coordinator
-
     monkeypatch.setattr(
         "dutchmate_service.startup.open_basic_backend_connection",
         fake_open_basic_backend_connection,
     )
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        track_coordinator,
-        raising=False,
-    )
-
     runtime = build_startup_runtime(session_root=tmp_path, profile=profile_for(settings))
     request.addfinalizer(runtime.close)
 
-    assert len(coordinator_factory_calls) == 1
-    assert isinstance(coordinator_factory_calls[0], BasicBackendEventSource)
-    assert runtime._message_source is coordinators[0]  # noqa: SLF001
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
+    assert runtime._message_source is None  # noqa: SLF001
     assert serial.read_started.wait(timeout=1)
-    reader = coordinator_factory_calls[0]._reader  # noqa: SLF001
+    source = recorder._source  # noqa: SLF001
+    assert isinstance(source, BasicBackendEventSource)
+    reader = source._reader  # noqa: SLF001
     assert reader is not None
     assert reader.name == "dutchmate-basic-serial-reader"
     assert reader.is_alive()
@@ -1122,16 +938,16 @@ def test_basic_startup_idle_reconnect_restores_existing_status(
         session_root=tmp_path,
         profile=profile_for(settings),
     )
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, ContinuousIngestionCoordinator)
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
 
     try:
         initial_serial.publish(OSError("removed while idle"))
         assert replacement_opened.wait(timeout=1)
-        condition = coordinator._condition  # noqa: SLF001 - deterministic barrier.
+        condition = recorder._condition  # noqa: SLF001 - deterministic barrier.
         with condition:
             assert condition.wait_for(
-                lambda: coordinator.capture_source_health().connection_generation == 1,
+                lambda: recorder.capture_source_health().connection_generation == 1,
                 timeout=1,
             )
         status = runtime.status()
@@ -1147,53 +963,42 @@ def test_basic_startup_idle_reconnect_restores_existing_status(
     assert serials == []
 
 
-def test_real_coordinator_discards_idle_basic_event_before_capture(
+def test_basic_startup_persists_idle_uart_without_capture(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    source = ConditionBackedBasicSource()
-    coordinator = ContinuousIngestionCoordinator(source)
-    source.publish(
-        UartReceiveEvent(
-            segment_id=0,
-            timestamp_us=1,
-            channel=0,
-            data=b"IDLE\n",
-        )
+    settings = backend_settings(
+        "basic",
+        serial_port="/dev/ttyUSB0",
+        baudrate=115200,
     )
-    assert source.idle_drained.wait(timeout=1)
+    serial = ScriptedBasicSerial([])
 
-    session_started = ThreadEvent()
-    publisher = Thread(
-        target=lambda: _publish_after_barrier(
-            source,
-            session_started,
-            UartReceiveEvent(
-                segment_id=0,
-                timestamp_us=2,
-                channel=0,
-                data=b"ACTIVE\n",
-            ),
+    def fake_open(received_settings: BackendSettings) -> BasicBackendConnection:
+        assert received_settings == settings
+        return BasicBackendConnection(
+            serial_port=serial,
+            settings=settings,
         )
+
+    monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
+    runtime = build_startup_runtime(
+        session_root=tmp_path,
+        profile=profile_for(settings),
     )
-    publisher.start()
-    clock = AdvancingClock()
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
+    tail = recorder.durable_tail()
     try:
-        summary = CaptureWorkflow(session_store=SessionStore(root=tmp_path)).run(
-            source=coordinator,
-            duration_s=0.2,
-            command="capture --duration 0.2",
-            monotonic_clock=clock,
-            on_session_handle_started=lambda _handle: session_started.set(),
-        )
+        serial.publish(b"IDLE\n")
+        updated = recorder.wait_for_durable_tail(tail, timeout_s=1)
+        assert updated is not None
+        assert (tmp_path / updated.session_id / "uart_raw.log").read_bytes() == b"IDLE\n"
     finally:
-        publisher.join(timeout=1)
-        coordinator.close()
-
-    assert not publisher.is_alive()
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"ACTIVE\n"
+        runtime.close()
 
 
-def test_basic_startup_runtime_reopens_disconnected_capture_source(
+def test_basic_startup_recorder_reopens_disconnected_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1203,7 +1008,7 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
         baudrate=115200,
     )
     initial_serial = ScriptedBasicSerial([])
-    replacement_serial = ScriptedBasicSerial([b"READY\n"])
+    replacement_serial = ScriptedBasicSerial([])
     serials = [initial_serial, replacement_serial]
 
     def fake_open(received_settings: BackendSettings) -> BasicBackendConnection:
@@ -1211,46 +1016,40 @@ def test_basic_startup_runtime_reopens_disconnected_capture_source(
         return BasicBackendConnection(serial_port=serials.pop(0), settings=settings)
 
     monkeypatch.setattr(startup, "open_basic_backend_connection", fake_open)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        WorkflowBarrierCoordinator,
-        raising=False,
-    )
-    clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
         profile=profile_for(settings),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
     )
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, WorkflowBarrierCoordinator)
-
-    def publish_disconnect() -> None:
-        assert coordinator.workflow_started.wait(timeout=1)
-        initial_serial.publish(OSError("device removed"))
-
-    publisher = Thread(target=publish_disconnect)
-    publisher.start()
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
+    initial_session_id = recorder.active_session_id
 
     try:
-        summary = runtime.capture_uart(duration_s=0.2)
-        connection_state = runtime.status().connection_state
+        initial_serial.publish(OSError("device removed"))
+        condition = recorder._condition  # noqa: SLF001 - deterministic barrier.
+        with condition:
+            assert condition.wait_for(
+                lambda: recorder.capture_source_health().connection_generation == 1,
+                timeout=1,
+            )
+        before_uart = recorder.durable_tail()
+        replacement_serial.publish(b"READY\n")
+        after_uart = recorder.wait_for_durable_tail(before_uart, timeout_s=1)
+        assert after_uart is not None
+        status = runtime.status()
+        metadata = runtime.session_store.load_metadata(after_uart.session_id)
+        assert after_uart.session_id == initial_session_id
+        assert len(metadata["segments"]) == 2  # type: ignore[arg-type]
+        assert (tmp_path / after_uart.session_id / "uart_raw.log").read_bytes() == b"READY\n"
+        assert status.connection_state == "connected"
     finally:
-        publisher.join(timeout=1)
         runtime.close()
 
-    assert not publisher.is_alive()
-    assert summary.state == "completed"
-    assert summary.interrupted is True
-    assert summary.resumed is True
-    assert summary.segment_count == 2
-    assert (tmp_path / summary.session_id / "uart_raw.log").read_bytes() == b"READY\n"
-    assert connection_state == "connected"
+    assert initial_serial.closed is True
+    assert replacement_serial.closed is True
 
 
-def test_enhanced_startup_reconnect_reopens_with_async_host(
+def test_enhanced_startup_recorder_reopens_with_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1266,21 +1065,8 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
     )
     replacement_host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
-        segment_id=1,
-        read_outcomes=[
-            UartReceiveEvent(
-                segment_id=1,
-                timestamp_us=0,
-                channel=0,
-                data=b"ORIGIN\n",
-            ),
-            UartReceiveEvent(
-                segment_id=1,
-                timestamp_us=25,
-                channel=0,
-                data=b"READY\n",
-            )
-        ],
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
     )
     hosts = [initial_host, replacement_host]
     opened: list[tuple[str, int, int]] = []
@@ -1303,54 +1089,48 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
         "open_enhanced_async_host",
         fake_open_host,
     )
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        WorkflowBarrierCoordinator,
-        raising=False,
-    )
-    clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
         profile=profile_for(settings, dut_io_voltage=3.3),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
     )
 
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, WorkflowBarrierCoordinator)
-
-    def publish_disconnect() -> None:
-        assert coordinator.workflow_started.wait(timeout=1)
-        initial_host.publish(BackendDisconnectedError("device removed"))
-
-    publisher = Thread(target=publish_disconnect)
-    publisher.start()
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
+    initial_session_id = recorder.active_session_id
     try:
-        summary = runtime.capture_uart(duration_s=0.2)
+        initial_host.publish(BackendDisconnectedError("device removed"))
+        condition = recorder._condition  # noqa: SLF001 - deterministic barrier.
+        with condition:
+            assert condition.wait_for(
+                lambda: recorder.capture_source_health().connection_generation == 1,
+                timeout=1,
+            )
+        before_uart = recorder.durable_tail()
+        replacement_host.publish(
+            UartReceiveEvent(
+                segment_id=0,
+                timestamp_us=25,
+                channel=0,
+                data=b"READY\n",
+            )
+        )
+        after_uart = recorder.wait_for_durable_tail(before_uart, timeout_s=1)
+        assert after_uart is not None
         status = runtime.status()
+        detail = runtime.session_store.get_session_detail(after_uart.session_id)
+        assert after_uart.session_id == initial_session_id
+        assert detail.summary.segment_count == 2
+        session_root = tmp_path / after_uart.session_id
+        assert session_root.joinpath("uart_raw.log").read_bytes() == b"READY\n"
+        uart_events = [
+            json.loads(line)
+            for line in session_root.joinpath("uart_events.jsonl").read_text().splitlines()
+        ]
+        assert [event["segment_id"] for event in uart_events] == [1]
+        assert [event["timestamp_us"] for event in uart_events] == [25]
     finally:
-        publisher.join(timeout=1)
         runtime.close()
 
-    assert not publisher.is_alive()
-    assert summary.state == "completed"
-    assert summary.interrupted is True
-    assert summary.resumed is True
-    assert summary.segment_count == 2
-    assert summary.segment_contexts == (
-        _enhanced_segment(segment_id=0),
-        _enhanced_segment(segment_id=1),
-    )
-    session_root = tmp_path / summary.session_id
-    assert session_root.joinpath("uart_raw.log").read_bytes() == b"ORIGIN\nREADY\n"
-    uart_events = [
-        json.loads(line)
-        for line in session_root.joinpath("uart_events.jsonl").read_text().splitlines()
-    ]
-    assert [event["segment_id"] for event in uart_events] == [1, 1]
-    assert [event["timestamp_us"] for event in uart_events] == [0, 25]
-    assert [event["text"] for event in uart_events] == ["ORIGIN\n", "READY\n"]
     assert status.connection_state == "connected"
     assert status.timestamp_provenance is not None
     assert status.timestamp_provenance.segment_id == 1
@@ -1358,7 +1138,7 @@ def test_enhanced_startup_reconnect_reopens_with_async_host(
     assert replacement_host.closed is True
     assert opened == [
         ("/dev/ttyACM0", 460800, 0),
-        ("/dev/ttyACM0", 460800, 1),
+        ("/dev/ttyACM0", 460800, 0),
     ]
     assert hosts == []
 
@@ -1385,10 +1165,11 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
             firmware="0.1.0",
             capabilities=frozenset({"uart_receive"}),
         ),
-        segment_id=1,
-        segment=_enhanced_segment(segment_id=1),
+        segment_id=0,
+        segment=_enhanced_segment(segment_id=0),
     )
     hosts = [initial_host, changed_host]
+    candidate_rejected = ThreadEvent()
 
     def fake_open_host(
         *,
@@ -1397,53 +1178,33 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         segment_id: int,
     ) -> FakeEnhancedAsyncHost:
         del port, baudrate
+        if not hosts:
+            candidate_rejected.set()
+            raise OSError("replacement unavailable")
         host = hosts.pop(0)
         assert host.segment_id == segment_id
         return host
 
     monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
-    monkeypatch.setattr(
-        startup,
-        "ContinuousIngestionCoordinator",
-        WorkflowBarrierCoordinator,
-        raising=False,
-    )
-    clock = AdvancingClock()
     runtime = build_startup_runtime(
         session_root=tmp_path,
         profile=profile_for(settings, dut_io_voltage=3.3),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
     )
-    coordinator = runtime._message_source  # noqa: SLF001
-    assert isinstance(coordinator, WorkflowBarrierCoordinator)
-
-    def publish_disconnect() -> None:
-        assert coordinator.workflow_started.wait(timeout=1)
-        initial_host.publish(BackendDisconnectedError("device removed"))
-
-    publisher = Thread(target=publish_disconnect)
-    publisher.start()
+    recorder = runtime._evidence_recorder  # noqa: SLF001
+    assert isinstance(recorder, ContinuousEvidenceRecorder)
 
     try:
-        with pytest.raises(BackendInputError, match="identity changed"):
-            runtime.capture_uart(duration_s=0.2)
+        initial_host.publish(BackendDisconnectedError("device removed"))
+        assert candidate_rejected.wait(timeout=1)
+        assert recorder.state == "reconnecting"
+        metadata = runtime.session_store.load_metadata(recorder.active_session_id)
+        assert metadata["state"] == "active"
     finally:
-        publisher.join(timeout=1)
         runtime.close()
 
-    assert not publisher.is_alive()
-    summary = runtime.session_store.summarize_session(next(tmp_path.iterdir()).name)
-    assert summary.state == "failed"
-    assert summary.end_reason == "backend_input_error"
-    assert summary.error is not None
-    assert summary.error["code"] == "backend_input_error"
-    assert runtime.status().connection_state == "disconnected"
     assert hosts == []
     assert initial_host.closed is True
     assert changed_host.closed is True
-    coordinator_stopped = not coordinator._thread.is_alive()  # noqa: SLF001
-    assert coordinator_stopped
 
 
 def test_build_startup_runtime_recovers_sessions_before_opening_backend(
@@ -1598,27 +1359,3 @@ def _enhanced_segment(*, segment_id: int) -> SegmentContext:
             event_granularity="uart_event",
         ),
     )
-
-
-def _basic_segment(*, segment_id: int) -> SegmentContext:
-    return SegmentContext(
-        segment_id=segment_id,
-        timestamp=SegmentTimestamp(
-            source="host",
-            clock="monotonic",
-            unit="us",
-            origin="segment_start",
-            source_origin_us=0,
-            observation_point="host_serial_read",
-            event_granularity="serial_read_chunk",
-        ),
-    )
-
-
-def _publish_after_barrier(
-    source: ConditionBackedBasicSource,
-    barrier: ThreadEvent,
-    event: BackendEvent,
-) -> None:
-    assert barrier.wait(timeout=1)
-    source.publish(event)

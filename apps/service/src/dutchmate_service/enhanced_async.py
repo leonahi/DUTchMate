@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections import deque
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
 from contextlib import suppress
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
 from dutchmate_core.backends.contracts import (
+    BackendDisconnectedError,
     BackendEvent,
     BackendInfo,
     BackendUartSendResult,
@@ -52,6 +54,8 @@ class _AsyncEnhancedAdapter(Protocol):
     async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None: ...
 
     async def discard_pending_events(self) -> None: ...
+
+    async def close_and_drain_events(self) -> tuple[BackendEvent, ...]: ...
 
     async def close(self) -> None: ...
 
@@ -96,6 +100,7 @@ class EnhancedAsyncHost:
         self._info: BackendInfo | None = None
         self._segment_id: int | None = None
         self._segment: SegmentContext | None = None
+        self._drained_events: deque[BackendEvent] = deque()
         self._inflight: set[Future[Any]] = set()
         self._thread = threading.Thread(
             target=self._run_loop,
@@ -172,6 +177,11 @@ class EnhancedAsyncHost:
         return self._submit(lambda: sender.send_uart(data))
 
     def read_event(self) -> BackendEvent | None:
+        with self._state_lock:
+            if self._drained_events:
+                return self._drained_events.popleft()
+            if self._closed:
+                raise BackendDisconnectedError("Enhanced async host is closed")
         adapter = self._adapter_for_operation()
         event, segment = self._submit(lambda: self._receive_event(adapter))
         with self._state_lock:
@@ -220,8 +230,12 @@ class EnhancedAsyncHost:
         close_error: BaseException | None = None
         try:
             if loop is not None and adapter is not None:
-                future = asyncio.run_coroutine_threadsafe(adapter.close(), loop)
-                future.result()
+                future = asyncio.run_coroutine_threadsafe(
+                    adapter.close_and_drain_events(), loop
+                )
+                drained_events = future.result()
+                with self._state_lock:
+                    self._drained_events.extend(drained_events)
         except BaseException as exc:
             close_error = exc
         finally:
@@ -242,6 +256,13 @@ class EnhancedAsyncHost:
                 self._close_complete.set()
         if close_error is not None:
             raise close_error
+
+    @property
+    def has_pending_events(self) -> bool:
+        """Report normalized events retained for recorder shutdown draining."""
+
+        with self._state_lock:
+            return bool(self._drained_events)
 
     def _run_loop(self) -> None:
         loop = asyncio.new_event_loop()

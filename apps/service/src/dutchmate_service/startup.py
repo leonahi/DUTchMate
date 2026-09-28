@@ -14,6 +14,7 @@ from dutchmate_core.backends.basic import (
     open_basic_backend_connection,
 )
 from dutchmate_core.backends.contracts import ControlState
+from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
 from dutchmate_core.gpio_config.config import (
     HardwareGpioConfig,
     load_hardware_gpio_config,
@@ -33,7 +34,6 @@ from dutchmate_service.backend_reconnect import (
     build_basic_capture_reconnect,
     build_enhanced_capture_reconnect,
 )
-from dutchmate_service.continuous_ingestion import ContinuousIngestionCoordinator
 from dutchmate_service.enhanced_async import open_enhanced_async_host
 
 DEFAULT_CONFIG_PATH: Final = Path(".dutchmate/config.toml")
@@ -109,8 +109,10 @@ def build_startup_runtime(
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
         initial_snapshot = basic_source.snapshot
-        coordinator = ContinuousIngestionCoordinator(
-            basic_source,
+        recorder = ContinuousEvidenceRecorder(
+            source=basic_source,
+            session_store=session_store,
+            profile=profile,
             backend_snapshot=initial_snapshot,
         )
         reconnect = None
@@ -119,7 +121,7 @@ def build_startup_runtime(
             control = ReplaceableDeviceControl(_UnavailableDeviceControl(connection))
             reconnect = build_basic_capture_reconnect(
                 settings=backend_settings,
-                source_owner=coordinator,
+                source_owner=recorder,
                 expected_snapshot=initial_snapshot,
                 open_connection=open_basic_backend_connection,
                 sender=sender,
@@ -129,11 +131,11 @@ def build_startup_runtime(
             runtime = DeviceCoreRuntime(
                 device_control=control,
                 uart_sender=sender,
-                message_source=coordinator,
                 session_store=session_store,
                 capture_clock=monotonic_clock,
                 backend_reconnect=reconnect,
                 profile=profile,
+                evidence_recorder=recorder,
             )
             runtime.record_backend_connection(initial_snapshot.info)
             reconnect.start()
@@ -142,7 +144,7 @@ def build_startup_runtime(
                 with suppress(BaseException):
                     reconnect.close()
             with suppress(BaseException):
-                coordinator.close()
+                recorder.close()
             raise
         return runtime
 
@@ -165,13 +167,24 @@ def build_startup_runtime(
         baudrate=backend_settings.baudrate,
         segment_id=0,
     )
+    segment = enhanced_host.segment or enhanced_host.wait_for_segment(
+        profile.reconnect_timeout_s
+    )
+    if segment is None:
+        with suppress(BaseException):
+            enhanced_host.close()
+        raise DeviceCoreRuntimeError(
+            "Enhanced backend did not establish timestamp provenance before startup"
+        )
     initial_snapshot = backend_snapshot(
         info=enhanced_host.info,
-        segment=enhanced_host.segment,
+        segment=segment,
         tx_enabled=backend_settings.tx_enabled,
     )
-    coordinator = ContinuousIngestionCoordinator(
-        enhanced_host,
+    recorder = ContinuousEvidenceRecorder(
+        source=enhanced_host,
+        session_store=session_store,
+        profile=profile,
         backend_snapshot=initial_snapshot,
     )
     reconnect = None
@@ -180,7 +193,7 @@ def build_startup_runtime(
         sender = ReplaceableUartSender(enhanced_host)
         reconnect = build_enhanced_capture_reconnect(
             settings=backend_settings,
-            source_owner=coordinator,
+            source_owner=recorder,
             expected_info=initial_snapshot.info,
             expected_snapshot=initial_snapshot,
             control=control,
@@ -192,11 +205,11 @@ def build_startup_runtime(
         runtime = DeviceCoreRuntime(
             device_control=control,
             uart_sender=sender,
-            message_source=coordinator,
             session_store=session_store,
             capture_clock=monotonic_clock,
             backend_reconnect=reconnect,
             profile=profile,
+            evidence_recorder=recorder,
         )
         runtime.record_backend_connection(initial_snapshot.info)
         reconnect.start()
@@ -205,7 +218,7 @@ def build_startup_runtime(
             with suppress(BaseException):
                 reconnect.close()
         with suppress(BaseException):
-            coordinator.close()
+            recorder.close()
         raise
     return runtime
 

@@ -91,6 +91,7 @@ class FakeSourceOwner:
         self._closed = False
         self.idle_wait_calls = 0
         self.idle_disconnect_observed = Event()
+        self.reconnect_timeouts = 0
 
     def read_event(self) -> BackendEvent | None:
         return None
@@ -147,6 +148,11 @@ class FakeSourceOwner:
             self._condition.notify_all()
         if self._order is not None and self._record_install_order:
             self._order.append("source_installed")
+
+    def reconnect_timed_out(self) -> None:
+        with self._condition:
+            self.reconnect_timeouts += 1
+            self._condition.notify_all()
 
     def wait_for_replacements(self, count: int, timeout_s: float = 1.0) -> bool:
         with self._condition:
@@ -265,7 +271,7 @@ def test_idle_reconnect_retries_transient_open_and_publishes_once() -> None:
     ) -> ReconnectedCaptureSource:
         nonlocal attempts
         assert segment_id == 0
-        assert deadline is None
+        assert deadline == 5.0
         assert not stop_requested.is_set()
         attempts += 1
         if attempts == 1:
@@ -280,6 +286,8 @@ def test_idle_reconnect_retries_transient_open_and_publishes_once() -> None:
         source_owner=owner,
         open_replacement=open_replacement,
         wait_for_idle_retry=wait_for_idle_retry,
+        reconnect_timeout_s=5.0,
+        monotonic_clock=lambda: 0.0,
     )
     reconnect.start()
     try:
@@ -295,35 +303,44 @@ def test_idle_reconnect_retries_transient_open_and_publishes_once() -> None:
     assert owner.replacement_snapshots == [replacement.backend_snapshot]
 
 
-def test_idle_reconnect_uses_capped_exponential_delays() -> None:
+def test_idle_reconnect_stops_at_profile_deadline_and_reports_timeout() -> None:
+    clock = FakeClock()
     owner = FakeSourceOwner()
     recorded_delays: list[float] = []
-    delays_recorded = Event()
+    timed_out = Event()
 
     def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
         raise OSError("still unavailable")
 
     def wait_for_idle_retry(delay: float) -> bool:
         recorded_delays.append(delay)
-        if len(recorded_delays) == 7:
-            delays_recorded.set()
-            return True
+        clock.sleep(delay)
         return False
 
     reconnect = BackendReconnectCoordinator(
         source_owner=owner,
         open_replacement=open_replacement,
         wait_for_idle_retry=wait_for_idle_retry,
+        reconnect_timeout_s=0.35,
+        monotonic_clock=clock,
     )
+    original_timeout = owner.reconnect_timed_out
+
+    def record_timeout() -> None:
+        original_timeout()
+        timed_out.set()
+
+    owner.reconnect_timed_out = record_timeout  # type: ignore[method-assign]
     reconnect.start()
     try:
         owner.disconnect_while_idle()
-        assert delays_recorded.wait(timeout=1.0)
+        assert timed_out.wait(timeout=1.0)
     finally:
         reconnect.close()
 
-    assert recorded_delays == [0.1, 0.2, 0.4, 0.8, 1.6, 2.0, 2.0]
+    assert recorded_delays == pytest.approx([0.1, 0.2, 0.05])
     assert owner.idle_claims == 1
+    assert owner.reconnect_timeouts == 1
 
 
 def test_active_reconnect_suppresses_stale_idle_claim_and_open_overlap() -> None:
@@ -585,7 +602,7 @@ def test_close_rejects_candidate_returned_after_shutdown_begins() -> None:
         stop_requested: Event,
     ) -> ReconnectedCaptureSource:
         assert segment_id == 0
-        assert deadline is None
+        assert deadline is not None
         opening.set()
         assert stop_requested.wait(timeout=1.0)
         return ReconnectedCaptureSource(
@@ -846,9 +863,14 @@ def test_enhanced_active_candidate_waits_for_origin_without_consuming_event() ->
     )
 
 
-def test_enhanced_idle_candidate_publishes_without_waiting_for_origin() -> None:
+def test_enhanced_idle_candidate_waits_for_origin_before_publish() -> None:
     expected_info = _enhanced_info()
-    host = FakeEnhancedReconnectHost(info=expected_info, segment=None)
+    origin = _segment(0, source_origin_us=4_000)
+    host = FakeEnhancedReconnectHost(
+        info=expected_info,
+        segment=None,
+        established_segment=origin,
+    )
     owner = FakeSourceOwner()
     opened = Event()
 
@@ -874,12 +896,12 @@ def test_enhanced_idle_candidate_publishes_without_waiting_for_origin() -> None:
     finally:
         reconnect.close()
 
-    assert host.segment_wait_timeouts == []
+    assert host.segment_wait_timeouts == [0.1]
     assert owner.replacements == [host]
     snapshot = owner.replacement_snapshots[0]
     assert snapshot is not None
     assert snapshot.info == expected_info
-    assert snapshot.segment is None
+    assert snapshot.segment == origin
 
 
 def test_enhanced_active_identity_mismatch_is_fatal_and_closes_host() -> None:
@@ -950,7 +972,11 @@ def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
         info=_enhanced_info(device="other-helper"),
         segment=None,
     )
-    accepted = FakeEnhancedReconnectHost(info=_enhanced_info(), segment=None)
+    accepted = FakeEnhancedReconnectHost(
+        info=_enhanced_info(),
+        segment=None,
+        established_segment=_segment(0),
+    )
     candidates = [mismatched, accepted]
     owner = FakeSourceOwner()
 
@@ -981,7 +1007,11 @@ def test_enhanced_idle_capability_mismatch_closes_host_then_retries() -> None:
         info=_enhanced_info(capabilities=frozenset({"gpio_control", "device_timestamp"})),
         segment=None,
     )
-    accepted = FakeEnhancedReconnectHost(info=_enhanced_info(), segment=None)
+    accepted = FakeEnhancedReconnectHost(
+        info=_enhanced_info(),
+        segment=None,
+        established_segment=_segment(0),
+    )
     candidates = [mismatched, accepted]
     owner = FakeSourceOwner()
 

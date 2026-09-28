@@ -9,6 +9,67 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Phase 1 v2 Migration Stage 3 Review Fixes — 2026-09-28
+
+- Replaced indefinite idle reopen with the profile-snapshotted reconnect
+  deadline. Unexpected disconnect now flushes derived line state, durably closes
+  the segment, records `unexpected_disconnect` and `reconnect_started`, and
+  records either `reconnect_succeeded` or `reconnect_failed`. Deadline expiry
+  fails the active v2 session with `reconnect_timeout` and projects service state
+  as `disconnected` with no active session.
+- Required every Enhanced replacement candidate to establish a segment timestamp
+  origin before publication. Identity/capability validation remains non-consuming,
+  and the first queued timestamped event remains available to the recorder.
+- Made clean shutdown close physical receive, drain every normalized event
+  retained by Basic/Enhanced sources (including an Enhanced event blocked on
+  bounded FIFO admission), finalize continuous line state, and only then
+  terminalize the active session. Basic now uses a fixed-capacity FIFO so
+  backend-to-recorder backpressure is bounded.
+- Finalized line processors at disconnect, UART- or telemetry-triggered rollover,
+  and shutdown. Partial lines cannot join across boundaries, and an oversized
+  unterminated line produces exactly one bounded `line_limit_exceeded` fact while
+  raw UART remains authoritative.
+- Added deterministic regressions for reconnect success/timeout, segment close
+  timestamps/reasons, Enhanced origin establishment, shutdown draining, each
+  line-state boundary, actual Enhanced queue draining (including a deterministic
+  capacity-one blocked-admission case), service disconnected projection, and
+  Basic queue boundedness. Stage 4 behavior was not started.
+- Validation: focused backend/recorder/service tests passed; `uv lock --check`,
+  Ruff, configured mypy (93 source files), all 1,441 pytest tests,
+  and `git diff --check` passed. The structural Graphify index was refreshed; it
+  reported partial extraction of
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` after a syntax warning.
+
+## Phase 1 v2 Migration Stage 3 — 2026-09-28
+
+- Replaced the service-owned idle drain/discard coordinator with a core-owned
+  `ContinuousEvidenceRecorder`. Production Basic and Enhanced startup now
+  creates an active schema-v2 ownership session after backend identity and
+  timestamp provenance are established, then starts exactly one authoritative
+  receive loop before reconnect supervision.
+- Persisted ambient UART RX, Enhanced buffer telemetry, connection lifecycle,
+  derived line-limit facts, default pattern matches, continuous `first_error`,
+  segment timestamps, integrity summaries, and continuity gaps through one
+  contiguous v2 evidence order. Durable-tail waiters advance only after the
+  complete admission transaction commits and do not backpressure acquisition.
+- Preserved one ownership interval across validated source replacement and
+  linked rollover sessions, rebasing physical segment IDs to session-local
+  contiguous IDs and resetting line state at reconnect/rollover boundaries.
+  Clean shutdown flushes and completes ownership; backend-input or persistence
+  faults close the source and fail the session rather than continuing silently.
+- Removed the obsolete continuous-ingestion module and its workflow-FIFO/idle-
+  discard tests. Added recorder and service regressions for idle Basic/Enhanced
+  UART, no-client delayed faults, telemetry and contiguous ordering, line limits,
+  rollover isolation, reconnect lifecycle/continuity, one physical reader,
+  persistence faults, shutdown cleanup, active-session status, and Stage 4
+  Monitor non-implementation.
+- Stage 4 Monitor execution and Stage 5 audited TX/Interact/Control behavior were
+  not implemented.
+- Validation: focused recorder/service and 181 session-store tests passed;
+  `uv lock --check` passed; Ruff passed; configured mypy reported no issues in
+  93 source files; all 1,431 pytest tests passed; `git diff --check` passed; and
+  the structural Graphify index was refreshed.
+
 ## Phase 1 v2 Migration Stage 2 Final Review Fixes — 2026-09-28
 
 - Made every schema-v2 terminalization path relinquish active-operation

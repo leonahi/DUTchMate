@@ -28,6 +28,7 @@ from dutchmate_core.backends.contracts import (
     integrity_for_backend,
 )
 from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
+from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
@@ -91,7 +92,7 @@ class DeviceCoreRuntimeError(RuntimeError):
     """Raised when the runtime cannot perform the requested operation."""
 
 
-ConnectionState = Literal["connected", "disconnected", "reconnecting"]
+ConnectionState = Literal["connected", "disconnected", "reconnecting", "faulted"]
 
 
 class DeviceCoreSessionStorage(CaptureSessionStorage, UartSendSessionStorage, Protocol):
@@ -229,6 +230,7 @@ class DeviceCoreRuntime:
         uart_monotonic_ns: Callable[[], int] | None = None,
         uart_attempt_id_factory: Callable[[], str] | None = None,
         profile: DutProfile | None = None,
+        evidence_recorder: ContinuousEvidenceRecorder | None = None,
     ) -> None:
         if profile is not None:
             port = profile.current_serial_port
@@ -237,6 +239,7 @@ class DeviceCoreRuntime:
             reconnect_timeout_s = profile.reconnect_timeout_s
             dut_io_voltage = profile.dut_io_voltage
         self._profile = profile
+        self._evidence_recorder = evidence_recorder
         self._message_source = message_source
         self._reconnect_source: CaptureEventSource | None = None
         self._capture_clock = capture_clock
@@ -293,7 +296,9 @@ class DeviceCoreRuntime:
             if isinstance(source_segment, SegmentContext)
             else None
         )
-        self._active_session_id: str | None = None
+        self._active_session_id: str | None = (
+            evidence_recorder.active_session_id if evidence_recorder is not None else None
+        )
         self._active_session_handle: SessionHandle | None = None
         self._active_segment_context: SegmentContext | None = None
         self._active_session_terminalized = False
@@ -374,6 +379,8 @@ class DeviceCoreRuntime:
                     self._reconnect_source = None
             if source is not None:
                 self._close_event_source(source)
+            if self._evidence_recorder is not None:
+                self._evidence_recorder.close()
         except BaseException as exc:
             if close_error is None:
                 close_error = exc
@@ -471,7 +478,8 @@ class DeviceCoreRuntime:
 
         with self._operation_lock:
             self._reconcile_capture_source_health()
-            source_segment = getattr(self._message_source, "segment", None)
+            status_source = self._evidence_recorder or self._message_source
+            source_segment = getattr(status_source, "segment", None)
             if self._connected and isinstance(source_segment, SegmentContext):
                 self._segment_context = source_segment
             reconnect_remaining_s = (
@@ -479,9 +487,22 @@ class DeviceCoreRuntime:
                 if self._reconnect_deadline is not None
                 else None
             )
+            recorder_state = (
+                self._evidence_recorder.state
+                if self._evidence_recorder is not None
+                else None
+            )
+            if self._evidence_recorder is not None:
+                self._active_session_id = (
+                    self._evidence_recorder.active_session_id
+                    if recorder_state in {"connected", "reconnecting"}
+                    else None
+                )
             connection_state: ConnectionState = (
-                "reconnecting"
-                if self._reconnect_deadline is not None
+                "faulted"
+                if recorder_state == "faulted"
+                else "reconnecting"
+                if recorder_state == "reconnecting" or self._reconnect_deadline is not None
                 else "connected"
                 if self._connected
                 else "disconnected"
@@ -651,6 +672,10 @@ class DeviceCoreRuntime:
         """Capture UART and telemetry messages into one filesystem session."""
 
         duration_s = validate_capture_duration(duration_s)
+        if self._evidence_recorder is not None:
+            raise DeviceCoreRuntimeError(
+                "Monitor over continuous evidence is not implemented until Stage 4"
+            )
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"capture --seconds {duration_s:g}",
@@ -661,6 +686,10 @@ class DeviceCoreRuntime:
         """Reset the DUT and capture its boot UART into one session."""
 
         duration_s = validate_capture_duration(duration_s)
+        if self._evidence_recorder is not None:
+            raise DeviceCoreRuntimeError(
+                "Boot-test operations are not implemented until Stage 5"
+            )
         return self._run_capture_workflow(
             duration_s=duration_s,
             command=f"boot-test --seconds {duration_s:g}",
@@ -679,6 +708,10 @@ class DeviceCoreRuntime:
 
         validated_pattern = validate_wait_pattern(pattern)
         validated_timeout = validate_wait_timeout(timeout_s)
+        if self._evidence_recorder is not None:
+            raise DeviceCoreRuntimeError(
+                "Monitor conditions are not implemented until Stage 4"
+            )
         detector_patterns = (validated_pattern,) + tuple(
             pattern_name
             for pattern_name in DEFAULT_PATTERNS
@@ -927,7 +960,7 @@ class DeviceCoreRuntime:
             self._integrity = None
 
     def _reconcile_capture_source_health(self) -> None:
-        source = self._message_source
+        source = self._evidence_recorder or self._message_source
         if not isinstance(source, CaptureSourceMonitor):
             return
         health = source.capture_source_health()

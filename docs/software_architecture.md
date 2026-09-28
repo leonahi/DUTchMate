@@ -2,12 +2,9 @@
 
 > Scope: host-side Python layers, dependency direction, data flow, and code ownership.
 >
-> **Migration status:** Stage 1 of the Phase 1 v2 migration is implemented. This
-> document describes that DUT Profile boundary plus the remaining pre-v2 runtime
-> structure. The target behavior is defined normatively by `project_context.md`
-> and `phase1_implementation_spec.md`; where schema-v1, finite-capture, or
-> service-owned ingestion descriptions differ, they remain implementation
-> inventory rather than the target contract.
+> The target behavior is defined normatively by `project_context.md` and
+> `phase1_implementation_spec.md`. This document records module ownership and
+> dependency direction, not migration progress or next steps.
 
 This document describes repository organization and ownership. Requirements
 belong to their contract documents; progress and next-step status belong only
@@ -47,6 +44,7 @@ core/profile
 
 core/runtime
   -> profile status projection
+  -> evidence
   -> workflows
   -> gpio_config
   -> backends.contracts
@@ -59,6 +57,11 @@ core/workflows.capture
 
 core/uart_capture
   -> log_processing
+  -> backends.contracts
+
+core/evidence
+  -> session_store
+  -> uart_capture
   -> backends.contracts
 
 core/session_store
@@ -142,8 +145,8 @@ Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
 `docs/phase1_implementation_spec.md`. Production Enhanced input enters through
-one service-owned async host and the service-owned continuous-ingestion
-coordinator. No synchronous Enhanced command/source path remains.
+one service-owned async host and the core-owned continuous evidence recorder.
+No synchronous Enhanced command/source path or second physical reader remains.
 
 ## Data Flow
 
@@ -171,22 +174,19 @@ The production Enhanced path is:
 
 ```text
 EnhancedAsyncHost (one owner loop and one async adapter)
-  -> ContinuousIngestionCoordinator
   -> normalized backend events
-  -> DeviceCoreRuntime.capture_uart / run_boot_test
-  -> TransportCaptureRunner
-  -> CaptureRecorder
-  -> UartCaptureProcessor
-  -> PatternDetector
-  -> SessionStore
-  -> SessionSummary
+  -> ContinuousEvidenceRecorder (core/evidence)
+  -> schema-v2 SessionStore admission
+  -> durable tail notification
 ```
 
-`DeviceCoreRuntime` publishes the active session while a finite workflow runs
-and rejects conflicting capture or hardware-changing operations. The currently
-owned async host supplies Enhanced events, semantic control, and UART send;
-initial startup and every accepted replacement install exactly one such host.
-Downstream processing remains shared with Basic.
+`DeviceCoreRuntime` publishes an active schema-v2 ownership session for the
+whole connected/reconnecting interval, including when no bounded operation is
+running. The recorder owns the only normalized receive path, persists UART and
+telemetry before advancing its durable tail, maintains continuous line/pattern
+projections, and transfers a validated replacement source into the same session
+with a new session-local segment. Basic and Enhanced use the same recorder
+contract.
 
 ## Supported Core Facades
 
@@ -240,6 +240,18 @@ byte span for each matching literal. Session persistence classifies failure
 versus success patterns, chooses deterministic `first_error`, and stores a
 bounded exact-byte excerpt. Pattern processing remains pure and does not own
 persistence or backend I/O.
+
+### `evidence`
+
+Owns continuous normalized receive and authoritative admission into schema-v2
+storage. `ContinuousEvidenceRecorder` starts only after profile, persistence,
+backend identity, and segment provenance are ready. It preserves ambient UART,
+telemetry, connection boundaries, line-limit facts, and default-pattern
+projections; publishes tail positions only after durable admission; resets
+session-local line state across disconnect, rollover, and shutdown boundaries;
+and faults and closes physical ownership when authoritative persistence cannot
+continue. Clean shutdown first stops physical input, drains already-normalized
+source events, and then terminalizes the active v2 session.
 
 ### `session_store`
 
@@ -295,10 +307,11 @@ The projection owns only bounded diagnostic text; error codes, HTTP status, and
 schema-defined context remain responsibilities of their originating workflow
 and delivery adapter.
 
-Runtime capture/boot-test sessions with complete backend identity now use schema
-version 1 and snapshot backend facts, accepted timing policy, integrity, line
-processing, storage accounting, and one-way lifecycle state. Older direct-store
-fixtures retain their recognized unversioned legacy shape. The CLI propagates
+Production connection ownership uses schema version 2 and snapshots the
+effective profile, backend facts, reconnect policy, integrity, line processing,
+storage accounting, contiguous primary evidence order, and one-way lifecycle
+state. Schema-v0/v1 sessions remain explicit read-only compatibility data. The
+CLI propagates
 the positive `sessions.max_size_mb` and optional positive `sessions.max_count`
 settings through service startup. Each native session snapshots and enforces
 the exact resulting byte budget. When the count limit is configured, the store
@@ -371,11 +384,12 @@ small injected reopen port and does not own serial details. The service-owned
 `BackendReconnectCoordinator` serializes idle and active replacement, validates
 the selected Basic identity or exact Enhanced identity, and publishes the new
 source plus stable control/UART-send ports. Idle retries use exponential backoff
-from 0.1 seconds through a 2.0-second cap; an active workflow instead retains
-its immutable reconnect deadline, which takes precedence over retry or Enhanced
-origin establishment. Enhanced reconnect uses the same async-host opener as
-startup and waits for the segment origin through `wait_for_segment()` without
-consuming the first evidence event. The continuous-ingestion owner exposes
+from 0.1 seconds through a 2.0-second cap within the profile-snapshotted
+`reconnect_timeout_s` deadline. Deadline expiry records reconnect failure, fails
+the active v2 session, and leaves runtime disconnected. Enhanced reconnect uses
+the same async-host opener as startup and every candidate waits for the segment
+origin through `wait_for_segment()` without consuming the first evidence event.
+The continuous recorder exposes
 versioned connection generations, and runtime adopts a reconnected snapshot
 only when a pull observes a newer generation, preventing stale health from
 overwriting the replacement. Runtime publishes connected, disconnected, and
@@ -392,13 +406,15 @@ selection, exact serial ports, backend-specific baudrates, 8-N-1 framing, TX
 policy, and reconnect timeout. Basic connection setup opens raw serial without
 reading a `hello`. Its event source lazily starts one serial-reader thread,
 converts each delivered byte chunk to one FIFO normalized event with
-host-monotonic provenance, and exposes a synchronous workflow read bridge to
-the current shared capture runner. Basic UART writes are capability-gated and retry
+host-monotonic provenance, and feeds the recorder through a fixed-capacity queue
+that applies bounded backpressure. Basic UART writes are capability-gated and retry
 ordered short writes to completion. The Enhanced adapter translates
 parsed v1 messages and async receive timeouts before shared capture. Its one
 service-owned async host remains the resource owner across event, control, and
-UART-send operations. When the device-timer origin is unavailable at connection
-creation, the first timestamped evidence establishes the segment origin and is
+  UART-send operations and retains already-normalized events that are queued or
+  blocked on bounded queue admission while physical receive closes so the recorder
+  can drain them. When the device-timer origin is unavailable at connection
+  creation, the first timestamped evidence establishes the segment origin and is
 normalized to zero before its immutable context is persisted; the adapter's
 origin wait observes that transition without dequeuing the event.
 
@@ -410,25 +426,19 @@ format CLI output.
 ### Device Core Service
 
 `apps/service` owns the local FastAPI process, selected serial connection, and
-runtime composition. Current endpoints cover status, finite capture, boot-test,
-wait-pattern, bounded UART send, GPIO mode, reset, boot mode, bounded session
-list/detail and comparison, baseline mark/clear, and bounded recent UART replay.
-Handlers remain thin: core code owns
-validation order, state transitions, and deterministic behavior; service code
-owns request/response serialization and HTTP error mapping.
+runtime composition. Startup creates the active schema-v2 session and core
+recorder before starting reconnect supervision. Handlers remain thin: core code
+owns validation order, state transitions, and deterministic behavior; service
+code owns request/response serialization and HTTP error mapping.
 
-The service accepts one explicit Basic/Enhanced selection. Basic requires and
-opens a raw serial port without `hello`, wiring its normalized source into the
-same finite capture path. Enhanced validates `hello` when a port is selected
-and opens exactly one async host at startup and for each replacement. A single
-service-owned reconnect coordinator handles both idle disconnects and
-finite-workflow disconnects, while the continuous-ingestion coordinator remains
-the stable normalized source owner. Status and finite capture responses
-serialize backend identity, raw/effective capabilities, TX-policy provenance,
-segment timing, UART-loss integrity, and volatile reconnect state. Active
-capture/boot-test workflows reopen the selected Basic port or validate an exact
-Enhanced hello before resuming, bounded by the workflow's existing reconnect
-deadline.
+The service accepts one explicit Basic/Enhanced selection. Basic opens a raw
+serial port without `hello`. Enhanced validates `hello`, waits for timestamp
+provenance while its async adapter buffers interleaved events, and then transfers
+the host to the recorder without adding a reader. The service-owned reconnect
+coordinator owns physical reopen callbacks; the core recorder remains the stable
+source and evidence owner. Status serializes backend identity, raw/effective
+capabilities, TX-policy provenance, the active v2 session, normalized segment
+timing, UART-loss integrity, and connection/reconnect/fault state.
 
 ### CLI
 

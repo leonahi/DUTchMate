@@ -98,6 +98,7 @@ class V2EvidenceAdmission:
     handle: SessionHandle
     evidence_seq: int
     rolled_over: bool = False
+    next_evidence_seq: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

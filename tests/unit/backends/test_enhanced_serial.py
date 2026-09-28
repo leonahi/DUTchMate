@@ -219,6 +219,52 @@ async def test_request_routes_response_and_retains_interleaved_event() -> None:
     await adapter.close()
 
 
+async def test_close_returns_every_normalized_event_still_queued() -> None:
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader)
+    await adapter.start(0.1)
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":701,"data_b64":"WQ=="}\n'
+    )
+    while adapter._events.qsize() < 2:  # noqa: SLF001
+        await asyncio.sleep(0)
+
+    drained = await adapter.close_and_drain_events()
+
+    assert drained == (
+        UartReceiveEvent(segment_id=3, timestamp_us=0, channel=0, data=b"X"),
+        UartReceiveEvent(segment_id=3, timestamp_us=1, channel=0, data=b"Y"),
+    )
+
+
+async def test_close_drains_capacity_blocked_normalized_event_in_fifo_order() -> None:
+    """Fails if shutdown cancels an event blocked on bounded FIFO admission."""
+
+    reader = FakeAsyncSerialReader()
+    reader.feed(HELLO_FRAME)
+    adapter = make_adapter(reader, event_queue_capacity=1)
+    await adapter.start(0.1)
+    reader.feed(
+        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":701,"data_b64":"WQ=="}\n'
+    )
+
+    async def wait_for_blocked_admission() -> None:
+        while not adapter._events._putters:  # noqa: SLF001
+            await asyncio.sleep(0)
+
+    await asyncio.wait_for(wait_for_blocked_admission(), timeout=0.1)
+
+    drained = await adapter.close_and_drain_events()
+
+    assert drained == (
+        UartReceiveEvent(segment_id=3, timestamp_us=0, channel=0, data=b"X"),
+        UartReceiveEvent(segment_id=3, timestamp_us=1, channel=0, data=b"Y"),
+    )
+
+
 async def test_same_batch_response_waits_for_capacity_one_evidence_admission() -> None:
     """Fails if a response overtakes earlier evidence blocked outside the FIFO."""
 

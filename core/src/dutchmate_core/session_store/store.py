@@ -465,20 +465,41 @@ class SessionStore:
         *,
         event: UartReceiveEvent,
         detected_patterns: Sequence[dict[str, object]] = (),
+        capture_result: UartCaptureResult | None = None,
+        rollover_capture_result: UartCaptureResult | None = None,
     ) -> V2EvidenceAdmission:
         """Atomically admit exact UART RX bytes and their schema-v2 record."""
 
         if not event.data or len(event.data) > 32768:
             raise ValueError("v2 UART RX payload must contain 1..32768 bytes")
+        if capture_result is not None:
+            _require_matching_capture_result(event, capture_result)
+            if detected_patterns:
+                raise ValueError(
+                    "v2 UART admission accepts detected_patterns or capture_result, not both"
+                )
+        if rollover_capture_result is not None and capture_result is None:
+            raise ValueError("rollover capture result requires a primary capture result")
         with self._store_lock:
             metadata = self._require_active_v2_metadata(handle)
             admitted_event = event
-            admitted_patterns = detected_patterns
+            admitted_result = capture_result
+            admitted_patterns = (
+                tuple(
+                    _evidence.detected_pattern_records(
+                        admitted_result,
+                        segment_id=event.segment_id,
+                    )
+                )
+                if admitted_result is not None
+                else detected_patterns
+            )
             unit = self._v2_uart_unit(
                 handle,
                 metadata=metadata,
                 event=admitted_event,
                 detected_patterns=admitted_patterns,
+                capture_result=admitted_result,
             )
             rolled_over = False
             if not self._v2_unit_fits(metadata, unit_bytes=unit[1]):
@@ -486,15 +507,32 @@ class SessionStore:
                 metadata = self._require_active_v2_metadata(handle)
                 successor_segment_id = _current_v2_segment_id(metadata)
                 admitted_event = replace(event, segment_id=successor_segment_id)
-                admitted_patterns = tuple(
-                    {**pattern, "segment_id": successor_segment_id}
-                    for pattern in detected_patterns
+                admitted_result = (
+                    rollover_capture_result
+                    if rollover_capture_result is not None
+                    else replace(capture_result, segment_id=successor_segment_id)
+                    if capture_result is not None
+                    else None
                 )
+                if admitted_result is not None:
+                    _require_matching_capture_result(admitted_event, admitted_result)
+                    admitted_patterns = tuple(
+                        _evidence.detected_pattern_records(
+                            admitted_result,
+                            segment_id=successor_segment_id,
+                        )
+                    )
+                else:
+                    admitted_patterns = tuple(
+                        {**pattern, "segment_id": successor_segment_id}
+                        for pattern in detected_patterns
+                    )
                 unit = self._v2_uart_unit(
                     handle,
                     metadata=metadata,
                     event=admitted_event,
                     detected_patterns=admitted_patterns,
+                    capture_result=admitted_result,
                 )
                 rolled_over = True
                 if not self._v2_unit_fits(metadata, unit_bytes=unit[1]):
@@ -504,25 +542,48 @@ class SessionStore:
                         detail="one schema-valid UART unit exceeds the session budget",
                     )
 
-            record, _unit_bytes, serialized_patterns = unit
+            record, _unit_bytes, serialized_patterns, hardware_event_bytes = unit
             evidence_seq = record["evidence_seq"]
             if not isinstance(evidence_seq, int):
                 raise ValueError("v2 evidence sequence is invalid")
             serialized_record = _persistence.serialize_jsonl(record)
+            append_paths = [handle.paths.uart_raw, handle.paths.uart_events]
+            if hardware_event_bytes:
+                append_paths.append(handle.paths.hardware_events)
             try:
                 with _transactions.evidence_transaction(
                     handle.paths,
-                    append_paths=[handle.paths.uart_raw, handle.paths.uart_events],
+                    append_paths=append_paths,
                     replace_detected_patterns=serialized_patterns is not None,
                 ) as transaction:
                     _persistence.append_serialized(handle.paths.uart_raw, admitted_event.data)
                     _persistence.append_serialized(handle.paths.uart_events, serialized_record)
+                    for hardware_event in hardware_event_bytes:
+                        _persistence.append_serialized(
+                            handle.paths.hardware_events,
+                            hardware_event,
+                        )
                     if serialized_patterns is not None:
                         _persistence.write_serialized(
                             handle.paths.detected_patterns,
                             serialized_patterns,
                         )
-                    metadata["next_evidence_seq"] = evidence_seq + 1
+                    metadata["next_evidence_seq"] = evidence_seq + 1 + len(
+                        hardware_event_bytes
+                    )
+                    if admitted_result is not None:
+                        if admitted_result.newly_oversized_line_count:
+                            _metadata._record_line_processing(
+                                metadata,
+                                newly_oversized_line_count=(
+                                    admitted_result.newly_oversized_line_count
+                                ),
+                            )
+                        _metadata._record_metadata_segment_timestamp(
+                            metadata,
+                            segment_id=admitted_event.segment_id,
+                            timestamp_us=admitted_event.timestamp_us,
+                        )
                     _persistence.refresh_storage_accounting(metadata, handle.paths)
                     serialized_metadata = _persistence.serialize_compact_json(metadata)
                     _require_metadata_capacity(serialized_metadata)
@@ -535,7 +596,79 @@ class SessionStore:
                 handle=handle,
                 evidence_seq=evidence_seq,
                 rolled_over=rolled_over,
+                next_evidence_seq=evidence_seq + 1 + len(hardware_event_bytes),
             )
+
+    def v2_uart_receive_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        event: UartReceiveEvent,
+        capture_result: UartCaptureResult,
+    ) -> bool:
+        """Return whether this exact UART unit requires a successor session."""
+
+        _require_matching_capture_result(event, capture_result)
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            patterns = tuple(
+                _evidence.detected_pattern_records(
+                    capture_result,
+                    segment_id=event.segment_id,
+                )
+            )
+            unit = self._v2_uart_unit(
+                handle,
+                metadata=metadata,
+                event=event,
+                detected_patterns=patterns,
+                capture_result=capture_result,
+            )
+            return not self._v2_unit_fits(metadata, unit_bytes=unit[1])
+
+    def append_v2_line_boundary(
+        self,
+        handle: SessionHandle,
+        *,
+        results: Sequence[UartCaptureResult],
+    ) -> tuple[V2EvidenceAdmission, ...]:
+        """Persist derived oversized-line facts finalized at a hard boundary."""
+
+        admissions: list[V2EvidenceAdmission] = []
+        with self._store_lock:
+            current = handle
+            for result in results:
+                for oversized_line in result.oversized_lines:
+                    fields = {
+                        key: value
+                        for key, value in _evidence.line_limit_exceeded_event_json(
+                            result,
+                            oversized_line,
+                        ).items()
+                        if key not in {"type", "segment_id"}
+                    }
+
+                    def boundary_fields(
+                        _current_handle: SessionHandle,
+                        updated: dict[str, object],
+                        _evidence_seq: int,
+                        *,
+                        finalized_fields: dict[str, object] = fields,
+                    ) -> dict[str, object]:
+                        return {
+                            "segment_id": _current_v2_segment_id(updated),
+                            **finalized_fields,
+                        }
+
+                    admission = self._append_v2_record_locked(
+                        current,
+                        stream="hardware",
+                        record_type="line_limit_exceeded",
+                        fields=boundary_fields,
+                    )
+                    admissions.append(admission)
+                    current = admission.handle
+        return tuple(admissions)
 
     def _v2_uart_unit(
         self,
@@ -544,7 +677,8 @@ class SessionStore:
         metadata: dict[str, object],
         event: UartReceiveEvent,
         detected_patterns: Sequence[dict[str, object]],
-    ) -> tuple[dict[str, object], int, bytes | None]:
+        capture_result: UartCaptureResult | None,
+    ) -> tuple[dict[str, object], int, bytes | None, tuple[bytes, ...]]:
         segments = metadata.get("segments")
         if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
             raise ValueError("v2 session must contain a current segment")
@@ -581,10 +715,35 @@ class SessionStore:
             event=event,
             detected_patterns=detected_patterns,
         )
+        hardware_event_bytes: tuple[bytes, ...] = ()
+        if capture_result is not None:
+            hardware_event_bytes = tuple(
+                _persistence.serialize_jsonl(
+                    self._v2_record(
+                        handle,
+                        metadata=metadata,
+                        evidence_seq=evidence_seq + index + 1,
+                        record_type="line_limit_exceeded",
+                        fields={
+                            key: value
+                            for key, value in _evidence.line_limit_exceeded_event_json(
+                                capture_result,
+                                oversized_line,
+                            ).items()
+                            if key != "type"
+                        },
+                    )
+                )
+                for index, oversized_line in enumerate(capture_result.oversized_lines)
+            )
         return (
             record,
-            len(event.data) + len(record_bytes) + pattern_growth,
+            len(event.data)
+            + len(record_bytes)
+            + pattern_growth
+            + sum(len(item) for item in hardware_event_bytes),
             serialized_patterns,
+            hardware_event_bytes,
         )
 
     def _fail_active_v2_persistence_locked(
@@ -1290,6 +1449,34 @@ class SessionStore:
             metadata = self._require_active_v2_metadata(handle)
             if segment_id is not None and segment_id != _current_v2_segment_id(metadata):
                 raise ValueError("v2 connection event must reference the current segment")
+
+            disconnected_at = _metadata._format_utc_timestamp(self._clock())
+
+            def update_continuity(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                if event_type != "unexpected_disconnect":
+                    return
+                continuity = updated.get("continuity")
+                if not isinstance(continuity, dict):
+                    raise ValueError("v2 continuity must be an object")
+                count = continuity.get("observation_gap_count")
+                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                    raise ValueError("v2 observation gap count is invalid")
+                continuity["observation_gap_count"] = count + 1
+                segments = updated.get("segments")
+                if (
+                    not isinstance(segments, list)
+                    or not segments
+                    or not isinstance(segments[-1], dict)
+                ):
+                    raise ValueError("v2 session segments are malformed")
+                current_segment = segments[-1]
+                if current_segment.get("ended_at") is None:
+                    current_segment["ended_at"] = disconnected_at
+                    current_segment["end_reason"] = "unexpected_disconnect"
+
             return self._append_v2_record_locked(
                 handle,
                 stream="connection",
@@ -1300,6 +1487,202 @@ class SessionStore:
                     ),
                     "detail": detail,
                 },
+                metadata_mutator=update_continuity,
+            )
+
+    def v2_telemetry_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        event: BufferOverflowEvent | BufferStatusEvent,
+    ) -> bool:
+        """Return whether this exact telemetry record requires a successor."""
+
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if event.segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 telemetry must reference the current segment")
+            if isinstance(event, BufferOverflowEvent):
+                record_type = "buffer_overflow"
+                fields: dict[str, object] = {
+                    "segment_id": event.segment_id,
+                    "timestamp_us": event.timestamp_us,
+                    "channel": event.channel,
+                    "dropped_bytes": event.dropped_bytes,
+                }
+            else:
+                record_type = "buffer_status"
+                fields = {
+                    "segment_id": event.segment_id,
+                    "timestamp_us": event.timestamp_us,
+                    "uart_rx_size_bytes": event.size_bytes,
+                    "uart_rx_used_bytes": event.used_bytes,
+                    "uart_rx_high_water_bytes": event.high_water_bytes,
+                    "dropped_bytes_total": event.dropped_bytes_total,
+                    "overflow_events": event.overflow_events,
+                }
+            record = self._v2_record(
+                handle,
+                metadata=metadata,
+                evidence_seq=_v2_next_sequence(metadata),
+                record_type=record_type,
+                fields=fields,
+            )
+            serialized_record = _persistence.serialize_jsonl(record)
+            return not self._v2_unit_fits(
+                metadata,
+                unit_bytes=len(serialized_record),
+            )
+
+    def append_v2_buffer_overflow(
+        self,
+        handle: SessionHandle,
+        *,
+        event: BufferOverflowEvent,
+        session_dropped_bytes: int | None = None,
+        rollover_session_dropped_bytes: int | None = None,
+    ) -> V2EvidenceAdmission:
+        """Persist one Enhanced overflow telemetry event."""
+
+        if session_dropped_bytes is not None and (
+            isinstance(session_dropped_bytes, bool)
+            or not isinstance(session_dropped_bytes, int)
+            or session_dropped_bytes < 0
+        ):
+            raise ValueError("session_dropped_bytes must be a non-negative integer")
+        if rollover_session_dropped_bytes is not None and (
+            isinstance(rollover_session_dropped_bytes, bool)
+            or not isinstance(rollover_session_dropped_bytes, int)
+            or rollover_session_dropped_bytes < 0
+        ):
+            raise ValueError(
+                "rollover_session_dropped_bytes must be a non-negative integer"
+            )
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if event.segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 telemetry must reference the current segment")
+
+            def record_integrity(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                dropped_bytes = (
+                    rollover_session_dropped_bytes
+                    if _admission.rolled_over
+                    and rollover_session_dropped_bytes is not None
+                    else session_dropped_bytes
+                    if session_dropped_bytes is not None
+                    else event.dropped_bytes
+                )
+                _record_v2_integrity_loss(
+                    updated,
+                    dropped_bytes=dropped_bytes,
+                    cumulative=(
+                        session_dropped_bytes is not None
+                        or rollover_session_dropped_bytes is not None
+                    ),
+                    reported_loss=True,
+                )
+                _metadata._record_metadata_segment_timestamp(
+                    updated,
+                    segment_id=_current_v2_segment_id(updated),
+                    timestamp_us=event.timestamp_us,
+                )
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="buffer_overflow",
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "segment_id": _current_v2_segment_id(updated),
+                    "timestamp_us": event.timestamp_us,
+                    "channel": event.channel,
+                    "dropped_bytes": event.dropped_bytes,
+                },
+                metadata_mutator=record_integrity,
+            )
+
+    def append_v2_buffer_status(
+        self,
+        handle: SessionHandle,
+        *,
+        event: BufferStatusEvent,
+        session_dropped_bytes: int | None = None,
+        reported_loss: bool | None = None,
+        rollover_session_dropped_bytes: int | None = None,
+        rollover_reported_loss: bool | None = None,
+    ) -> V2EvidenceAdmission:
+        """Persist one Enhanced buffer-status telemetry event."""
+
+        if session_dropped_bytes is not None and (
+            isinstance(session_dropped_bytes, bool)
+            or not isinstance(session_dropped_bytes, int)
+            or session_dropped_bytes < 0
+        ):
+            raise ValueError("session_dropped_bytes must be a non-negative integer")
+        if reported_loss is not None and not isinstance(reported_loss, bool):
+            raise ValueError("reported_loss must be a boolean")
+        if rollover_session_dropped_bytes is not None and (
+            isinstance(rollover_session_dropped_bytes, bool)
+            or not isinstance(rollover_session_dropped_bytes, int)
+            or rollover_session_dropped_bytes < 0
+        ):
+            raise ValueError(
+                "rollover_session_dropped_bytes must be a non-negative integer"
+            )
+        if rollover_reported_loss is not None and not isinstance(
+            rollover_reported_loss, bool
+        ):
+            raise ValueError("rollover_reported_loss must be a boolean")
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if event.segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 telemetry must reference the current segment")
+
+            def record_integrity(
+                updated: dict[str, object],
+                _admission: V2EvidenceAdmission,
+            ) -> None:
+                rolled_over = _admission.rolled_over
+                dropped_bytes = (
+                    rollover_session_dropped_bytes
+                    if rolled_over and rollover_session_dropped_bytes is not None
+                    else session_dropped_bytes
+                    if session_dropped_bytes is not None
+                    else event.dropped_bytes_total
+                )
+                loss = (
+                    rollover_reported_loss
+                    if rolled_over and rollover_reported_loss is not None
+                    else reported_loss
+                )
+                _record_v2_integrity_loss(
+                    updated,
+                    dropped_bytes=dropped_bytes,
+                    cumulative=True,
+                    reported_loss=loss,
+                )
+                _metadata._record_metadata_segment_timestamp(
+                    updated,
+                    segment_id=_current_v2_segment_id(updated),
+                    timestamp_us=event.timestamp_us,
+                )
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="buffer_status",
+                fields=lambda _handle, updated, _evidence_seq: {
+                    "segment_id": _current_v2_segment_id(updated),
+                    "timestamp_us": event.timestamp_us,
+                    "uart_rx_size_bytes": event.size_bytes,
+                    "uart_rx_used_bytes": event.used_bytes,
+                    "uart_rx_high_water_bytes": event.high_water_bytes,
+                    "dropped_bytes_total": event.dropped_bytes_total,
+                    "overflow_events": event.overflow_events,
+                },
+                metadata_mutator=record_integrity,
             )
 
     def _append_v2_record_locked(
@@ -1359,6 +1742,7 @@ class SessionStore:
             handle=handle,
             evidence_seq=evidence_seq,
             rolled_over=rolled_over,
+            next_evidence_seq=evidence_seq + 1,
         )
         try:
             with _transactions.evidence_transaction(
@@ -2742,6 +3126,48 @@ def _require_v2_operation_active(
         raise ValueError("v2 active_operations must be an object")
     if not isinstance(operations.get(operation_id), dict):
         raise ValueError("v2 action operation_id must reference an active operation")
+
+
+def _record_v2_integrity_loss(
+    metadata: dict[str, object],
+    *,
+    dropped_bytes: int,
+    cumulative: bool,
+    reported_loss: bool | None = None,
+) -> None:
+    quality = metadata.get("evidence_quality")
+    if not isinstance(quality, dict):
+        raise ValueError("v2 evidence_quality must be an object")
+    integrity = quality.get("backend_integrity")
+    if not isinstance(integrity, dict):
+        raise ValueError("v2 backend_integrity must be an object")
+    previous = integrity.get("dropped_bytes")
+    if isinstance(previous, bool) or not isinstance(previous, int) or previous < 0:
+        raise ValueError("v2 backend integrity dropped bytes are invalid")
+    observed = max(previous, dropped_bytes) if cumulative else previous + dropped_bytes
+    integrity.update(
+        {
+            "loss_status": (
+                "loss_reported"
+                if observed or reported_loss is True
+                else "none_reported"
+            ),
+            "observation_scope": "debug_helper_rx_buffer",
+            "dropped_bytes": observed,
+        }
+    )
+
+
+def _require_matching_capture_result(
+    event: UartReceiveEvent,
+    result: UartCaptureResult,
+) -> None:
+    if event.segment_id != result.segment_id:
+        raise ValueError("UART event and capture result segments must match")
+    if event.channel != result.channel:
+        raise ValueError("UART event and capture result channels must match")
+    if event.timestamp_us != result.timestamp_us:
+        raise ValueError("UART event and capture result timestamps must match")
 
 
 def _v2_operation_id_seen(path: Path, operation_id: str) -> bool:

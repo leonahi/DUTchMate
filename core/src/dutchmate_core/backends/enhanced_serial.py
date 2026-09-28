@@ -87,6 +87,7 @@ class AsyncEnhancedSerialAdapter:
         self._parser = parser or NdjsonStreamParser()
         self._read_size = read_size
         self._events: asyncio.Queue[BackendEvent] = asyncio.Queue(event_queue_capacity)
+        self._event_awaiting_admission: BackendEvent | None = None
         self._start_lock = asyncio.Lock()
         self._command_lock = asyncio.Lock()
         self._close_lock = asyncio.Lock()
@@ -244,7 +245,9 @@ class AsyncEnhancedSerialAdapter:
                 )
                 assert event is not None
                 self._segment = segment
+                self._event_awaiting_admission = event
                 await self._events.put(event)
+                self._event_awaiting_admission = None
                 continue
             if self._info is not None and isinstance(
                 message,
@@ -450,6 +453,19 @@ class AsyncEnhancedSerialAdapter:
 
         while not self._events.empty():
             self._events.get_nowait()
+
+    async def close_and_drain_events(self) -> tuple[BackendEvent, ...]:
+        """Stop physical receive and return every event already normalized."""
+
+        await self.close()
+        drained: list[BackendEvent] = []
+        while not self._events.empty():
+            drained.append(self._events.get_nowait())
+        awaiting_admission = self._event_awaiting_admission
+        if awaiting_admission is not None:
+            drained.append(awaiting_admission)
+            self._event_awaiting_admission = None
+        return tuple(drained)
 
     def _set_terminal(
         self,

@@ -132,6 +132,10 @@ class FakeAsyncEnhancedAdapter:
         self.discard_thread_id = threading.get_ident()
         self.discard_count += 1
 
+    async def close_and_drain_events(self) -> tuple[BackendEvent, ...]:
+        await self.close()
+        return ()
+
     async def close(self) -> None:
         self.operation_thread_ids.append(threading.get_ident())
         self.close_count += 1
