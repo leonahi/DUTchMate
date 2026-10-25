@@ -10,7 +10,9 @@ from threading import Event
 from typing import Annotated, Protocol
 
 from fastapi import FastAPI, Query
+from fastapi.responses import Response
 
+from dutchmate_core.evidence.tail import EvidencePage
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.operations import MonitorCondition, MonitorResult
@@ -57,6 +59,10 @@ from dutchmate_service.startup import apply_startup_hardware_config, build_start
 
 class RuntimeProvider(Protocol):
     """Runtime surface needed by the current service API."""
+
+    def evidence(
+        self, *, cursor: str | None = None, limit: int = 100, wait_s: float = 1.0,
+    ) -> EvidencePage: ...
 
     def status(self) -> DeviceCoreStatus:
         """Return the current Device Core status."""
@@ -234,6 +240,15 @@ def create_app(
         lines: Annotated[int, Query(ge=1, le=1000)] = 300,
     ) -> dict[str, object]:
         return recent_logs_payload(runtime_provider.recent_logs(session_id=session_id, lines=lines))
+
+    @app.get("/dut/evidence")
+    def get_evidence(
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+        wait_s: Annotated[float, Query(ge=0, le=30, allow_inf_nan=False)] = 1.0,
+    ) -> Response:
+        page = runtime_provider.evidence(cursor=cursor, limit=limit, wait_s=wait_s)
+        return Response(content=page.compact_json(), media_type="application/json")
 
     @app.post("/gpio/mode")
     def configure_gpio_mode(request: GpioModeRequest) -> dict[str, object]:

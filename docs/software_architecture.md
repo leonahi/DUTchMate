@@ -265,6 +265,11 @@ evidence ranges and runtime result construction releases. Reconnect replacement
 and failure use the same admission ordering, so bounded operations cannot create
 a second physical reader.
 
+`evidence.tail` defines the independent public durable-tail page contract and
+query bounds. It does not reuse the Monitor/Interact operation cursor or own
+acquisition. Runtime uses recorder notifications only to wake long polls; page
+contents always come from persisted primary evidence.
+
 ### `operations`
 
 Owns framework-independent bounded observation and Interact result values, validation,
@@ -320,6 +325,19 @@ Owns filesystem-backed sessions under
   latest session
 - returns stable opaque-cursor pages and bounded native/legacy detail without
   expanding raw UART, JSONL, or detected-pattern arrays
+- `session_store.tail` merges committed v2 UART, operation, hardware, and connection
+  streams in `evidence_seq` order. Its versioned opaque cursor encodes the session,
+  next sequence, and four seek offsets. Snapshots open files and capture committed
+  lengths under the store lock, then replay outside that lock. Reference-counted
+  retention leases protect only an in-flight snapshot, never an attached client
+- follows only explicit v2 successor links across rollover. A missing cursor
+  session returns `cursor_expired`; without a retained proof of continuity it
+  never guesses a successor or jumps to the latest session
+- projects exact UART bytes/raw offsets and segment timestamp provenance, plus
+  bounded scalar action/operation/connection markers without exception detail.
+  Pages contain at most 500 records and 262144 compact UTF-8 bytes, including the
+  envelope. `omitted_records` counts whole records deferred from the selected
+  limit-bounded window by the byte cap; `next_cursor` leaves those records unread
 - selects an explicit, active, or newest terminal native session and replays
   persisted UART events through the shared segment/channel line buffer, retaining
   bounded complete, partial, and oversized records with evidence coordinates
@@ -463,6 +481,13 @@ source and evidence owner. Status serializes backend identity, raw/effective
 capabilities, TX-policy provenance, the active v2 session, normalized segment
 timing, UART-loss integrity, and connection/reconnect/fault state.
 
+`GET /dut/evidence` validates cursor/limit/wait bounds and returns the core's
+compact page without a second serialization format. A cursorless request
+establishes the current durable tail and returns no historical records; runtime
+resamples if rollover retention retires its initial tail during attachment.
+Cursor requests page persisted evidence and may wait up to 30 seconds for a
+durable-tail notification. Deleted positions map to HTTP 410 `cursor_expired`.
+
 ### CLI
 
 `apps/cli` is an HTTP client for the Device Core Service. It owns process
@@ -472,11 +497,22 @@ not import low-level transport code or open serial ports for debug workflows.
 Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, GPIO mode, reset, boot mode,
 session listing, session detail, recent logs, and literal
-wait-pattern, bounded Monitor/Interact, audited byte-first UART send, and baseline mark/clear. `dutchmate mcp`
+wait-pattern, bounded Monitor/Interact, audited byte-first UART send, durable
+`follow`, line-oriented `console`, and baseline mark/clear. `dutchmate mcp`
 replaces the CLI process with the aggregator-owned `dutchmate-mcp` entry point,
 which targets the separately packaged MCP adapter. This preserves the
 delivery-package import boundary and gives the MCP adapter direct ownership of
 stdin, stdout, and stderr.
+
+Follow attaches at the durable tail by default (or resumes `--cursor`), renders
+lossy UART text and bounded markers, and advances only after rendering each
+page. Byte-deferred records are replayed by the next request; expiry is explicit
+and never triggers silent reattachment. Console uses the same view in a client
+thread while reading complete input lines. It requires effective `uart_send`,
+resolves `profile_default` from the service's immutable effective profile, and
+sends an explicit resolved ending through audited `/dut/uart/send`. Interact
+rejections are reported without retry. EOF/Ctrl-C stops and joins the view only;
+neither command changes recorder/session ownership or opens serial transport.
 
 ### Public Distribution Composition
 

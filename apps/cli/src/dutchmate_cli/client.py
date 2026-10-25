@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
+from dutchmate_core.evidence.tail import validate_evidence_query
 from dutchmate_core.operations import MonitorCondition
 from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.validation import (
@@ -54,6 +55,27 @@ def fetch_status(
         transport=transport,
     )
     return _response_payload(response, description="status payload")
+
+
+def fetch_evidence(
+    *,
+    cursor: str | None = None,
+    limit: int = 100,
+    wait_s: float = 1.0,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Page the authoritative durable tail; the service owns the opaque cursor."""
+
+    validate_evidence_query(cursor=cursor, limit=limit, wait_s=wait_s)
+    params: dict[str, str | int | float] = {"limit": limit, "wait_s": wait_s}
+    if cursor is not None:
+        params["cursor"] = cursor
+    response = _request_service(
+        method="GET", path="/dut/evidence", service_url=service_url,
+        transport=transport, params=params, timeout_s=wait_s + DEFAULT_TIMEOUT_SECONDS,
+    )
+    return _response_payload(response, description="evidence page")
 
 
 def list_debug_sessions(
@@ -437,7 +459,7 @@ def _request_service(
     service_url: str,
     transport: httpx.BaseTransport | None = None,
     json: Mapping[str, object] | None = None,
-    params: Mapping[str, str | int] | None = None,
+    params: Mapping[str, str | int | float] | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> httpx.Response:
     try:

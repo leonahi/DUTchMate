@@ -14,6 +14,7 @@ from dutchmate_core.device_connection.errors import (
     ProtocolValidationError,
 )
 from dutchmate_core.diagnostics import project_diagnostic_detail
+from dutchmate_core.evidence.tail import EvidenceCursorExpired
 from dutchmate_core.gpio_config.config import GpioConfigError
 from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
@@ -57,6 +58,9 @@ class ServiceError:
 
 def service_error_from_exception(exc: Exception) -> ServiceError:
     """Map known core exceptions to the service error contract."""
+
+    if isinstance(exc, EvidenceCursorExpired):
+        return _service_error(error="cursor_expired", detail=str(exc), status_code=410, context={})
 
     if isinstance(exc, DeviceActionError):
         return _service_error(
@@ -319,6 +323,10 @@ def _comparison_context(exc: SessionComparisonError) -> dict[str, object]:
 
 def register_error_handlers(app: FastAPI) -> None:
     """Register service exception handlers on an app."""
+
+    @app.exception_handler(EvidenceCursorExpired)
+    async def handle_cursor_expired(request: Request, exc: EvidenceCursorExpired) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
 
     @app.exception_handler(DeviceActionError)
     async def handle_device_action_error(

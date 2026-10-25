@@ -4,7 +4,8 @@ import base64
 import binascii
 import json
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from dutchmate_core.backends.contracts import (
     UartIntegrity,
     UartReceiveEvent,
 )
+from dutchmate_core.evidence.tail import EvidenceCursorExpired, EvidencePage
 from dutchmate_core.operations.monitor import (
     EvidenceCursor,
     EvidenceRange,
@@ -79,6 +81,7 @@ from dutchmate_core.session_store.retrieval import (
 from dutchmate_core.session_store.retrieval import (
     list_session_page as _list_session_page,
 )
+from dutchmate_core.session_store.tail import EvidenceSnapshot, read_evidence_page
 from dutchmate_core.uart_capture.processor import UartCaptureResult
 from dutchmate_core.validation import (
     DEFAULT_SESSION_MAX_SIZE_MB,
@@ -282,12 +285,66 @@ class SessionStore:
         self._v2_profiles: dict[str, DutProfile] = {}
         self._v2_snapshots: dict[str, BackendSnapshot] = {}
         self._v2_monitor_range_leases: dict[str, set[str]] = {}
+        self._v2_tail_read_leases: dict[str, int] = {}
 
     @property
     def root(self) -> Path:
         """Directory containing all sessions."""
 
         return self._root
+
+    def read_evidence_page(
+        self,
+        *,
+        cursor: str | None,
+        tail_session_id: str | None,
+        limit: int,
+    ) -> EvidencePage:
+        """Read persisted primary evidence without holding the admission lock during replay."""
+
+        return read_evidence_page(
+            self._evidence_snapshot,
+            cursor=cursor,
+            tail_session_id=tail_session_id,
+            limit=limit,
+        )
+
+    @contextmanager
+    def _evidence_snapshot(self, session_id: str) -> Iterator[EvidenceSnapshot]:
+        _metadata._validate_session_id(session_id)
+        with ExitStack() as files:
+            with self._store_lock:
+                paths = _persistence.session_paths(self._root / session_id)
+                if not paths.root.is_dir() or paths.root.is_symlink():
+                    raise EvidenceCursorExpired()
+                metadata = _persistence.read_json_object(paths.metadata)
+                if metadata.get("schema_version") != 2:
+                    raise ValueError("Evidence tail requires schema-v2 sessions")
+                stream_paths = (
+                    paths.uart_events, paths.operation_events,
+                    paths.hardware_events, paths.connection_events,
+                )
+                try:
+                    streams = tuple(files.enter_context(path.open("rb")) for path in stream_paths)
+                    lengths = tuple(path.stat().st_size for path in stream_paths)
+                except OSError as exc:
+                    raise SessionPersistenceError(
+                        operation="open evidence snapshot", path=paths.root,
+                        detail="Unable to open primary evidence",
+                    ) from exc
+                self._v2_tail_read_leases[session_id] = (
+                    self._v2_tail_read_leases.get(session_id, 0) + 1
+                )
+            try:
+                yield EvidenceSnapshot(session_id, metadata, streams, lengths)
+            finally:
+                files.close()
+                with self._store_lock:
+                    remaining = self._v2_tail_read_leases[session_id] - 1
+                    if remaining:
+                        self._v2_tail_read_leases[session_id] = remaining
+                    else:
+                        del self._v2_tail_read_leases[session_id]
 
     @property
     def last_recovery(self) -> SessionRecoveryResult:
@@ -2596,7 +2653,9 @@ class SessionStore:
         self._retention_status = _retention.apply_session_retention(
             self._root,
             max_count=self._max_count,
-            held_session_ids=held_session_ids | leased_session_ids,
+            held_session_ids=(
+                held_session_ids | leased_session_ids | self._v2_tail_read_leases.keys()
+            ),
         )
         return self._retention_status
 

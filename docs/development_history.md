@@ -10,6 +10,62 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Phase 1 v2 Migration Stage 6 Completed — 2026-10-25
+
+- Implemented `GET /dut/evidence` over committed schema-v2 primary streams.
+  Cursorless attachment returns no historical records. Cursor requests merge
+  UART, operation, hardware, and connection records by contiguous evidence
+  sequence with exact RX bytes/raw offsets and segment timestamp provenance.
+  Action/operation/connection projections omit arbitrary exception detail.
+- The separate public cursor is versioned URL-safe base64 containing a session,
+  next evidence sequence, and four stream seek offsets. It follows explicit
+  rollover successors; missing retained positions return HTTP 410
+  `cursor_expired` without guessing or silently attaching forward. Initial
+  cursorless attachment resamples a tail retired by concurrent rollover.
+- Snapshot metadata, file handles, and committed lengths are captured under the
+  store lock; incremental replay runs outside that lock. Reference-counted
+  snapshot leases reuse retention protection and release on success/error.
+  Long polls use recorder notifications only as wakeups, then reread persisted
+  evidence. No subscriber queue or additional backend reader was introduced.
+- Enforced integer limit 1..500 (default 100), finite wait 0..30 seconds
+  (default 1.0), and the 262144-byte compact UTF-8 envelope cap. Whole records
+  deferred by that cap are counted within the selected bounded window and left
+  unread by `next_cursor`, so clients can recover them exactly once.
+- Added HTTP-only `dutchmate follow` and line-oriented `dutchmate console`.
+  Follow starts at tail or resumes an opaque cursor, renders UART and bounded
+  evidence markers, and reports expiry without automatic reattachment. Console
+  requires effective `uart_send`, resolves its default ending from the service's
+  immutable effective profile, and submits explicit endings through the Stage 5
+  audited standalone-send endpoint. Interact conflicts report `operation_active`
+  without TX/retry. Console displays authoritative stream evidence; EOF/Ctrl-C
+  closes and joins only the view. Neither command owns serial/session lifecycle.
+- Added 35 regressions covering attachment, deterministic exactly-once paging,
+  rollover, expiry, committed snapshot boundaries, byte-cap recovery including
+  maximum-sized control-byte UART, long-poll wakeup, malformed cursors, safe
+  markers, slow-reader isolation, retention lease cleanup, client-only exits,
+  audited HTTP console sends and profile defaults, and real Interact conflicts.
+- Focused validation:
+  `UV_CACHE_DIR=/tmp/dutchmate-uv-cache uv run --frozen pytest tests/unit/evidence tests/unit/runtime tests/unit/session_store apps/service/tests apps/cli/tests tests/architecture -q`
+  — 629 passed in 12.16 seconds.
+- Full validation:
+  `UV_CACHE_DIR=/tmp/dutchmate-uv-cache uv run --frozen pytest -q`
+  — 1,465 passed in 42.86 seconds, including historical v0/v1 compatibility,
+  continuous recorder/Monitor/Interact, audited actions, and import boundaries.
+  `uv run --frozen ruff check .` passed;
+  `uv run --frozen mypy` passed (101 source files);
+  `uv lock --check` passed (66 packages; writable temporary UV cache);
+  `git diff --check` passed. Import Linter is not configured; the executable
+  architecture tests supply the repository's import/dependency gate.
+- `graphify update .` refreshed the ignored local structural index (5,576 nodes,
+  14,404 edges) with the existing partial-extraction warning for
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` and a community-label
+  refresh notice. Generated artifacts are excluded from the review diff.
+- Started from clean HEAD `857261b` (committed Stage 5), reconciling the stale
+  current-status baseline without rewriting prior history.
+  No Stage 7/8, MCP migration, composite workflow, or physical
+  hardware acceptance work was started. No hardware was accessed.
+
+
 ## Stage 5 Atomic-Capability Cleanup Completed — 2026-10-25 (Uncommitted)
 
 - Applied the documented review decision to the existing Stage 5 diff. Removed

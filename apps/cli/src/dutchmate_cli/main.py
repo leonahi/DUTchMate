@@ -27,8 +27,10 @@ from dutchmate_cli.client import (
     wait_for_pattern,
 )
 from dutchmate_cli.config import CliConfig, CliConfigError, load_cli_config
+from dutchmate_cli.console import run_console
 from dutchmate_cli.devices import DeviceSelectionError, format_devices, resolve_start_serial_port
 from dutchmate_cli.dut import format_boot_mode_result, format_reset_result
+from dutchmate_cli.follow import run_follow
 from dutchmate_cli.gpio import format_gpio_mode_result
 from dutchmate_cli.lifecycle import (
     LifecycleError,
@@ -387,6 +389,38 @@ def send_command(
     except (ServiceUnavailableError, ServiceClientError) as exc:
         _fail(str(exc))
     typer.echo(format_uart_send(payload))
+
+
+@app.command("follow")
+def follow_command(
+    cursor: Annotated[
+        str | None, typer.Option("--cursor", help="Resume an opaque evidence cursor.")
+    ] = None,
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
+) -> None:
+    """Display new durable UART and action evidence; Ctrl-C closes only this view."""
+
+    try:
+        run_follow(cursor=cursor, service_url=_resolve_service_url(service_url))
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceClientError as exc:
+        _fail(str(exc))
+
+
+@app.command("console")
+def console_command(
+    line_ending: Annotated[str, typer.Option("--line-ending")] = "profile_default",
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
+) -> None:
+    """Send human input lines through audited service TX while following evidence."""
+
+    try:
+        run_console(line_ending=line_ending, service_url=_resolve_service_url(service_url))
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except ServiceClientError as exc:
+        _fail(str(exc))
 
 
 @app.command("interact")

@@ -29,6 +29,11 @@ from dutchmate_core.evidence.recorder import (
     ContinuousEvidenceRecorder,
     DurableEvidenceTail,
 )
+from dutchmate_core.evidence.tail import (
+    EvidenceCursorExpired,
+    EvidencePage,
+    validate_evidence_query,
+)
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.configurator import GpioConfigurator
 from dutchmate_core.gpio_config.modes import (
@@ -102,6 +107,10 @@ ConnectionState = Literal["connected", "disconnected", "reconnecting", "faulted"
 
 class DeviceCoreSessionStorage(Protocol):
     """Capture and bounded-query storage operations required by the runtime."""
+
+    def read_evidence_page(
+        self, *, cursor: str | None, tail_session_id: str | None, limit: int,
+    ) -> EvidencePage: ...
 
     def list_session_page(
         self,
@@ -351,6 +360,41 @@ class DeviceCoreRuntime:
             lines=lines,
             active_session_id=active_session_id,
         )
+
+    def evidence(
+        self, *, cursor: str | None = None, limit: int = 100, wait_s: float = 1.0,
+    ) -> EvidencePage:
+        """Observe durable evidence; attachment and polling never acquire reader ownership."""
+
+        validate_evidence_query(cursor=cursor, limit=limit, wait_s=wait_s)
+        recorder = self._evidence_recorder
+        if recorder is None and cursor is None:
+            raise DeviceCoreRuntimeError("Authoritative evidence recorder is unavailable")
+        previous = recorder.durable_tail() if recorder is not None else None
+        while True:
+            try:
+                page = self._session_store.read_evidence_page(
+                    cursor=cursor,
+                    tail_session_id=previous.session_id if previous is not None else None,
+                    limit=limit,
+                )
+                break
+            except EvidenceCursorExpired:
+                if cursor is not None or recorder is None or previous is None:
+                    raise
+                # An attachment has no historical position to preserve. If rollover
+                # retired this sampled tail, wait for publication and sample again.
+                changed = recorder.wait_for_durable_tail(previous, timeout_s=1.0)
+                if changed is None:
+                    raise DeviceCoreRuntimeError("Durable evidence tail is unavailable") from None
+                previous = changed
+        if cursor is not None and not page.records and wait_s and recorder is not None:
+            assert previous is not None
+            recorder.wait_for_durable_tail(previous, timeout_s=wait_s)
+            page = self._session_store.read_evidence_page(
+                cursor=page.next_cursor, tail_session_id=None, limit=limit,
+            )
+        return page
 
     def mark_baseline(self, session_id: str) -> BaselineMutationResult:
         """Designate a stored session without requiring a backend connection."""
