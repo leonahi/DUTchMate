@@ -11,7 +11,7 @@ import httpx
 from dutchmate_core.operations import MonitorCondition
 from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.validation import (
-    prepare_uart_send_payload,
+    prepare_uart_tx_payload,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_session_id,
@@ -185,6 +185,45 @@ def wait_for_pattern(
     return _response_payload(response, description="wait-pattern response")
 
 
+def _bounded_request(
+    *,
+    path: str,
+    payload: dict[str, object],
+    duration_s: object | None,
+    until: object | None,
+    timeout_s: object | None,
+    service_url: str,
+    transport: httpx.BaseTransport | None,
+) -> dict[str, object]:
+    if until is not None and not isinstance(until, str):
+        raise ValueError("Completion condition must be a string")
+    request = validate_monitor_request(
+        duration_s=duration_s,
+        conditions=(MonitorCondition(pattern=until),) if isinstance(until, str) else None,
+        timeout_s=timeout_s,
+    )
+    if request.mode == "duration":
+        payload["duration_s"] = request.duration_s
+    else:
+        payload.update(
+            {
+                "conditions": [{"pattern": item.pattern} for item in request.conditions],
+                "timeout_s": request.timeout_s,
+            }
+        )
+    bound_s = request.duration_s or request.timeout_s
+    assert bound_s is not None
+    response = _request_service(
+        method="POST",
+        path=path,
+        service_url=service_url,
+        transport=transport,
+        json=payload,
+        timeout_s=max(DEFAULT_TIMEOUT_SECONDS, bound_s + CAPTURE_TIMEOUT_GRACE_SECONDS),
+    )
+    return _response_payload(response, description="bounded operation response")
+
+
 def monitor_uart(
     *,
     duration_s: object | None = None,
@@ -193,69 +232,77 @@ def monitor_uart(
     service_url: str = DEFAULT_SERVICE_URL,
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, object]:
-    """Run one bounded Monitor operation through the Device Core Service."""
+    """Run one bounded Monitor through the service."""
 
-    conditions = (
-        (MonitorCondition(pattern=until),) if isinstance(until, str) else None
-    )
-    if until is not None and not isinstance(until, str):
-        raise ValueError("Monitor until condition must be a string")
-    request = validate_monitor_request(
-        duration_s=duration_s,
-        conditions=conditions,
-        timeout_s=timeout_s,
-    )
-    if request.mode == "duration":
-        payload: dict[str, object] = {"duration_s": request.duration_s}
-        bound_s = request.duration_s
-    else:
-        payload = {
-            "conditions": [
-                {"pattern": condition.pattern} for condition in request.conditions
-            ],
-            "timeout_s": request.timeout_s,
-        }
-        bound_s = request.timeout_s
-    assert bound_s is not None
-    response = _request_service(
-        method="POST",
+    return _bounded_request(
         path="/dut/monitor",
+        payload={},
+        duration_s=duration_s,
+        until=until,
+        timeout_s=timeout_s,
         service_url=service_url,
         transport=transport,
-        json=payload,
-        timeout_s=max(
-            DEFAULT_TIMEOUT_SECONDS,
-            bound_s + CAPTURE_TIMEOUT_GRACE_SECONDS,
-        ),
     )
-    return _response_payload(response, description="monitor response")
+
+
+def _tx_request(
+    *,
+    data_b64: object = None,
+    text: object = None,
+    line_ending: object = None,
+) -> dict[str, object]:
+    prepare_uart_tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
+    return (
+        {"data_b64": data_b64}
+        if data_b64 is not None
+        else {"text": text, "line_ending": line_ending}
+    )
 
 
 def send_uart_command(
-    cmd: str,
     *,
-    append_newline: bool = True,
-    force: bool = False,
+    data_b64: object = None,
+    text: object = None,
+    line_ending: object = None,
     service_url: str = DEFAULT_SERVICE_URL,
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, object]:
-    """Send one validated text command through the Device Core Service."""
+    """Send one exact, audited payload through the service."""
 
-    prepare_uart_send_payload(cmd, append_newline=append_newline)
-    if not isinstance(force, bool):
-        raise ValueError("UART send force must be a boolean")
+    payload = _tx_request(data_b64=data_b64, text=text, line_ending=line_ending)
     response = _request_service(
         method="POST",
         path="/dut/uart/send",
         service_url=service_url,
         transport=transport,
-        json={
-            "cmd": cmd,
-            "append_newline": append_newline,
-            "force": force,
-        },
+        json=payload,
     )
     return _response_payload(response, description="UART-send response")
+
+
+def interact_uart(
+    *,
+    data_b64: object = None,
+    text: object = None,
+    line_ending: object = None,
+    duration_s: object | None = None,
+    until: object | None = None,
+    timeout_s: object | None = None,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Send once and observe under the service's Interact lease."""
+
+    payload = _tx_request(data_b64=data_b64, text=text, line_ending=line_ending)
+    return _bounded_request(
+        path="/dut/interact",
+        payload=payload,
+        duration_s=duration_s,
+        until=until,
+        timeout_s=timeout_s,
+        service_url=service_url,
+        transport=transport,
+    )
 
 
 def configure_gpio_mode(
@@ -350,23 +397,6 @@ def capture_uart(
     return _run_timed_capture_request(
         path="/dut/capture",
         description="capture",
-        duration_s=duration_s,
-        service_url=service_url,
-        transport=transport,
-    )
-
-
-def run_boot_test(
-    *,
-    duration_s: float,
-    service_url: str = DEFAULT_SERVICE_URL,
-    transport: httpx.BaseTransport | None = None,
-) -> dict[str, object]:
-    """Reset the DUT and capture boot evidence through the Device Core Service."""
-
-    return _run_timed_capture_request(
-        path="/dut/boot-test",
-        description="boot-test",
         duration_s=duration_s,
         service_url=service_url,
         transport=transport,

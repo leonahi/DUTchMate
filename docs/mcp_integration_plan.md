@@ -2,7 +2,8 @@
 
 > **Status:** pre-v2 Phase 2 implementation reference. Its capture/wait,
 > schema-v1, implicit line-ending, `capture_active`, and `force` semantics are not
-> the target contracts. `project_context.md` and `phase1_implementation_spec.md`
+> the target contracts. The former dedicated boot-test composite is also removed
+> from the target tool model. `project_context.md` and `phase1_implementation_spec.md`
 > are authoritative. Stage 1 DUT Profile/provenance is implemented, while the
 > schema-v2 and operation-contract migration is not; MCP remapping remains
 > deferred until the new Device Core/service/CLI behavior passes Phase 1
@@ -148,7 +149,6 @@ Phase 2 tools:
 | `capture_uart(duration_s)` | `POST /dut/capture` |
 | `get_recent_uart_log(lines=300, session_id=None)` | `GET /dut/logs` |
 | `wait_for_uart_pattern(pattern, timeout_s)` | `POST /dut/wait-pattern` |
-| `run_boot_test(duration_s)` | `POST /dut/boot-test` |
 | `send_uart_command(cmd, append_newline=True, force=False)` | `POST /dut/uart/send` |
 | `get_debug_session(session_id)` | `GET /sessions/{id}` |
 | `list_debug_sessions(limit=50, cursor=None)` | `GET /sessions` |
@@ -163,9 +163,8 @@ Phase 4 tool:
 the one project-session-store `baseline.json` pointer; no designation preserves
 `not_found`, and a corrupt or dangling pointer preserves `persistence_fault`.
 Both baseline and subject must be native session schema version `1`; MCP
-preserves `unsupported_session_schema` for non-native evidence. The subject must
-be a terminal capture or boot-test session. Text/pattern
-comparison may cross backend modes, while timing comparison is returned only
+preserves `unsupported_session_schema` for non-native evidence. The subject may be a terminal legacy capture or historical boot-test session.
+Text/pattern comparison may cross backend modes, while timing comparison is returned only
 for uninterrupted single-segment sessions with matching timestamp source,
 clock, observation point, and event granularity. MCP preserves
 `baseline_session_id`, `timing_comparable`, and the incompatibility reason.
@@ -192,7 +191,8 @@ Capture-like tools must include:
 
 - `session_id`
 - `schema_version: 1`
-- accepted `duration_s` for capture/boot-test
+- accepted `duration_s` for applicable legacy capture/historical boot-test
+  evidence
 - `integrity` with `loss_status`, `observation_scope`, and `dropped_bytes`
 - `line_processing` with `status`, `max_line_bytes`, and
   `oversized_line_count`
@@ -270,14 +270,15 @@ accepted `pulse_ms`; MCP must not omit that value from a successful response.
 
 `set_boot_mode` preserves the accepted `mode` in its result. `normal` selects
 the configured boot role's idle behavior and `bootloader` its active behavior;
-the reported mode is commanded state, not DUT pin readback. `run_boot_test`
-uses the current or externally selected state, requires only reset control, and
-must not silently select or restore a boot mode. A Coding Agent that needs a
-bootloader test explicitly calls `set_boot_mode("bootloader")`, runs the test,
-and then calls `set_boot_mode("normal")`.
+the reported mode is commanded state, not DUT pin readback. Phase 2 exposes no
+dedicated boot-test tool. A Coding Agent composes boot validation from audited
+reset/boot-mode tools plus the v2 durable evidence/Monitor tools defined by the
+post-Phase-1 MCP remapping. A bootloader procedure explicitly selects
+`bootloader`, performs reset and evidence observation, then restores `normal` when
+appropriate. Device Core does not silently select or restore a boot mode.
 
-`capture_uart` and `run_boot_test` require an explicit numeric `duration_s` with
-no MCP default. They accept finite integers/fractions satisfying
+`capture_uart` requires an explicit numeric `duration_s` with
+no MCP default. It accepts finite integers/fractions satisfying
 `0 < duration_s <= 300`; booleans and all other types/ranges are invalid. MCP
 forwards the value unchanged and preserves Device Core's accepted `duration_s`
 in success responses. It must not retry with a shorter/longer value, round the
@@ -322,9 +323,8 @@ detection, or electrical isolation. Setting it false does not disconnect Basic
 adapter TX and cannot independently disable the Enhanced Revision A transmit
 direction while its shared UART translator is enabled for receive.
 
-`send_uart_command` defaults to `force = false`. During an active capture,
-boot-test, or wait-pattern session, the default preserves evidence isolation by
-returning `capture_active`; explicit `force = true` may bypass only that
+`send_uart_command` defaults to `force = false`. During an active legacy capture or wait-pattern session, the default preserves
+evidence isolation by returning `capture_active`; explicit `force = true` may bypass only that
 ownership conflict. It never bypasses argument validation, effective
 `uart_send` capability policy, `tx_enabled = false`, connection state, or
 backend errors.
@@ -364,7 +364,7 @@ Tool errors should preserve Device Core Service error codes:
   "detail": "reset role is not configured",
   "detail_truncated": false,
   "context": {
-    "operation": "boot_test",
+    "operation": "reset",
     "required_role": "reset",
     "role_state": "unconfigured"
   }
@@ -389,13 +389,11 @@ For Phase 2, prefer bounded tools over open-ended streaming:
 
 - `capture_uart(duration_s)`
 - `wait_for_uart_pattern(pattern, timeout_s)`
-- `run_boot_test(duration_s)`
 
 The MCP server may call the Device Core Service's `GET /dut/events` SSE endpoint
 internally later, but Phase 2 tools should return finite results. This avoids
-long-running MCP streams until the core workflow is stable. Capture, boot-test,
-and wait-pattern remain capped at 300 seconds even if an MCP client allows a
-longer tool-call timeout.
+long-running MCP streams until the core workflow is stable. Capture and wait-pattern remain capped at 300 seconds even if an MCP client
+allows a longer tool-call timeout.
 
 Phase 2 does not advertise `subscriptions/listen` filters because its MCP tool
 catalog is fixed and it exposes no MCP resources or prompts. It also does not
@@ -516,8 +514,8 @@ Minimum Phase 2 tests:
 - Capture-like tools include accepted duration when applicable, `integrity`,
   `line_processing`, storage/truncation accounting, `truncated`, `interrupted`,
   `resumed`, and `segments`.
-- Capture and boot-test reject invalid or over-300-second durations without
-  calling Device Core and preserve the accepted duration from success responses.
+- Legacy capture rejects invalid or over-300-second durations without calling
+  Device Core and preserves the accepted duration from success responses.
 - Quota truncation remains distinct from response omission, backend loss, and
   persistence failure; forced-send result reservations are not exposed or
   modified by MCP.

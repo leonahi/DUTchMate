@@ -606,7 +606,7 @@ Phase 1 requirements are:
 - Enhanced reserves `EVENT0` through `EVENT3` for Phase 5 and MUST NOT advertise
   `gpio_events` before that implementation passes its HIL acceptance.
 - Users map generic physical channels to host-side role and DUT-signal metadata.
-- Exact lowercase `reset` is required by reset and boot-test.
+- Exact lowercase `reset` is required by reset operations.
 - Exact lowercase `boot` is required only by boot-mode operations.
 - Firmware receives channel and electrical behavior, never role or schematic
   signal names.
@@ -814,8 +814,7 @@ successful reconnect creates a new segment. Evidence produced by firmware before
 USB re-enumeration is physically unobservable through that console and MUST NOT
 be invented or presented as lossless continuity.
 
-The session continuity summary records the resulting observation gap. A bounded
-Monitor/Interact/boot-test operation may continue across the reconnect only while
+The session continuity summary records the resulting observation gap. A bounded Monitor/Interact operation may continue across the reconnect only while
 both its own deadline and the reconnect deadline remain valid.
 
 ### 13.8 Explicit release
@@ -1114,8 +1113,8 @@ intervals, not fabricated UART silence.
 
 ### 15.11 Operation evidence
 
-`operation_events.jsonl` stores lifecycle records for bounded Monitor, Interact,
-and composite boot-test operations. Each operation has a unique ID and at least:
+`operation_events.jsonl` stores lifecycle records for bounded Monitor and
+Interact operations. Each operation has a unique ID and at least:
 
 - operation type;
 - start record with accepted validated request parameters;
@@ -1371,9 +1370,8 @@ A detected match record references:
 
 ### 18.1 Operation identity
 
-Every bounded Monitor, Interact, and composite boot-test has a unique operation
-ID. The ID and accepted parameters are recorded before the operation can produce
-a successful response.
+Every bounded Monitor and Interact has a unique operation ID. The ID and accepted
+parameters are recorded before the operation can produce a successful response.
 
 ### 18.2 Bounds
 
@@ -1624,29 +1622,41 @@ public semantic APIs but resolves through `serial_line_control`, not
 `gpio_control`. The action definition must be explicit in the profile and cannot
 conflict with flow-control ownership.
 
-## 24. Boot-Test Composite Workflow
+## 24. Client Composition of Atomic Capabilities
 
-Phase 1 retains boot-test as a convenience composite built from the new
-primitives rather than as a separate receive architecture.
+Phase 1 does not define a dedicated boot-test operation, service endpoint, CLI
+command, or MCP tool. Boot validation is a higher-level client procedure composed
+from generic deterministic capabilities.
 
-A boot-test:
+Device Core guarantees the atomic pieces:
 
-1. validates the Monitor completion request and reset parameters;
-2. records a boot-test operation start cursor while RX is already active;
-3. performs the configured semantic reset as an audited Control action;
-4. observes the same continuous evidence stream using Monitor completion rules;
-5. returns operation outcome and evidence ranges.
+- continuous UART acquisition while it owns the backend;
+- audited reset/boot/GPIO Control actions;
+- bounded Monitor and Interact operations;
+- durable evidence cursors/retrieval.
 
-There is no capture gap between reset and observation because acquisition
-predates the reset action.
+A client that needs an exact observation boundary around reset should compose:
 
-Plain boot-test is reset-only and MUST NOT silently change boot mode. A caller
-that needs bootloader mode explicitly selects it, runs the desired test, and
-restores normal mode explicitly.
+```text
+establish durable evidence cursor at the current tail
+    -> perform audited reset
+    -> consume evidence from the saved cursor
+    -> optionally use Monitor for a later bounded condition
+```
 
-For native USB consoles, reset may intentionally cause disconnect/re-enumeration;
-boot-test follows the reconnect semantics defined above and reports the
-unobservable gap.
+Because acquisition predates the reset action, immediate boot UART remains durable
+evidence even if it arrives before a subsequent Monitor starts. A Monitor started
+after reset does not retroactively match those pre-cursor bytes; the durable
+evidence cursor is the generic mechanism for exact cross-action observation.
+
+A caller that needs bootloader mode explicitly selects it with the boot-mode
+Control operation, performs reset and evidence observation as separate atomic
+requests, and restores normal mode when appropriate. Device Core does not silently
+select or restore boot mode.
+
+For native USB consoles, reset may intentionally cause disconnect/re-enumeration.
+The connection lifecycle records the resulting observation gap; clients consume
+that evidence rather than relying on a dedicated reset-and-observe composite.
 
 ## 25. Concurrency and Arbitration
 
@@ -1778,7 +1788,6 @@ GET    /dut/evidence
 POST   /dut/monitor
 POST   /dut/interact
 POST   /dut/uart/send
-POST   /dut/boot-test
 POST   /dut/reset
 POST   /dut/boot-mode
 POST   /gpio/mode
@@ -1991,7 +2000,6 @@ dutchmate send <text> --line-ending <none|lf|cr|crlf|profile_default>
 
 dutchmate reset [--pulse-ms N]
 dutchmate boot-mode <normal|bootloader>
-dutchmate boot-test ...
 dutchmate gpio mode ...
 
 dutchmate release
@@ -2265,7 +2273,7 @@ It provides deterministic modes for:
 - UART command/response when TX is enabled;
 - asynchronous log output after a command has completed;
 - a delayed fault emitted while no bounded operation is running;
-- repeated reset/boot-test cycles through Enhanced control;
+- repeated audited reset cycles with boot evidence retrieved from the continuous stream;
 - native-USB-like disconnect/reconnect behavior in a dedicated fixture/path if
   available.
 
@@ -2321,8 +2329,8 @@ Enhanced and:
   and UART signal-integrity measurements recorded for the prototype;
 - configured `reset` and `boot` workflows are capability/configuration-gated and
   auditable in v2 evidence;
-- boot-test uses continuous pre-existing acquisition and therefore does not lose
-  boot bytes because the operation starts after reset;
+- audited reset leaves continuous acquisition running so immediate boot bytes are
+  persisted even when no bounded observation operation is active;
 - Enhanced session segments use RP2350 timestamp provenance;
 - buffer status/overflow telemetry is recorded continuously, not only inside a
   finite capture;
@@ -2332,8 +2340,8 @@ Enhanced and:
 - `EVENTn` ownership is documented but not advertised/implemented;
 - fake Enhanced integration/CLI tests pass;
 - a real RP2350 Pico 2 Debug Helper + the same Zephyr DUT fixture demonstrates
-  continuous RX, Interact, reset/boot-test, timestamps, telemetry, session v2,
-  and retrieval.
+  continuous RX, Interact, audited reset plus client-composed boot evidence
+  retrieval, timestamps, telemetry, session v2, and retrieval.
 
 ## 35. Phase 1 Complete
 

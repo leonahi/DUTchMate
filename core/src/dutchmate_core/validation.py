@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 import unicodedata
+from base64 import b64decode, b64encode
+from binascii import Error as Base64Error
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias, cast
 
@@ -151,8 +153,71 @@ def validate_wait_pattern(pattern: object) -> str:
     return pattern
 
 
+@dataclass(frozen=True, slots=True)
+class UartTxPayload:
+    """Resolved exact bytes and the explicit transformation that produced them."""
+
+    data: bytes
+    input_form: Literal["data_b64", "text"]
+    line_ending: str | None
+    resolved_line_ending: str | None
+
+    @property
+    def data_b64(self) -> str:
+        return b64encode(self.data).decode("ascii")
+
+    def transformation(self) -> dict[str, object]:
+        return {
+            "input_form": self.input_form,
+            "line_ending": self.line_ending,
+            "resolved_line_ending": self.resolved_line_ending,
+        }
+
+
+def prepare_uart_tx_payload(
+    *,
+    data_b64: object = None,
+    text: object = None,
+    line_ending: object = None,
+    profile_default: str = "none",
+) -> UartTxPayload:
+    """Resolve the public byte-first TX contract before any state checks."""
+
+    if (data_b64 is None) == (text is None):
+        raise UartSendValidationError("Supply exactly one of data_b64 or text")
+    resolved: str | None = None
+    if data_b64 is not None:
+        if not isinstance(data_b64, str) or line_ending is not None:
+            raise UartSendValidationError("data_b64 requires a base64 string and no line_ending")
+        # Reject oversized input before allocating a decoded payload.
+        if len(data_b64) > 1368:
+            raise UartSendValidationError("UART send payload must contain 1..1024 bytes")
+        try:
+            data = b64decode(data_b64, validate=True)
+        except (ValueError, Base64Error) as exc:
+            raise UartSendValidationError("data_b64 must be valid base64") from exc
+        form: Literal["data_b64", "text"] = "data_b64"
+    else:
+        endings = {"none": b"", "lf": b"\n", "cr": b"\r", "crlf": b"\r\n"}
+        if not isinstance(text, str) or not isinstance(line_ending, str):
+            raise UartSendValidationError("text requires an explicit line_ending")
+        resolved = profile_default if line_ending == "profile_default" else line_ending
+        if resolved not in endings:
+            raise UartSendValidationError("Invalid UART line_ending")
+        try:
+            data = text.encode("utf-8") + endings[resolved]
+        except UnicodeEncodeError as exc:
+            raise UartSendValidationError("text must be valid Unicode") from exc
+        form = "text"
+    if not 1 <= len(data) <= MAX_UART_SEND_BYTES:
+        raise UartSendValidationError(
+            "UART send payload must contain 1..1024 bytes", actual_bytes=len(data)
+        )
+    return UartTxPayload(data, form, line_ending, resolved)
+
+
 def prepare_uart_send_payload(cmd: object, *, append_newline: object = True) -> bytes:
-    """Encode one public text command and enforce its final UART payload bound."""
+    """Legacy protocol/MCP text helper; live Device Core TX uses the byte-first contract."""
 
     if not isinstance(cmd, str):
         raise UartSendValidationError("UART send cmd must be a string")

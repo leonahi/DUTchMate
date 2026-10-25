@@ -290,24 +290,6 @@ def test_connection_generation_rejects_changed_capability_policy(tmp_path: Path)
     runtime.close()
 
 
-def test_active_reconnect_rejects_changed_effective_capabilities(tmp_path: Path) -> None:
-    source = MutableHealthSource(CaptureSourceHealth(False, None))
-    runtime = monitored_runtime(tmp_path, source)
-    expected = replacement_snapshot(segment_id=0)
-    replacement = BackendSnapshot(
-        info=enhanced_info(capabilities=frozenset({"uart_receive"})),
-        capabilities=frozenset({"uart_receive"}),
-        capability_policy=expected.capability_policy,
-        segment=replacement_snapshot(segment_id=1).segment,
-        integrity=expected.integrity,
-    )
-
-    with pytest.raises(ValueError, match="reconnected backend capabilities changed"):
-        runtime._validate_replacement(expected, replacement)  # noqa: SLF001
-
-    runtime.close()
-
-
 def test_capture_source_health_rejects_negative_connection_generation() -> None:
     with pytest.raises(ValueError, match="source connection generation must be non-negative"):
         CaptureSourceHealth(True, None, connection_generation=-1)
@@ -325,21 +307,4 @@ def test_plain_capture_source_remains_compatible(tmp_path: Path) -> None:
     runtime.record_backend_connection(enhanced_info())
 
     assert runtime.status().connected is True
-    runtime.close()
-
-
-def test_disconnected_monitor_does_not_erase_reconnect_deadline(tmp_path: Path) -> None:
-    clock = FakeMonotonicClock()
-    source = MutableHealthSource(CaptureSourceHealth(True, None))
-    runtime = monitored_runtime(tmp_path, source, clock=clock)
-    runtime.record_backend_connection(enhanced_info())
-    runtime._reconnect_deadline = 10.0  # noqa: SLF001 - precedence assertion.
-    source.health = CaptureSourceHealth(False, None)
-
-    status = runtime.status()
-
-    assert status.connected is False
-    assert status.connection_state == "reconnecting"
-    assert status.reconnect_remaining_s == 10.0
-    runtime._reconnect_deadline = None  # noqa: SLF001 - test cleanup.
     runtime.close()

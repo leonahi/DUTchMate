@@ -9,10 +9,10 @@ from dutchmate_cli.client import ServiceApiError, send_uart_command
 from dutchmate_cli.send import format_uart_send
 
 
-def test_send_client_forwards_text_flags_without_raw_encoding() -> None:
+def test_send_client_forwards_explicit_text_transformation() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/dut/uart/send"
-        assert request.read() == b'{"cmd":"go","append_newline":false,"force":true}'
+        assert request.read() == b'{"text":"go","line_ending":"none"}'
         return httpx.Response(
             200,
             json={
@@ -20,14 +20,13 @@ def test_send_client_forwards_text_flags_without_raw_encoding() -> None:
                 "performed_at": "2026-08-21T10:00:00Z",
                 "device_timestamp_us": 10,
                 "attempt_id": "attempt01",
-                "perturbation_logged": True,
+                "audit_status": "recorded",
             },
         )
 
     payload = send_uart_command(
-        "go",
-        append_newline=False,
-        force=True,
+        text="go",
+        line_ending="none",
         transport=httpx.MockTransport(handler),
     )
 
@@ -40,8 +39,8 @@ def test_send_client_validates_final_payload_before_http() -> None:
 
     with pytest.raises(ValueError, match="1..1024"):
         send_uart_command(
-            "",
-            append_newline=False,
+            text="",
+            line_ending="none",
             transport=httpx.MockTransport(unexpected),
         )
 
@@ -63,8 +62,8 @@ def test_send_client_failure_reports_unknown_acceptance_warning() -> None:
 
     with pytest.raises(ServiceApiError) as raised:
         send_uart_command(
-            "go",
-            force=True,
+            text="go",
+            line_ending="none",
             transport=httpx.MockTransport(handler),
         )
 
@@ -74,43 +73,31 @@ def test_send_client_failure_reports_unknown_acceptance_warning() -> None:
     assert "bytes may have reached the DUT" in message
 
 
-def test_format_forced_send_reports_attempt_and_evidence_pair() -> None:
+def test_format_send_reports_durable_audit() -> None:
     output = format_uart_send(
         {
             "performed_at": "2026-08-21T10:00:00Z",
             "device_timestamp_us": 100,
             "attempt_id": "attempt01",
-            "perturbation_logged": True,
+            "audit_status": "recorded",
         }
     )
 
     assert "UART command sent" in output
     assert "Device timestamp: 100 us" in output
     assert "Attempt: attempt01" in output
-    assert "Perturbation logged: yes" in output
+    assert "Audit: recorded" in output
 
 
-def test_send_command_composes_no_newline_and_force(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_send(
-        cmd: str,
-        *,
-        append_newline: bool,
-        force: bool,
-        service_url: str,
-    ) -> dict[str, object]:
-        assert cmd == "go"
-        assert append_newline is False
-        assert force is True
+def test_send_command_composes_explicit_line_ending(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_send(*, text, data_b64, line_ending, service_url):
+        assert text == "go"
+        assert data_b64 is None
+        assert line_ending == "none"
         assert service_url == "http://127.0.0.1:2040"
-        return {
-            "performed_at": "2026-08-21T10:00:00Z",
-            "attempt_id": "attempt01",
-            "perturbation_logged": True,
-        }
+        return {"attempt_id": "attempt01", "audit_status": "recorded"}
 
     monkeypatch.setattr(main, "send_uart_command", fake_send)
-
-    result = CliRunner().invoke(main.app, ["send", "go", "--no-newline", "--force"])
-
+    result = CliRunner().invoke(main.app, ["send", "go", "--line-ending", "none"])
     assert result.exit_code == 0
     assert "Attempt: attempt01" in result.output

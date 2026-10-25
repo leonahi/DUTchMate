@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
-from contextlib import suppress
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 from threading import Event, RLock
 from typing import Literal, Protocol
 from uuid import uuid4
@@ -15,9 +14,7 @@ from uuid import uuid4
 from dutchmate_core.backends.contracts import (
     BackendCapability,
     BackendCapabilityPolicy,
-    BackendEvent,
     BackendInfo,
-    BackendInputError,
     BackendMode,
     BackendSnapshot,
     DeviceControl,
@@ -28,7 +25,6 @@ from dutchmate_core.backends.contracts import (
     apply_capability_policy,
     integrity_for_backend,
 )
-from dutchmate_core.backends.settings import DEFAULT_RECONNECT_TIMEOUT_S
 from dutchmate_core.evidence.recorder import (
     ContinuousEvidenceRecorder,
     DurableEvidenceTail,
@@ -43,6 +39,7 @@ from dutchmate_core.gpio_config.modes import (
     GpioModeRequestSource,
     GpioRoleName,
 )
+from dutchmate_core.operations.interact import InteractResult
 from dutchmate_core.operations.monitor import (
     ActiveMonitor,
     ActiveMonitorSummary,
@@ -64,30 +61,25 @@ from dutchmate_core.session_store.models import (
     RecentLogs,
     SessionComparison,
     SessionDetail,
-    SessionHandle,
     SessionListPage,
     SessionRetentionStatus,
-    SessionSummary,
     SessionWorkflow,
 )
-from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import (
-    UartSendValidationError,
-    prepare_uart_send_payload,
+    UartTxPayload,
+    prepare_uart_tx_payload,
+    validate_boot_mode,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_source,
+    validate_reset_pulse,
     validate_wait_pattern,
     validate_wait_timeout,
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
     CaptureReconnect,
-    CaptureSessionStorage,
     CaptureSourceMonitor,
-    CaptureWorkflow,
-    CaptureWorkflowLifecycle,
-    ReconnectedCaptureSource,
 )
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
@@ -95,10 +87,8 @@ from dutchmate_core.workflows.device_actions import (
     DeviceActionRunner,
 )
 from dutchmate_core.workflows.uart_send import (
-    ActiveUartSendSession,
     UartSendError,
     UartSendResult,
-    UartSendSessionStorage,
     UartSendWorkflow,
 )
 
@@ -110,7 +100,7 @@ class DeviceCoreRuntimeError(RuntimeError):
 ConnectionState = Literal["connected", "disconnected", "reconnecting", "faulted"]
 
 
-class DeviceCoreSessionStorage(CaptureSessionStorage, UartSendSessionStorage, Protocol):
+class DeviceCoreSessionStorage(Protocol):
     """Capture and bounded-query storage operations required by the runtime."""
 
     def list_session_page(
@@ -177,51 +167,6 @@ class DeviceCoreStatus:
     active_operations: tuple[ActiveMonitorSummary, ...] = ()
 
 
-class _SessionCaptureSource:
-    """Map one live connection source onto a new session-local segment zero."""
-
-    def __init__(self, source: CaptureEventSource, segment: SegmentContext) -> None:
-        self._source = source
-        self._source_segment_id = segment.segment_id
-        self.segment = replace(segment, segment_id=0)
-
-    def read_event(self) -> BackendEvent | None:
-        event = self._source.read_event()
-        if event is None:
-            return None
-        if event.segment_id != self._source_segment_id:
-            raise BackendInputError("backend event source changed its bound segment ID")
-        return replace(event, segment_id=0)
-
-    def discard_pending_events(self) -> None:
-        """Advance a wait cursor on the wrapped source when supported."""
-
-        discard = getattr(self._source, "discard_pending_events", None)
-        if callable(discard):
-            discard()
-
-    def begin_workflow(self) -> None:
-        lifecycle = (
-            self._source if isinstance(self._source, CaptureWorkflowLifecycle) else None
-        )
-        if lifecycle is not None:
-            lifecycle.begin_workflow()
-
-    def end_workflow(self) -> None:
-        lifecycle = (
-            self._source if isinstance(self._source, CaptureWorkflowLifecycle) else None
-        )
-        if lifecycle is not None:
-            lifecycle.end_workflow()
-
-    def close(self) -> None:
-        """Close the live source represented by this session-local view."""
-
-        close = getattr(self._source, "close", None)
-        if callable(close):
-            close()
-
-
 class DeviceCoreRuntime:
     """Compose Phase 1 core services behind one service-facing object."""
 
@@ -238,12 +183,10 @@ class DeviceCoreRuntime:
         backend_mode: BackendMode | None = None,
         tx_policy_enabled: bool = False,
         segment_context: SegmentContext | None = None,
-        reconnect_timeout_s: float = DEFAULT_RECONNECT_TIMEOUT_S,
         backend_reconnect: CaptureReconnect | None = None,
         dut_io_voltage: float | None = None,
         action_wall_clock: Callable[[], datetime] | None = None,
         uart_wall_clock: Callable[[], datetime] | None = None,
-        uart_monotonic_ns: Callable[[], int] | None = None,
         uart_attempt_id_factory: Callable[[], str] | None = None,
         profile: DutProfile | None = None,
         evidence_recorder: ContinuousEvidenceRecorder | None = None,
@@ -253,34 +196,22 @@ class DeviceCoreRuntime:
             port = profile.current_serial_port
             backend_mode = profile.backend_mode
             tx_policy_enabled = profile.uart.tx_enabled
-            reconnect_timeout_s = profile.reconnect_timeout_s
             dut_io_voltage = profile.dut_io_voltage
         self._profile = profile
         self._evidence_recorder = evidence_recorder
-        self._monitor_id_factory = monitor_id_factory or (
-            lambda: f"monitor-{uuid4()}"
-        )
+        self._monitor_id_factory = monitor_id_factory or (lambda: f"monitor-{uuid4()}")
         self._message_source = message_source
-        self._reconnect_source: CaptureEventSource | None = None
-        self._capture_clock = capture_clock
         self._status_clock = capture_clock or time.monotonic
         self._backend_reconnect = backend_reconnect
         self._dut_io_voltage = dut_io_voltage
         self._session_store = session_store
-        self._session_mutation_lock = RLock()
-        self._capture_workflow = CaptureWorkflow(
-            session_store=self._session_store,
-            mutation_lock=self._session_mutation_lock,
-        )
+        self._mutation_lock = RLock()
+        self._interact_owner: str | None = None
         self._uart_send_workflow = (
             UartSendWorkflow(
                 sender=uart_sender,
-                session_store=self._session_store,
-                mutation_lock=self._session_mutation_lock,
                 wall_clock=uart_wall_clock,
-                monotonic_ns=uart_monotonic_ns,
                 attempt_id_factory=uart_attempt_id_factory,
-                backend_mode=backend_mode,
             )
             if uart_sender is not None
             else None
@@ -319,23 +250,12 @@ class DeviceCoreRuntime:
         self._active_session_id: str | None = (
             evidence_recorder.active_session_id if evidence_recorder is not None else None
         )
-        self._active_session_handle: SessionHandle | None = None
-        self._active_segment_context: SegmentContext | None = None
-        self._active_session_terminalized = False
-        self._active_workflow: SessionWorkflow | None = None
-        self._capture_in_progress = False
-        self._reconnect_timeout_s = reconnect_timeout_s
-        self._reconnect_deadline: float | None = None
         self._operation_lock = RLock()
         self._active_monitors: dict[str, ActiveMonitor] = {}
         self._closing = False
         self._closed = False
         self._close_complete = Event()
         self._close_error: BaseException | None = None
-        self._reconnect_in_progress = False
-        self._reconnect_complete = Event()
-        self._reconnect_complete.set()
-        self._reconnect_cleanup_error: BaseException | None = None
 
     @property
     def session_store(self) -> DeviceCoreSessionStorage:
@@ -355,21 +275,11 @@ class DeviceCoreRuntime:
             if self._closing:
                 first_closer = False
                 source = None
-                reconnect_in_progress = False
             else:
                 self._closing = True
                 first_closer = True
-                reconnect_in_progress = self._reconnect_in_progress
-                if reconnect_in_progress:
-                    source = None
-                else:
-                    source = (
-                        self._message_source
-                        if self._message_source is not None
-                        else self._reconnect_source
-                    )
-                    self._message_source = None
-                    self._reconnect_source = None
+                source = self._message_source
+                self._message_source = None
                 self._mark_backend_disconnected()
                 active_monitors = tuple(self._active_monitors.values())
                 for monitor in active_monitors:
@@ -386,37 +296,28 @@ class DeviceCoreRuntime:
         close_error: BaseException | None = None
         for monitor in active_monitors:
             monitor.completed.wait()
-        reconnect_close = getattr(self._backend_reconnect, "close", None)
-        if callable(reconnect_close):
+        # In-flight standalone actions must finish their result evidence before
+        # reconnect supervision or authoritative recording can be closed.
+        with self._mutation_lock:
+            reconnect_close = getattr(self._backend_reconnect, "close", None)
+            if callable(reconnect_close):
+                try:
+                    reconnect_close()
+                except BaseException as exc:
+                    close_error = exc
             try:
-                reconnect_close()
+                if source is not None:
+                    self._close_event_source(source)
+                if self._evidence_recorder is not None:
+                    self._evidence_recorder.close()
             except BaseException as exc:
-                close_error = exc
-        try:
-            if reconnect_in_progress:
-                self._reconnect_complete.wait()
-                with self._operation_lock:
-                    source = (
-                        self._message_source
-                        if self._message_source is not None
-                        else self._reconnect_source
-                    )
-                    self._message_source = None
-                    self._reconnect_source = None
-            if source is not None:
-                self._close_event_source(source)
-            if self._evidence_recorder is not None:
-                self._evidence_recorder.close()
-        except BaseException as exc:
-            if close_error is None:
-                close_error = exc
-        finally:
-            with self._operation_lock:
                 if close_error is None:
-                    close_error = self._reconnect_cleanup_error
-                self._close_error = close_error
-                self._closed = True
-            self._close_complete.set()
+                    close_error = exc
+            finally:
+                with self._operation_lock:
+                    self._close_error = close_error
+                    self._closed = True
+                self._close_complete.set()
         if close_error is not None:
             raise close_error
 
@@ -508,15 +409,8 @@ class DeviceCoreRuntime:
             source_segment = getattr(status_source, "segment", None)
             if self._connected and isinstance(source_segment, SegmentContext):
                 self._segment_context = source_segment
-            reconnect_remaining_s = (
-                max(0.0, self._reconnect_deadline - self._status_clock())
-                if self._reconnect_deadline is not None
-                else None
-            )
             recorder_state = (
-                self._evidence_recorder.state
-                if self._evidence_recorder is not None
-                else None
+                self._evidence_recorder.state if self._evidence_recorder is not None else None
             )
             if self._evidence_recorder is not None:
                 self._active_session_id = (
@@ -528,7 +422,7 @@ class DeviceCoreRuntime:
                 "faulted"
                 if recorder_state == "faulted"
                 else "reconnecting"
-                if recorder_state == "reconnecting" or self._reconnect_deadline is not None
+                if recorder_state == "reconnecting"
                 else "connected"
                 if self._connected
                 else "disconnected"
@@ -564,8 +458,6 @@ class DeviceCoreRuntime:
                 timestamp_provenance=(self._segment_context),
                 integrity=self._integrity,
                 connection_state=connection_state,
-                active_workflow=self._active_workflow,
-                reconnect_remaining_s=reconnect_remaining_s,
                 retention=retention,
                 profile_name=(self._profile.name if self._profile is not None else None),
                 profile_digest_sha256=(
@@ -578,6 +470,7 @@ class DeviceCoreRuntime:
                     ActiveMonitorSummary(
                         operation_id=monitor.operation_id,
                         mode=monitor.mode,
+                        operation_type=monitor.operation_type,
                         deadline_remaining_s=max(
                             0.0,
                             monitor.deadline - self._status_clock(),
@@ -593,9 +486,8 @@ class DeviceCoreRuntime:
     ) -> dict[GpioRoleName, GpioControlChannelState]:
         """Apply configured GPIO modes after a Debug Helper hello is available."""
 
-        with self._operation_lock:
+        with self._mutation():
             self._require_connected()
-            self._require_no_active_capture()
             if config.dut_io_voltage is None and config.controls:
                 raise DeviceCoreRuntimeError(
                     "hardware.dut_io_voltage must be configured before GPIO control"
@@ -637,13 +529,28 @@ class DeviceCoreRuntime:
             idle_level=idle_level,
         )
         source_name = validate_gpio_source(source)
-        with self._operation_lock:
+        with self._mutation():
             self._require_connected()
-            self._require_no_active_capture()
             if self._dut_io_voltage is None:
                 raise DeviceCoreRuntimeError(
                     "hardware.dut_io_voltage must be configured before GPIO control"
                 )
+            self._require_control_capability("configure_gpio_mode")
+            recorder = self._require_action_recorder()
+            attempt_id = str(uuid4())
+            recorder.audit_control_attempt(
+                attempt_id=attempt_id,
+                role=request.role,
+                parameters={
+                    "action": "configure_gpio_mode",
+                    "channel": request.channel,
+                    "dut_signal": request.dut_signal,
+                    "mode": request.mode,
+                    "active_level": request.active_level,
+                    "idle_level": request.idle_level,
+                    "source": source_name,
+                },
+            )
             boot_mapping = self._gpio_registry.find_by_role("boot")
             affects_boot_state = request.role == "boot" or (
                 boot_mapping is not None and boot_mapping.channel == request.channel
@@ -659,14 +566,21 @@ class DeviceCoreRuntime:
                     source=source_name,
                 )
             except GpioConfigurationError:
+                self._control_result(recorder, attempt_id=attempt_id, status="backend_input_error")
                 if affects_boot_state:
                     self._commanded_boot_mode = None
                 raise
+            self._control_result(
+                recorder,
+                attempt_id=attempt_id,
+                status=state.last_rejected.error if state.last_rejected else "success",
+                device_timestamp_us=state.device_timestamp_us if not state.last_rejected else None,
+            )
             if state.last_rejected is not None:
-                if (
-                    affects_boot_state
-                    and state.last_rejected.error in {"hardware_fault", "timeout"}
-                ):
+                if affects_boot_state and state.last_rejected.error in {
+                    "hardware_fault",
+                    "timeout",
+                }:
                     self._commanded_boot_mode = None
             elif state.state == "configured":
                 if request.role == "boot":
@@ -675,33 +589,116 @@ class DeviceCoreRuntime:
                     self._commanded_boot_mode = None
             return state
 
-    def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
-        """Pulse the configured DUT reset role."""
+    @staticmethod
+    def _control_result(
+        recorder: ContinuousEvidenceRecorder,
+        *,
+        attempt_id: str,
+        status: str,
+        device_timestamp_us: int | None = None,
+    ) -> None:
+        try:
+            recorder.audit_control_result(
+                attempt_id=attempt_id,
+                status=status,
+                device_timestamp_us=device_timestamp_us,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise DeviceActionError(
+                error="persistence_fault",
+                detail="Control result could not be stored; the durable attempt outcome is unknown",
+                context={
+                    "attempt_id": attempt_id,
+                    "outcome": "unknown",
+                    "may_have_reached_dut": True,
+                },
+            ) from exc
 
-        with self._operation_lock:
-            self._require_connected()
-            self._require_no_active_capture()
-            return self._action_runner.reset_dut(pulse_ms=pulse_ms)
+    def _require_control_capability(self, operation: str) -> None:
+        effective = apply_capability_policy(self._backend_capabilities, self._capability_policy)
+        if "gpio_control" not in effective:
+            raise DeviceActionError(
+                error="unsupported_capability",
+                detail="Operation requires effective capability 'gpio_control'",
+                context={
+                    "operation": operation,
+                    "backend_mode": self._backend_mode,
+                    "required_capabilities": ["gpio_control"],
+                    "available_capabilities": sorted(effective),
+                    "backend_capabilities": sorted(self._backend_capabilities),
+                    "disabled_by_policy": [],
+                },
+            )
+
+    def _control_action(
+        self,
+        *,
+        role: str,
+        parameters: dict[str, object],
+        dispatch: Callable[[], DeviceActionResult],
+    ) -> DeviceActionResult:
+        recorder = self._require_action_recorder()
+        self._require_control_capability(str(parameters["action"]))
+        mapping = self._gpio_registry.require_role_configured(
+            role,
+            operation=str(parameters["action"]),
+        )
+        attempt_id = str(uuid4())
+        recorder.audit_control_attempt(
+            attempt_id=attempt_id,
+            role=role,
+            parameters={
+                **parameters,
+                "channel": mapping.channel,
+                "active_level": mapping.active_level,
+                "mode": mapping.mode,
+                "idle_level": mapping.idle_level,
+                "dut_signal": mapping.dut_signal,
+            },
+        )
+        try:
+            result = dispatch()
+        except DeviceActionError as exc:
+            self._control_result(recorder, attempt_id=attempt_id, status=exc.error)
+            raise
+        self._control_result(
+            recorder,
+            attempt_id=attempt_id,
+            status="success",
+            device_timestamp_us=result.device_timestamp_us,
+        )
+        return result
+
+    def reset_dut(self, *, pulse_ms: int = 100) -> DeviceActionResult:
+        """Audit and pulse the configured reset role without disturbing RX."""
+
+        pulse_ms = validate_reset_pulse(pulse_ms)
+        with self._mutation():
+            return self._control_action(
+                role="reset",
+                parameters={"action": "reset", "pulse_ms": pulse_ms},
+                dispatch=lambda: self._action_runner.reset_dut(pulse_ms=pulse_ms),
+            )
 
     def set_boot_mode(self, *, mode: str) -> DeviceActionResult:
-        """Set the configured DUT boot/control role."""
+        """Audit and set the configured boot role."""
 
-        with self._operation_lock:
-            self._require_connected()
-            self._require_no_active_capture()
+        mode = validate_boot_mode(mode)
+        with self._mutation():
             try:
-                result = self._action_runner.set_boot_mode(mode=mode)
+                result = self._control_action(
+                    role="boot",
+                    parameters={"action": "set_boot_mode", "mode": mode},
+                    dispatch=lambda: self._action_runner.set_boot_mode(mode=mode),
+                )
             except DeviceActionError as exc:
                 if exc.error not in {
-                    "invalid_command",
                     "invalid_argument",
                     "not_configured",
-                    "capture_active",
+                    "unsupported_capability",
                 }:
                     self._commanded_boot_mode = None
                 raise
-            if result.mode is None:
-                raise DeviceCoreRuntimeError("Accepted boot-mode result omitted mode")
             self._commanded_boot_mode = result.mode
             return result
 
@@ -726,6 +723,18 @@ class DeviceCoreRuntime:
             conditions=conditions,
             timeout_s=timeout_s,
         )
+        return self._run_bounded_operation(request=request, cancellation=cancellation)
+
+    def _run_bounded_operation(
+        self,
+        *,
+        request: MonitorRequest,
+        cancellation: Event | None = None,
+        operation_type: Literal["monitor", "interact"] = "monitor",
+        operation_id: str | None = None,
+        start_action: Callable[[str], None] | None = None,
+        action_parameters: dict[str, object] | None = None,
+    ) -> MonitorResult:
         recorder = self._evidence_recorder
         if recorder is None:
             raise DeviceCoreRuntimeError("Continuous evidence recorder is unavailable")
@@ -738,9 +747,7 @@ class DeviceCoreRuntime:
                 raise DeviceCoreRuntimeError("Device Core runtime is closing")
             recorder_state = recorder.state
             if recorder_state not in {"connected", "reconnecting"}:
-                raise DeviceCoreRuntimeError(
-                    "Monitor requires a connected or reconnecting backend"
-                )
+                raise DeviceCoreRuntimeError("Monitor requires a connected or reconnecting backend")
             health = recorder.capture_source_health()
             snapshot = health.backend_snapshot
             capabilities = (
@@ -752,10 +759,8 @@ class DeviceCoreRuntime:
                 )
             )
             if "uart_receive" not in capabilities:
-                raise DeviceCoreRuntimeError(
-                    "Monitor requires effective capability 'uart_receive'"
-                )
-            operation_id = self._monitor_id_factory()
+                raise DeviceCoreRuntimeError("Monitor requires effective capability 'uart_receive'")
+            operation_id = operation_id or self._monitor_id_factory()
             deadline = self._status_clock() + bound_s
             active = ActiveMonitor(
                 operation_id=operation_id,
@@ -763,12 +768,12 @@ class DeviceCoreRuntime:
                 deadline=deadline,
                 cancellation=cancellation,
                 completed=completion,
+                operation_type=operation_type,
             )
-            start_cursor, incomplete_channels, evidence_reader = (
-                recorder.start_monitor_operation(
-                    operation_id=operation_id,
-                    parameters=_monitor_parameters(request),
-                )
+            start_cursor, incomplete_channels, evidence_reader = recorder.start_monitor_operation(
+                operation_id=operation_id,
+                parameters={**_monitor_parameters(request), **(action_parameters or {})},
+                operation_type=operation_type,
             )
             try:
                 self._active_monitors[operation_id] = active
@@ -777,7 +782,14 @@ class DeviceCoreRuntime:
                     recorder.complete_monitor_operation(
                         operation_id=operation_id,
                         outcome="error",
-                        error={"code": "monitor_error", "detail": str(exc)},
+                        error={
+                            "code": (
+                                exc.error
+                                if isinstance(exc, (DeviceActionError, UartSendError))
+                                else f"{operation_type}_error"
+                            ),
+                            "detail": str(exc),
+                        },
                     )
                 except BaseException as terminal_error:
                     evidence_reader.close()
@@ -791,6 +803,8 @@ class DeviceCoreRuntime:
         outcome: MonitorOutcome
         terminalized = False
         try:
+            if start_action is not None and not cancellation.is_set():
+                start_action(operation_id)
             matcher = (
                 MonitorMatcher(
                     request.conditions,
@@ -813,7 +827,13 @@ class DeviceCoreRuntime:
                     )
                 remaining_s = deadline - self._status_clock()
                 if remaining_s <= 0:
-                    outcome = "elapsed" if request.mode == "duration" else "timeout"
+                    outcome = (
+                        "disconnected"
+                        if recorder_state == "reconnecting"
+                        else "elapsed"
+                        if request.mode == "duration"
+                        else "timeout"
+                    )
                     break
                 tail = recorder.wait_for_durable_tail(
                     DurableEvidenceTail(
@@ -842,9 +862,7 @@ class DeviceCoreRuntime:
             terminal = recorder.complete_monitor_operation(
                 operation_id=operation_id,
                 outcome=outcome,
-                matched_condition=(
-                    match.persistence_projection() if match is not None else None
-                ),
+                matched_condition=(match.persistence_projection() if match is not None else None),
                 line_processing_limited=(
                     matcher.line_processing_limited if matcher is not None else False
                 ),
@@ -867,12 +885,17 @@ class DeviceCoreRuntime:
                     recorder.complete_monitor_operation(
                         operation_id=operation_id,
                         outcome="error",
-                        error={"code": "monitor_error", "detail": str(exc)},
+                        error={
+                            "code": (
+                                exc.error
+                                if isinstance(exc, (DeviceActionError, UartSendError))
+                                else f"{operation_type}_error"
+                            ),
+                            "detail": str(exc),
+                        },
                         matched_condition=None,
                         line_processing_limited=(
-                            matcher.line_processing_limited
-                            if matcher is not None
-                            else False
+                            matcher.line_processing_limited if matcher is not None else False
                         ),
                     )
                 except BaseException as terminal_error:
@@ -883,22 +906,6 @@ class DeviceCoreRuntime:
             with self._operation_lock:
                 self._active_monitors.pop(operation_id, None)
             completion.set()
-
-    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
-        """Reset the DUT and capture its boot UART into one session."""
-
-        duration_s = validate_capture_duration(duration_s)
-        if self._evidence_recorder is not None:
-            raise DeviceCoreRuntimeError(
-                "Boot-test operations are not implemented until Stage 5"
-            )
-        return self._run_capture_workflow(
-            duration_s=duration_s,
-            command=f"boot-test --seconds {duration_s:g}",
-            workflow="boot_test",
-            required_role="reset",
-            start_action=self._action_runner.reset_dut,
-        )
 
     def wait_pattern(
         self,
@@ -915,208 +922,164 @@ class DeviceCoreRuntime:
             timeout_s=validated_timeout,
         )
 
+    def _tx_payload(
+        self,
+        *,
+        data_b64: object = None,
+        text: object = None,
+        line_ending: object = None,
+    ) -> UartTxPayload:
+        return prepare_uart_tx_payload(
+            data_b64=data_b64,
+            text=text,
+            line_ending=line_ending,
+            profile_default=self._profile.uart.default_line_ending if self._profile else "none",
+        )
+
+    def _require_action_recorder(self) -> ContinuousEvidenceRecorder:
+        self._require_connected()
+        recorder = self._evidence_recorder
+        if recorder is None:
+            raise DeviceCoreRuntimeError("Continuous evidence recorder is unavailable")
+        if self._closing or self._closed or recorder.state != "connected":
+            raise DeviceActionError(
+                error="invalid_connection_state",
+                detail="Action requires a connected backend",
+            )
+        return recorder
+
+    @contextmanager
+    def _mutation(self, *, owner: str | None = None) -> Iterator[None]:
+        # Never hold the status/operation lock while waiting for a physical action.
+        with self._operation_lock:
+            self._check_interact_owner(owner)
+        with self._mutation_lock:
+            with self._operation_lock:
+                self._check_interact_owner(owner)
+                self._require_action_recorder()
+            yield
+
+    def _check_interact_owner(self, owner: str | None) -> None:
+        if self._interact_owner is not None and self._interact_owner != owner:
+            raise DeviceActionError(
+                error="operation_active",
+                detail="An exclusive Interact operation is active",
+                context={"operation_id": self._interact_owner},
+            )
+
+    def _require_tx_capability(self) -> None:
+        effective = apply_capability_policy(self._backend_capabilities, self._capability_policy)
+        if "uart_send" not in effective:
+            raise UartSendError(
+                error="unsupported_capability",
+                detail="Operation requires effective capability 'uart_send'",
+                context={
+                    "operation": "uart_send",
+                    "backend_mode": self._backend_mode,
+                    "required_capabilities": ["uart_send"],
+                    "available_capabilities": sorted(effective),
+                    "backend_capabilities": sorted(self._backend_capabilities),
+                    "disabled_by_policy": (
+                        ["hardware.uart.tx_enabled"]
+                        if "uart_send" in self._backend_capabilities
+                        and not self._capability_policy.uart_send.tx_policy_enabled
+                        else []
+                    ),
+                },
+            )
+
+    def _send_payload(
+        self,
+        payload: UartTxPayload,
+        *,
+        operation_id: str | None = None,
+    ) -> UartSendResult:
+        recorder = self._require_action_recorder()
+        self._require_tx_capability()
+        if self._uart_send_workflow is None:
+            raise DeviceCoreRuntimeError("UART sender is not configured")
+        return self._uart_send_workflow.run(payload, recorder=recorder, operation_id=operation_id)
+
     def send_uart(
         self,
         *,
-        cmd: str,
-        append_newline: bool = True,
-        force: bool = False,
+        data_b64: object = None,
+        text: object = None,
+        line_ending: object = None,
     ) -> UartSendResult:
-        """Validate and transmit one public UTF-8 UART command."""
+        """Transmit one exact audited payload without changing RX ownership."""
 
-        payload = prepare_uart_send_payload(cmd, append_newline=append_newline)
-        if not isinstance(force, bool):
-            raise UartSendValidationError("UART send force must be a boolean")
-        with self._session_mutation_lock, self._operation_lock:
-            self._require_connected()
-            effective_capabilities = apply_capability_policy(
-                self._backend_capabilities,
-                self._capability_policy,
-            )
-            if "uart_send" not in effective_capabilities:
-                disabled_by_policy = (
-                    ["hardware.uart.tx_enabled"]
-                    if "uart_send" in self._backend_capabilities
-                    and not self._capability_policy.uart_send.tx_policy_enabled
-                    else []
-                )
-                raise UartSendError(
-                    error="unsupported_capability",
-                    detail="Operation requires effective capability 'uart_send'",
-                    context={
-                        "operation": "uart_send",
-                        "backend_mode": self._backend_mode,
-                        "required_capabilities": ["uart_send"],
-                        "available_capabilities": sorted(effective_capabilities),
-                        "backend_capabilities": sorted(self._backend_capabilities),
-                        "disabled_by_policy": disabled_by_policy,
-                    },
-                )
-            active_session: ActiveUartSendSession | None = None
-            if self._capture_in_progress:
-                if not force:
-                    raise UartSendError(
-                        error="capture_active",
-                        detail="UART receive workflow is active; explicit force is required",
-                    )
-                if self._active_session_handle is None or self._active_segment_context is None:
-                    raise UartSendError(
-                        error="capture_active",
-                        detail="UART receive workflow has not published its session yet",
-                    )
-                active_session = ActiveUartSendSession(
-                    handle=self._active_session_handle,
-                    segment=self._active_segment_context,
-                )
-            if self._uart_send_workflow is None:
-                raise DeviceCoreRuntimeError("UART sender is not configured")
-            try:
-                return self._uart_send_workflow.run(
-                    payload,
-                    active_session=active_session,
-                )
-            except UartSendError as exc:
-                if exc.error == "backend_input_error":
-                    if self._message_source is not None:
-                        self._close_event_source(self._message_source)
-                    self._mark_backend_disconnected()
-                    if active_session is not None:
-                        self._session_store.fail_session(
-                            active_session.handle,
-                            end_reason="backend_input_error",
-                            error_code="backend_input_error",
-                            detail=exc.detail,
-                        )
-                        self._active_session_terminalized = True
-                if exc.session_terminalized:
-                    self._active_session_terminalized = True
-                raise
+        payload = self._tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
+        with self._mutation():
+            return self._send_payload(payload)
 
-    def _run_capture_workflow(
+    def interact(
         self,
         *,
-        duration_s: float,
-        command: str,
-        workflow: SessionWorkflow,
-        required_role: str | None = None,
-        required_capability: BackendCapability | None = None,
-        start_action: Callable[[], DeviceActionResult] | None = None,
-        uart_processor: UartCaptureProcessor | None = None,
-        requested_pattern: str | None = None,
-        discard_preexisting: bool = False,
-    ) -> SessionSummary:
-        with self._operation_lock:
-            self._require_connected()
-            effective_capabilities = apply_capability_policy(
-                self._backend_capabilities,
-                self._capability_policy,
-            )
-            if (
-                required_capability is not None
-                and required_capability not in effective_capabilities
-            ):
-                raise DeviceActionError(
-                    error="unsupported_capability",
-                    detail=f"Operation requires effective capability '{required_capability}'",
-                    context={
-                        "operation": workflow,
-                        "backend_mode": self._backend_mode,
-                        "required_capabilities": [required_capability],
-                        "available_capabilities": sorted(effective_capabilities),
-                        "backend_capabilities": sorted(self._backend_capabilities),
-                        "disabled_by_policy": [],
+        data_b64: object = None,
+        text: object = None,
+        line_ending: object = None,
+        duration_s: object | None = None,
+        conditions: Sequence[MonitorCondition] | None = None,
+        timeout_s: object | None = None,
+        cancellation: Event | None = None,
+    ) -> InteractResult:
+        """Send once and observe with the existing bounded operation machinery."""
+
+        payload = self._tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
+        request = validate_monitor_request(
+            duration_s=duration_s,
+            conditions=conditions,
+            timeout_s=timeout_s,
+        )
+        with self._mutation():
+            self._require_tx_capability()
+            owner = f"interact-{uuid4()}"
+            with self._operation_lock:
+                self._interact_owner = owner
+            tx: UartSendResult | None = None
+            tx_error: dict[str, object] | None = None
+
+            def send(operation_id: str) -> None:
+                nonlocal tx, tx_error
+                try:
+                    tx = self._send_payload(payload, operation_id=operation_id)
+                except UartSendError as exc:
+                    tx_error = {"code": exc.error, "detail": exc.detail, "context": exc.context}
+                    if (
+                        self._evidence_recorder is not None
+                        and self._evidence_recorder.state == "disconnected"
+                    ):
+                        return
+                    if (
+                        exc.error in {"persistence_fault", "backend_input_error"}
+                        or not exc.context
+                        or exc.context.get("connection_interrupted") is not True
+                    ):
+                        raise
+
+            try:
+                result = self._run_bounded_operation(
+                    request=request,
+                    cancellation=cancellation,
+                    operation_type="interact",
+                    operation_id=owner,
+                    start_action=send,
+                    action_parameters={
+                        "data_b64": payload.data_b64,
+                        "transformation": payload.transformation(),
                     },
                 )
-            self._require_no_active_capture()
-            if self._message_source is None:
-                raise DeviceCoreRuntimeError("Capture message source is not configured")
-            if required_role is not None:
-                self._gpio_registry.require_role_configured(
-                    required_role,
-                    operation=workflow,
+                return InteractResult(
+                    **{field: getattr(result, field) for field in result.__dataclass_fields__},
+                    data_b64=payload.data_b64,
+                    transformation=payload.transformation(),
+                    tx=tx,
+                    tx_error=tx_error,
                 )
-            source = self._session_capture_source(self._message_source)
-            source_segment = getattr(source, "segment", None)
-            backend_snapshot = self._backend_snapshot(
-                segment_context=(
-                    source_segment if isinstance(source_segment, SegmentContext) else None
-                )
-            )
-            if backend_snapshot is not None and backend_snapshot.info.mode == "enhanced":
-                backend_snapshot = replace(
-                    backend_snapshot,
-                    integrity=UartIntegrity("none_reported", "debug_helper_rx_buffer", 0),
-                )
-            firmware = self._backend_info.firmware if self._backend_info is not None else None
-            device = self._backend_info.device if self._backend_info is not None else None
-            self._capture_in_progress = True
-            self._active_workflow = workflow
-            commanded_boot_mode = self._commanded_boot_mode
-            self._active_segment_context = (
-                source_segment if isinstance(source_segment, SegmentContext) else None
-            )
-
-        reconnect = (
-            partial(
-                self._reconnect_capture_source,
-                expected_snapshot=backend_snapshot,
-            )
-            if backend_snapshot is not None and self._backend_reconnect is not None
-            else None
-        )
-
-        try:
-            summary = self._capture_workflow.run(
-                source=source,
-                duration_s=duration_s,
-                command=command,
-                firmware=firmware,
-                device=device,
-                monotonic_clock=self._capture_clock,
-                reconnect_timeout_s=self._reconnect_timeout_s,
-                backend_snapshot=backend_snapshot,
-                workflow=workflow,
-                commanded_boot_mode=commanded_boot_mode,
-                uart_processor=uart_processor,
-                start_action=start_action,
-                on_session_handle_started=self._set_active_session,
-                reconnect=reconnect,
-                on_backend_disconnected=self._mark_backend_disconnected,
-                requested_pattern=requested_pattern,
-                discard_preexisting=discard_preexisting,
-                is_session_terminalized=self._is_active_session_terminalized,
-            )
-            if summary.integrity is not None:
+            finally:
                 with self._operation_lock:
-                    self._integrity = summary.integrity
-            return summary
-        except BackendInputError:
-            with self._operation_lock:
-                source = self._message_source
-                self._message_source = None
-            if source is not None:
-                with suppress(BaseException):
-                    self._close_event_source(source)
-            self._mark_backend_disconnected()
-            raise
-        finally:
-            with self._operation_lock:
-                self._capture_in_progress = False
-                self._active_session_id = None
-                self._active_session_handle = None
-                self._active_segment_context = None
-                self._active_session_terminalized = False
-                self._active_workflow = None
-                self._reconnect_deadline = None
-
-    def _set_active_session(self, handle: SessionHandle) -> None:
-        with self._operation_lock:
-            self._active_session_id = handle.session_id
-            self._active_session_handle = handle
-
-    def _is_active_session_terminalized(self) -> bool:
-        with self._operation_lock:
-            return self._active_session_terminalized
+                    self._interact_owner = None
 
     def _mark_backend_disconnected(self) -> None:
         with self._operation_lock:
@@ -1136,12 +1099,9 @@ class DeviceCoreRuntime:
             self._mark_backend_disconnected()
             return
         snapshot = health.backend_snapshot
-        if (
-            snapshot is not None
-            and (
-                self._source_connection_generation is None
-                or health.connection_generation > self._source_connection_generation
-            )
+        if snapshot is not None and (
+            self._source_connection_generation is None
+            or health.connection_generation > self._source_connection_generation
         ):
             self._adopt_backend_snapshot(snapshot)
             self._source_connection_generation = health.connection_generation
@@ -1167,106 +1127,6 @@ class DeviceCoreRuntime:
         self._integrity = snapshot.integrity
         self._port = snapshot.info.port
 
-    def _reconnect_capture_source(
-        self,
-        *,
-        expected_snapshot: BackendSnapshot,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource | None:
-        reconnect = self._backend_reconnect
-        if reconnect is None:
-            return None
-        with self._operation_lock:
-            if self._closing or self._closed:
-                return None
-            self._reconnect_in_progress = True
-            self._reconnect_cleanup_error = None
-            self._reconnect_complete.clear()
-            self._reconnect_deadline = deadline
-            self._reconnect_source = self._message_source
-            self._message_source = None
-        try:
-            try:
-                replacement = reconnect(segment_id=segment_id, deadline=deadline)
-            except BaseException:
-                with self._operation_lock:
-                    if not self._closing and not self._closed:
-                        self._message_source = self._reconnect_source
-                        self._reconnect_source = None
-                raise
-            if replacement is None:
-                with self._operation_lock:
-                    if not self._closing and not self._closed:
-                        self._message_source = self._reconnect_source
-                        self._reconnect_source = None
-                return None
-            try:
-                self._validate_replacement(expected_snapshot, replacement.backend_snapshot)
-            except Exception:
-                with self._operation_lock:
-                    self._reconnect_source = None
-                try:
-                    self._close_event_source(replacement.source)
-                except BaseException as exc:
-                    with self._operation_lock:
-                        if self._closing:
-                            self._reconnect_cleanup_error = exc
-                    raise
-                raise
-            with self._operation_lock:
-                reject_replacement = self._closing or self._closed
-                self._reconnect_source = None
-                if not reject_replacement:
-                    snapshot = replacement.backend_snapshot
-                    self._message_source = replacement.source
-                    self._connected = True
-                    self._backend_mode = snapshot.info.mode
-                    self._backend_info = snapshot.info
-                    self._backend_capabilities = snapshot.info.capabilities
-                    self._segment_context = snapshot.segment
-                    self._active_segment_context = snapshot.segment
-                    self._integrity = snapshot.integrity
-                    self._port = snapshot.info.port
-            if reject_replacement:
-                try:
-                    self._close_event_source(replacement.source)
-                except BaseException as exc:
-                    with self._operation_lock:
-                        self._reconnect_cleanup_error = exc
-                    raise
-                return None
-            return replacement
-        finally:
-            with self._operation_lock:
-                self._reconnect_in_progress = False
-                self._reconnect_deadline = None
-            self._reconnect_complete.set()
-
-    def _validate_replacement(
-        self,
-        expected: BackendSnapshot,
-        replacement: BackendSnapshot,
-    ) -> None:
-        expected_identity = (
-            expected.info.mode,
-            expected.info.port,
-            expected.info.device,
-            expected.info.firmware,
-        )
-        replacement_identity = (
-            replacement.info.mode,
-            replacement.info.port,
-            replacement.info.device,
-            replacement.info.firmware,
-        )
-        if replacement_identity != expected_identity:
-            raise ValueError("reconnected backend identity does not match active session")
-        if replacement.capability_policy != self._capability_policy:
-            raise ValueError("reconnected backend capability policy changed")
-        if replacement.capabilities != expected.capabilities:
-            raise ValueError("reconnected backend capabilities changed")
-
     @staticmethod
     def _close_event_source(source: CaptureEventSource) -> None:
         close = getattr(source, "close", None)
@@ -1277,40 +1137,6 @@ class DeviceCoreRuntime:
         self._reconcile_capture_source_health()
         if not self._connected:
             raise DeviceCoreRuntimeError("Debug Helper is not connected")
-
-    def _require_no_active_capture(self) -> None:
-        if self._capture_in_progress:
-            raise DeviceActionError(
-                error="capture_active",
-                detail="capture is already active",
-            )
-
-    @staticmethod
-    def _session_capture_source(source: CaptureEventSource) -> CaptureEventSource:
-        segment = getattr(source, "segment", None)
-        if not isinstance(segment, SegmentContext) or segment.segment_id == 0:
-            return source
-        return _SessionCaptureSource(source, segment)
-
-    def _backend_snapshot(
-        self,
-        *,
-        segment_context: SegmentContext | None = None,
-    ) -> BackendSnapshot | None:
-        if self._backend_info is None:
-            return None
-        if self._integrity is None:
-            raise DeviceCoreRuntimeError("Connected backend integrity state is unavailable")
-        return BackendSnapshot(
-            info=self._backend_info,
-            capabilities=apply_capability_policy(
-                self._backend_capabilities,
-                self._capability_policy,
-            ),
-            capability_policy=self._capability_policy,
-            segment=(segment_context if segment_context is not None else self._segment_context),
-            integrity=self._integrity,
-        )
 
 
 def _monitor_parameters(request: MonitorRequest) -> dict[str, object]:

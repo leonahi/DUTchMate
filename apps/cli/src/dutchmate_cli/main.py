@@ -7,7 +7,7 @@ from typing import Annotated, NoReturn
 import typer
 
 from dutchmate_cli.baseline import format_baseline_mutation
-from dutchmate_cli.capture import format_boot_test_result, format_capture_result
+from dutchmate_cli.capture import format_capture_result
 from dutchmate_cli.client import (
     ServiceClientError,
     ServiceUnavailableError,
@@ -17,11 +17,11 @@ from dutchmate_cli.client import (
     fetch_recent_logs,
     fetch_status,
     get_debug_session,
+    interact_uart,
     list_debug_sessions,
     mark_session_baseline,
     monitor_uart,
     reset_dut,
-    run_boot_test,
     send_uart_command,
     set_boot_mode,
     wait_for_pattern,
@@ -53,7 +53,11 @@ from dutchmate_core.profile import (
     resolve_dut_profile,
     resolve_profile_mode,
 )
-from dutchmate_core.validation import validate_capture_duration, validate_gpio_configuration
+from dutchmate_core.validation import (
+    prepare_uart_tx_payload,
+    validate_capture_duration,
+    validate_gpio_configuration,
+)
 
 app = typer.Typer(help="DUTchMate hardware debug helper.", no_args_is_help=True)
 dut_app = typer.Typer(help="Run DUT-level workflows through configured control roles.")
@@ -252,7 +256,7 @@ def mark_baseline_command(
         typer.Option("--service-url", help="Base URL for the local Device Core Service."),
     ] = None,
 ) -> None:
-    """Designate one completed capture or boot test as the baseline."""
+    """Designate an eligible stored session as the baseline."""
 
     resolved_service_url = _resolve_service_url(service_url)
     try:
@@ -363,37 +367,61 @@ def wait_command(
 
 @app.command("send")
 def send_command(
-    cmd: Annotated[str, typer.Argument(help="UTF-8 text command to send.")],
-    no_newline: Annotated[
-        bool,
-        typer.Option("--no-newline", help="Do not append the default LF terminator."),
-    ] = False,
-    force: Annotated[
-        bool,
-        typer.Option("--force", help="Permit a visibly recorded send during capture."),
-    ] = False,
-    service_url: Annotated[
-        str | None,
-        typer.Option("--service-url", help="Base URL for the local Device Core Service."),
-    ] = None,
+    text: Annotated[str | None, typer.Argument(help="UTF-8 text payload.")] = None,
+    data_b64: Annotated[str | None, typer.Option("--data-b64", help="Exact base64 bytes.")] = None,
+    line_ending: Annotated[str | None, typer.Option("--line-ending")] = None,
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
 ) -> None:
-    """Send one bounded text command to the DUT UART."""
+    """Send exact audited bytes; text requires an explicit line ending."""
 
-    resolved_service_url = _resolve_service_url(service_url)
     try:
+        prepare_uart_tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
         payload = send_uart_command(
-            cmd,
-            append_newline=not no_newline,
-            force=force,
-            service_url=resolved_service_url,
+            data_b64=data_b64,
+            text=text,
+            line_ending=line_ending,
+            service_url=_resolve_service_url(service_url),
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    except ServiceUnavailableError as exc:
-        _fail(str(exc))
-    except ServiceClientError as exc:
+    except (ServiceUnavailableError, ServiceClientError) as exc:
         _fail(str(exc))
     typer.echo(format_uart_send(payload))
+
+
+@app.command("interact")
+def interact_command(
+    text: Annotated[str | None, typer.Argument(help="UTF-8 text payload.")] = None,
+    data_b64: Annotated[str | None, typer.Option("--data-b64")] = None,
+    line_ending: Annotated[str | None, typer.Option("--line-ending")] = None,
+    seconds: Annotated[float | None, typer.Option("--seconds")] = None,
+    until: Annotated[str | None, typer.Option("--until")] = None,
+    timeout_s: Annotated[float | None, typer.Option("--timeout")] = None,
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
+) -> None:
+    """Send once, then observe until a finite duration or condition completes."""
+
+    try:
+        prepare_uart_tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
+        validate_monitor_request(
+            duration_s=seconds,
+            conditions=(MonitorCondition(until),) if until is not None else None,
+            timeout_s=timeout_s,
+        )
+        payload = interact_uart(
+            data_b64=data_b64,
+            text=text,
+            line_ending=line_ending,
+            duration_s=seconds,
+            until=until,
+            timeout_s=timeout_s,
+            service_url=_resolve_service_url(service_url),
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except (ServiceUnavailableError, ServiceClientError) as exc:
+        _fail(str(exc))
+    typer.echo(format_monitor_result(payload).replace("Monitor ", "Interact ", 1))
 
 
 @app.command("monitor")
@@ -473,39 +501,6 @@ def capture(
         _fail(str(exc))
 
     typer.echo(format_capture_result(payload))
-
-
-@app.command("boot-test")
-def boot_test(
-    seconds: Annotated[
-        float,
-        typer.Option(
-            "--seconds",
-            callback=_validate_positive_seconds,
-            help="Boot capture duration in seconds.",
-        ),
-    ],
-    service_url: Annotated[
-        str | None,
-        typer.Option(
-            "--service-url",
-            help="Base URL for the local Device Core Service.",
-        ),
-    ] = None,
-) -> None:
-    """Reset the DUT and capture boot evidence into a debug session."""
-    resolved_service_url = _resolve_service_url(service_url)
-    try:
-        payload = run_boot_test(
-            duration_s=seconds,
-            service_url=resolved_service_url,
-        )
-    except ServiceUnavailableError as exc:
-        _fail(str(exc))
-    except ServiceClientError as exc:
-        _fail(str(exc))
-
-    typer.echo(format_boot_test_result(payload))
 
 
 @gpio_app.command("mode")

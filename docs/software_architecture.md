@@ -155,7 +155,7 @@ No synchronous Enhanced command/source path or second physical reader remains.
 
 ## Data Flow
 
-Enhanced byte-chunk normalization composition is test-only:
+Enhanced byte-chunk normalization is tested independently of evidence ownership:
 
 ```text
 NDJSON bytes
@@ -163,13 +163,6 @@ NDJSON bytes
   -> parse_device_message
   -> EnhancedNdjsonEventStream
   -> normalized backend events
-  -> test fixture recorder
-  -> CaptureRecorder
-  -> UartCaptureProcessor
-  -> UartLineBuffer
-  -> PatternDetector
-  -> SessionStore
-  -> SessionSummary
 ```
 
 Production workflows receive normalized events and never import Enhanced wire
@@ -183,7 +176,7 @@ EnhancedAsyncHost (one owner loop and one async adapter)
   -> ContinuousEvidenceRecorder (core/evidence)
   -> schema-v2 SessionStore admission
   -> durable tail notification
-  -> DeviceCoreRuntime bounded Monitor
+  -> DeviceCoreRuntime bounded Monitor / Interact and audited Control
   -> operation-local MonitorMatcher over durable UART records
 ```
 
@@ -193,7 +186,7 @@ running. The recorder owns the only normalized receive path, persists UART and
 telemetry before advancing its durable tail, maintains continuous line/pattern
 projections, and transfers a validated replacement source into the same session
 with a new session-local segment. Basic and Enhanced use the same recorder
-contract. Monitor waiters observe published durable tails and read stable UART
+contract. Bounded operations observe published durable tails and read stable UART
 records through operation-local seek cursors; they never call the physical
 backend source or rescan accumulated UART history under the store mutation lock.
 
@@ -262,10 +255,10 @@ and faults and closes physical ownership when authoritative persistence cannot
 continue. Clean shutdown first stops physical input, drains already-normalized
 source events, and then terminalizes the active v2 session.
 
-It also serializes Monitor lifecycle admissions with receive/connection
-admissions, snapshots the operation start cursor and pre-cursor partial-line
+It also serializes bounded-operation lifecycle and TX/Control attempt/result
+admissions with receive/connection admissions, snapshots the operation start cursor and pre-cursor partial-line
 state in the final start session, flushes continuous line state before a
-lifecycle admission rolls over, exposes incremental cursor-bounded UART reads,
+lifecycle or action admission rolls over, exposes incremental cursor-bounded UART reads,
 and resolves lifecycle-owned terminal records. Each reader owns a bounded
 retention lease that terminal persistence atomically extends across its final
 evidence ranges and runtime result construction releases. Reconnect replacement
@@ -274,7 +267,7 @@ a second physical reader.
 
 ### `operations`
 
-Owns framework-independent bounded Monitor request/result values, validation,
+Owns framework-independent bounded observation and Interact result values, validation,
 active-operation summaries, evidence cursors/ranges, and operation-local literal
 matching. `MonitorMatcher` reconstructs lines independently by
 session/segment/channel from persisted UART records, excludes pre-cursor partial
@@ -303,16 +296,16 @@ Owns filesystem-backed sessions under
 - stores bounded detected-pattern excerpts and derives deterministic
   reference-bearing `first_error` summaries in segment/event order
 - records schema-v2 operation start/terminal evidence, transfers active ranges
-  across rollover, opens seek-based incremental UART readers for Monitor, and
+  across rollover, opens seek-based incremental UART readers for bounded operations, and
   derives operation result integrity from telemetry inside exact half-open
   ranges plus timestamp provenance across every range
 - stores `line_processing` status/counts and finalized `line_limit_exceeded`
   descriptors without changing UART integrity or session truncation
-- preflights exact whole-unit evidence for UART receive, buffer telemetry, and
-  finalized line-limit events; over-budget units are omitted atomically and
-  terminalize native sessions as successful `size_limit` truncations
-- creates native runtime sessions with versioned workflow/lifecycle fields and
-  a terminal reserve, then transitions them once to completed or failed
+- preflights exact whole units for RX, telemetry, bounded-operation lifecycle,
+  and TX/Control evidence; v2 rolls over before admitting an over-budget unit,
+  flushes continuous line boundaries, and transfers pending operation/action ownership
+- creates schema-v2 ownership sessions with a terminal reserve and one-way
+  lifecycle; legacy v1 writer helpers remain available for compatibility fixtures
 - atomically closes disconnected segments and appends validated contiguous
   reconnect segments with `usb_disconnect`, `usb_reconnect`, and
   `timestamp_discontinuity` evidence
@@ -388,51 +381,43 @@ in `docs/gpio_configuration_semantics.md`.
 
 ### `workflows`
 
-Owns deterministic orchestration, not serial-port discovery or low-level
-protocol validation. Current behavior includes:
+Owns exact-byte TX dispatch and configured semantic Control execution through
+backend-neutral ports. `DeviceActionRunner` and `GpioConfigurator` retain role,
+electrical, and accepted-state policy; runtime wraps every physical mutation in
+durable v2 attempt/result evidence. Failed attempts/results preserve actual or
+unknown outcomes. TX never enters the receive-only raw log.
 
-- capture from normalized backend events
-- finite source-backed capture using a host-monotonic deadline
-- disconnect recovery through an injected backend reopen operation, with one
-  immutable deadline across all replacement sources
-- per-segment UART finalization before reconnect so partial and oversized lines
-  never cross a connection boundary
-- reset and boot-mode actions through an injected semantic device-control port
-- reset-triggered boot-test recording
-- active-session publication and conflict cleanup in `DeviceCoreRuntime`
-- required accepted `reset`/`boot` role checks
-- literal new-evidence-only wait-pattern sessions
-- text-only bounded UART send through an injected backend sender port
-- forced-send attempt/result persistence under the same mutation guard as
-  capture evidence and terminalization
+`DeviceCoreRuntime` serializes standalone TX, reset, boot mode, and GPIO mode
+changes with one mutation lock. It does not hold the operation/status or recorder
+admission locks across physical dispatch. Read-only Monitor remains independent;
+Interact holds exclusive mutation ownership across its complete bounded window
+and rejects competing mutations with `operation_active`. Shutdown cancels bounded
+operations and waits for in-flight action result evidence before closing ownership.
 
-Runtime capture/wait compatibility entry points always delegate to
-`operations.Monitor` semantics and require the continuous recorder; they cannot
-invoke a finite v1 session or independent reader. The older finite capture
-infrastructure remains only for boot-test until its Stage 5 migration.
+Monitor and Interact share the existing operation lifecycle, incremental UART
+reader, matcher, exact-range quality projection, retention lease, cancellation, and
+reconnect machinery. Interact establishes its durable cursor before TX, never retries
+TX after reconnect, and exposes exact bytes plus known or unknown acceptance.
 
-Capture and boot-test validation consistently enforces the Phase 1
-`0 < duration_s <= 300` contract before HTTP dispatch or workflow/session work.
-Native workflows persist and echo accepted duration/reconnect policy and
-terminal lifecycle state, and startup resolves interrupted evidence units and
-abandons stale active sessions before opening a backend. The session store owns
-durable disconnect/resume mutations. The capture workflow owns deadline
-precedence, the 32-segment stop, and canonical reconnect failures through a
-small injected reopen port and does not own serial details. The service-owned
-`BackendReconnectCoordinator` serializes idle and active replacement, validates
-the selected Basic identity or exact Enhanced identity, and publishes the new
-source plus stable control/UART-send ports. Idle retries use exponential backoff
-from 0.1 seconds through a 2.0-second cap within the profile-snapshotted
-`reconnect_timeout_s` deadline. Deadline expiry records reconnect failure, fails
-the active v2 session, and leaves runtime disconnected. Enhanced reconnect uses
-the same async-host opener as startup and every candidate waits for the segment
-origin through `wait_for_segment()` without consuming the first evidence event.
-The continuous recorder exposes
-versioned connection generations, and runtime adopts a reconnected snapshot
-only when a pull observes a newer generation, preventing stale health from
-overwriting the replacement. Runtime publishes connected, disconnected, and
-reconnecting state plus the active workflow and remaining reconnect window,
-and runtime close owns reconnect-coordinator shutdown before closing its source.
+Device Core does not own a dedicated boot-test composite. Higher-level procedures
+such as reset-and-observe or bootloader validation are composed by clients from
+audited Control plus durable evidence access and, when useful, Monitor. Continuous
+recording remains authoritative between those atomic requests.
+
+The former finite `CaptureWorkflow`, `CaptureRecorder`, transport runner,
+workflow-only reader lifecycle, runtime capture-exclusion flags, session-source
+rebasing, and per-capture reconnect ownership have been removed. The
+`workflows.capture` module retains normalized source/health/reconnect contracts
+used by backend/service consumers. Capture/wait spellings remain thin Monitor
+aliases; they cannot create v1 sessions or independent readers. Historical v0/v1
+session reading, replay, and compatibility fixtures remain available.
+
+The service-owned `BackendReconnectCoordinator` continues to reopen and validate
+replacement sources and publish stable control/TX ports. The core continuous
+recorder owns evidence and connection generations. New v2 runtime actions use
+explicit payload transformations; the public send API and CLI have no `force`
+or implicit newline append. Low-level protocol and deferred MCP text helpers are
+unchanged and do not restore the retired service request contract.
 
 ### `backends` (Contract Foundation)
 
@@ -485,9 +470,9 @@ lifecycle commands, request construction, and human-readable output. It must
 not import low-level transport code or open serial ports for debug workflows.
 
 Current commands cover explicit Basic/Enhanced startup selection, service
-lifecycle, labeled device listing, status, capture, boot-test, GPIO mode,
-reset, boot mode, session listing, session detail, recent logs, and literal
-wait-pattern, plus bounded UART send and baseline mark/clear. `dutchmate mcp`
+lifecycle, labeled device listing, status, capture, GPIO mode, reset, boot mode,
+session listing, session detail, recent logs, and literal
+wait-pattern, bounded Monitor/Interact, audited byte-first UART send, and baseline mark/clear. `dutchmate mcp`
 replaces the CLI process with the aggregator-owned `dutchmate-mcp` entry point,
 which targets the separately packaged MCP adapter. This preserves the
 delivery-package import boundary and gives the MCP adapter direct ownership of

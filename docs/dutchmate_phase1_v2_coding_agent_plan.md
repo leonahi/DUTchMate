@@ -501,7 +501,7 @@ Add section 31.4 tests at core, service, and CLI levels. In particular:
 
 ---
 
-## Stage 5 — Make UART TX Always Audited, Add Interact, and Migrate Control/Boot-Test Auditing
+## Stage 5 — Make UART TX Always Audited, Add Interact, and Migrate Control Auditing
 
 ### Goal
 
@@ -556,17 +556,21 @@ Replace `_require_no_active_capture()` with explicit conflict rules:
 - mutating actions serialize;
 - release excludes in-flight mutating actions.
 
-### Boot-test
+### Remove the dedicated boot-test composite
 
-Rebuild boot-test as a composite operation over:
+Do not retain a Device Core/service/CLI boot-test workflow. Boot validation is a
+client-composed procedure built from atomic Control plus durable evidence access
+and, when useful, Monitor.
 
-```text
-continuous recording already active
-    -> reset Control action
-    -> Monitor completion window
-```
+Stage 5 must remove the existing `run_boot_test` runtime/service/CLI path and any
+tests or compatibility machinery that exist only for that live composite. Preserve
+historical v0/v1 session readers and fixtures that must still understand stored
+legacy boot-test evidence.
 
-It must not start capture after reset.
+Continuous recording must remain active across audited reset, so immediate boot
+bytes are persisted even when no Monitor is active. Stage 6's durable evidence
+cursor is the generic exact-boundary mechanism for client-composed reset/observe
+procedures.
 
 ### API/CLI
 
@@ -588,12 +592,12 @@ Add section 31.5 plus Control persistence tests:
 - Interact cursor established before TX;
 - unrelated async RX remains in range;
 - no automatic TX retry after reconnect;
-- reset-before-Monitor early boot bytes already persisted;
+- audited reset does not interrupt continuous RX and immediate post-reset bytes are persisted without a Monitor;
 - failed Control/TX still has correct audit evidence.
 
 ### Exit criterion
 
-CLI can perform standalone audited send, deterministic Interact, reset/boot, and boot-test without any finite-capture ownership model.
+CLI can perform standalone audited send, deterministic Interact, and audited reset/boot/GPIO Control without any finite-capture ownership model or use-case-specific boot-test composite.
 
 ---
 
@@ -788,7 +792,7 @@ Run Basic first, then Enhanced, covering at least:
 **Enhanced**
 
 - same Monitor/Interact semantics;
-- reset/boot-test with no first-byte race;
+- audited reset plus durable boot-evidence retrieval with no first-byte loss;
 - timestamps;
 - buffer telemetry/overflow evidence;
 - configured reset/boot control;
@@ -855,7 +859,7 @@ Do not implement the migration in one coding-agent run or one giant commit. Reco
 3. session-v2 store/retrieval compatibility;
 4. continuous recorder/runtime ownership;
 5. Monitor;
-6. audited TX + Interact + Control/boot-test;
+6. audited TX + Interact + Control, with the dedicated boot-test composite removed;
 7. follow/console;
 8. release/reacquire + DTR/RTS + native USB;
 9. Enhanced parity + cleanup + full CLI/HIL acceptance;

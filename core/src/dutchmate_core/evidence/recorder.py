@@ -63,6 +63,55 @@ class EvidenceRecorderStore(Protocol):
         backend_snapshot: BackendSnapshot,
     ) -> SessionHandle: ...
 
+    def v2_action_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        record_type: Literal[
+            "uart_tx_attempt", "uart_tx_result", "control_attempt", "control_result"
+        ],
+        fields: dict[str, object],
+    ) -> bool: ...
+
+    def append_v2_uart_tx_attempt(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        data: bytes,
+        operation_id: str | None,
+        transformation: dict[str, object],
+    ) -> V2EvidenceAdmission: ...
+
+    def append_v2_uart_tx_result(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        status: str,
+        accepted_bytes: int | None,
+    ) -> V2EvidenceAdmission: ...
+
+    def append_v2_control_attempt(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        role: str,
+        provider: str,
+        parameters: dict[str, object],
+        operation_id: str | None,
+    ) -> V2EvidenceAdmission: ...
+
+    def append_v2_control_result(
+        self,
+        handle: SessionHandle,
+        *,
+        attempt_id: str,
+        status: str,
+        device_timestamp_us: int | None = None,
+    ) -> V2EvidenceAdmission: ...
+
     def append_v2_uart_receive(
         self,
         handle: SessionHandle,
@@ -154,7 +203,7 @@ class EvidenceRecorderStore(Protocol):
         handle: SessionHandle,
         *,
         operation_id: str,
-        operation_type: Literal["monitor", "interact", "boot_test"],
+        operation_type: Literal["monitor", "interact"],
         parameters: dict[str, object],
     ) -> V2EvidenceAdmission: ...
 
@@ -163,7 +212,7 @@ class EvidenceRecorderStore(Protocol):
         handle: SessionHandle,
         *,
         operation_id: str,
-        operation_type: Literal["monitor", "interact", "boot_test"],
+        operation_type: Literal["monitor", "interact"],
         parameters: dict[str, object],
     ) -> bool: ...
 
@@ -329,17 +378,148 @@ class ContinuousEvidenceRecorder:
         with self._condition:
             return self._tail
 
+    def audit_uart_attempt(
+        self,
+        *,
+        attempt_id: str,
+        data: bytes,
+        transformation: dict[str, object],
+        operation_id: str | None,
+    ) -> V2EvidenceAdmission:
+        from base64 import b64encode
+
+        return self._admit_action(
+            "uart_tx_attempt",
+            {
+                "attempt_id": attempt_id,
+                "operation_id": operation_id,
+                "data_b64": b64encode(data).decode("ascii"),
+                "byte_length": len(data),
+                "transformation": transformation,
+            },
+            lambda handle: self._session_store.append_v2_uart_tx_attempt(
+                handle,
+                attempt_id=attempt_id,
+                data=data,
+                operation_id=operation_id,
+                transformation=transformation,
+            ),
+        )
+
+    def audit_uart_result(
+        self,
+        *,
+        attempt_id: str,
+        status: str,
+        accepted_bytes: int | None,
+    ) -> V2EvidenceAdmission:
+        return self._admit_action(
+            "uart_tx_result",
+            {"attempt_id": attempt_id, "status": status, "accepted_bytes": accepted_bytes},
+            lambda handle: self._session_store.append_v2_uart_tx_result(
+                handle,
+                attempt_id=attempt_id,
+                status=status,
+                accepted_bytes=accepted_bytes,
+            ),
+        )
+
+    def audit_control_attempt(
+        self,
+        *,
+        attempt_id: str,
+        role: str,
+        parameters: dict[str, object],
+    ) -> V2EvidenceAdmission:
+        return self._admit_action(
+            "control_attempt",
+            {
+                "attempt_id": attempt_id,
+                "operation_id": None,
+                "role": role,
+                "provider": "gpio_control",
+                "parameters": parameters,
+            },
+            lambda handle: self._session_store.append_v2_control_attempt(
+                handle,
+                attempt_id=attempt_id,
+                role=role,
+                provider="gpio_control",
+                parameters=parameters,
+                operation_id=None,
+            ),
+        )
+
+    def audit_control_result(
+        self,
+        *,
+        attempt_id: str,
+        status: str,
+        device_timestamp_us: int | None = None,
+    ) -> V2EvidenceAdmission:
+        return self._admit_action(
+            "control_result",
+            {
+                "attempt_id": attempt_id,
+                "status": status,
+                "device_timestamp_us": device_timestamp_us,
+            },
+            lambda handle: self._session_store.append_v2_control_result(
+                handle,
+                attempt_id=attempt_id,
+                status=status,
+                device_timestamp_us=device_timestamp_us,
+            ),
+        )
+
+    def _admit_action(
+        self,
+        record_type: Literal[
+            "uart_tx_attempt", "uart_tx_result", "control_attempt", "control_result"
+        ],
+        fields: dict[str, object],
+        append: Callable[[SessionHandle], V2EvidenceAdmission],
+    ) -> V2EvidenceAdmission:
+        with self._admission_lock:
+            with self._condition:
+                if self._closing or self._closed or self._fault is not None:
+                    raise RuntimeError("Authoritative evidence recording is unavailable")
+                handle = self._handle
+            try:
+                if self._session_store.v2_action_will_rollover(
+                    handle,
+                    record_type=record_type,
+                    fields=fields,
+                ):
+                    self._flush_line_state()
+                    handle = self._handle
+                admission = append(handle)
+                self._publish_admission(admission)
+                if admission.rolled_over:
+                    with self._condition:
+                        self._reset_integrity_after_rollover()
+                return admission
+            except SessionPersistenceError as exc:
+                self._record_fatal(exc, end_reason="persistence_error")
+                raise
+
+    def backend_input_failed(self, error: BackendInputError) -> None:
+        """Fail authoritative ownership on malformed action transport input."""
+
+        self._record_fatal(error, end_reason="backend_input_error")
+
     def start_monitor_operation(
         self,
         *,
         operation_id: str,
         parameters: dict[str, object],
+        operation_type: Literal["monitor", "interact"] = "monitor",
     ) -> tuple[
         EvidenceCursor,
         frozenset[tuple[str, int, int]],
         MonitorEvidenceReader,
     ]:
-        """Durably start Monitor and snapshot pre-cursor partial-line state."""
+        """Durably start a bounded operation and snapshot pre-cursor line state."""
 
         with self._admission_lock:
             with self._condition:
@@ -349,7 +529,7 @@ class ContinuousEvidenceRecorder:
             if self._session_store.v2_operation_start_will_rollover(
                 handle,
                 operation_id=operation_id,
-                operation_type="monitor",
+                operation_type=operation_type,
                 parameters=parameters,
             ):
                 self._flush_line_state()
@@ -358,7 +538,7 @@ class ContinuousEvidenceRecorder:
             admission = self._session_store.start_v2_operation(
                 handle,
                 operation_id=operation_id,
-                operation_type="monitor",
+                operation_type=operation_type,
                 parameters=parameters,
             )
             self._publish_admission(admission)
@@ -666,8 +846,6 @@ class ContinuousEvidenceRecorder:
                 for operation_id, operation in tuple(active.items()):
                     if not isinstance(operation, dict):
                         raise ValueError("v2 active operation is malformed")
-                    if operation.get("operation_type") != "monitor":
-                        continue
                     terminal = self._session_store.complete_v2_operation(
                         failed.handle,
                         operation_id=operation_id,
@@ -1093,8 +1271,6 @@ class ContinuousEvidenceRecorder:
                 for operation_id, operation in tuple(active.items()):
                     if not isinstance(operation, dict):
                         raise ValueError("v2 active operation is malformed")
-                    if operation.get("operation_type") != "monitor":
-                        continue
                     terminal = self._session_store.complete_v2_operation(
                         handle,
                         operation_id=operation_id,

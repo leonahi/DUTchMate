@@ -15,12 +15,6 @@ def format_capture_result(payload: Mapping[str, object]) -> str:
     return _format_capture_summary("Capture complete", payload)
 
 
-def format_boot_test_result(payload: Mapping[str, object]) -> str:
-    """Format a completed boot-test session summary."""
-
-    return _format_capture_summary("Boot test complete", payload)
-
-
 def _format_capture_summary(label: str, payload: Mapping[str, object]) -> str:
     session_id = _display(payload.get("session_id"))
     segments = _display(payload.get("segments"))

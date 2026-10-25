@@ -40,6 +40,60 @@ def _profile() -> DutProfile:
     )
 
 
+@pytest.mark.parametrize("method", ["start_v2_operation", "v2_operation_start_will_rollover"])
+def test_boot_test_is_not_a_new_v2_operation(tmp_path: Path, method: str) -> None:
+    store = SessionStore(root=tmp_path)
+    handle = store.create_v2_session(profile=_profile(), backend_snapshot=enhanced_snapshot())
+
+    with pytest.raises(ValueError, match="unsupported v2 operation type"):
+        getattr(store, method)(
+            handle,
+            operation_id="retired-composite",
+            operation_type="boot_test",
+            parameters={},
+        )
+
+    assert read_jsonl(handle.paths.operation_events) == []
+
+
+def test_historical_v2_boot_test_evidence_remains_readable(tmp_path: Path) -> None:
+    store = SessionStore(root=tmp_path)
+    handle = store.create_v2_session(profile=_profile(), backend_snapshot=enhanced_snapshot())
+    store.start_v2_operation(
+        handle,
+        operation_id="historical-boot",
+        operation_type="monitor",
+        parameters={"duration_s": 1},
+    )
+    store.append_v2_uart_receive(handle, event=UartReceiveEvent(0, 10, 0, b"BOOT_OK\n"))
+    store.complete_v2_operation(handle, operation_id="historical-boot", outcome="elapsed")
+    store.complete_session(handle)
+
+    # Build an on-disk historical fixture independently of the live writer vocabulary.
+    original = handle.paths.operation_events.read_bytes()
+    events = read_jsonl(handle.paths.operation_events)
+    for event in events:
+        event["operation_type"] = "boot_test"
+    encoded = "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events)
+    handle.paths.operation_events.write_text(encoded, encoding="utf-8")
+    metadata = store.load_metadata(handle.session_id)
+    metadata["storage"]["evidence_bytes_written"] += len(encoded.encode()) - len(original)
+    handle.paths.metadata.write_text(json.dumps(metadata), encoding="utf-8")
+
+    historical = SessionStore(root=tmp_path)
+    detail = historical.get_session_detail(handle.session_id)
+    assert isinstance(detail, V2SessionDetail)
+    assert detail.summary.operation_counts["completed"] == 1
+    terminal = historical.load_v2_operation_terminal(
+        session_id=handle.session_id,
+        operation_id="historical-boot",
+    )
+    assert terminal["operation_type"] == "boot_test"
+    assert terminal["outcome"] == "elapsed"
+    logs = historical.replay_recent_logs(session_id=handle.session_id)
+    assert logs.complete_lines[0].line_text == "BOOT_OK\n"
+
+
 def _failure_pattern() -> dict[str, object]:
     return {
         "pattern": "ERROR",

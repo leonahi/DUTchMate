@@ -1,10 +1,10 @@
 # Development Status
 
-> Active phase: Phase 1 v2 semantic migration — Stage 4 bounded Monitor
-> implemented; Stage 5 is next
-> Repository baseline reviewed: Stage 4 completion commit (current `HEAD`)
-> on 2026-09-28
-> Stage 4 state: committed; Stage 5 has not started
+> Active phase: Phase 1 v2 semantic migration — Stage 5 implemented and
+> uncommitted; atomic-capability review applied, live boot-test removed
+> Repository baseline reviewed: `365c302` plus the uncommitted Stage 5 diff
+> on 2026-10-25
+> Stage 6 has not started
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -14,34 +14,25 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Stage 4 adds bounded duration/condition Monitor
-  operations over the Stage 3 durable stream. Monitor records globally unique
-  operation IDs, accepted parameters, cursors, rollover-spanning ranges,
-  terminal outcomes, exact requested matches, line-limit quality, and
-  cancellation. Matching reads no pre-start history or pre-cursor partial line,
-  lifecycle rollover flushes continuous line state, reconnect preserves one
-  operation while both deadlines remain valid, and failed reconnect produces a
-  durable `disconnected` outcome. Incremental seek cursors read only newly
-  admitted UART evidence outside the store mutation lock. Results aggregate
-  integrity from exact half-open evidence ranges and timestamp provenance across
-  every range. A bounded reader lease protects rollover predecessors through
-  terminal result construction. Service/CLI expose Monitor; legacy capture/wait
-  always require and delegate to Monitor.
-- **Implementation status:** The Phase 1 v2 migration is **partially
-  implemented through Stage 4**. Production runtime ownership uses schema v2,
-  continuous acquisition, and bounded Monitor. Interact, audited action
-  migration, follow/console, and release/reacquire are not implemented.
-- **Historical evidence:** Existing Basic, Enhanced, firmware, ring-buffer, and
-  HIL results remain valid evidence for the physical/backend behavior they tested.
-  They do not establish the new continuous ambient recording, schema-v2,
-  Monitor, Interact, follow/console, or release/reacquire requirements.
-- **Next step:** Execute migration **Stage 5 only**: make UART TX always audited,
-  add Interact, and migrate Control/boot-test auditing. Do not begin Stage 6
-  durable-cursor/follow/console work in that slice.
-- **Open blockers:** No contradiction requiring a new design decision was found
-  between the two normative documents. Previously recorded Revision A physical
-  evidence gaps remain deferred acceptance work for Stage 8; they do not change
-  the Stage 4 scope.
+- **Current milestone:** Stage 5 implements byte-first audited standalone TX,
+  bounded Interact, and audited reset/boot/GPIO actions. The live boot-test
+  runtime/service/CLI composite has been removed under the atomic-capability
+  contract; clients compose higher-level procedures. All mutations persist
+  attempts before physical dispatch and available results afterward. One mutation lock serializes standalone actions; Interact
+  holds exclusivity while read-only Monitor remains independent. Cancellation,
+  reconnect without TX retry, rollover, unknown outcomes, and shutdown share the
+  existing v2 lifecycle and evidence machinery.
+- **Implementation status:** The migration is implemented through Stage 5 in an
+  **uncommitted review diff** on `365c302`. Service/CLI expose Interact and exact
+  TX payloads with explicit line endings. Public `force` and finite runtime
+  capture ownership are removed. Historical v0/v1 readers remain available.
+- **Historical evidence:** Existing physical/backend/HIL results remain valid
+  for what they tested; they do not establish final Phase 1 v2 acceptance.
+- **Next step:** Review the revised uncommitted Stage 5 diff, then commit when
+  approved. Stage 6 durable cursor/follow/console remains a separate later slice;
+  it has not started. Internal operation cursors do not implement that public API.
+- **Open blockers:** No new design blocker. Revision A physical evidence gaps
+  remain deferred to Stage 8. MCP and Debug Agent contract migration remain deferred.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -62,7 +53,7 @@ demonstrated again against the new normative done criteria.
 | Native session schema v2 | Deterministic v2 store/recovery/retrieval/retention is implemented | Stage 2 complete; production runtime ownership adopted in Stage 3 |
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
 | Monitor | Bounded duration/condition observation uses the continuous durable stream with v2 operation lifecycle evidence | Stage 4 complete |
-| Interact and audited actions | Existing send/Control/boot-test paths retain pre-Stage-5 semantics | Not implemented |
+| Interact and audited actions | Exact-byte audited send, exclusive bounded Interact, and audited reset/boot/GPIO Control; higher-level reset/observe procedures are client-composed | Stage 5 implemented; live boot-test removed, uncommitted review diff |
 | Follow and console | Target durable-cursor views do not exist | Not implemented |
 | Release and reacquire | Target explicit ownership handoff does not exist | Not implemented |
 | MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Deferred until Phase 1 CLI acceptance |
@@ -80,8 +71,8 @@ the new contract.
 | 2 — session schema v2 persistence | Complete | Review findings resolved; deterministic storage contract and compatibility readers validated |
 | 3 — authoritative continuous recorder | Complete | Profile-bounded reconnect, provenance, capacity-blocked shutdown drain, boundary-flush, and queue review findings resolved |
 | 4 — Monitor | Complete | Review fixes validated; rollover-safe lifecycle, deterministic terminalization, exact-range quality, leased incremental reads, and Monitor-only aliases |
-| 5 — audited TX, Interact, Control/boot-test | Not started | **Next development slice** |
-| 6 — durable cursor, follow, console | Not started | Wait for Stage 5 |
+| 5 — audited TX, Interact, Control | Implemented, uncommitted | Atomic-capability review applied and revalidated; review before committing |
+| 6 — durable cursor, follow, console | Not started | Next implementation slice after Stage 5 review/commit |
 | 7 — release/reacquire, DTR/RTS, native USB | Not started | Wait for Stage 6 |
 | 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Not started | Wait for Stage 7 |
 | Post-Phase-1 MCP migration | Not started | Wait for Stage 8 acceptance |
@@ -102,9 +93,11 @@ progress; it does not redefine either document.
 
 ## Current Validation Requirements
 
-Stage 4 review-fix validation, 2026-09-28: 79 focused Monitor, persistence, and
-status regressions passed; the lockfile check and Ruff passed; configured mypy
-reported no issues in 94 source files; all 1,488 pytest tests passed; and
-`git diff --check` passed. Graphify was refreshed with its existing partial
-extraction warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h`.
-Detailed evidence is recorded in [Development History](development_history.md).
+Revised Stage 5 validation, 2026-10-25: 472 focused TX/Interact/Control,
+Monitor/concurrency, public-surface, and historical compatibility tests passed.
+All 1,430 pytest tests passed; Ruff, configured mypy (97 source files), the
+lockfile check, and `git diff --check` passed. Import Linter is not configured.
+The structural Graphify index was refreshed with its existing partial-extraction
+warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h`. No hardware
+was accessed. Detailed evidence is in [Development History](development_history.md).
+Stage 5 remains uncommitted; Stage 6 was not started.

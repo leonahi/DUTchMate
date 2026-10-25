@@ -6,10 +6,11 @@ import json
 from dataclasses import asdict
 from typing import Final, Literal, cast
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.operations import MonitorCondition, MonitorResult
+from dutchmate_core.operations.interact import InteractResult
 from dutchmate_core.operations.monitor import validate_monitor_request
 from dutchmate_core.runtime import DeviceCoreStatus
 from dutchmate_core.session_store.models import (
@@ -36,9 +37,11 @@ from dutchmate_core.validation import (
     GpioControlChannel,
     GpioControlMode,
     GpioLevel,
+    prepare_uart_tx_payload,
     validate_capture_duration,
     validate_gpio_configuration,
     validate_gpio_identifier,
+    validate_reset_pulse,
     validate_wait_pattern,
     validate_wait_timeout,
 )
@@ -171,6 +174,11 @@ class ResetRequest(BaseModel):
 
     pulse_ms: int = Field(default=100, ge=1, le=10000)
 
+    @field_validator("pulse_ms", mode="before")
+    @classmethod
+    def validate_pulse(cls, value: object) -> int:
+        return validate_reset_pulse(value)
+
 
 class BootModeRequest(BaseModel):
     """Request body for setting the configured boot/control role."""
@@ -189,10 +197,6 @@ class _TimedCaptureRequest(BaseModel):
 
 class CaptureRequest(_TimedCaptureRequest):
     """Request body for a finite UART capture."""
-
-
-class BootTestRequest(_TimedCaptureRequest):
-    """Request body for a reset-triggered boot capture."""
 
 
 class WaitPatternRequest(BaseModel):
@@ -259,18 +263,25 @@ class MonitorRequest(BaseModel):
 
 
 class UartSendRequest(BaseModel):
-    """Public text-only UART-send request."""
+    """Exactly one byte-first payload form; removed fields are rejected."""
 
-    cmd: str
-    append_newline: bool = True
-    force: bool = False
+    model_config = ConfigDict(extra="forbid")
+    data_b64: str | None = None
+    text: str | None = None
+    line_ending: str | None = None
 
-    @field_validator("append_newline", "force", mode="before")
-    @classmethod
-    def validate_boolean(cls, value: object, info: ValidationInfo) -> bool:
-        if not isinstance(value, bool):
-            raise ValueError(f"{info.field_name} must be a boolean")
-        return value
+    @model_validator(mode="after")
+    def validate_payload(self) -> UartSendRequest:
+        prepare_uart_tx_payload(
+            data_b64=self.data_b64,
+            text=self.text,
+            line_ending=self.line_ending,
+        )
+        return self
+
+
+class InteractRequest(MonitorRequest, UartSendRequest):
+    """One exact payload plus one bounded observation mode."""
 
 
 def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
@@ -357,7 +368,7 @@ def wait_pattern_payload(result: WaitPatternResult) -> dict[str, object]:
 def monitor_result_payload(result: MonitorResult) -> dict[str, object]:
     """Serialize one terminal bounded Monitor result."""
 
-    return {
+    payload: dict[str, object] = {
         "ok": True,
         "operation_id": result.operation_id,
         "outcome": result.outcome,
@@ -373,22 +384,24 @@ def monitor_result_payload(result: MonitorResult) -> dict[str, object]:
         ),
         "line_processing_limited": result.line_processing_limited,
         "integrity": asdict(result.integrity) if result.integrity is not None else None,
-        "timestamp_provenance": [
-            asdict(item) for item in result.timestamp_provenance
-        ],
+        "timestamp_provenance": [asdict(item) for item in result.timestamp_provenance],
     }
+    if isinstance(result, InteractResult):
+        payload.update(
+            {
+                "data_b64": result.data_b64,
+                "transformation": result.transformation,
+                "tx": uart_send_payload(result.tx) if result.tx is not None else None,
+                "tx_error": result.tx_error,
+            }
+        )
+    return payload
 
 
 def uart_send_payload(result: UartSendResult) -> dict[str, object]:
-    """Serialize one successful complete UART send."""
+    """Serialize exact bytes, acceptance, and durable audit references."""
 
-    return {
-        "ok": True,
-        "performed_at": result.performed_at,
-        "device_timestamp_us": result.device_timestamp_us,
-        "attempt_id": result.attempt_id,
-        "perturbation_logged": result.perturbation_logged,
-    }
+    return {"ok": True, **asdict(result)}
 
 
 def session_list_payload(page: SessionListPage) -> dict[str, object]:

@@ -188,6 +188,7 @@ class ActiveMonitorSummary:
     operation_id: str
     mode: Literal["duration", "conditions"]
     deadline_remaining_s: float
+    operation_type: Literal["monitor", "interact"] = "monitor"
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +200,7 @@ class ActiveMonitor:
     deadline: float
     cancellation: Event
     completed: Event
+    operation_type: Literal["monitor", "interact"] = "monitor"
 
 
 class MonitorMatcher:

@@ -441,7 +441,13 @@ def _status_for_error(error: str) -> int:
         return 409
     if error == "persistence_fault":
         return 500
-    if error in {"not_configured", "capture_active", "unsupported_capability"}:
+    if error in {
+        "not_configured",
+        "operation_active",
+        "invalid_connection_state",
+        "capture_active",
+        "unsupported_capability",
+    }:
         return 409
     if error in {"backend_input_error", "timeout", "hardware_fault"}:
         return 502

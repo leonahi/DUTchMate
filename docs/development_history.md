@@ -9,6 +9,119 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+
+## Stage 5 Atomic-Capability Cleanup Completed — 2026-10-25 (Uncommitted)
+
+- Applied the documented review decision to the existing Stage 5 diff. Removed
+  `DeviceCoreRuntime.run_boot_test`, its reset-and-observe implementation,
+  `/dut/boot-test`, `RuntimeProvider.run_boot_test`, `BootTestRequest`, the CLI
+  `boot-test` command, its HTTP client, and its dedicated result formatter.
+  No replacement composite was introduced; reset and boot-mode Control remain.
+- Removed the boot-test-only `_reset_audited` helper, internal composite Control
+  ownership parameters, fake-runtime boot-test support, and unused imports.
+  Live bounded-operation types and new v2 operation admission now allow only
+  Monitor/Interact; the Control evidence schema still records standalone
+  `operation_id: null` without changing stored evidence formats.
+- Deleted live boot-test CLI/service test modules and client tests. Removed the
+  composite-only runtime validation/observation tests; converted immediate boot
+  RX coverage to audited standalone reset with no Monitor running, followed by
+  a separate Monitor proving pre-start evidence is not retroactively matched.
+  Converted mixed service coverage to the standalone reset endpoint.
+- Added regressions for the absent runtime/client/formatter/schema/CLI/HTTP
+  surfaces and rejection of new v2 boot-test operation admission. Retained all
+  historical v0/v1 readers, replay, metadata workflow vocabulary, baseline/
+  comparison compatibility, and fixtures. A synthetic historical v2 boot-test
+  fixture verifies detail, terminal evidence, and UART replay remain readable.
+  No existing historical evidence or prior history entries were rewritten.
+- Preserved the remaining Stage 5 contracts: one continuous RX owner, exact-byte
+  audited TX, durable attempt-before-dispatch, known/unknown result evidence,
+  standalone mutation serialization, Interact exclusivity, read-only Monitor
+  coexistence, and reconnect without TX retry.
+- Validation: 472 focused tests passed across runtime, payload validation,
+  session compatibility/persistence, Control/GPIO, and service/CLI public
+  surfaces. All 1,430 pytest tests passed in 43.82 seconds. Ruff passed;
+  configured mypy reported no issues in 97 source files; `uv lock --check`
+  passed (66 packages, temporary writable `UV_CACHE_DIR`); and
+  `git diff --check` passed. Import Linter is not configured. The local structural
+  Graphify index was refreshed (5,485 nodes) with the pre-existing partial
+  extraction warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h`.
+- Baseline remains `365c302`; all Stage 5 work remains uncommitted. Stage 6,
+  release/reacquire, Stage 8 cleanup/HIL, and MCP migration were not started.
+  No physical hardware was accessed.
+
+
+## Stage 5 Review Decision — Remove Dedicated Boot-Test Composite — 2026-10-25
+
+- Stage 5 review concluded that `boot-test` is a use-case-specific composite and
+  should not remain a Device Core, service, CLI, or future MCP capability.
+- The target product boundary remains the generic deterministic primitives:
+  continuous evidence, Monitor, Interact, audited UART TX, audited Control, and
+  durable evidence access. Clients/coding agents compose reset-and-observe,
+  bootloader validation, and similar procedures from those atomic capabilities.
+- Continuous acquisition preserves immediate post-reset UART even when it arrives
+  between client requests. The Phase 1 durable evidence cursor is the generic
+  mechanism for an exact pre-action observation boundary; a later Monitor does
+  not retroactively match pre-cursor bytes.
+- The already implemented uncommitted Stage 5 boot-test path must therefore be
+  removed before Stage 5 is committed. Historical v0/v1 boot-test sessions,
+  readers, fixtures, and prior validation records remain truthful compatibility
+  evidence and are not rewritten.
+- Normative/current documentation was updated first so the coding-agent cleanup
+  follows one source of truth. Final Stage 5 validation is pending that removal.
+
+
+## Phase 1 v2 Migration Stage 5 — 2026-10-25 (Uncommitted Review Diff)
+
+- Implemented byte-first standalone UART send with exactly one binary/text input,
+  explicit `none|lf|cr|crlf|profile_default` transformations, final 1..1024-byte
+  validation, exact transmitted bytes, and durable attempt/result references.
+  Public service/CLI `force`, implicit newline append, and optional perturbation
+  auditing were retired. No TX enters the RX-only raw log.
+- Reused the existing bounded operation lifecycle, cursor, incremental reader,
+  matcher, range-quality projection, and retention lease for Interact and
+  boot-test. Interact establishes its cursor before TX, holds exclusive mutation
+  ownership, supports duration/conditions/cancellation, and preserves one
+  operation through reconnect without retransmission. Transport-interrupted or
+  lifecycle-terminalized attempts expose truthful unknown acceptance.
+- Added common standalone mutation serialization and v2 attempt-before-dispatch
+  auditing for reset, boot mode, and GPIO mode changes while preserving accepted
+  role/electrical state. Failed/unavailable results remain explicitly known or
+  unresolved; inability to persist an attempt prevents physical dispatch.
+- Boot-test records a composite start while acquisition is already active,
+  audits reset without changing boot mode, then observes the same durable stream.
+  It releases mutation serialization after reset. Read-only Monitor continues
+  alongside standalone mutations and Interact. Shutdown cancels operations and
+  waits for in-flight action result evidence before closing recording.
+- Extended recorder admission to existing v2 TX/Control persistence primitives,
+  including exact action-unit rollover preflight, line-boundary flushing,
+  pending-attempt transfer, and fatal persistence handling. Reconnect failure and
+  backend-input terminalization now cover all three bounded operation types.
+- Mapped callers before removing the old finite `CaptureWorkflow`,
+  `CaptureRecorder`, `TransportCaptureRunner`, workflow reader lifecycle,
+  runtime capture/exclusion/session-rebasing state, and per-capture reconnect
+  path. Obsolete finite-execution and forced-send tests were replaced/retired;
+  the Basic pipeline proof now exercises continuous v2 recording. Source/health/
+  reconnect contracts remain for live backend/service consumers. V0/v1 reading,
+  replay, stored evidence formats, and session-store compatibility fixtures were
+  preserved. Low-level protocol/MCP text helpers remain outside the new live TX
+  contract; no MCP files were changed.
+- Added service/CLI Interact and migrated send/boot-test contracts. Regression
+  evidence covers immediate reply ordering, unrelated and post-operation ambient
+  RX, one reader on Basic/Enhanced, read-only coexistence, exclusivity, mutation
+  ordering, request validation, partial/failed actions, attempt/result failures,
+  recovery of unknown attempts, reconnect success/failure/deadline precedence,
+  cancellation, action-triggered rollover, early boot RX, and shutdown ordering.
+- Validation: 357 focused regressions passed; `uv lock --check` passed (66
+  packages, using a writable temporary `UV_CACHE_DIR`); Ruff passed; configured
+  mypy reported no issues in 97 source files; all 1,449 pytest tests passed in
+  35.95 seconds; and `git diff --check` passed. The structural Graphify index was
+  refreshed with its existing partial-extraction warning for
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` and an aggregated view for
+  5,503 nodes. Generated graph artifacts remain untracked local navigation data.
+- Baseline is `365c302`; no commit was created. Stage 6 durable cursor/follow/
+  console, Stage 7 ownership handoff, Stage 8 acceptance, MCP migration, and
+  physical hardware acceptance were not started in this slice.
+
 ## Phase 1 v2 Migration Stage 4 Review Fixes — 2026-09-28
 
 - Made Monitor lifecycle admissions rollover-boundary aware. Continuous line

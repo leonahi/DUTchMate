@@ -1,35 +1,51 @@
 # DUTchMate
 
 DUTchMate helps embedded developers turn UART output and hardware-control
-actions into reproducible debug sessions that humans and coding agents can
-inspect. It runs a local Device Core Service, records bounded evidence from a
-selected hardware backend, and exposes the same deterministic workflows through
-a CLI and a tools-only MCP server.
+actions into durable evidence that humans and coding agents can inspect. Its
+local Device Core Service continuously records UART while it owns a connected
+backend. The CLI and service expose deterministic atomic capabilities;
+clients and coding agents compose higher-level debug procedures from them.
+
+- **Continuous evidence recording** preserves UART between client requests.
+- **Audited Control** provides configured reset, boot-mode, and GPIO actions,
+  with durable attempt evidence before physical dispatch.
+- **Monitor** observes new evidence for a bounded duration or until a condition.
+- **Interact** sends exact UART bytes once and observes a bounded response window.
+- **Audited UART TX** sends standalone payloads with explicit line-ending behavior.
 
 ## What it looks like
 
-Connect an RP2350-based Debug Helper, then let the Enhanced backend discover and
-open it during service startup. Configure the DUT reset signal and run a bounded
-boot test:
+Configure the DUT I/O voltage in the project profile and connect an RP2350-based
+Debug Helper. The Enhanced backend can discover and open it during startup.
+Configure the reset signal, then use separate Control and observation requests:
 
 ```bash
 dutchmate devices
 dutchmate start --backend enhanced
 dutchmate gpio mode CTRL0 reset RESET_N \
   --mode open_drain --active-level low
-dutchmate boot-test --seconds 15
+dutchmate dut reset
+dutchmate monitor --seconds 15
+dutchmate logs --lines 100
 ```
 
-With deterministic fixture data, the current CLI formatter renders the session
-summary like this:
+An illustrative Monitor result identifies its bounded evidence window:
 
 ```text
-Boot test complete: 20260924T120000Z-demo0001 (backend=enhanced, state=completed, end=duration_elapsed, loss=none_reported, timestamp=device/rp2350_timer:debug_helper_uart_receive/uart_event, first_error=HardFault@segment:0/event:12, lines=complete/oversized:0, segments=1, overflow=no, interrupted=no, resumed=no, truncated=no)
+Monitor elapsed
+Operation: monitor-00000000-0000-4000-8000-000000000001
+Evidence: 20261025T120000Z-demo0001:0..12
 ```
 
-The `first_error` coordinate points back into stored session evidence. A coding
-agent can launch `dutchmate mcp` and call tools such as `get_debug_session`,
-`get_recent_uart_log`, or `run_boot_test` against the same local service.
+Recording is already active before reset. A later Monitor observes only evidence
+after its own start; immediate boot output remains in the session and is available
+through log retrieval. These are independent atomic requests, with no dedicated
+reset-and-observe workflow in Device Core.
+
+Coding agents can use the CLI or service to compose procedures from Monitor,
+Interact, audited UART TX, and audited reset/boot/GPIO Control. UART TX requires
+the profile's TX policy to be enabled. The separate MCP adapter's contract and
+migration scope are tracked in the [development status](docs/development_status.md).
 
 ## Install
 

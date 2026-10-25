@@ -4,7 +4,7 @@
 
 ## Goal
 
-GPIO configuration must make hardware control explicit without making every normal boot test repetitive. DUTchMate therefore treats both runtime CLI configuration and config-file configuration as explicit user decisions.
+GPIO configuration must make hardware control explicit without forcing clients to repeat low-level electrical setup for each higher-level procedure. DUTchMate therefore treats both runtime CLI configuration and config-file configuration as explicit user decisions.
 
 ## Channel State Model
 
@@ -222,21 +222,21 @@ Before `set_boot_mode()`:
   starts in `normal`; disconnect and safety-fault paths make the commanded mode
   unknown until configuration is accepted again.
 
-Before `run_boot_test()`:
+For client-composed reset/boot validation:
 
-- `reset` must be `configured`.
-- The plain Phase 1 workflow uses the current or externally selected boot state
-  and must not issue a boot-mode command. It therefore does not require a
-  configured `boot` role.
-- A bootloader test is an explicit three-step workflow: select `bootloader`, run
-  the boot test, then select `normal`. `run_boot_test()` does not silently
+- `reset` must be `configured` before an audited reset action.
+- Observing boot evidence does not itself require a configured `boot` role; the
+  current or externally selected boot state remains in effect.
+- A bootloader validation sequence is explicit client orchestration: select
+  `bootloader`, establish/retain the desired evidence boundary, perform reset,
+  inspect the resulting evidence, then select `normal` when appropriate. Device
+  Core does not provide a dedicated boot-test operation and does not silently
   select or restore either mode.
 
 Read-only operations do not require GPIO configuration.
 
-A successful reset response echoes the accepted `pulse_ms`. A reset recorded
-inside a boot-test session stores that value with the normalized control-action
-event.
+A successful reset response echoes the accepted `pulse_ms`. The active v2 session
+records that value in the normalized audited Control evidence.
 
 ## Service API Reporting
 

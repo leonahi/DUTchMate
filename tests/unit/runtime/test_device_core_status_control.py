@@ -87,7 +87,7 @@ def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
 
 def test_configure_gpio_mode_requires_declared_dut_io_voltage(tmp_path: Path) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
@@ -113,7 +113,7 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
             CommandSuccessMessage(timestamp_us=200),
         ]
     )
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
     )
@@ -136,7 +136,7 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
                         "active_level": "high",
                         "idle_level": "low",
                     },
-                }
+                },
             }
         }
     )
@@ -184,7 +184,7 @@ def test_boot_mode_tracks_only_accepted_commands_and_disconnect_invalidates_it(
             CommandSuccessMessage(timestamp_us=200),
         ]
     )
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
         dut_io_voltage=3.3,
@@ -218,7 +218,7 @@ def test_uncertain_boot_command_failure_invalidates_prior_command(
             CommandErrorMessage(error="hardware_fault", detail="driver failed"),
         ]
     )
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
         dut_io_voltage=3.3,
@@ -256,12 +256,13 @@ def test_rejected_boot_mapping_preserves_or_invalidates_command_by_outcome(
             CommandErrorMessage(error="hardware_fault", detail="driver failed"),
         ]
     )
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
         dut_io_voltage=3.3,
     )
     runtime.record_backend_connection(enhanced_info())
+
     def configure_boot() -> GpioControlChannelState:
         return runtime.configure_gpio_mode(
             role="boot",
@@ -293,7 +294,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
             CommandSuccessMessage(timestamp_us=300),
         ]
     )
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
         dut_io_voltage=3.3,
@@ -332,7 +333,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
 
 def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Path) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
-    runtime = DeviceCoreRuntime(
+    runtime = _recording_runtime(
         device_control=control,
         session_store=SessionStore(root=tmp_path),
         dut_io_voltage=3.3,
@@ -353,3 +354,36 @@ def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Pa
     assert status.firmware is None
     assert status.integrity is None
     assert status.control_channels["CTRL0"].state == "configured"
+
+
+_RECORDING_RUNTIMES = []
+
+
+@pytest.fixture(autouse=True)
+def _close_recorders():
+    yield
+    for runtime in _RECORDING_RUNTIMES:
+        runtime.close()
+    _RECORDING_RUNTIMES.clear()
+
+
+def _recording_runtime(**kwargs):
+    from dataclasses import replace
+
+    from test_device_core_monitor import ControlledSource, _snapshot
+
+    from dutchmate_core.evidence import ContinuousEvidenceRecorder
+    from dutchmate_core.profile import DutProfileConfig, resolve_dut_profile
+
+    snapshot = _snapshot()
+    info = enhanced_info()
+    snapshot = replace(snapshot, info=info, capabilities=info.capabilities - {"uart_send"})
+    recorder = ContinuousEvidenceRecorder(
+        source=ControlledSource(),
+        session_store=kwargs["session_store"],
+        profile=resolve_dut_profile(DutProfileConfig(), mode="enhanced", serial_port=info.port),
+        backend_snapshot=snapshot,
+    )
+    runtime = DeviceCoreRuntime(**kwargs, evidence_recorder=recorder)
+    _RECORDING_RUNTIMES.append(runtime)
+    return runtime

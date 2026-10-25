@@ -310,7 +310,7 @@ def test_apply_startup_hardware_config_skips_disconnected_runtime() -> None:
                         "mode": "open_drain",
                         "active_level": "low",
                     }
-                }
+                },
             }
         }
     )
@@ -333,9 +333,7 @@ def test_build_startup_runtime_without_serial_port_is_disconnected(tmp_path: Pat
 def test_build_startup_runtime_exposes_resolved_profile_while_disconnected(
     tmp_path: Path,
 ) -> None:
-    profile = resolve_dut_profile(
-        DutProfileConfig(name="fixture", mode="enhanced")
-    )
+    profile = resolve_dut_profile(DutProfileConfig(name="fixture", mode="enhanced"))
 
     runtime = build_startup_runtime(session_root=tmp_path, profile=profile)
 
@@ -747,7 +745,7 @@ def test_enhanced_startup_hardware_config_reaches_async_host(
                         "mode": "open_drain",
                         "active_level": "low",
                     }
-                }
+                },
             }
         }
     )
@@ -1251,12 +1249,10 @@ def test_build_startup_runtime_recovers_sessions_before_opening_backend(
 
 def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=123)])
-    runtime = DeviceCoreRuntime(
-        device_control=control,
-        session_store=SessionStore(root=tmp_path),
-    )
+    runtime = _runtime_with_continuous_recording(tmp_path, control, request)
     runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
         {
@@ -1269,7 +1265,7 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
                         "mode": "open_drain",
                         "active_level": "low",
                     }
-                }
+                },
             }
         }
     )
@@ -1296,14 +1292,13 @@ def test_create_app_applies_startup_hardware_config_when_runtime_is_connected(
     assert payload["control_channels"]["CTRL0"]["device_timestamp_us"] == 123
 
 
-def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -> None:
+def test_rejected_startup_hardware_config_is_visible_in_status(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
     control = FakeDeviceControl(
         [CommandErrorMessage(error="hardware_fault", detail="CTRL0 cannot drive RESET_N")]
     )
-    runtime = DeviceCoreRuntime(
-        device_control=control,
-        session_store=SessionStore(root=tmp_path),
-    )
+    runtime = _runtime_with_continuous_recording(tmp_path, control, request)
     runtime.record_backend_connection(normalize_enhanced_hello(_hello(), port="/dev/ttyACM0"))
     config = parse_hardware_gpio_config(
         {
@@ -1316,7 +1311,7 @@ def test_rejected_startup_hardware_config_is_visible_in_status(tmp_path: Path) -
                         "mode": "open_drain",
                         "active_level": "low",
                     }
-                }
+                },
             }
         }
     )
@@ -1363,3 +1358,27 @@ def _enhanced_segment(*, segment_id: int) -> SegmentContext:
             event_granularity="uart_event",
         ),
     )
+
+
+def _runtime_with_continuous_recording(
+    root: Path,
+    control: FakeDeviceControl,
+    request: pytest.FixtureRequest,
+) -> DeviceCoreRuntime:
+    from dutchmate_service.backend_reconnect import backend_snapshot
+
+    info = normalize_enhanced_hello(_hello(), port="/dev/ttyACM0")
+    segment = _enhanced_segment(segment_id=0)
+    source = FakeEnhancedAsyncHost(info=info, segment_id=0, segment=segment)
+    store = SessionStore(root=root)
+    recorder = ContinuousEvidenceRecorder(
+        source=source,
+        session_store=store,
+        profile=resolve_dut_profile(DutProfileConfig(), mode="enhanced", serial_port=info.port),
+        backend_snapshot=backend_snapshot(info=info, segment=segment, tx_enabled=False),
+    )
+    runtime = DeviceCoreRuntime(
+        device_control=control, session_store=store, evidence_recorder=recorder
+    )
+    request.addfinalizer(runtime.close)
+    return runtime

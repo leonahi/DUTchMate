@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 
 def format_uart_send(payload: Mapping[str, object]) -> str:
-    """Format a complete standalone or forced in-session UART send."""
+    """Format a complete audited UART send."""
 
     lines = [
         "UART command sent",
@@ -13,18 +13,14 @@ def format_uart_send(payload: Mapping[str, object]) -> str:
     device_timestamp = payload.get("device_timestamp_us")
     if device_timestamp is not None:
         lines.append(f"Device timestamp: {device_timestamp} us")
-    attempt_id = payload.get("attempt_id")
-    if attempt_id is not None:
-        lines.extend(
-            [
-                f"Attempt: {_display(attempt_id)}",
-                (
-                    "Perturbation logged: yes"
-                    if payload.get("perturbation_logged") is True
-                    else "Perturbation logged: no"
-                ),
-            ]
-        )
+    lines.extend(
+        [
+            f"Bytes accepted: {_display(payload.get('accepted_bytes'))}",
+            f"Attempt: {_display(payload.get('attempt_id'))}",
+            f"Audit: {_display(payload.get('audit_status'))}",
+            f"Exact bytes (base64): {_display(payload.get('data_b64'))}",
+        ]
+    )
     return "\n".join(lines)
 
 

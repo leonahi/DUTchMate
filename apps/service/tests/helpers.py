@@ -27,7 +27,6 @@ class FakeRuntime:
         self.reset_requests: list[int] = []
         self.boot_mode_requests: list[str] = []
         self.capture_requests: list[float] = []
-        self.boot_test_requests: list[float] = []
         self.uart_send_requests: list[dict[str, object]] = []
         self.hardware_configs: list[HardwareGpioConfig] = []
 
@@ -113,36 +112,6 @@ class FakeRuntime:
             end_reason="duration_elapsed",
         )
 
-    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
-        self.boot_test_requests.append(duration_s)
-        return SessionSummary(
-            session_id="20260729T100000Z-boot01",
-            started_at="2026-07-29T10:00:00Z",
-            command=f"boot-test --seconds {duration_s:g}",
-            truncated=False,
-            interrupted=False,
-            resumed=False,
-            overflow=False,
-            baseline=False,
-            firmware="0.1.0",
-            device="dutchmate-rp2350",
-            segment_count=1,
-            backend_mode="enhanced",
-            port="/dev/ttyACM0",
-            backend_capabilities=("gpio_control", "uart_receive", "uart_send"),
-            capabilities=("gpio_control", "uart_receive"),
-            capability_policy=_tx_policy(),
-            integrity=_enhanced_integrity(),
-            segment_contexts=(_enhanced_segment(),),
-            schema_version=1,
-            state="completed",
-            workflow="boot_test",
-            duration_s=duration_s,
-            reconnect_timeout_s=5.0,
-            ended_at="2026-07-29T10:00:03Z",
-            end_reason="duration_elapsed",
-        )
-
     def wait_pattern(self, *, pattern: str, timeout_s: float) -> WaitPatternResult:
         summary = self.capture_uart(duration_s=timeout_s)
         return WaitPatternResult(
@@ -152,25 +121,26 @@ class FakeRuntime:
             match=None,
         )
 
-    def send_uart(
-        self,
-        *,
-        cmd: str,
-        append_newline: bool = True,
-        force: bool = False,
-    ) -> UartSendResult:
+    def send_uart(self, *, data_b64=None, text=None, line_ending=None) -> UartSendResult:
+        from dutchmate_core.validation import prepare_uart_tx_payload
+
+        payload = prepare_uart_tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
         self.uart_send_requests.append(
-            {
-                "cmd": cmd,
-                "append_newline": append_newline,
-                "force": force,
-            }
+            {"data_b64": data_b64, "text": text, "line_ending": line_ending}
         )
         return UartSendResult(
             performed_at="2026-07-29T10:00:01Z",
             device_timestamp_us=182334700,
-            attempt_id="attempt01" if force else None,
-            perturbation_logged=force,
+            attempt_id="attempt01",
+            data_b64=payload.data_b64,
+            transformation=payload.transformation(),
+            accepted_bytes=len(payload.data),
+            status="success",
+            audit_status="recorded",
+            attempt_session_id="session-one",
+            attempt_evidence_seq=1,
+            result_session_id="session-one",
+            result_evidence_seq=2,
         )
 
     def list_sessions(

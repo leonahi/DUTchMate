@@ -116,9 +116,7 @@ __all__ = [
     "V2SessionListItem",
 ]
 
-DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES = session_evidence_budget_bytes(
-    DEFAULT_SESSION_MAX_SIZE_MB
-)
+DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES = session_evidence_budget_bytes(DEFAULT_SESSION_MAX_SIZE_MB)
 _V2_OPERATION_OUTCOMES: Final = frozenset(
     {
         "elapsed",
@@ -1177,13 +1175,13 @@ class SessionStore:
         handle: SessionHandle,
         *,
         operation_id: str,
-        operation_type: Literal["monitor", "interact", "boot_test"],
+        operation_type: Literal["monitor", "interact"],
         parameters: dict[str, object],
     ) -> bool:
         """Return whether the exact operation-start unit requires rollover."""
 
         _validate_v2_identifier(operation_id, field="operation_id")
-        if operation_type not in {"monitor", "interact", "boot_test"}:
+        if operation_type not in {"monitor", "interact"}:
             raise ValueError("unsupported v2 operation type")
         with self._store_lock:
             metadata = self._require_active_v2_metadata(handle)
@@ -1214,7 +1212,7 @@ class SessionStore:
         handle: SessionHandle,
         *,
         operation_id: str,
-        operation_type: Literal["monitor", "interact", "boot_test"],
+        operation_type: Literal["monitor", "interact"],
         parameters: dict[str, object],
     ) -> V2EvidenceAdmission:
         """Persist an operation start before operation-owned activity begins.
@@ -1225,7 +1223,7 @@ class SessionStore:
         """
 
         _validate_v2_identifier(operation_id, field="operation_id")
-        if operation_type not in {"monitor", "interact", "boot_test"}:
+        if operation_type not in {"monitor", "interact"}:
             raise ValueError("unsupported v2 operation type")
         with self._store_lock:
             metadata = self._require_active_v2_metadata(handle)
@@ -1425,7 +1423,7 @@ class SessionStore:
             operation = _v2_active_operation(metadata, operation_id)
             ranges = operation.get("ranges")
             if (
-                operation.get("operation_type") != "monitor"
+                operation.get("operation_type") not in {"monitor", "interact", "boot_test"}
                 or not isinstance(ranges, list)
                 or not ranges
                 or not isinstance(ranges[-1], dict)
@@ -1449,9 +1447,7 @@ class SessionStore:
                 root=self._root,
                 start=start,
                 uart_offset=uart_offset,
-                release_lease=lambda: self._release_v2_monitor_range_lease(
-                    operation_id
-                ),
+                release_lease=lambda: self._release_v2_monitor_range_lease(operation_id),
             )
 
     def summarize_v2_monitor_evidence(
@@ -1535,6 +1531,49 @@ class SessionStore:
                 ):
                     return dict(record)
         raise ValueError("v2 operation terminal record was not found")
+
+    def v2_action_will_rollover(
+        self,
+        handle: SessionHandle,
+        *,
+        record_type: Literal[
+            "uart_tx_attempt", "uart_tx_result", "control_attempt", "control_result"
+        ],
+        fields: dict[str, object],
+    ) -> bool:
+        """Preflight the exact action unit so the recorder can flush line state."""
+
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+
+            def action_fields(
+                _handle: SessionHandle,
+                updated: dict[str, object],
+                _sequence: int,
+            ) -> dict[str, object]:
+                projected = dict(fields)
+                if record_type.endswith("_attempt"):
+                    projected["segment_id"] = _current_v2_segment_id(updated)
+                else:
+                    attempt_type: Literal["uart_tx_attempt", "control_attempt"] = (
+                        "uart_tx_attempt" if record_type == "uart_tx_result" else "control_attempt"
+                    )
+                    attempt_id = fields.get("attempt_id")
+                    if not isinstance(attempt_id, str):
+                        raise ValueError("action attempt_id must be a string")
+                    pending = _v2_pending_attempt(updated, attempt_type, attempt_id)
+                    if pending is None:
+                        raise ValueError("action result requires an unresolved attempt")
+                    projected["attempt_session_id"] = pending["session_id"]
+                    projected["attempt_evidence_seq"] = pending["evidence_seq"]
+                return projected
+
+            return self._v2_record_will_rollover_locked(
+                handle,
+                metadata=metadata,
+                record_type=record_type,
+                fields=action_fields,
+            )
 
     def append_v2_uart_tx_attempt(
         self,

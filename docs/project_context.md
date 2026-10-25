@@ -230,10 +230,14 @@ DUTchMate does not promise identical DUT output. It promises that the requested 
 The boundary is:
 
 ```text
-Client decides WHAT operation to request.
-DUTchMate owns HOW the bounded operation executes.
+Client decides WHICH atomic operations to request and HOW to compose them.
+DUTchMate owns HOW each bounded atomic operation executes.
 DUT determines WHAT physically happens in response.
 ```
+
+Use-case-specific orchestration stays above Device Core unless a future contract
+demonstrates that the sequence itself must become a reusable deterministic atomic
+capability.
 
 ---
 
@@ -344,6 +348,31 @@ DUT -> EVENTn -> DUTchMate -> client
 ```
 
 `Follow` and `Console` are user-facing views built on these underlying capabilities and the continuous stream. They are not separate physical capabilities.
+
+### 7.1 Atomic capabilities and client orchestration
+
+Device Core owns deterministic execution of each atomic capability. Clients may
+compose those capabilities into higher-level debugging procedures without Device
+Core adding a dedicated API for every use case.
+
+For example, a coding agent may implement a boot-validation procedure as:
+
+```text
+establish durable evidence cursor
+    -> audited reset Control action
+    -> read/Monitor the continuing evidence stream
+    -> evaluate the observed boot behavior
+```
+
+The same principle applies to bootloader entry, reset-and-diagnose sequences,
+GPIO-driven tests, and other project-specific procedures. Device Core must not
+accumulate use-case-specific composites when the same behavior can be expressed
+from Monitor, Interact, Control, and durable evidence access.
+
+Continuous acquisition ensures that UART emitted between those client requests
+remains evidence. A bounded Monitor only matches evidence after its own start
+cursor; callers that need an exact pre-action observation boundary use the
+durable evidence cursor API instead of relying on a dedicated composite workflow.
 
 ---
 

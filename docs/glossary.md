@@ -97,9 +97,10 @@ reconnect closes the old segment and creates a new timestamp context.
 
 ## Session
 
-A bounded, durable record of one capture, boot test, wait, or related workflow,
-including lifecycle state, segments, UART evidence, hardware actions, and
-integrity metadata.
+A bounded, durable ownership interval containing ambient UART evidence, connection
+segments, bounded operation records, audited hardware/TX actions, and integrity
+metadata. A session is not created per Monitor, Interact, or client-composed
+higher-level procedure.
 
 ## Timestamp provenance
 

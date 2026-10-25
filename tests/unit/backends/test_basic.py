@@ -17,8 +17,9 @@ from dutchmate_core.backends.basic import (
     open_basic_backend_connection,
 )
 from dutchmate_core.backends.settings import BackendSettings
+from dutchmate_core.evidence import ContinuousEvidenceRecorder
+from dutchmate_core.profile import DutProfileConfig, resolve_dut_profile
 from dutchmate_core.session_store.store import SessionStore
-from dutchmate_core.workflows.capture import CaptureWorkflow
 
 
 class FakeRawSerial:
@@ -249,10 +250,9 @@ async def test_basic_source_drains_queued_data_before_disconnect() -> None:
     source.close()
 
 
-def test_basic_source_records_raw_bytes_through_shared_capture_pipeline(tmp_path: Path) -> None:
+def test_basic_source_records_raw_bytes_through_continuous_v2_pipeline(tmp_path: Path) -> None:
     serial = ScriptedRawSerial([b"BOOT_OK\n"])
     source_clock = iter([20_000_000, 20_750_000])
-    workflow_clock = iter([0.0, 0.0, 0.0, 2.0])
     connection = open_basic_backend_connection(
         _settings(),
         serial_factory=lambda **_kwargs: serial,
@@ -264,27 +264,35 @@ def test_basic_source_records_raw_bytes_through_shared_capture_pipeline(tmp_path
     )
     store = SessionStore(root=tmp_path)
 
-    summary = CaptureWorkflow(session_store=store).run(
+    recorder = ContinuousEvidenceRecorder(
         source=source,
-        duration_s=1.0,
-        command="capture --seconds 1",
-        monotonic_clock=lambda: next(workflow_clock),
+        session_store=store,
+        backend_snapshot=source.snapshot,
+        profile=resolve_dut_profile(DutProfileConfig(), mode="basic", serial_port="/dev/ttyUSB0"),
     )
-
+    try:
+        cursor = recorder.durable_tail()
+        raw_path = store.root / recorder.active_session_id / "uart_raw.log"
+        while raw_path.read_bytes() != b"BOOT_OK\n":
+            tail = recorder.wait_for_durable_tail(cursor, timeout_s=1)
+            assert tail is not None
+            cursor = tail
+    finally:
+        recorder.close()
+    summary = store.get_session_detail(recorder.active_session_id).summary
     assert (store.root / summary.session_id / "uart_raw.log").read_bytes() == b"BOOT_OK\n"
-    assert summary.device is None
-    assert summary.firmware is None
+    metadata = store.load_metadata(summary.session_id)
+    assert metadata["schema_version"] == 2
     assert summary.backend_mode == "basic"
-    assert summary.port == "/dev/ttyUSB0"
-    assert summary.backend_capabilities == ("uart_receive", "uart_send")
-    assert summary.capabilities == ("uart_receive",)
-    assert summary.capability_policy is not None
-    assert summary.capability_policy.uart_send.tx_policy_enabled is False
-    assert summary.integrity is not None
-    assert summary.integrity.loss_status == "not_observable"
-    assert summary.integrity.observation_scope is None
-    assert summary.integrity.dropped_bytes is None
-    assert summary.segment_contexts[0].timestamp.observation_point == "host_serial_read"
+    assert connection.info.device is None
+    assert connection.info.firmware is None
+    assert connection.info.port == "/dev/ttyUSB0"
+    assert source.snapshot.capability_policy.uart_send.tx_policy_enabled is False
+    assert source.snapshot.integrity is not None
+    assert source.snapshot.integrity.loss_status == "not_observable"
+    assert source.snapshot.integrity.observation_scope is None
+    assert source.snapshot.integrity.dropped_bytes is None
+    assert source.segment.timestamp.observation_point == "host_serial_read"
     source.close()
 
 

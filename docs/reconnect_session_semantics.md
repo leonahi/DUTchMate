@@ -251,7 +251,7 @@ payload.
 seconds and accepts finite numeric values from `0.1` through `60.0`, inclusive;
 booleans and all other types/ranges are invalid configuration. Device Core
 validates it before opening a backend and snapshots the accepted value as
-top-level `reconnect_timeout_s` in every native capture, boot-test, and
+top-level `reconnect_timeout_s` in every legacy native capture and
 wait-pattern session. A later configuration change cannot alter an active or
 stored session.
 
@@ -346,10 +346,11 @@ For Phase 1, capture duration and wait-pattern timeout are elapsed-time based
 from the host workflow start and measured with a monotonic host clock.
 Wall-clock adjustments and reconnect do not extend the deadline.
 
-Capture and boot-test accept only an explicit finite numeric duration satisfying
-`0 < duration_s <= 300`. Validation occurs before session/reset work. The
-accepted duration is stored with the session and the original monotonic deadline
-is retained across reconnect attempts.
+Legacy capture accepts only an explicit finite numeric duration satisfying
+`0 < duration_s <= 300`. Validation occurs before session work. The accepted
+duration is stored with the session and the original monotonic deadline is
+retained across reconnect attempts. Current bounded Monitor/Interact timing is
+defined normatively in `phase1_implementation_spec.md`.
 
 Example: if `capture --seconds 10` disconnects at second 3 and reconnects at second 5, capture still ends at second 10. The session contains a two-second evidence gap.
 
@@ -361,7 +362,7 @@ wait.
 The gap must be visible through segment metadata and hardware events.
 
 If the original workflow deadline arrives before or at the reconnect deadline, it
-ends normally: capture/boot-test uses `state: "completed"` with
+ends normally: legacy capture uses `state: "completed"` with
 `end_reason: "duration_elapsed"`, and wait-pattern uses `state: "completed"`
 with `end_reason: "timeout"` and `matched: false`. If the reconnect deadline
 arrives first, the workflow uses `state: "failed"` with

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from threading import Event
@@ -14,6 +14,7 @@ from fastapi import FastAPI, Query
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
 from dutchmate_core.operations import MonitorCondition, MonitorResult
+from dutchmate_core.operations.interact import InteractResult
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.runtime import (
     DeviceCoreStatus,
@@ -25,16 +26,15 @@ from dutchmate_core.session_store.store import (
     SessionComparison,
     SessionDetail,
     SessionListPage,
-    SessionSummary,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionResult
 from dutchmate_core.workflows.uart_send import UartSendResult
 from dutchmate_service.errors import register_error_handlers
 from dutchmate_service.schemas import (
     BootModeRequest,
-    BootTestRequest,
     CaptureRequest,
     GpioModeRequest,
+    InteractRequest,
     MonitorRequest,
     ResetRequest,
     UartSendRequest,
@@ -82,9 +82,6 @@ class RuntimeProvider(Protocol):
     def capture_uart(self, *, duration_s: float) -> MonitorResult:
         """Run the legacy capture spelling as a Monitor alias."""
 
-    def run_boot_test(self, *, duration_s: float) -> SessionSummary:
-        """Reset the DUT and capture boot evidence into a session."""
-
     def wait_pattern(
         self,
         *,
@@ -103,14 +100,27 @@ class RuntimeProvider(Protocol):
     ) -> MonitorResult:
         """Run one bounded Monitor window over durable evidence."""
 
+    def interact(
+        self,
+        *,
+        data_b64: object = None,
+        text: object = None,
+        line_ending: object = None,
+        duration_s: object | None = None,
+        conditions: tuple[MonitorCondition, ...] | None = None,
+        timeout_s: object | None = None,
+        cancellation: Event | None = None,
+    ) -> InteractResult:
+        """Send once and observe under exclusive mutation ownership."""
+
     def send_uart(
         self,
         *,
-        cmd: str,
-        append_newline: bool = True,
-        force: bool = False,
+        data_b64: object = None,
+        text: object = None,
+        line_ending: object = None,
     ) -> UartSendResult:
-        """Send one validated text command to the DUT UART."""
+        """Send exact audited bytes in the existing ownership session."""
 
     def list_sessions(
         self,
@@ -223,9 +233,7 @@ def create_app(
         session_id: str | None = None,
         lines: Annotated[int, Query(ge=1, le=1000)] = 300,
     ) -> dict[str, object]:
-        return recent_logs_payload(
-            runtime_provider.recent_logs(session_id=session_id, lines=lines)
-        )
+        return recent_logs_payload(runtime_provider.recent_logs(session_id=session_id, lines=lines))
 
     @app.post("/gpio/mode")
     def configure_gpio_mode(request: GpioModeRequest) -> dict[str, object]:
@@ -258,8 +266,11 @@ def create_app(
             else capture_summary_payload(result)
         )
 
-    @app.post("/dut/monitor")
-    async def monitor(request: MonitorRequest) -> dict[str, object]:
+    async def bounded(
+        operation: Callable[..., MonitorResult],
+        request: MonitorRequest,
+        **kwargs: object,
+    ) -> dict[str, object]:
         cancellation = Event()
         conditions = (
             tuple(
@@ -271,11 +282,12 @@ def create_app(
         )
         task = asyncio.create_task(
             asyncio.to_thread(
-                runtime_provider.monitor,
+                operation,
                 duration_s=request.duration_s,
                 conditions=conditions,
                 timeout_s=request.timeout_s,
                 cancellation=cancellation,
+                **kwargs,
             )
         )
         try:
@@ -284,10 +296,19 @@ def create_app(
             cancellation.set()
             raise
 
-    @app.post("/dut/boot-test")
-    def run_boot_test(request: BootTestRequest) -> dict[str, object]:
-        summary = runtime_provider.run_boot_test(duration_s=request.duration_s)
-        return capture_summary_payload(summary)
+    @app.post("/dut/monitor")
+    async def monitor(request: MonitorRequest) -> dict[str, object]:
+        return await bounded(runtime_provider.monitor, request)
+
+    @app.post("/dut/interact")
+    async def interact(request: InteractRequest) -> dict[str, object]:
+        return await bounded(
+            runtime_provider.interact,
+            request,
+            data_b64=request.data_b64,
+            text=request.text,
+            line_ending=request.line_ending,
+        )
 
     @app.post("/dut/wait-pattern")
     def wait_pattern(request: WaitPatternRequest) -> dict[str, object]:
@@ -305,9 +326,9 @@ def create_app(
     def send_uart(request: UartSendRequest) -> dict[str, object]:
         return uart_send_payload(
             runtime_provider.send_uart(
-                cmd=request.cmd,
-                append_newline=request.append_newline,
-                force=request.force,
+                data_b64=request.data_b64,
+                text=request.text,
+                line_ending=request.line_ending,
             )
         )
 
