@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import replace
 from threading import Condition, Event, RLock, Thread, current_thread
 from typing import Protocol, cast
 
@@ -15,6 +17,7 @@ from dutchmate_core.backends.contracts import (
     BackendCapabilityPolicy,
     BackendInfo,
     BackendInputError,
+    BackendOpenError,
     BackendSnapshot,
     BackendUartSendResult,
     ControlState,
@@ -25,7 +28,10 @@ from dutchmate_core.backends.contracts import (
     apply_capability_policy,
     integrity_for_backend,
 )
+from dutchmate_core.backends.selection import select_backend_settings
 from dutchmate_core.backends.settings import BackendSettings
+from dutchmate_core.connection import ConnectionLifecycleError
+from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
     ReconnectedCaptureSource,
@@ -116,6 +122,15 @@ class _CandidateCleanupFailure(Exception):
         self.cleanup_error = cleanup_error
 
 
+class ManualSourceOwner(Protocol):
+    def release(self) -> None: ...
+    def begin_reacquire(self) -> None: ...
+    def reacquire_failed(self, *, cleanup_unknown: bool = False) -> None: ...
+    def accept_reacquired_source(
+        self, source: CaptureEventSource, *, backend_snapshot: BackendSnapshot
+    ) -> None: ...
+
+
 class BackendReconnectCoordinator:
     """Serialize idle and active reconnect attempts for one stable source owner."""
 
@@ -175,12 +190,158 @@ class BackendReconnectCoordinator:
                 return self._stop_requested.is_set()
 
             self._active_retry_wait = deterministic_active_retry_wait
+        self._failure: ConnectionLifecycleError | None = None
+        self._suspended = False
         self._worker: Thread | None = None
         self._attempt_active = False
         self._attempt_owner: Thread | None = None
         self._closing = False
         self._closed = False
         self._close_error: BaseException | None = None
+
+    @property
+    def failure(self) -> ConnectionLifecycleError | None:
+        with self._condition:
+            return self._failure
+
+    def cancel_pending(self) -> None:
+        """Prevent a submitted open from being published after shutdown/detach."""
+        with self._condition:
+            self._stop_requested.set()
+            self._condition.notify_all()
+
+    @contextmanager
+    def _manual_claim(self) -> Iterator[None]:
+        with self._condition:
+            if (
+                self._closing
+                or self._closed
+                or self._stop_requested.is_set()
+                or self._close_error is not None
+            ):
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state",
+                    "Connection ownership is closed or cleanup is unconfirmed",
+                )
+            if self._attempt_active:
+                raise ConnectionLifecycleError(
+                    "operation_active", "A connection lifecycle request is active"
+                )
+            self._attempt_active = True
+            self._attempt_owner = current_thread()
+            self._suspended = True
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._attempt_active = False
+                self._attempt_owner = None
+                self._condition.notify_all()
+
+    def release(self) -> None:
+        with self._manual_claim():
+            try:
+                cast(ManualSourceOwner, self._source_owner).release()
+            except ConnectionLifecycleError:
+                with self._condition:
+                    self._suspended = False
+                    self._condition.notify_all()
+                raise
+            except SessionPersistenceError as exc:
+                self._retain_close_error(exc)
+                self._failure = ConnectionLifecycleError(
+                    "persistence_fault", "Lifecycle journaling failed", reason="persistence_fault"
+                )
+                raise
+            except BaseException as exc:
+                self._retain_close_error(exc)
+                raise ConnectionLifecycleError(
+                    "service_unavailable",
+                    "Release cleanup is unconfirmed",
+                    reason="cleanup_unconfirmed",
+                ) from exc
+
+    def reacquire(self) -> None:
+        with self._manual_claim():
+            owner = cast(ManualSourceOwner, self._source_owner)
+            owner.begin_reacquire()
+            replacement: ReconnectedCaptureSource | None = None
+            try:
+                deadline = self._clock() + self._reconnect_timeout_s
+                if self._stop_requested.is_set():
+                    raise ConnectionLifecycleError(
+                        "invalid_connection_state", "Connection ownership is shutting down"
+                    )
+                replacement = self._open_replacement(
+                    segment_id=0,
+                    deadline=deadline,
+                    stop_requested=self._stop_requested,
+                )
+                with self._condition:
+                    if self._clock() >= deadline:
+                        raise ConnectionLifecycleError(
+                            "service_unavailable",
+                            "Reacquire deadline expired",
+                            reason="open_timeout",
+                        )
+                    if self._closing or self._closed or self._stop_requested.is_set():
+                        raise ConnectionLifecycleError(
+                            "invalid_connection_state", "Connection ownership is shutting down"
+                        )
+                    if self._on_connected is not None:
+                        self._on_connected(replacement)
+                    if self._closing or self._closed or self._stop_requested.is_set():
+                        raise ConnectionLifecycleError(
+                            "invalid_connection_state", "Connection ownership is shutting down"
+                        )
+                    if replacement.backend_snapshot is None:
+                        raise ValueError("Reacquire requires segment provenance")
+                    owner.accept_reacquired_source(
+                        replacement.source, backend_snapshot=replacement.backend_snapshot
+                    )
+                    replacement = None
+                    self._suspended = False
+                    self._failure = None
+                    self._condition.notify_all()
+            except BaseException as exc:
+                unknown = (
+                    not isinstance(exc, ConnectionLifecycleError)
+                    and getattr(exc, "cleanup_confirmed", None) is not True
+                )
+                if replacement is not None:
+                    try:
+                        self._close_rejected(replacement)
+                        unknown = False
+                    except BaseException:
+                        unknown = True
+                self._failure = (
+                    exc
+                    if isinstance(exc, ConnectionLifecycleError) and not unknown
+                    else ConnectionLifecycleError(
+                        "service_unavailable",
+                        "Reacquire failed",
+                        reason="cleanup_unconfirmed" if unknown else "open_failed",
+                    )
+                )
+                if unknown:
+                    self._retain_close_error(exc)
+                owner.reacquire_failed(cleanup_unknown=unknown)
+                if isinstance(exc, SessionPersistenceError):
+                    self.cancel_pending()
+                    if not unknown:
+                        self._failure = ConnectionLifecycleError(
+                            "persistence_fault",
+                            "Lifecycle journaling failed",
+                            reason="persistence_fault",
+                        )
+                    raise
+                if isinstance(exc, ConnectionLifecycleError) and not unknown:
+                    raise
+                raise ConnectionLifecycleError(
+                    "service_unavailable",
+                    "Reacquire failed",
+                    reason="cleanup_unconfirmed" if unknown else "open_failed",
+                ) from exc
 
     def start(self) -> None:
         """Start the single non-daemon idle reconnect worker."""
@@ -211,7 +372,7 @@ class BackendReconnectCoordinator:
         """Own one bounded active-workflow reconnect attempt."""
 
         with self._condition:
-            if self._closing or self._closed:
+            if self._closing or self._closed or self._suspended:
                 return None
             if self._attempt_active:
                 raise RuntimeError("backend reconnect is already active")
@@ -280,6 +441,11 @@ class BackendReconnectCoordinator:
                 with self._condition:
                     if self._closing or self._closed:
                         return
+                    if self._suspended:
+                        self._condition.wait_for(
+                            lambda: not self._suspended or self._stop_requested.is_set()
+                        )
+                        continue
                     if self._attempt_active:
                         self._condition.wait_for(
                             lambda: not self._attempt_active or self._closing
@@ -294,7 +460,17 @@ class BackendReconnectCoordinator:
                     deadline = self._clock() + self._reconnect_timeout_s
                     reconnected = self._retry_idle(deadline=deadline)
                     if not reconnected and not self._stop_requested.is_set():
-                        self._source_owner.reconnect_timed_out()
+                        selection_failed = getattr(
+                            self._source_owner, "reconnect_selection_failed", None
+                        )
+                        if (
+                            self._failure is not None
+                            and self._failure.context.get("reason") == "ambiguous_device"
+                            and callable(selection_failed)
+                        ):
+                            selection_failed("ambiguous_device")
+                        else:
+                            self._source_owner.reconnect_timed_out()
                 finally:
                     with self._condition:
                         self._attempt_active = False
@@ -316,6 +492,13 @@ class BackendReconnectCoordinator:
                     deadline=deadline,
                     stop_requested=self._stop_requested,
                 )
+            except BackendOpenError as exc:
+                if not exc.cleanup_confirmed:
+                    self._retain_close_error(exc)
+                    return None
+                if self._wait_for_active_retry(deadline):
+                    return None
+                continue
             except _CandidateCleanupFailure as exc:
                 self._retain_close_error(exc.cleanup_error)
                 if isinstance(exc.primary_error, BackendInputError):
@@ -325,7 +508,10 @@ class BackendReconnectCoordinator:
                 return None
             except BackendInputError:
                 raise
-            except Exception:
+            except Exception as exc:
+                if getattr(exc, "cleanup_confirmed", None) is False:
+                    self._retain_close_error(exc)
+                    return None
                 if self._wait_for_active_retry(deadline):
                     return None
                 continue
@@ -347,7 +533,14 @@ class BackendReconnectCoordinator:
             except _CandidateCleanupFailure as exc:
                 self._retain_close_error(exc.cleanup_error)
                 return False
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, ConnectionLifecycleError):
+                    self._failure = exc
+                    if exc.context.get("reason") == "ambiguous_device":
+                        return False
+                if getattr(exc, "cleanup_confirmed", None) is False:
+                    self._retain_close_error(exc)
+                    return False
                 if self._stop_requested.is_set():
                     return False
                 remaining_s = deadline - self._clock()
@@ -379,7 +572,7 @@ class BackendReconnectCoordinator:
     ) -> ReconnectedCaptureSource | None:
         callback_error: BaseException | None = None
         with self._condition:
-            if self._closing or self._closed:
+            if self._closing or self._closed or self._suspended or self._stop_requested.is_set():
                 publish = False
             else:
                 publish = True
@@ -389,9 +582,10 @@ class BackendReconnectCoordinator:
                 except BaseException as exc:
                     callback_error = exc
                 else:
-                    if self._closing or self._closed:
+                    if self._closing or self._closed or self._stop_requested.is_set():
                         publish = False
                     else:
+                        self._failure = None
                         self._source_owner.replace_source(
                             replacement.source,
                             backend_snapshot=replacement.backend_snapshot,
@@ -428,10 +622,20 @@ class BackendReconnectCoordinator:
 
     def _retain_close_error(self, error: BaseException) -> None:
         with self._condition:
-            if self._close_error is None:
+            first_failure = self._close_error is None
+            if first_failure:
                 self._close_error = error
+                self._failure = ConnectionLifecycleError(
+                    "service_unavailable",
+                    "Physical cleanup is unconfirmed",
+                    reason="cleanup_unconfirmed",
+                )
             self._stop_requested.set()
             self._condition.notify_all()
+        if first_failure:
+            mark_fault = getattr(self._source_owner, "cleanup_unconfirmed", None)
+            if callable(mark_fault):
+                mark_fault()
 
 
 class ReplaceableDeviceControl:
@@ -513,10 +717,20 @@ def build_basic_capture_reconnect(
         del deadline
         if stop_requested.is_set():
             raise RuntimeError("backend reconnect coordinator is closing")
-        connection = open_connection(settings)
+        selected = select_backend_settings(settings)
+        connection = open_connection(selected)
         source = BasicBackendEventSource(connection, segment_id=segment_id)
         try:
-            _require_matching_basic_snapshot(expected_snapshot, source.snapshot)
+            _require_matching_basic_snapshot(
+                replace(
+                    expected_snapshot,
+                    info=replace(expected_snapshot.info, port=cast(str, selected.serial_port)),
+                )
+                if settings.topology == "native_usb_console"
+                and settings.usb_serial_number is not None
+                else expected_snapshot,
+                source.snapshot,
+            )
         except BaseException as primary_error:
             cleanup_error = _close_unpublished_candidate(source)
             if cleanup_error is not None:
@@ -598,7 +812,8 @@ def _build_async_enhanced_capture_reconnect(
     ) -> ReconnectedCaptureSource:
         if stop_requested.is_set():
             raise RuntimeError("backend reconnect coordinator is closing")
-        serial_port = settings.serial_port
+        selected = select_backend_settings(settings)
+        serial_port = selected.serial_port
         if serial_port is None:
             raise ValueError("Enhanced reconnect requires an explicit serial port")
         host = open_host(
@@ -608,7 +823,10 @@ def _build_async_enhanced_capture_reconnect(
         )
         try:
             _require_matching_enhanced_snapshot(
-                expected_snapshot,
+                replace(expected_snapshot, info=replace(expected_snapshot.info, port=serial_port))
+                if settings.topology == "native_usb_console"
+                and settings.usb_serial_number is not None
+                else expected_snapshot,
                 backend_snapshot(
                     info=host.info,
                     segment=host.segment,

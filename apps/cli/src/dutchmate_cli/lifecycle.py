@@ -127,6 +127,17 @@ def start_service(
             "--rts-on-open",
             profile.uart.rts_on_open,
         ]
+        if profile.selector.strategy == "usb_identity":
+            service_command.extend(
+                [
+                    "--usb-vid",
+                    str(profile.selector.vid),
+                    "--usb-pid",
+                    str(profile.selector.pid),
+                    "--usb-serial-number",
+                    str(profile.selector.serial_number),
+                ]
+            )
         if profile.name is not None:
             service_command.extend(["--profile-name", profile.name])
         if backend_settings.serial_port is not None:

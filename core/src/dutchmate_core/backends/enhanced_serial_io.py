@@ -7,6 +7,7 @@ import importlib
 from collections.abc import Awaitable, Callable
 from typing import Protocol, cast
 
+from dutchmate_core.backends.contracts import mark_open_cleanup
 from dutchmate_core.backends.enhanced_serial import (
     DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY,
     AsyncEnhancedSerialAdapter,
@@ -127,8 +128,8 @@ def _serial_asyncio_opener() -> OpenSerialConnection:
         # asserts DTR before its final input flush, which can discard that hello.
         # Hold DTR low until the serial port is configured, flushed, and attached
         # to the asyncio reader, then assert it exactly once.
-        serial_port.dtr = False
         try:
+            serial_port.dtr = False
             serial_port.open()
             loop = asyncio.get_running_loop()
             stream_reader = asyncio.StreamReader(limit=limit)
@@ -147,8 +148,13 @@ def _serial_asyncio_opener() -> OpenSerialConnection:
             serial_port.reset_input_buffer()
             await asyncio.sleep(USB_CDC_DTR_RESET_SECONDS)
             serial_port.dtr = True
-        except BaseException:
-            serial_port.close()
+        except BaseException as primary_error:
+            try:
+                serial_port.close()
+            except BaseException:
+                mark_open_cleanup(primary_error, False)
+            else:
+                mark_open_cleanup(primary_error, True)
             raise
 
         return stream_reader, cast(_StreamWriter, stream_writer)
@@ -162,17 +168,17 @@ async def _run_cleanup(close: Callable[[], Awaitable[None]]) -> None:
 
 async def _close_without_masking_primary(
     close: Callable[[], Awaitable[None]],
-) -> None:
+) -> bool:
     close_task = asyncio.create_task(_run_cleanup(close))
     while True:
         try:
             await asyncio.shield(close_task)
-            return
+            return True
         except asyncio.CancelledError:
             if close_task.done():
-                return
+                return not close_task.cancelled() and close_task.exception() is None
         except BaseException:
-            return
+            return False
 
 
 async def open_async_enhanced_serial_adapter(
@@ -194,20 +200,14 @@ async def open_async_enhanced_serial_adapter(
         baudrate=DEFAULT_USB_CDC_LINE_BAUDRATE,
         limit=MAX_DEVICE_FRAME_BYTES,
     )
-    serial_resource = stream_writer.transport.get_extra_info("serial")
-    owned_reader = _OwnedStreamReader(
-        stream_reader,
-        stream_writer,
-        serial_port=(
-            cast(_DtrControl, serial_resource)
-            if open_connection is None and serial_resource is not None
-            else None
-        ),
-    )
+    owned_reader = _OwnedStreamReader(stream_reader, stream_writer)
     adapter: AsyncEnhancedSerialAdapter | None = None
     try:
+        serial_resource = stream_writer.transport.get_extra_info("serial")
         if serial_resource is None:
             raise RuntimeError("pyserial-asyncio transport omitted serial resource")
+        if open_connection is None:
+            owned_reader._serial_port = cast(_DtrControl, serial_resource)
         writer = _ThreadedSerialFrameWriter(cast(SerialFrameSink, serial_resource))
         adapter = AsyncEnhancedSerialAdapter(
             reader=owned_reader,
@@ -218,7 +218,7 @@ async def open_async_enhanced_serial_adapter(
         )
         await adapter.start(hello_timeout_s)
         return adapter
-    except BaseException:
+    except BaseException as primary_error:
         close = adapter.close if adapter is not None else owned_reader.close
-        await _close_without_masking_primary(close)
+        mark_open_cleanup(primary_error, await _close_without_masking_primary(close))
         raise

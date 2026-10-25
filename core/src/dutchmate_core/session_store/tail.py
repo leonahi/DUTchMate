@@ -13,6 +13,7 @@ from typing import BinaryIO, cast
 
 from dutchmate_core.evidence.tail import (
     MAX_EVIDENCE_RESPONSE_BYTES,
+    EvidenceCursorExpired,
     EvidencePage,
     compact_json,
 )
@@ -210,5 +211,13 @@ def read_evidence_page(
         records.append(record)
         next_cursor = proposed_cursor
     if not candidates:
+        if (
+            tail_session_id is not None
+            and position.session_id != tail_session_id
+            and current.metadata.get("state") != "active"
+        ):
+            raise EvidenceCursorExpired(
+                "Evidence cursor session ended; attach to the new ownership session explicitly"
+            )
         next_cursor = position.encode()
     return EvidencePage(tuple(records), next_cursor, len(candidates) - len(records))

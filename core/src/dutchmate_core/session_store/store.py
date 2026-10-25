@@ -592,7 +592,10 @@ class SessionStore:
             raise ValueError("v2 backend snapshot mode must match the DUT Profile")
         if backend_snapshot.segment is None:
             raise ValueError("v2 session creation requires timestamp provenance")
-        if backend_snapshot.info.port != profile.current_serial_port:
+        if (
+            backend_snapshot.info.port != profile.current_serial_port
+            and profile.selector.strategy != "usb_identity"
+        ):
             raise ValueError("v2 backend snapshot port must match the DUT Profile")
 
         started_at = self._clock()
@@ -1046,6 +1049,17 @@ class SessionStore:
                 updated["pending_attempts"] = {
                     key: dict(value) for key, value in pending_attempts.items()
                 }
+                prior_segments = cast(list[dict[str, object]], predecessor_metadata["segments"])
+                prior_segment = prior_segments[-1]
+                if successor_snapshot is None and prior_segment.get("ended_at") is not None:
+                    # Journal rollover is not a physical reopen. Carry the closed
+                    # connection and its still-unobserved interval into the successor.
+                    segments = cast(list[dict[str, object]], updated["segments"])
+                    for key in ("started_at", "ended_at", "end_reason", "start_reason"):
+                        if key in prior_segment:
+                            segments[0][key] = prior_segment[key]
+                    continuity = cast(dict[str, object], updated["continuity"])
+                    continuity["observation_gap_count"] = 1
 
             rollover_admission = self._append_v2_record_locked(
                 successor,
@@ -1890,7 +1904,13 @@ class SessionStore:
                 updated: dict[str, object],
                 _admission: V2EvidenceAdmission,
             ) -> None:
-                if event_type != "unexpected_disconnect":
+                if event_type in {"reconnect_succeeded", "reacquire_succeeded"}:
+                    opened_segments = cast(list[dict[str, object]], updated["segments"])
+                    opened_segments[-1]["start_reason"] = (
+                        "reacquire" if event_type == "reacquire_succeeded" else "reconnect"
+                    )
+                    return
+                if event_type not in {"unexpected_disconnect", "released"}:
                     return
                 continuity = updated.get("continuity")
                 if not isinstance(continuity, dict):
@@ -1909,7 +1929,7 @@ class SessionStore:
                 current_segment = segments[-1]
                 if current_segment.get("ended_at") is None:
                     current_segment["ended_at"] = disconnected_at
-                    current_segment["end_reason"] = "unexpected_disconnect"
+                    current_segment["end_reason"] = event_type
 
             return self._append_v2_record_locked(
                 handle,

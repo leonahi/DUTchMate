@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Event, RLock
+from threading import Event, Lock, RLock
 from typing import Literal, Protocol
 from uuid import uuid4
 
@@ -24,6 +24,12 @@ from dutchmate_core.backends.contracts import (
     UartSender,
     apply_capability_policy,
     integrity_for_backend,
+)
+from dutchmate_core.connection import (
+    ConnectionBoundary,
+    ConnectionLifecycleError,
+    ConnectionOwner,
+    ConnectionState,
 )
 from dutchmate_core.evidence.recorder import (
     ContinuousEvidenceRecorder,
@@ -102,9 +108,6 @@ class DeviceCoreRuntimeError(RuntimeError):
     """Raised when the runtime cannot perform the requested operation."""
 
 
-ConnectionState = Literal["connected", "disconnected", "reconnecting", "faulted"]
-
-
 class DeviceCoreSessionStorage(Protocol):
     """Capture and bounded-query storage operations required by the runtime."""
 
@@ -174,6 +177,7 @@ class DeviceCoreStatus:
     profile_digest_sha256: str | None = None
     effective_profile: dict[str, object] | None = None
     active_operations: tuple[ActiveMonitorSummary, ...] = ()
+    connection_error: dict[str, object] | None = None
 
 
 class DeviceCoreRuntime:
@@ -200,12 +204,16 @@ class DeviceCoreRuntime:
         profile: DutProfile | None = None,
         evidence_recorder: ContinuousEvidenceRecorder | None = None,
         monitor_id_factory: Callable[[], str] | None = None,
+        connection_owner: ConnectionOwner | None = None,
     ) -> None:
         if profile is not None:
             port = profile.current_serial_port
             backend_mode = profile.backend_mode
             tx_policy_enabled = profile.uart.tx_enabled
             dut_io_voltage = profile.dut_io_voltage
+        self._connection_owner = connection_owner
+        self._lifecycle_lock = Lock()
+        self._lifecycle_active = False
         self._profile = profile
         self._evidence_recorder = evidence_recorder
         self._monitor_id_factory = monitor_id_factory or (lambda: f"monitor-{uuid4()}")
@@ -215,6 +223,7 @@ class DeviceCoreRuntime:
         self._dut_io_voltage = dut_io_voltage
         self._session_store = session_store
         self._mutation_lock = RLock()
+        self._active_mutations = 0
         self._interact_owner: str | None = None
         self._uart_send_workflow = (
             UartSendWorkflow(
@@ -236,7 +245,7 @@ class DeviceCoreRuntime:
             wall_clock=action_wall_clock,
         )
         self._port = port
-        self._connected = False
+        self._connection_state: ConnectionState = "disconnected"
         self._source_connection_generation: int | None = None
         self._commanded_boot_mode: CommandedBootMode | None = None
         self._backend_mode = backend_mode
@@ -265,6 +274,81 @@ class DeviceCoreRuntime:
         self._closed = False
         self._close_complete = Event()
         self._close_error: BaseException | None = None
+
+    @property
+    def _connected(self) -> bool:
+        return self._connection_state == "connected"
+
+    @contextmanager
+    def _ownership_change(self) -> Iterator[None]:
+        if not self._lifecycle_lock.acquire(blocking=False):
+            raise ConnectionLifecycleError(
+                "operation_active", "A connection lifecycle request is active"
+            )
+        mutation_acquired = False
+        try:
+            with self._operation_lock:
+                if self._closing or self._closed:
+                    raise ConnectionLifecycleError(
+                        "invalid_connection_state", "Runtime is shutting down"
+                    )
+                self._check_interact_owner(None)
+                if self._active_mutations:
+                    raise ConnectionLifecycleError(
+                        "operation_active", "A submitted mutation is active"
+                    )
+                self._lifecycle_active = True
+            mutation_acquired = self._mutation_lock.acquire(blocking=False)
+            if not mutation_acquired:
+                raise ConnectionLifecycleError("operation_active", "A mutating action is active")
+            yield
+        finally:
+            with self._operation_lock:
+                self._lifecycle_active = False
+            if mutation_acquired:
+                self._mutation_lock.release()
+            self._lifecycle_lock.release()
+
+    def _ownership_boundary(self) -> ConnectionBoundary:
+        recorder = self._evidence_recorder
+        if recorder is None:
+            raise ConnectionLifecycleError(
+                "service_unavailable", "No authoritative ownership journal"
+            )
+        status = self.status()
+        return ConnectionBoundary(
+            status.connection_state, recorder.active_session_id, recorder.segment.segment_id
+        )
+
+    def release_connection(self) -> ConnectionBoundary:
+        with self._ownership_change():
+            if self.status().connection_state != "connected" or self._connection_owner is None:
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state", "Release requires connected ownership"
+                )
+            self._connection_owner.release()
+            with self._operation_lock:
+                monitors = tuple(self._active_monitors.values())
+            for monitor in monitors:
+                monitor.completed.wait()
+            return self._ownership_boundary()
+
+    def reacquire_connection(self) -> ConnectionBoundary:
+        with self._ownership_change():
+            if (
+                self.status().connection_state not in {"released", "disconnected"}
+                or self._connection_owner is None
+            ):
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state",
+                    "Reacquire requires released or disconnected ownership",
+                )
+            with self._operation_lock:
+                monitors = tuple(self._active_monitors.values())
+            for monitor in monitors:
+                monitor.completed.wait()
+            self._connection_owner.reacquire()
+            return self._ownership_boundary()
 
     @property
     def session_store(self) -> DeviceCoreSessionStorage:
@@ -302,6 +386,8 @@ class DeviceCoreRuntime:
                 raise retained_error
             return
 
+        if self._connection_owner is not None:
+            self._connection_owner.cancel_pending()
         close_error: BaseException | None = None
         for monitor in active_monitors:
             monitor.completed.wait()
@@ -392,7 +478,9 @@ class DeviceCoreRuntime:
             assert previous is not None
             recorder.wait_for_durable_tail(previous, timeout_s=wait_s)
             page = self._session_store.read_evidence_page(
-                cursor=page.next_cursor, tail_session_id=None, limit=limit,
+                cursor=page.next_cursor,
+                tail_session_id=recorder.durable_tail().session_id,
+                limit=limit,
             )
         return page
 
@@ -423,7 +511,7 @@ class DeviceCoreRuntime:
         if info.mode == "basic" and (info.device is not None or info.firmware is not None):
             raise ValueError("Basic backend identity must omit device and firmware")
         with self._operation_lock:
-            self._connected = True
+            self._connection_state = "connected"
             self._commanded_boot_mode = None
             self._backend_mode = info.mode
             self._backend_info = info
@@ -433,10 +521,12 @@ class DeviceCoreRuntime:
         return self.status()
 
     def disconnect(self) -> DeviceCoreStatus:
-        """Mark the Debug Helper connection as disconnected."""
+        """Detach publication and mark the backend disconnected."""
 
+        if self._connection_owner is not None:
+            self._connection_owner.cancel_pending()
         with self._operation_lock:
-            self._connected = False
+            self._connection_state = "disconnected"
             self._commanded_boot_mode = None
             self._backend_info = None
             self._backend_capabilities = frozenset()
@@ -459,24 +549,30 @@ class DeviceCoreRuntime:
             if self._evidence_recorder is not None:
                 self._active_session_id = (
                     self._evidence_recorder.active_session_id
-                    if recorder_state in {"connected", "reconnecting"}
+                    if recorder_state in {"connected", "reconnecting", "released", "reacquiring"}
                     else None
                 )
-            connection_state: ConnectionState = (
-                "faulted"
-                if recorder_state == "faulted"
-                else "reconnecting"
-                if recorder_state == "reconnecting"
-                else "connected"
-                if self._connected
-                else "disconnected"
-            )
+            if recorder_state in {
+                "reconnecting",
+                "released",
+                "reacquiring",
+                "faulted",
+                "disconnected",
+            }:
+                self._connection_state = recorder_state
+            connection_state = self._connection_state
             retention = getattr(
                 self._session_store,
                 "retention_status",
                 SessionRetentionStatus(),
             )
+            failure = self._connection_owner.failure if self._connection_owner is not None else None
             return DeviceCoreStatus(
+                connection_error=(
+                    {"error": failure.error, "detail": str(failure), "context": failure.context}
+                    if failure is not None
+                    else None
+                ),
                 connected=self._connected,
                 port=self._port,
                 firmware=(self._backend_info.firmware if self._backend_info is not None else None),
@@ -787,8 +883,8 @@ class DeviceCoreRuntime:
         bound_s = request.duration_s or request.timeout_s
         assert bound_s is not None
         with self._operation_lock:
-            if self._closing or self._closed:
-                raise DeviceCoreRuntimeError("Device Core runtime is closing")
+            if self._closing or self._closed or self._lifecycle_active:
+                raise DeviceCoreRuntimeError("Device Core runtime is changing ownership")
             recorder_state = recorder.state
             if recorder_state not in {"connected", "reconnecting"}:
                 raise DeviceCoreRuntimeError("Monitor requires a connected or reconnecting backend")
@@ -862,8 +958,8 @@ class DeviceCoreRuntime:
                     outcome = "cancelled"
                     break
                 recorder_state = recorder.state
-                if recorder_state == "disconnected":
-                    outcome = "disconnected"
+                if recorder_state in {"released", "reacquiring", "disconnected"}:
+                    outcome = "disconnected" if recorder_state == "disconnected" else "released"
                     break
                 if recorder_state == "faulted":
                     raise DeviceCoreRuntimeError(
@@ -1001,9 +1097,16 @@ class DeviceCoreRuntime:
             with self._operation_lock:
                 self._check_interact_owner(owner)
                 self._require_action_recorder()
-            yield
+                self._active_mutations += 1
+            try:
+                yield
+            finally:
+                with self._operation_lock:
+                    self._active_mutations -= 1
 
     def _check_interact_owner(self, owner: str | None) -> None:
+        if self._lifecycle_active:
+            raise ConnectionLifecycleError("operation_active", "Connection ownership is changing")
         if self._interact_owner is not None and self._interact_owner != owner:
             raise DeviceActionError(
                 error="operation_active",
@@ -1127,7 +1230,7 @@ class DeviceCoreRuntime:
 
     def _mark_backend_disconnected(self) -> None:
         with self._operation_lock:
-            self._connected = False
+            self._connection_state = "disconnected"
             self._commanded_boot_mode = None
             self._backend_info = None
             self._backend_capabilities = frozenset()
@@ -1162,7 +1265,7 @@ class DeviceCoreRuntime:
     def _adopt_backend_snapshot(self, snapshot: BackendSnapshot) -> None:
         if snapshot.capability_policy != self._capability_policy:
             raise ValueError("reconnected backend capability policy changed")
-        self._connected = True
+        self._connection_state = "connected"
         self._commanded_boot_mode = None
         self._backend_mode = snapshot.info.mode
         self._backend_info = snapshot.info

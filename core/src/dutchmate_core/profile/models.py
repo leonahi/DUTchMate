@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from dutchmate_core.backends.settings import BackendSettings
 
 ConnectionTopology = Literal["external_uart", "native_usb_console"]
-SerialSelectorStrategy = Literal["exact_path", "enhanced_discovery"]
+SerialSelectorStrategy = Literal["exact_path", "enhanced_discovery", "usb_identity"]
 ControlLineOpenBehavior = Literal["driver_default", "asserted", "deasserted"]
 DefaultLineEnding = Literal["none", "lf", "cr", "crlf"]
 
@@ -44,6 +44,9 @@ class DutProfileConfig:
     serial_port: object | None = None
     reconnect_timeout_s: object = 5.0
     topology: object = "external_uart"
+    usb_vid: object = None
+    usb_pid: object = None
+    usb_serial_number: object = None
     uart: UartProfileConfig = UartProfileConfig()
     hardware: HardwareGpioConfig = field(
         default_factory=lambda: HardwareGpioConfig(dut_io_voltage=None, controls={})
@@ -56,6 +59,9 @@ class SerialSelector:
 
     strategy: SerialSelectorStrategy
     exact_path: str | None
+    vid: int | None = None
+    pid: int | None = None
+    serial_number: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +111,12 @@ class DutProfile:
             tx_enabled=self.uart.tx_enabled,
             rtscts=self.uart.rtscts,
             xonxoff=self.uart.xonxoff,
+            dtr_on_open=self.uart.dtr_on_open,
+            rts_on_open=self.uart.rts_on_open,
+            topology=self.topology,
+            usb_vid=self.selector.vid,
+            usb_pid=self.selector.pid,
+            usb_serial_number=self.selector.serial_number,
         )
 
     @property
@@ -138,6 +150,15 @@ class DutProfile:
                 "selector": {
                     "strategy": self.selector.strategy,
                     "exact_path": self.selector.exact_path,
+                    **(
+                        {
+                            "vid": self.selector.vid,
+                            "pid": self.selector.pid,
+                            "serial_number": self.selector.serial_number,
+                        }
+                        if self.selector.strategy == "usb_identity"
+                        else {}
+                    ),
                 },
                 "current_serial_port": self.current_serial_port,
                 "reconnect_timeout_s": self.reconnect_timeout_s,

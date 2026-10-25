@@ -14,6 +14,7 @@ from dutchmate_core.backends.basic import (
     open_basic_backend_connection,
 )
 from dutchmate_core.backends.contracts import ControlState
+from dutchmate_core.backends.selection import select_backend_settings
 from dutchmate_core.evidence.recorder import ContinuousEvidenceRecorder
 from dutchmate_core.gpio_config.config import (
     HardwareGpioConfig,
@@ -104,7 +105,7 @@ def build_startup_runtime(
             capture_clock=monotonic_clock,
         )
 
-    backend_settings = profile.backend_settings
+    backend_settings = select_backend_settings(profile.backend_settings)
     if profile.backend_mode == "basic":
         connection = open_basic_backend_connection(backend_settings)
         basic_source = BasicBackendEventSource(connection, segment_id=0)
@@ -134,6 +135,7 @@ def build_startup_runtime(
                 session_store=session_store,
                 capture_clock=monotonic_clock,
                 backend_reconnect=reconnect,
+                connection_owner=reconnect,
                 profile=profile,
                 evidence_recorder=recorder,
             )
@@ -208,6 +210,7 @@ def build_startup_runtime(
             session_store=session_store,
             capture_clock=monotonic_clock,
             backend_reconnect=reconnect,
+            connection_owner=reconnect,
             profile=profile,
             evidence_recorder=recorder,
         )

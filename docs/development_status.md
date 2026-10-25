@@ -1,7 +1,8 @@
 # Development Status
 
-> Active phase: Phase 1 v2 semantic migration — Stage 6 Complete
-> Repository baseline reviewed: `857261b` (Stage 5 committed), 2026-10-25
+> Active phase: Phase 1 v2 semantic migration — Stage 7 Complete
+> Stage 7 implementation baseline: `5643c65` (Stage 6 committed)
+> Documentation state reviewed: 2026-10-26
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -11,17 +12,20 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Stage 6 is complete, providing the durable evidence-tail API,
-  HTTP-only follow, and line-oriented human console. Persisted primary streams
-  supply ordered bounded pages; opaque cursors continue across explicit v2
-  rollover links and fail explicitly when retention removes continuity.
-- **Implementation status:** Stages 1–6 are complete. Follow/console
-  attach without changing recorder ownership; console uses audited standalone
-  send and respects Interact exclusivity. Historical v0/v1 readers remain.
+- **Current milestone:** Stage 7 is complete, covering explicit release/reacquire,
+  intentional evidence gaps, same-session resume/new-session recovery, Basic
+  DTR/RTS open provenance, and unique native-USB identity selection. Ownership
+  arbitration preserves audited mutations, read-only Monitor settlement, and
+  one authoritative RX reader; unknown cleanup remains a blocking fault.
+- **Implementation status:** Stages 1–7 are complete. Service and CLI
+  expose atomic release/reacquire; no optional raw or semantic serial-line
+  control capability was added. Historical v0/v1 readers remain available.
 - **Historical evidence:** Existing physical/backend/HIL results remain valid
   for what they tested; they do not establish final Phase 1 v2 acceptance.
-- **Next step:** Implement Stage 7 — release/reacquire, DTR/RTS, and native USB.
-  Stage 8, MCP migration, and physical acceptance remain deferred.
+- **Next step:** Stage 8 — Enhanced parity, cleanup, and CLI/HIL acceptance — is
+  the next implementation slice and remains **Not started**. MCP migration
+  remains deferred until after Phase 1 CLI acceptance. Existing physical/HIL
+  acceptance work remains deferred to Stage 8.
 - **Open blockers:** No new design blocker. Revision A physical evidence gaps
   remain deferred to Stage 8. MCP and Debug Agent contract migration remain deferred.
 
@@ -45,9 +49,9 @@ demonstrated again against the new normative done criteria.
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
 | Monitor | Bounded duration/condition observation uses the continuous durable stream with v2 operation lifecycle evidence | Stage 4 complete |
 | Interact and audited actions | Exact-byte audited send, exclusive bounded Interact, and audited reset/boot/GPIO Control; higher-level reset/observe procedures are client-composed | Stage 5 complete at `857261b`; live boot-test removed |
-| Follow and console | Durable cursor API plus HTTP-only follow and audited line console | Stage 6 Complete |
-| Release and reacquire | Target explicit ownership handoff does not exist | Not implemented |
-| MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Deferred until Phase 1 CLI acceptance |
+| Follow and console | Durable cursor API plus HTTP-only follow and audited line console | Stage 6 complete at `5643c65` |
+| Release and reacquire | Explicit ownership lifecycle, durable gaps, Basic line provenance, and safe USB identity matching | Stage 7 Complete |
+| MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Deferred until after Phase 1 CLI acceptance |
 
 Historical sessions and validation records must not be rewritten as though they
 never existed. Schema-v0/v1 evidence remains read-only compatibility data under
@@ -64,9 +68,9 @@ the new contract.
 | 4 — Monitor | Complete | Review fixes validated; rollover-safe lifecycle, deterministic terminalization, exact-range quality, leased incremental reads, and Monitor-only aliases |
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
-| 7 — release/reacquire, DTR/RTS, native USB | Not started | Next implementation slice |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Deferred | Wait for Stage 7 |
-| Post-Phase-1 MCP migration | Deferred | Wait for Stage 8 acceptance |
+| 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Not started | Next implementation slice; includes deferred physical/HIL acceptance |
+| Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
 only in the migration plan and normative specification. This checklist records
@@ -84,12 +88,13 @@ progress; it does not redefine either document.
 
 ## Current Validation Requirements
 
-Stage 6 validation, 2026-10-25: 629 focused tests and all 1,465 pytest tests
-passed. Ruff, configured mypy (101 source files), lockfile check (66 packages),
+Stage 7 validation, 2026-10-25: 830 focused tests and all 1,515 pytest tests
+passed. Ruff, configured mypy (103 source files), lockfile check (66 packages),
 and `git diff --check` passed. Import Linter is not configured; executable
 architecture/import-boundary tests passed. The structural Graphify index was
 refreshed with the existing partial-extraction warning for
 `hardware/firmware/zephyr_dut/src/fixture_protocol.h` and a community-label notice.
 No hardware was accessed. Detailed evidence is in
-[Development History](development_history.md). Stage 6 is complete; Stage 7 has
-not started. Stage 8 and MCP migration remain deferred.
+[Development History](development_history.md). Stage 7 is complete. Stage 8 is
+next and has not started; MCP migration remains deferred until after Phase 1 CLI
+acceptance. Existing physical/HIL acceptance work remains deferred to Stage 8.

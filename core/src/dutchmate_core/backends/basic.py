@@ -21,6 +21,7 @@ from dutchmate_core.backends.contracts import (
     BackendEvent,
     BackendInfo,
     BackendInputError,
+    BackendOpenError,
     BackendSnapshot,
     BackendUartSendResult,
     BackendWriteError,
@@ -41,6 +42,13 @@ DEFAULT_BASIC_EVENT_QUEUE_CAPACITY: Final = 256
 
 class BasicSerialPort(Protocol):
     """Small raw pyserial surface owned by the Basic backend."""
+
+    port: str | None
+    dtr: bool
+    rts: bool
+
+    def open(self) -> None:
+        """Open a preconfigured port."""
 
     def read(self, size: int = 1) -> bytes:
         """Read up to ``size`` raw UART bytes."""
@@ -70,6 +78,7 @@ class BasicBackendConnection:
             {"uart_receive", "uart_send"}
         )
         self._serial_port = serial_port
+        self._settings = settings
         self._write_lock = Lock()
         self._capability_policy = BackendCapabilityPolicy(
             uart_send=UartSendCapabilityPolicy(
@@ -83,6 +92,30 @@ class BasicBackendConnection:
             firmware=None,
             capabilities=capabilities,
         )
+
+    @property
+    def serial_provenance(self) -> dict[str, object]:
+        settings = self._settings
+        return {
+            "baudrate": settings.baudrate,
+            "data_bits": settings.data_bits,
+            "parity": settings.parity,
+            "stop_bits": settings.stop_bits,
+            "rtscts": settings.rtscts,
+            "xonxoff": settings.xonxoff,
+            "dtr_requested": settings.dtr_on_open,
+            "rts_requested": settings.rts_on_open,
+            "rts_owner": "flow_control"
+            if settings.rtscts
+            else "driver"
+            if settings.rts_on_open == "driver_default"
+            else "application",
+            "open_transition": "driver_managed"
+            if settings.dtr_on_open == settings.rts_on_open == "driver_default"
+            else "preconfigured",
+            "electrical_glitch_free": False,
+            "state_is_electrical_readback": False,
+        }
 
     @property
     def info(self) -> BackendInfo:
@@ -223,6 +256,8 @@ class BasicBackendEventSource:
         self._outcomes: Queue[_ReaderOutcome] = Queue(maxsize=event_queue_capacity)
         self._stop = Event()
         self._start_lock = Lock()
+        self._close_lock = Lock()
+        self._close_error: BaseException | None = None
         self._reader: Thread | None = None
         self._terminal_error: BackendDisconnectedError | BackendInputError | None = None
 
@@ -254,6 +289,7 @@ class BasicBackendEventSource:
             capability_policy=self._connection.capability_policy,
             segment=self._segment,
             integrity=integrity_for_backend("basic"),
+            serial_provenance=self._connection.serial_provenance,
         )
 
     @property
@@ -288,20 +324,31 @@ class BasicBackendEventSource:
         for outcome in retained:
             self._outcomes.put(outcome)
 
-    def close(self) -> None:
-        """Stop the reader and close the Basic serial connection."""
+    @property
+    def has_pending_events(self) -> bool:
+        return not self._outcomes.empty() or (self._reader is not None and self._reader.is_alive())
 
-        if self._stop.is_set():
-            return
-        self._stop.set()
-        try:
-            self._connection.close()
-        finally:
-            reader = self._reader
-            if reader is not None:
-                reader.join(timeout=DEFAULT_SERIAL_TIMEOUT_S + 0.1)
-            with suppress(Full):
-                self._outcomes.put_nowait(_SourceClosed())
+    def close(self) -> None:
+        """Close once; a failed close never becomes an apparently successful retry."""
+        with self._close_lock:
+            if self._stop.is_set():
+                if self._close_error is not None:
+                    raise self._close_error
+                return
+            self._stop.set()
+            try:
+                self._connection.close()
+                reader = self._reader
+                if reader is not None:
+                    reader.join(timeout=DEFAULT_SERIAL_TIMEOUT_S + 0.1)
+                    if reader.is_alive():
+                        raise RuntimeError("Basic reader shutdown could not be confirmed")
+            except BaseException as exc:
+                self._close_error = exc
+                raise
+            finally:
+                with suppress(Full):
+                    self._outcomes.put_nowait(_SourceClosed())
 
     def _ensure_reader_started(self) -> None:
         if self._reader is not None:
@@ -437,9 +484,11 @@ def open_basic_backend_connection(
 
     if settings.mode != "basic" or settings.serial_port is None:
         raise ValueError("Basic connection requires resolved Basic backend settings")
+    if settings.rtscts and settings.rts_on_open != "driver_default":
+        raise ValueError("RTS application state conflicts with hardware flow control")
     factory = serial_factory or _pyserial_factory()
     serial_port = factory(
-        port=settings.serial_port,
+        port=None,
         baudrate=settings.baudrate,
         bytesize=settings.data_bits,
         parity="N",
@@ -450,6 +499,18 @@ def open_basic_backend_connection(
         rtscts=settings.rtscts,
         dsrdtr=False,
     )
+    try:
+        for line, requested in (("dtr", settings.dtr_on_open), ("rts", settings.rts_on_open)):
+            if requested != "driver_default":
+                setattr(serial_port, line, requested == "asserted")
+        serial_port.port = settings.serial_port
+        serial_port.open()
+    except BaseException as exc:
+        try:
+            serial_port.close()
+        except BaseException:
+            raise BackendOpenError(cleanup_confirmed=False) from exc
+        raise BackendOpenError(cleanup_confirmed=True) from exc
     return BasicBackendConnection(serial_port=serial_port, settings=settings)
 
 

@@ -440,6 +440,9 @@ def _backend_segment_json(
         "timestamp": (
             _timestamp_json(snapshot.segment.timestamp) if snapshot.segment is not None else None
         ),
+        **(
+            {"serial": snapshot.serial_provenance} if snapshot.serial_provenance is not None else {}
+        ),
         "first_timestamp_us": None,
         "last_timestamp_us": None,
     }

@@ -55,6 +55,11 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
     return {
         "connected": status.connected,
         "connection_state": status.connection_state,
+        **(
+            {"connection_error": status.connection_error}
+            if status.connection_error is not None
+            else {}
+        ),
         "backend_mode": status.backend_mode,
         "profile_name": status.profile_name,
         "profile_digest_sha256": status.profile_digest_sha256,
@@ -78,9 +83,7 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
         "active_workflow": status.active_workflow,
-        "active_operations": [
-            asdict(operation) for operation in status.active_operations
-        ],
+        "active_operations": [asdict(operation) for operation in status.active_operations],
         "commanded_boot_mode": status.commanded_boot_mode,
         "reconnect_remaining_s": status.reconnect_remaining_s,
         "retention": asdict(status.retention),

@@ -153,6 +153,7 @@ class BackendSnapshot:
     capability_policy: BackendCapabilityPolicy
     segment: SegmentContext | None
     integrity: UartIntegrity
+    serial_provenance: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         effective = apply_capability_policy(
@@ -193,6 +194,21 @@ def integrity_for_backend(mode: BackendMode) -> UartIntegrity:
         observation_scope="debug_helper_rx_buffer",
         dropped_bytes=0,
     )
+
+
+def mark_open_cleanup(error: BaseException, confirmed: bool) -> None:
+    """Keep the primary exception identity while recording physical cleanup certainty."""
+    error.cleanup_confirmed = confirmed  # type: ignore[attr-defined]
+
+
+class BackendOpenError(RuntimeError):
+    """An attempted open failed; cleanup certainty controls later ownership."""
+
+    def __init__(self, *, cleanup_confirmed: bool) -> None:
+        super().__init__(
+            "Backend open failed" if cleanup_confirmed else "Backend cleanup is unconfirmed"
+        )
+        self.cleanup_confirmed = cleanup_confirmed
 
 
 class BackendDisconnectedError(RuntimeError):

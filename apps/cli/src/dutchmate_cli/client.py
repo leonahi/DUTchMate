@@ -57,6 +57,25 @@ def fetch_status(
     return _response_payload(response, description="status payload")
 
 
+def change_connection(
+    action: str,
+    *,
+    service_url: str = DEFAULT_SERVICE_URL,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, object]:
+    """Request atomic ownership transfer; no local serial access."""
+    if action not in {"release", "reacquire"}:
+        raise ValueError("Unknown connection lifecycle action")
+    response = _request_service(
+        method="POST",
+        path=f"/connection/{action}",
+        service_url=service_url,
+        transport=transport,
+        timeout_s=65.0,
+    )
+    return _response_payload(response, description="connection boundary")
+
+
 def fetch_evidence(
     *,
     cursor: str | None = None,
@@ -506,6 +525,15 @@ def _response_error_message(response: httpx.Response) -> str:
         error = payload.get("error")
         if isinstance(detail, str) and detail:
             suffix = _uart_send_error_suffix(payload.get("context"))
+            context = payload.get("context")
+            reason = context.get("reason") if isinstance(context, Mapping) else None
+            if reason in (
+                "cleanup_unconfirmed",
+                "ambiguous_device",
+                "device_not_found",
+                "open_failed",
+            ):
+                suffix += f" [{reason}]"
             if isinstance(error, str) and error:
                 return f"{prefix} [{error}]: {detail}{suffix}"
             return f"{prefix}: {detail}{suffix}"

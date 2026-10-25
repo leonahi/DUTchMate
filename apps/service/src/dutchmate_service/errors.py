@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from dutchmate_core.backends.contracts import BackendInputError
+from dutchmate_core.connection import ConnectionLifecycleError
 from dutchmate_core.device_connection.errors import (
     HostCommandFrameTooLargeError,
     ProtocolValidationError,
@@ -58,6 +59,14 @@ class ServiceError:
 
 def service_error_from_exception(exc: Exception) -> ServiceError:
     """Map known core exceptions to the service error contract."""
+
+    if isinstance(exc, ConnectionLifecycleError):
+        return _service_error(
+            error=exc.error,
+            detail=str(exc),
+            status_code=(503 if exc.error == "service_unavailable" else 409),
+            context=exc.context,
+        )
 
     if isinstance(exc, EvidenceCursorExpired):
         return _service_error(error="cursor_expired", detail=str(exc), status_code=410, context={})
@@ -323,6 +332,12 @@ def _comparison_context(exc: SessionComparisonError) -> dict[str, object]:
 
 def register_error_handlers(app: FastAPI) -> None:
     """Register service exception handlers on an app."""
+
+    @app.exception_handler(ConnectionLifecycleError)
+    async def handle_connection_error(
+        request: Request, exc: ConnectionLifecycleError
+    ) -> JSONResponse:
+        return _json_response(service_error_from_exception(exc))
 
     @app.exception_handler(EvidenceCursorExpired)
     async def handle_cursor_expired(request: Request, exc: EvidenceCursorExpired) -> JSONResponse:

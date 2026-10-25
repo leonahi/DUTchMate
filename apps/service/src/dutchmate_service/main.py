@@ -39,6 +39,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--profile-name")
     parser.add_argument("--backend", choices=("basic", "enhanced"))
     parser.add_argument("--serial-port")
+    parser.add_argument("--usb-vid", type=int)
+    parser.add_argument("--usb-pid", type=int)
+    parser.add_argument("--usb-serial-number")
     parser.add_argument("--topology", choices=("external_uart", "native_usb_console"))
     parser.add_argument("--baudrate", type=int)
     parser.add_argument("--data-bits", type=int)
@@ -86,6 +89,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             name=args.profile_name,
             mode=args.backend,
             serial_port=args.serial_port,
+            usb_vid=args.usb_vid,
+            usb_pid=args.usb_pid,
+            usb_serial_number=args.usb_serial_number,
             topology=args.topology,
             baudrate=args.baudrate,
             data_bits=args.data_bits,

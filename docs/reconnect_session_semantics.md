@@ -1,10 +1,10 @@
 # Reconnect and Session Semantics
 
 > **Status:** pre-v2 implementation reference. All normative language below is
-> limited to the current schema-v1 finite-workflow model and is superseded for
+> limited to the historical schema-v1 finite-workflow model and is superseded for
 > the Phase 1 v2 target by `project_context.md` and
-> `phase1_implementation_spec.md`. Stage 1 DUT Profile/provenance is implemented,
-> while the schema-v2 runtime migration is not; this document must not be used to
+> `phase1_implementation_spec.md`. Current ownership implementation is described
+> in `software_architecture.md`; this document must not be used to
 > override v2 session rollover, continuous evidence, operation,
 > release/reacquire, or reconnect requirements.
 >

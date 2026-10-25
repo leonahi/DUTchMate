@@ -14,8 +14,11 @@ MAX_EVIDENCE_RESPONSE_BYTES = 262144
 class EvidenceCursorExpired(ValueError):
     """The retained evidence cannot safely continue this cursor."""
 
-    def __init__(self) -> None:
-        super().__init__("Evidence cursor position is no longer retained; attach again explicitly")
+    def __init__(
+        self,
+        detail: str = "Evidence cursor position is no longer retained; attach again explicitly",
+    ) -> None:
+        super().__init__(detail)
 
 
 def validate_evidence_query(*, cursor: str | None, limit: int, wait_s: float) -> None:

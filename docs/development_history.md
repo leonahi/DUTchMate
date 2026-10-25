@@ -10,6 +10,84 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Phase 1 v2 Migration Stage 7 Completed — 2026-10-25
+
+- Started from clean HEAD `5643c65` (committed Stage 6). Implemented only the
+  Stage 7 ownership lifecycle, Basic open-line provenance, and safe native USB
+  selection. Settlement follows the current DUTchMate normative specification,
+  particularly sections 13.8 (explicit release) and 25.5 (release exclusivity).
+- Added the framework-independent seven-state connection vocabulary, ownership
+  boundary/result/error values, and ownership port in `connection.py`. Runtime
+  derives `connected` from explicit state, claims lifecycle requests without
+  waiting behind competing lifecycle/mutation work, and rejects release during
+  Interact or submitted TX/Control, including reentrant mutation callbacks.
+  Read-only Monitor settles as `released`; follow does not own the transport.
+  Shutdown waits for submitted mutation result evidence and fences late source
+  publication; detach also cancels pending publication.
+- Added atomic service `/connection/release` and `/connection/reacquire` plus
+  HTTP-only CLI commands. Release durably records intent, closes/drains the
+  physical source through the authoritative admission path, flushes line state,
+  closes the segment, and records an intentional observation gap while keeping
+  the session journal alive. The coordinator suspends automatic reconnect.
+- Reacquire uses the resolved profile and records start/success/failure facts.
+  A valid active journal continues with a fresh segment; a terminal prior
+  journal produces a new v2 session with fresh session-local integrity. Existing
+  segment-count rollover is reused. Rollover during a released interval carries
+  the closed segment and ongoing gap instead of fabricating an open connection.
+  Same-session/rollover cursors remain ordered. An exhausted cursor into an ended
+  journal explicitly expires when reacquire creates an unrelated ownership
+  session; it neither silently jumps nor waits forever on the old tail.
+- Reused the coordinator's exclusive attempt claim for automatic/manual opens.
+  Competing requests fail busy. Returned candidates rejected during shutdown,
+  detach, deadline expiry, or publication failure are closed. Confirmed failed-
+  open cleanup allows retry; missing/failed cleanup proof retains a blocking
+  fault. Basic/Enhanced close failures remain visible on subsequent close calls.
+  Enhanced failed-open cleanup retains the original exception identity and a
+  cleanup certainty fact; lifecycle persistence failures remain typed
+  `persistence_fault` errors and cannot be overwritten as safe disconnected
+  ownership. The existing idle retry backoff is preserved.
+- Basic now constructs an unopened serial object, applies requested DTR/RTS
+  intent, then opens the selected path. Segment `serial` provenance records
+  effective framing/flow settings, requested states, RTS ownership, and bounded
+  preconfigured/driver-managed open intent without electrical readback or
+  glitch-free/passive claims. RTS flow-control conflicts are rejected before
+  opening. Optional semantic `serial_line_control` remains unavailable; Basic
+  advertises neither GPIO control nor arbitrary line toggles.
+- Added complete bounded `[backend.selector]` VID/PID/serial-number validation
+  and backend-boundary unique discovery for native USB. Exact external-UART
+  paths remain deterministic. Only a unique configured stable identity permits
+  path change. Ambiguity opens nothing and exposes `service_unavailable` /
+  `ambiguous_device`; automatic ambiguity leaves ownership disconnected with
+  bounded status diagnostics. Native USB gaps remain real segment boundaries.
+  CLI startup forwards the resolved selector to the service process.
+- Added 50 deterministic hardware-free regressions across runtime, backend,
+  service composition, and CLI. Coverage includes durable intent-before-close,
+  RX drain, intentional gaps, active Monitor/Interact/TX settlement, same/new
+  sessions, segment/size rollover, follow continuity/expiry, competing lifecycle
+  claims, shutdown/detach fences, confirmed/unknown cleanup, persistence faults,
+  Basic line provenance and capability separation, safe changed-path selection,
+  ambiguity, startup selector forwarding, and unchanged retry backoff. New
+  concurrency tests use Event/Condition synchronization; the retry test advances
+  a fake clock without wall-clock sleeps.
+- Focused validation:
+  `UV_CACHE_DIR=/tmp/dutchmate-uv-cache uv run --frozen pytest tests/unit/runtime tests/unit/evidence tests/unit/backends tests/unit/profile tests/unit/session_store apps/service/tests apps/cli/tests tests/architecture -q --tb=short`
+  — 830 passed in 12.86 seconds.
+- Full validation:
+  `UV_CACHE_DIR=/tmp/dutchmate-uv-cache uv run --frozen pytest -q`
+  — 1,515 passed in 39.93 seconds. Ruff passed; configured mypy passed (103
+  source files); `uv lock --check` passed (66 packages; temporary writable cache,
+  no lockfile changes); executable architecture/import checks passed; and
+  `git diff --check` passed. Import Linter is not configured.
+- Updated architecture ownership, status, and the legacy reconnect document's
+  supersession header. `graphify update .` refreshed the ignored structural
+  graph (5,698 nodes, 14,813 edges), with the existing partial-extraction warning
+  for `hardware/firmware/zephyr_dut/src/fixture_protocol.h` and a community-label
+  refresh notice. Generated graph artifacts are excluded from review changes.
+- Completed the Stage 7 slice from implementation baseline `5643c65`. No Stage 8,
+  MCP migration, firmware/protocol changes, composite workflow, or physical
+  acceptance work was started. No hardware was accessed.
+
+
 ## Phase 1 v2 Migration Stage 6 Completed — 2026-10-25
 
 - Implemented `GET /dut/evidence` over committed schema-v2 primary streams.

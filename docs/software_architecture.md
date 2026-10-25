@@ -44,6 +44,7 @@ core/profile
 
 core/runtime
   -> profile status projection
+  -> connection ownership contract
   -> evidence
   -> operations
   -> workflows
@@ -62,6 +63,7 @@ core/uart_capture
 
 core/evidence
   -> session_store
+  -> connection ownership values
   -> uart_capture
   -> backends.contracts
 
@@ -270,6 +272,26 @@ query bounds. It does not reuse the Monitor/Interact operation cursor or own
 acquisition. Runtime uses recorder notifications only to wake long polls; page
 contents always come from persisted primary evidence.
 
+### `connection`
+
+`connection.py` owns the normalized seven-state ownership vocabulary, boundary
+result, lifecycle error, and replaceable ownership port. Runtime derives the
+compatibility `connected` flag from its explicit state, arbitrates lifecycle
+requests with a nonblocking claim, and rejects release during submitted mutations
+or Interact. Active read-only Monitor operations finish as `released`; follow
+continues observing journal evidence without acquiring transport ownership.
+
+The recorder persists `release_requested` before closing its source, drains
+already-normalized RX through the same admission path, flushes line boundaries,
+and records `released`. Persistence closes the segment with reason `released`
+and increments the explicit observation-gap count while keeping the journal
+active. Reacquire records start/success/failure facts and publishes a fresh
+segment before resuming RX. It continues a valid active journal or creates a new
+v2 session when the prior journal is terminal. New sessions reset session-local
+integrity; segment-limit rollover uses the existing explicit successor chain.
+Journal rollover during a released interval preserves the closed connection
+and its gap rather than creating a synthetic physical reopen.
+
 ### `operations`
 
 Owns framework-independent bounded observation and Interact result values, validation,
@@ -437,6 +459,16 @@ explicit payload transformations; the public send API and CLI have no `force`
 or implicit newline append. Low-level protocol and deferred MCP text helpers are
 unchanged and do not restore the retired service request contract.
 
+Manual release/reacquire share the coordinator's attempt claim with automatic
+reconnect. Release suspends automatic opening; competing lifecycle requests fail
+busy. Shutdown/detach cancels pending publication, closes rejected candidates,
+and waits for submitted physical mutations to finish their result evidence.
+Failed-open cleanup is a separate ownership fact: confirmed cleanup permits
+retry; unknown cleanup retains a blocking fault and never reports the port free.
+Basic and Enhanced close paths retain cleanup failures across repeated calls.
+Enhanced open failures retain the primary exception identity together with
+cleanup certainty; persistence failures retain their `persistence_fault` error.
+
 ### `backends` (Contract Foundation)
 
 This package defines backend-neutral identity, timestamp provenance, normalized
@@ -461,6 +493,27 @@ origin wait observes that transition without dequeuing the event.
 
 It will not decode lines, detect patterns, persist sessions, handle HTTP, or
 format CLI output.
+
+Basic constructs an unopened serial object, applies requested DTR/RTS states,
+then opens the configured path. Segment `serial` provenance records effective
+framing/flow settings, requested line states, RTS ownership, and
+`preconfigured`/`driver_managed` open intent. The provenance makes no guarantee of
+glitch-free electrical transitions or electrical readback. Phase 1 rejects RTS
+application ownership with hardware flow control before opening. Optional
+semantic `serial_line_control` remains unavailable; Basic never advertises GPIO
+control or exposes raw line toggles.
+
+`backends.selection` owns USB discovery and unique identity matching. An optional
+`[backend.selector]` table supplies all three of `vid`, `pid`, and `serial_number`
+for `native_usb_console`; VID/PID are unsigned 16-bit integers and the serial
+number is bounded and nonempty. Only a unique exact identity match can select a
+changed path. External UART and native USB without that selector retain exact
+path selection. The service consumes selected backend settings and normalized
+snapshots; it does not choose between discovery candidates. CLI startup forwards
+the resolved selector to the service process. Ambiguity opens nothing, leaves
+automatic reconnect disconnected, and exposes `service_unavailable` with reason
+`ambiguous_device` through bounded status diagnostics. USB absence remains a real
+segment boundary and unobserved gap.
 
 ## Application Boundaries
 
@@ -487,6 +540,15 @@ establishes the current durable tail and returns no historical records; runtime
 resamples if rollover retention retires its initial tail during attachment.
 Cursor requests page persisted evidence and may wait up to 30 seconds for a
 durable-tail notification. Deleted positions map to HTTP 410 `cursor_expired`.
+If reacquire must create an unrelated journal after the prior session ended,
+an exhausted old cursor also explicitly expires. The API never silently joins
+independent ownership sessions; ordinary same-session release/reacquire and
+explicit rollover links continue normally.
+
+`POST /connection/release` and `/connection/reacquire` return the resulting
+connection state and durable session/segment boundary. Status preserves the
+active journal ID while released/reacquiring and includes bounded
+`connection_error` diagnostics when ownership selection or cleanup fails.
 
 ### CLI
 
@@ -498,7 +560,8 @@ Current commands cover explicit Basic/Enhanced startup selection, service
 lifecycle, labeled device listing, status, capture, GPIO mode, reset, boot mode,
 session listing, session detail, recent logs, and literal
 wait-pattern, bounded Monitor/Interact, audited byte-first UART send, durable
-`follow`, line-oriented `console`, and baseline mark/clear. `dutchmate mcp`
+`follow`, line-oriented `console`, explicit `release`/`reacquire`, and baseline
+mark/clear. `dutchmate mcp`
 replaces the CLI process with the aggregator-owned `dutchmate-mcp` entry point,
 which targets the separately packaged MCP adapter. This preserves the
 delivery-package import boundary and gives the MCP adapter direct ownership of

@@ -26,3 +26,9 @@ class BackendSettings:
     tx_enabled: bool
     rtscts: bool = False
     xonxoff: bool = False
+    dtr_on_open: str = "driver_default"
+    rts_on_open: str = "driver_default"
+    topology: str = "external_uart"
+    usb_vid: int | None = None
+    usb_pid: int | None = None
+    usb_serial_number: str | None = None

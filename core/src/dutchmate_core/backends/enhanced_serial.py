@@ -102,6 +102,7 @@ class AsyncEnhancedSerialAdapter:
         self._terminal = asyncio.Event()
         self._closed = False
         self._resource_close_task: asyncio.Task[None] | None = None
+        self._resource_close_error: BaseException | None = None
 
     @property
     def info(self) -> BackendInfo:
@@ -511,8 +512,8 @@ class AsyncEnhancedSerialAdapter:
     async def _run_resource_close(self) -> None:
         try:
             await self._reader.close()
-        except Exception:
-            return
+        except BaseException as exc:
+            self._resource_close_error = exc
 
     async def _terminate(
         self,
@@ -546,6 +547,8 @@ class AsyncEnhancedSerialAdapter:
                 await self._terminate(
                     BackendDisconnectedError("Enhanced serial adapter is closed")
                 )
+            if self._resource_close_error is not None:
+                raise self._resource_close_error
 
 
 def _validate_timeout(

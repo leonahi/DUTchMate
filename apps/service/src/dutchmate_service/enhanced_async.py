@@ -18,6 +18,7 @@ from dutchmate_core.backends.contracts import (
     BackendUartSendResult,
     ControlState,
     SegmentContext,
+    mark_open_cleanup,
 )
 from dutchmate_core.backends.enhanced import (
     AsyncEnhancedDeviceControl,
@@ -361,9 +362,13 @@ async def _open_host_on_owner_loop(
             segment_id=adapter.segment_id,
             segment=adapter.segment,
         )
-    except BaseException:
-        with suppress(BaseException):
+    except BaseException as primary_error:
+        try:
             await adapter.close()
+        except BaseException:
+            mark_open_cleanup(primary_error, False)
+        else:
+            mark_open_cleanup(primary_error, True)
         raise
 
 
@@ -387,7 +392,10 @@ def open_enhanced_async_host(
             )
         )
         host._install(opened)
-    except BaseException:
-        host._stop_failed_open()
+    except BaseException as primary_error:
+        try:
+            host._stop_failed_open()
+        except BaseException:
+            mark_open_cleanup(primary_error, False)
         raise
     return host

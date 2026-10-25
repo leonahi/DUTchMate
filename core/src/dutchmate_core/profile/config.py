@@ -6,6 +6,7 @@ import importlib
 import math
 import unicodedata
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
@@ -58,10 +59,14 @@ def parse_dut_profile_config(raw_config: Mapping[str, object]) -> DutProfileConf
     backend = _optional_table(raw_config, "backend")
     _reject_extra_fields(
         backend,
-        allowed={"mode", "serial_port", "reconnect_timeout_s", "topology"},
+        allowed={"mode", "serial_port", "reconnect_timeout_s", "topology", "selector"},
         context="[backend]",
     )
 
+    selector = _optional_table(backend, "selector", context="[backend.selector]")
+    _reject_extra_fields(
+        selector, allowed={"vid", "pid", "serial_number"}, context="[backend.selector]"
+    )
     hardware = _optional_table(raw_config, "hardware")
     uart = _optional_table(hardware, "uart", context="[hardware.uart]")
     _reject_extra_fields(
@@ -104,6 +109,9 @@ def parse_dut_profile_config(raw_config: Mapping[str, object]) -> DutProfileConf
             DEFAULT_RECONNECT_TIMEOUT_S,
         ),
         topology=backend.get("topology", "external_uart"),
+        usb_vid=selector.get("vid"),
+        usb_pid=selector.get("pid"),
+        usb_serial_number=selector.get("serial_number"),
         uart=UartProfileConfig(
             baudrate=uart.get("baudrate"),
             data_bits=uart.get("data_bits", 8),
@@ -149,9 +157,20 @@ def resolve_dut_profile(
     default_line_ending: object | None = None,
     dtr_on_open: object | None = None,
     rts_on_open: object | None = None,
+    usb_vid: object | None = None,
+    usb_pid: object | None = None,
+    usb_serial_number: object | None = None,
 ) -> DutProfile:
     """Apply overrides and validate one complete immutable effective profile."""
 
+    config = replace(
+        config,
+        usb_vid=config.usb_vid if usb_vid is None else usb_vid,
+        usb_pid=config.usb_pid if usb_pid is None else usb_pid,
+        usb_serial_number=config.usb_serial_number
+        if usb_serial_number is None
+        else usb_serial_number,
+    )
     resolved_mode = resolve_profile_mode(config, mode)
     resolved_name = _optional_name(config.name if name is None else name)
     resolved_topology = _topology(config.topology if topology is None else topology)
@@ -228,9 +247,32 @@ def resolve_dut_profile(
     if resolved_xonxoff:
         raise DutProfileError("hardware.uart.xonxoff must be false in Phase 1")
 
+    usb_values = (config.usb_vid, config.usb_pid, config.usb_serial_number)
+    if any(value is not None for value in usb_values):
+        if resolved_topology != "native_usb_console":
+            raise DutProfileError("USB identity selector requires native_usb_console topology")
+        for value in usb_values[:2]:
+            if type(value) is not int or not 0 <= value <= 65535:
+                raise DutProfileError("USB selector vid and pid must be integers 0..65535")
+        if (
+            not isinstance(config.usb_serial_number, str)
+            or not config.usb_serial_number
+            or len(config.usb_serial_number) > 128
+            or any(not c.isprintable() for c in config.usb_serial_number)
+        ):
+            raise DutProfileError("USB selector requires a bounded non-empty serial_number")
     selector = SerialSelector(
-        strategy="exact_path" if resolved_port is not None else "enhanced_discovery",
+        strategy=(
+            "usb_identity"
+            if config.usb_serial_number is not None
+            else "exact_path"
+            if resolved_port is not None
+            else "enhanced_discovery"
+        ),
         exact_path=resolved_port,
+        vid=cast(int | None, config.usb_vid),
+        pid=cast(int | None, config.usb_pid),
+        serial_number=cast(str | None, config.usb_serial_number),
     )
     controls = tuple(
         config.hardware.controls[role] for role in sorted(config.hardware.controls)

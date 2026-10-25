@@ -24,8 +24,13 @@ from dutchmate_core.session_store.store import SessionStore
 
 class FakeRawSerial:
     def __init__(self) -> None:
+        self.port = None
+        self.opened = False
         self.read_calls = 0
         self.closed = False
+
+    def open(self) -> None:
+        self.opened = True
 
     def read(self, size: int = 1) -> bytes:
         self.read_calls += 1
@@ -116,7 +121,7 @@ def test_open_basic_connection_uses_raw_8n1_without_reading_hello() -> None:
 
     assert calls == [
         {
-            "port": "/dev/ttyUSB0",
+            "port": None,
             "baudrate": 230400,
             "bytesize": 8,
             "parity": "N",
@@ -129,6 +134,7 @@ def test_open_basic_connection_uses_raw_8n1_without_reading_hello() -> None:
         }
     ]
     assert serial.read_calls == 0
+    assert serial.opened is True and serial.port == "/dev/ttyUSB0"
     assert connection.info.mode == "basic"
     assert connection.info.device is None
     assert connection.info.firmware is None

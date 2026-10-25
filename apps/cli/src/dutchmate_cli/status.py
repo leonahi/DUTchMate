@@ -31,6 +31,13 @@ def format_status(payload: Mapping[str, object]) -> str:
         f"Retention: {_format_retention(payload.get('retention'))}",
         "Control channels:",
     ]
+    connection_error = payload.get("connection_error")
+    if isinstance(connection_error, Mapping):
+        context = connection_error.get("context")
+        reason = context.get("reason") if isinstance(context, Mapping) else None
+        lines.insert(
+            8, f"Connection error: {_display(connection_error.get('error'))} ({_display(reason)})"
+        )
     lines.extend(_format_control_channels(payload.get("control_channels")))
     return "\n".join(lines)
 
@@ -86,7 +93,17 @@ def _format_connection(payload: Mapping[str, object]) -> str:
     value = payload.get("connection_state")
     state = (
         value
-        if isinstance(value, str) and value in {"connected", "disconnected", "reconnecting"}
+        if isinstance(value, str)
+        and value
+        in {
+            "connected",
+            "disconnected",
+            "reconnecting",
+            "connecting",
+            "released",
+            "reacquiring",
+            "faulted",
+        }
         else None
     )
     if state is None:

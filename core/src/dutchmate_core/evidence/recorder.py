@@ -19,6 +19,7 @@ from dutchmate_core.backends import (
     UartIntegrity,
     UartReceiveEvent,
 )
+from dutchmate_core.connection import ConnectionLifecycleError
 from dutchmate_core.operations.monitor import (
     EvidenceCursor,
     EvidenceRange,
@@ -50,6 +51,8 @@ RecorderState = Literal[
     "disconnected",
     "faulted",
     "closed",
+    "released",
+    "reacquiring",
 ]
 
 
@@ -301,6 +304,9 @@ class ContinuousEvidenceRecorder:
         self._state: RecorderState = "connected"
         self._fault: BaseException | None = None
         self._replacement_allowed = False
+        self._releasing = False
+        self._release_close_complete = False
+        self._release_drained = Event()
         self._closing = False
         self._closed = False
         self._close_complete = Event()
@@ -712,6 +718,130 @@ class ContinuousEvidenceRecorder:
                 self._replacement_allowed = True
             self._condition.notify_all()
 
+    def _connection_event(self, event_type: str) -> None:
+        admission = self._session_store.append_v2_connection_event(
+            self._handle,
+            event_type=event_type,
+            segment_id=self._stored_segment_id,
+            detail={},
+        )
+        self._publish_admission(admission)
+
+    def release(self) -> None:
+        """Record intent, close/drain the source, and publish an intentional gap."""
+        with self._admission_lock:
+            with self._condition:
+                if self._state != "connected" or self._closing or self._source is None:
+                    raise ConnectionLifecycleError(
+                        "invalid_connection_state", "Release requires connected ownership"
+                    )
+                source = self._source
+                self._releasing = True
+                self._release_close_complete = False
+                self._release_drained.clear()
+            try:
+                self._connection_event("release_requested")
+            except BaseException as exc:
+                self._record_fatal(exc, end_reason="persistence_error")
+                raise
+        try:
+            _close_source(source)
+        except BaseException as exc:
+            self._record_fatal(exc, end_reason="backend_input_error")
+            raise
+        finally:
+            with self._condition:
+                self._release_close_complete = True
+                self._condition.notify_all()
+        self._release_drained.wait()
+        with self._admission_lock:
+            try:
+                if self._fault is not None:
+                    raise RuntimeError("Recorder faulted while releasing")
+                self._flush_line_state()
+                self._connection_event("released")
+            except BaseException as exc:
+                self._record_fatal(exc, end_reason="persistence_error")
+                raise
+            with self._condition:
+                self._state = "released"
+                self._releasing = False
+                self._health = replace(self._health, connected=False)
+                self._condition.notify_all()
+
+    def cleanup_unconfirmed(self) -> None:
+        """An unclosed candidate blocks ownership, even when it was never published."""
+        self._record_fatal(
+            RuntimeError("Physical cleanup is unconfirmed"), end_reason="backend_input_error"
+        )
+
+    def begin_reacquire(self) -> None:
+        with self._admission_lock:
+            with self._condition:
+                if (
+                    self._closing
+                    or self._fault is not None
+                    or self._state not in {"released", "disconnected"}
+                ):
+                    raise ConnectionLifecycleError(
+                        "invalid_connection_state", "Recorder cannot reacquire"
+                    )
+                self._state = "reacquiring"
+            try:
+                metadata = self._session_store.load_metadata(self._handle.session_id)
+                if metadata.get("state") == "active":
+                    self._connection_event("reacquire_started")
+            except BaseException as exc:
+                self._record_fatal(exc, end_reason="persistence_error")
+                raise
+
+    def reacquire_failed(self, *, cleanup_unknown: bool = False) -> None:
+        with self._admission_lock:
+            with self._condition:
+                if self._fault is not None:
+                    self._state = "faulted"
+                    self._health = replace(self._health, connected=False)
+                    self._condition.notify_all()
+                    return
+            metadata = self._session_store.load_metadata(self._handle.session_id)
+            if metadata.get("state") == "active":
+                self._connection_event("reacquire_failed")
+            with self._condition:
+                self._state = (
+                    "faulted"
+                    if cleanup_unknown
+                    else "released"
+                    if metadata.get("state") == "active"
+                    else "disconnected"
+                )
+                self._health = replace(self._health, connected=False)
+                self._condition.notify_all()
+
+    def accept_reacquired_source(
+        self,
+        replacement: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot,
+    ) -> None:
+        with self._admission_lock:
+            self._replace_source_admitted(
+                replacement, backend_snapshot=backend_snapshot, manual=True
+            )
+
+    def _finish_release_drain(self, source: CaptureEventSource) -> bool:
+        with self._condition:
+            if not self._releasing:
+                return False
+            self._condition.wait_for(
+                lambda: self._release_close_complete or self._fault is not None
+            )
+            if not bool(getattr(source, "has_pending_events", False)):
+                if self._source is source:
+                    self._source = None
+                self._release_drained.set()
+                self._condition.notify_all()
+            return True
+
     def replace_source(
         self,
         replacement: CaptureEventSource,
@@ -731,6 +861,7 @@ class ContinuousEvidenceRecorder:
         replacement: CaptureEventSource,
         *,
         backend_snapshot: BackendSnapshot | None,
+        manual: bool = False,
     ) -> None:
         if backend_snapshot is None or backend_snapshot.segment is None:
             with suppress(BaseException):
@@ -743,8 +874,8 @@ class ContinuousEvidenceRecorder:
             raise ValueError("replacement source segment must match its backend snapshot")
         with self._condition:
             if (
-                self._state != "reconnecting"
-                or not self._replacement_allowed
+                (self._state != "reacquiring" if manual else self._state != "reconnecting")
+                or (not manual and not self._replacement_allowed)
                 or self._source is not None
                 or self._closing
             ):
@@ -756,10 +887,22 @@ class ContinuousEvidenceRecorder:
         normalized_segment = replace(physical_segment, segment_id=next_segment_id)
         normalized_snapshot = replace(backend_snapshot, segment=normalized_segment)
         try:
-            handle = self._session_store.append_v2_segment(
-                handle,
-                backend_snapshot=normalized_snapshot,
-            )
+            metadata = self._session_store.load_metadata(handle.session_id)
+            new_ownership_session = manual and metadata.get("state") != "active"
+            if new_ownership_session:
+                normalized_snapshot = replace(
+                    normalized_snapshot, segment=replace(normalized_segment, segment_id=0)
+                )
+                handle = self._session_store.create_v2_session(
+                    profile=self._profile, backend_snapshot=normalized_snapshot
+                )
+                self._handle = handle
+                self._stored_segment_id = 0
+                self._connection_event("reacquire_started")
+            else:
+                handle = self._session_store.append_v2_segment(
+                    handle, backend_snapshot=normalized_snapshot
+                )
             metadata = self._session_store.load_metadata(handle.session_id)
             segments = metadata.get("segments")
             if not isinstance(segments, list) or not segments:
@@ -767,7 +910,7 @@ class ContinuousEvidenceRecorder:
             stored_segment_id = len(segments) - 1
             connected = self._session_store.append_v2_connection_event(
                 handle,
-                event_type="reconnect_succeeded",
+                event_type="reacquire_succeeded" if manual else "reconnect_succeeded",
                 segment_id=stored_segment_id,
                 detail={"connection_generation": self._connection_generation + 1},
             )
@@ -786,7 +929,9 @@ class ContinuousEvidenceRecorder:
                 reject = True
             else:
                 reject = False
-                rolled_over = connected.handle.session_id != self._handle.session_id
+                rolled_over = (
+                    new_ownership_session or connected.handle.session_id != self._handle.session_id
+                )
                 self._connection_generation += 1
                 self._handle = connected.handle
                 self._source = replacement
@@ -801,7 +946,7 @@ class ContinuousEvidenceRecorder:
                     )
                 self._connection_start_dropped_bytes = self._session_dropped_bytes
                 self._explicit_overflow_bytes = 0
-                prior_integrity = self._health.integrity
+                prior_integrity = None if new_ownership_session else self._health.integrity
                 self._health = CaptureSourceHealth(
                     connected=True,
                     integrity=prior_integrity or backend_snapshot.integrity,
@@ -822,7 +967,10 @@ class ContinuousEvidenceRecorder:
             _close_source(replacement)
             raise RuntimeError("evidence recorder is closing")
 
-    def reconnect_timed_out(self) -> None:
+    def reconnect_selection_failed(self, reason: str) -> None:
+        self.reconnect_timed_out(reason=reason)
+
+    def reconnect_timed_out(self, *, reason: str = "reconnect_timeout") -> None:
         """Record a bounded reconnect failure and terminalize ownership."""
 
         with self._condition:
@@ -836,7 +984,7 @@ class ContinuousEvidenceRecorder:
                     handle,
                     event_type="reconnect_failed",
                     segment_id=segment_id,
-                    detail={"error": "reconnect_timeout"},
+                    detail={"error": reason},
                 )
                 self._publish_admission(failed)
                 metadata = self._session_store.load_metadata(failed.handle.session_id)
@@ -856,8 +1004,10 @@ class ContinuousEvidenceRecorder:
                 self._session_store.fail_session(
                     failed.handle,
                     end_reason="reconnect_timeout",
-                    error_code="reconnect_timeout",
-                    detail="backend reconnect deadline expired",
+                    error_code=reason,
+                    detail="backend reconnect deadline expired"
+                    if reason == "reconnect_timeout"
+                    else "backend USB selection is ambiguous",
                 )
         except BaseException as exc:
             self._record_fatal(exc, end_reason="persistence_error")
@@ -957,27 +1107,30 @@ class ContinuousEvidenceRecorder:
             try:
                 event = source.read_event()
             except BackendDisconnectedError as exc:
-                if self._finish_shutdown_drain(source):
+                if self._finish_release_drain(source) or self._finish_shutdown_drain(source):
                     continue
                 if self._closing:
                     return
                 self._record_disconnect(source, exc)
                 continue
             except BackendInputError as exc:
-                if self._finish_shutdown_drain(source):
+                if self._finish_release_drain(source) or self._finish_shutdown_drain(source):
                     continue
                 if self._closing:
                     return
                 self._record_fatal(exc, end_reason="backend_input_error", source=source)
                 return
             except Exception as exc:
-                if self._finish_shutdown_drain(source):
+                if self._finish_release_drain(source) or self._finish_shutdown_drain(source):
                     continue
                 if self._closing:
                     return
                 self._record_fatal(exc, end_reason="backend_input_error", source=source)
                 return
             if event is None:
+                if self._releasing and self._release_close_complete:
+                    self._finish_release_drain(source)
+                    continue
                 with self._condition:
                     if (
                         self._closing
@@ -1229,6 +1382,7 @@ class ContinuousEvidenceRecorder:
             current = self._source
             if source is not None and current is not source:
                 return
+            self._release_drained.set()
             self._fault = error
             self._state = "faulted"
             self._source = None

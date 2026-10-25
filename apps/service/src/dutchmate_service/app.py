@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
+from dataclasses import asdict
 from pathlib import Path
 from threading import Event
 from typing import Annotated, Protocol
@@ -12,6 +13,7 @@ from typing import Annotated, Protocol
 from fastapi import FastAPI, Query
 from fastapi.responses import Response
 
+from dutchmate_core.connection import ConnectionBoundary
 from dutchmate_core.evidence.tail import EvidencePage
 from dutchmate_core.gpio_config.config import HardwareGpioConfig
 from dutchmate_core.gpio_config.modes import GpioControlChannelState
@@ -59,6 +61,9 @@ from dutchmate_service.startup import apply_startup_hardware_config, build_start
 
 class RuntimeProvider(Protocol):
     """Runtime surface needed by the current service API."""
+
+    def release_connection(self) -> ConnectionBoundary: ...
+    def reacquire_connection(self) -> ConnectionBoundary: ...
 
     def evidence(
         self, *, cursor: str | None = None, limit: int = 100, wait_s: float = 1.0,
@@ -205,6 +210,14 @@ def create_app(
 
     app = FastAPI(title="DUTchMate Device Core Service", lifespan=lifespan)
     register_error_handlers(app)
+
+    @app.post("/connection/release")
+    def release_connection() -> dict[str, object]:
+        return {"ok": True, **asdict(runtime_provider.release_connection())}
+
+    @app.post("/connection/reacquire")
+    def reacquire_connection() -> dict[str, object]:
+        return {"ok": True, **asdict(runtime_provider.reacquire_connection())}
 
     @app.get("/status")
     def get_status() -> dict[str, object]:

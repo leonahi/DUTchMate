@@ -12,6 +12,7 @@ from dutchmate_cli.client import (
     ServiceClientError,
     ServiceUnavailableError,
     capture_uart,
+    change_connection,
     clear_session_baseline,
     configure_gpio_mode,
     fetch_recent_logs,
@@ -389,6 +390,33 @@ def send_command(
     except (ServiceUnavailableError, ServiceClientError) as exc:
         _fail(str(exc))
     typer.echo(format_uart_send(payload))
+
+
+def _connection_command(action: str, service_url: str | None) -> None:
+    try:
+        payload = change_connection(action, service_url=_resolve_service_url(service_url))
+    except ServiceClientError as exc:
+        _fail(str(exc))
+    typer.echo(
+        f"Connection: {payload.get('connection_state')}\n"
+        f"Session: {payload.get('session_id')}\nSegment: {payload.get('segment_id')}"
+    )
+
+
+@app.command("release")
+def release_command(
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
+) -> None:
+    """Release the transport for an external tool; keep the journal alive."""
+    _connection_command("release", service_url)
+
+
+@app.command("reacquire")
+def reacquire_command(
+    service_url: Annotated[str | None, typer.Option("--service-url")] = None,
+) -> None:
+    """Reacquire the configured backend with a fresh observation segment."""
+    _connection_command("reacquire", service_url)
 
 
 @app.command("follow")
