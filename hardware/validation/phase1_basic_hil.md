@@ -469,3 +469,105 @@ The delayed-fault source limitation recorded above remains unresolved, so this
 baseline alone cannot substantiate the full requested v2 HIL gate. No firmware
 changes were made. All acceptance decisions remain unchanged; Enhanced HIL
 was not started.
+
+## Reviewed fixture finalization / Basic HIL preflight — 2026-10-26
+
+Result: **blocked before flash and serial ownership; Basic HIL not run**.
+No new acceptance decision replaces any historical result above.
+
+| Provenance | Observed value |
+|---|---|
+| Preflight time | `2026-10-26T19:02:24.994058+05:30` (IST) |
+| Branch | `stage8-phase1-acceptance` |
+| Reviewed fixture/preflight commit | `746121a35633c070f4e7112010ce26b656d8ef1d`, `test(hardware): prepare Basic Phase 1 HIL fixture` |
+| Commit publication | Local only; SSH and HTTPS push authentication failed |
+| Host | macOS 26.2, Darwin 25.2.0, arm64 |
+| Adapter | FTDI FT231X USB UART, `0403:6015`, serial `D358SG6A`, location `0-1.4` |
+| Port | `/dev/cu.usbserial-D358SG6A`; enumerated only, never opened |
+| Reviewed UF2 | `build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767/zephyr/zephyr.uf2` |
+| Independent UF2 SHA-256 | `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`; exact required match |
+| Image build identity | `basic-v2-20261026-7bc2ec377767`, Zephyr v4.4.0 / SDK 1.0.1, `rpi_pico/rp2040`; built for 115200 8-N-1, no flow control/overlay |
+| Physical DUT/BOOTSEL | Not verified; only `/Volumes/Macintosh HD` mounted, no `RPI-RP2` or `INFO_UF2.TXT` found |
+| Wiring | Not verified; operator confirmation/physical inspection required |
+| Flash / actual boot or INFO identity | Not performed / not observed |
+| Effective DUTchMate profile, serial, DTR/RTS | Not resolved on hardware; service never started |
+| New schema-v2 session IDs | None |
+
+Actions/commands performed:
+
+```bash
+rtk proxy git diff --check
+rtk proxy git add docs/development_history.md docs/development_status.md hardware/firmware/zephyr_dut/README.md hardware/firmware/zephyr_dut/src/fixture_protocol.c hardware/firmware/zephyr_dut/src/fixture_protocol.h hardware/firmware/zephyr_dut/src/main.c hardware/validation/phase1_basic_hil.md tests/hardware/zephyr_dut/fixture_protocol_harness.c tests/hardware/zephyr_dut/test_fixture_protocol.py
+rtk proxy git diff --cached --check
+rtk proxy git commit -m 'test(hardware): prepare Basic Phase 1 HIL fixture'
+rtk proxy git push origin stage8-phase1-acceptance
+rtk proxy ssh-add -l
+rtk proxy env GIT_TERMINAL_PROMPT=0 git push https://github.com/leonahi/DUTchMate.git stage8-phase1-acceptance:stage8-phase1-acceptance
+```
+
+Read-only `rtk proxy .venv/bin/python -` scripts verified the reviewed source
+digests against `fixture-build-report.json`, branch and absence of production
+changes; then independently used `hashlib.sha256(uf2.read_bytes())` with an
+assertion against the required hash, `serial.tools.list_ports.comports()`,
+`Path('/Volumes').iterdir()`, and `Path('/Volumes').glob('*/INFO_UF2.TXT')`.
+The raw inventory is also retained locally at
+`/tmp/dutchmate-basic-hil-current-preflight.json`. No device was opened.
+
+Push failed through SSH (`Permission denied (publickey)`; no agent identities)
+and HTTPS (no available username/credentials). No production or fixture behavior
+was patched, no alternative flashing mechanism was attempted, and no service,
+external terminal, Monitor, Interact, follow, or console was started.
+
+| Phase 1A criterion | This attempt |
+|---|---|
+| Continuous ambient RX / single service reader | Not tested — stopped before ownership |
+| Boot/INFO physical identity | Not tested — no flash/serial open |
+| Follow and recording after detach | Not tested |
+| Duration/literal Monitor with exact ranges | Not tested |
+| Default-disabled TX and explicitly enabled exact audited send | Not tested |
+| Deterministic single-send Interact | Not tested |
+| DELAYFAULT completion-before-fault ordering | Not tested — no operation/evidence sequence exists |
+| Service-only line console | Not tested |
+| Native v2 records and session/list/detail/evidence/log retrieval | Not tested |
+| Linked size/segment rollover | Not rerun; earlier deterministic tests remain historical software evidence |
+| Host-observation timestamps and truthful Basic loss state | Not tested |
+| DTR/RTS requested/open provenance | Not tested |
+| Release / external same-port ownership / reacquire | Not tested; no segment or observation gap created |
+| Unexpected reconnect with v2 evidence | Not tested |
+| Shared unit/service/CLI tests | Not rerun for wording-only finalization; prior 1,496-test result retained in history |
+| Real generic adapter + Zephyr HIL | Blocked before flash/setup verification |
+
+Required operator actions: restore GitHub authentication for the requested
+branch push; disconnect Pico USB, hold BOOTSEL while reconnecting its USB data
+cable, then release BOOTSEL when `RPI-RP2` appears. Confirm that board is the
+Pico 1/Pico H and the wiring is GP0/pin 1 to FTDI RX, GP1/pin 2 to FTDI TX,
+GND/pin 3 to FTDI GND, Pico independently USB-powered, FTDI VCC disconnected,
+and adapter logic 3.3 V. Do not confuse its UF2 volume with another board.
+
+This is an authentication/physical setup blocker, not an observed DUTchMate
+software failure. Stage 8, Phase 1A, Phase 1B, and Phase 1 remain incomplete;
+Enhanced HIL was not started and MCP migration remains deferred. This new HIL
+blocker documentation remains uncommitted for review.
+
+## Operator setup confirmation / waiting for push — 2026-10-26
+
+At `2026-10-26T19:08:29.149606+05:30`, read-only serial discovery again
+identified FTDI FT231X `0403:6015`, serial `D358SG6A`, at
+`/dev/cu.usbserial-D358SG6A`; the reviewed UF2 hash still matched exactly.
+`lsof` listed no owner of the cu/tty paths. The current CLI help and local
+Basic 115200 8-N-1, TX-enabled configuration were inspected without starting
+the service or opening serial.
+
+The operator subsequently confirmed the connected Pico 1/Pico H was flashed
+with `basic-v2-20261026-7bc2ec377767` and that GP0/pin 1 → FTDI RX,
+GP1/pin 2 → FTDI TX, GND/pin 3 → FTDI GND, separate Pico USB power,
+FTDI VCC disconnected, 3.3 V logic, and open GP2/GP3 all matched.
+This confirmation supersedes the earlier missing operator setup information;
+actual boot/INFO identity has not yet been observed through DUTchMate.
+
+Another `rtk proxy git push origin stage8-phase1-acceptance` failed with
+`Permission denied (publickey)`. The operator requested waiting for their push
+before HIL and then requested committing the pending documentation. No serial
+port was opened, no firmware was flashed by the agent, and no session or HIL
+result was created. The earlier criterion table remains untested. All phase
+statuses are unchanged; Enhanced HIL and MCP work were not started.

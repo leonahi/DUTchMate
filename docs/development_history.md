@@ -10,6 +10,54 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Operator Confirmed Basic Setup; Acceptance Paused for Push — 2026-10-26
+
+- Read-only inventory at `2026-10-26T19:08:29.149606+05:30` again identified
+  FTDI FT231X `0403:6015`, serial `D358SG6A`, at the expected cu path; the
+  reviewed UF2 SHA-256 still matched exactly. Current CLI help/configuration
+  were inspected; `lsof -nP /dev/cu.usbserial-D358SG6A /dev/tty.usbserial-D358SG6A`
+  listed no owner. No serial open or HIL operation occurred.
+- The operator confirmed that the Pico 1/H had the reviewed
+  `basic-v2-20261026-7bc2ec377767` image flashed and all requested Basic wiring,
+  3.3 V logic, separate USB power, disconnected FTDI VCC, and open GP2/GP3
+  matched. This is operator provenance, not an observed boot/INFO response.
+- The SSH push retry failed with `Permission denied (publickey)`. The operator
+  requested waiting for their push before Basic HIL, then requested committing
+  the remaining branch documentation. No fixture/production source changed;
+  all acceptance gates remained incomplete. Documentation diff validation
+  passed; software checks were not rerun for documentation-only changes.
+
+
+## Reviewed Basic Fixture Committed; Push/BOOTSEL Preflight Blocked — 2026-10-26
+
+- Finalized only current review-state wording; preserved earlier dated reports
+  and the reviewed fixture source snapshot. `git diff --check` and staged diff
+  checks passed. Committed the nine reviewed fixture/preflight files on
+  `stage8-phase1-acceptance` as
+  `746121a35633c070f4e7112010ce26b656d8ef1d`, subject
+  `test(hardware): prepare Basic Phase 1 HIL fixture`.
+- `rtk proxy git push origin stage8-phase1-acceptance` failed with
+  `Permission denied (publickey)`. Escalated `rtk proxy ssh-add -l` reported
+  `The agent has no identities.` An HTTPS retry using existing credentials,
+  `rtk proxy env GIT_TERMINAL_PROMPT=0 git push https://github.com/leonahi/DUTchMate.git stage8-phase1-acceptance:stage8-phase1-acceptance`,
+  failed with `could not read Username for 'https://github.com': terminal prompts
+  disabled`. GitHub CLI was unavailable. No remote URL/configuration changed;
+  the commit remains local, not pushed. These are authentication failures, not
+  automatic approval-review rejections.
+- Read-only preflight at `2026-10-26T19:02:24.994058+05:30` independently
+  recomputed the reviewed UF2 SHA-256 and required an exact match. FTDI FT231X
+  `0403:6015`, serial `D358SG6A`, remained present at the intended path.
+  `/Volumes` contained only `Macintosh HD`; no `INFO_UF2.TXT` or `RPI-RP2`
+  volume was found. No flash or serial open was attempted.
+- Detailed identity, command, physical-blocker, and criterion results are
+  appended to [Basic HIL validation](../hardware/validation/phase1_basic_hil.md).
+  No DUTchMate software defect was observed; no v2 session or runtime criterion
+  result exists. Stage 8/Phase 1A/Phase 1B/Phase 1 remain incomplete. Enhanced
+  HIL and MCP work were not started. Post-commit HIL blocker documentation was
+  left uncommitted; final documentation `git diff --check` passed. No source
+  behavior or production code changed during this finalization/preflight.
+
+
 ## Basic Delayed-Fault Fixture Prepared, Not Flashed — 2026-10-26
 
 - Stayed on `stage8-phase1-acceptance`, HEAD
