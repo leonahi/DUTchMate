@@ -571,3 +571,131 @@ before HIL and then requested committing the pending documentation. No serial
 port was opened, no firmware was flashed by the agent, and no session or HIL
 result was created. The earlier criterion table remains untested. All phase
 statuses are unchanged; Enhanced HIL and MCP work were not started.
+
+## Real Basic v2 HIL attempt stopped — 2026-10-26
+
+Result: **incomplete; run invalidated by concurrent software-test store recovery**.
+No Phase 1A acceptance is granted. The agent ran pytest against the checkout
+while the physical service was active; unisolated service tests recovered its
+live session. The resulting reproducible test-isolation defect requires a
+separate correction and a fresh HIL run. No production/fixture fix was made.
+
+### Physical and software provenance
+
+| Field | Observed value |
+|---|---|
+| Branch/commit | Clean `stage8-phase1-acceptance` at `b3f850a4b71cc80c2081fb24f5f151ea01625c84`; upstream tracking ref matched after operator push |
+| Fixture source baseline | `746121a35633c070f4e7112010ce26b656d8ef1d` |
+| Host | macOS 26.2, Darwin 25.2.0, arm64 |
+| Adapter | FTDI FT231X USB UART, VID/PID `0403:6015`, serial `D358SG6A`, `/dev/cu.usbserial-D358SG6A` |
+| DUT identity | Pico 1/Pico H confirmed by operator; physical INFO returned `board=rpi_pico`; no independent unique board serial obtained |
+| Firmware | `basic-v2-20261026-7bc2ec377767`; actual UART INFO matched exactly; Zephyr v4.4.0 (`684c9e8f32e4373a21098559f748f06915f950c9`), SDK 1.0.1 from reviewed build provenance |
+| Reviewed/flashed UF2 | Operator confirmed flashing the reviewed image; independently hashed local image `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`; no device image readback and no agent flash |
+| Wiring | Operator confirmed GP0/pin 1→FTDI RX, GP1/pin 2→FTDI TX, GND/pin 3→FTDI GND, own Pico USB power, FTDI VCC disconnected, 3.3 V logic, GP2/GP3 open |
+| Service | PID 7478, `127.0.0.1:2040`; explicit Basic selection; one service-owned FTDI descriptor (FD 3u), no external owner |
+| Session | `20261026T134413Z-e8d17b99`, native schema v2; started 13:44:13 UTC / 19:14:13 IST |
+| Config/profile | `.dutchmate/config.toml`, unnamed profile; SHA-256 `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837` |
+| Effective serial | 115200 8-N-1; `rtscts=false`, `xonxoff=false`; exact-path selector, external UART topology; reconnect timeout 5 s |
+| TX | Explicit `hardware.uart.tx_enabled=true`; profile default ending `none`; both INFO requests explicitly used LF |
+| DTR/RTS | Both requested `driver_default`; open transition `driver_managed`, RTS owner `driver`; electrical readback/glitch-free claims both false |
+| Timestamp/loss | Host monotonic microseconds, segment-start origin, `host_serial_read/serial_read_chunk`; `not_observable`, null observer/drop count |
+
+### Exact actions and retrieval
+
+Preflight used `git status --short --branch`, `git rev-parse HEAD
+origin/stage8-phase1-acceptance`, independent UF2 hashing/serial enumeration,
+and `lsof -nP /dev/cu.usbserial-D358SG6A /dev/tty.usbserial-D358SG6A` through
+`rtk proxy`. Current CLI help and source contracts were inspected.
+
+The local recorder `.dutchmate/hil/basic-phase1a-20261026/run.py` invokes the
+actual `.venv/bin/dutchmate` and normal HTTP endpoints, saving request start/end
+timestamps, exact arguments/bodies, outputs, and return/status codes in
+`commands.jsonl` plus numbered JSON files. It does not implement acquisition.
+
+| UTC | Action | Observed result |
+|---|---|---|
+| 13:43:56 | `dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200`, direct launcher environment | Failed before service creation: runner PATH lacked `dutchmate-service`; preserved in `01-start.json` |
+| 13:44:12 | Same CLI arguments under `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen --package dutchmate python .../run.py 02-start cli ...` | Service PID 7478 started; no source change needed |
+| 13:44:53 | `GET /status` | Connected Basic; no active operations; session/provenance above |
+| 13:44:58 | `dutchmate interact INFO --line-ending lf --until 'DMF/1 INFO board=rpi_pico build=basic-v2-20261026-7bc2ec377767 protocol=1' --timeout 2` | `timeout`; fixture returned `E_COMMAND_001`; CLI exit 0 did not imply matched acceptance |
+| 13:45:09 | `GET /dut/evidence?wait_s=0` | Durable tail cursor saved; this cursorless attachment returns no history |
+| 13:45:48 | `POST /dut/uart/send`, body `{"text":"INFO","line_ending":"lf"}` | Separately requested diagnostic send, 5 accepted bytes, audit recorded; not an automatic Interact retry |
+| 13:45:50 | `GET /dut/logs?session_id=20261026T134413Z-e8d17b99&lines=20` | Exact reviewed INFO response retrieved |
+| 13:46:13 | `GET /sessions/20261026T134413Z-e8d17b99` | Active v2 detail, one segment, 113 RX bytes, no active operation |
+| 13:46:37 | Full pytest running concurrently | Default-root `create_app()` tests recovered the live session as `abandoned/service_restart` |
+| Before 13:48:06 | Operator briefly grounded RUN then released, with no bounded operation/view active | Operator confirmed reset; boot evidence was not persisted in the invalidated session |
+| 13:48:06 | Same session/log retrieval | Session inactive, no BOOT marker; segment ended `service_restart` |
+| 13:48:08 | `dutchmate monitor --seconds 0.5` | HTTP 503 `service_unavailable`: `Monitor requires a connected or reconnecting backend` |
+| 13:48:39 | `GET /status` | `connection_state=faulted`, no active session/capabilities |
+| 13:51:14 | Public `dutchmate stop` under the uv environment | Service stopped; no serial owner listed afterward |
+
+### Preserved evidence and diagnosis
+
+- Original session: `.dutchmate/sessions/20261026T134413Z-e8d17b99/`.
+  Independent unchanged copy: `.dutchmate/hil/basic-phase1a-20261026/preserved-session/`.
+- Operation start sequence 1, TX attempt 2, successful result 3, fixture command
+  error RX 4, timeout terminal 5; range `[1,6)`. Operation ID
+  `interact-4577de7a-e938-4a96-b33c-960e0e77c6bc`, attempt
+  `ca38f784-3156-49c4-93f6-d9e25e87c4be`. Exactly one `INFO\n` TX (base64
+  `SU5GTwo=`), accepted 5 bytes; no retry in this operation.
+- Separate INFO attempt/result sequences 6/7, attempt
+  `314026c7-4573-409a-bf8d-8b397a1493cd`; RX sequence 8 contains exactly
+  `DMF/1 INFO board=rpi_pico build=basic-v2-20261026-7bc2ec377767 protocol=1\n`.
+  This RX occurred outside a bounded operation, before the later store interference.
+- Two RX records total 113 bytes. Decoded RX equals `uart_raw.log` byte-for-byte;
+  TX request bytes `INFO\n` are absent from receive-only raw. TX audit records
+  live in `operation_events.jsonl` under current schema v2, not the historical
+  Basic report's hardware-event location. Attempts precede their results/RX.
+- Raw SHA-256 `b2d79f264653793677ded02262c95db9136e311a241dcd8c0b3e63d85e6ebba0`;
+  metadata SHA-256 `ec398919bb07faa04acc09c2549cc8ef280ac157b62e2d4b9e5a9005622c7fc0`;
+  operation events SHA-256 `0d8687110ca16e6e4451e64d686d0d1ae716f35197ef1f6a01d082d23c244b38`.
+  Full manifest: `preserved-manifest.json` in the run directory; all original
+  hashes still matched after service cleanup. Only the current PID's log epoch
+  is retained as `service-7478.log`, excluding older historical service runs.
+- `apps/service/tests/test_errors.py` lines 206, 234, and 252 call `create_app()`
+  with no temporary root. `apps/service/src/dutchmate_service/startup.py`
+  builds a store and calls `recover_stale_sessions()` before its no-profile
+  check. Thus these tests mutate the default real session directory.
+- Exact standalone reproduction:
+  `rtk proxy .venv/bin/python .dutchmate/hil/basic-phase1a-20261026/reproduce_test_isolation.py`.
+  Twice, in temporary directories only, create a synthetic active Basic session,
+  construct `TestClient(create_app())`, then try an RX append. Both sessions
+  became abandoned/`service_restart`; both appends raised
+  `ValueError: schema-v2 evidence can only append while active`. Results are in
+  `test-isolation-reproduction.json`. This used no physical backend.
+
+Classification: confirmed service-test isolation defect and acceptance-run
+contamination caused by running those tests concurrently with the live service.
+The recorder's subsequent fail-stop is not evidence of a normal single-owner
+UART defect. The initial fixture command rejection has no established cause;
+its later correct INFO response does not erase that anomaly. Neither issue is
+silently attributed to wiring or fixed during acceptance.
+
+### Criterion results
+
+| Phase 1A criterion | Result for this run |
+|---|---|
+| Real Basic startup, exactly one serial owner, effective UART/profile | Observed before interference |
+| Physical boot/INFO identity | INFO verified; ambient boot not captured after foreign recovery |
+| Continuous operation-independent ambient evidence | INFO RX outside operations observed; complete ambient boot/fault gate not established |
+| Follow / continued RX after detach | Not run; stopped at defect |
+| Duration Monitor | Blocked: HTTP 503 after recorder fault |
+| Literal-condition Monitor | Not run |
+| Default-disabled / explicitly enabled audited TX | Explicit enabled TX passed for two sends; default-disabled physical check not run; software gate passed |
+| Interact exact bytes, outcome/range, single send | One TX and correct timeout/range observed; matched Interact not established |
+| DELAYFAULT ACK terminal before asynchronous fault | Not run; no delayed-fault ordering evidence |
+| Service-backed console / recording after exit | Not run |
+| Native v2 RX/action/provenance and retrieval | Partial: detail/log/tail attachment work; full listing/cursor replay gate not established |
+| Size/segment linked rollover | Not physically exercised; software gate passed |
+| Truthful Basic loss and host timestamp provenance | Observed; no lossless/electrical readback claim |
+| DTR/RTS requested/open provenance | Observed as truthful driver-default/driver-managed provenance |
+| Release / external owner / reacquire, segment and gap | Not run; no handoff segment/gap evidence |
+| Unexpected reconnect | Not run |
+| Shared unit/service/CLI gate | 1,496 passed in 36.01 s; unsafe default-store side effect identified despite green tests |
+| Full real Basic HIL | Incomplete, no acceptance |
+
+Ruff and configured mypy (103 files) passed. Final documentation
+`git diff --check` passed. Stage 8, Phase 1A, Phase 1B, and Phase 1 remain
+incomplete. Enhanced HIL and MCP work were not started. New HIL documentation
+remains uncommitted for review; no production, fixture, or tracked test code
+was changed, and the agent did not flash hardware.

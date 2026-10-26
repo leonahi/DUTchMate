@@ -10,6 +10,64 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Basic Phase 1A HIL Stopped After Test-Isolation Interference — 2026-10-26
+
+- Began from clean `stage8-phase1-acceptance`; HEAD and its upstream tracking
+  ref both named `b3f850a4b71cc80c2081fb24f5f151ea01625c84`, confirming the
+  operator's push. Fixture source baseline remains `746121a`. Operator-confirmed
+  Pico 1/H flash/wiring were retained; independent UF2 SHA-256 again matched
+  `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`.
+- Real Basic service PID 7478 connected to FTDI FT231X `0403:6015`, serial
+  `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, 115200 8-N-1, no flow control,
+  explicit TX enabled. One service-owned serial descriptor was observed.
+  Session `20261026T134413Z-e8d17b99` started at 13:44:13 UTC (19:14:13 IST).
+  Effective profile digest:
+  `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+- First exact `INFO\n` Interact returned timeout because the fixture emitted
+  `DMF/1 ERROR COMMAND code=E_COMMAND_001\n`. It had one TX attempt/result,
+  without retry. A separately requested audited INFO send returned the exact
+  reviewed build ID. The initial fixture-path rejection remains unexplained;
+  no host TX defect was established from it.
+- The agent then incorrectly ran the full suite while the physical service
+  was active. Three `apps/service/tests/test_errors.py` tests call `create_app()`
+  without a temporary session root. `create_app` calls `build_startup_runtime`,
+  which recovers the real default `.dutchmate/sessions` even without a profile.
+  The live session was marked abandoned with `service_restart` at 13:46:37 UTC.
+  Following the operator's requested RUN reset, boot bytes were not persisted;
+  the next duration Monitor returned HTTP 503 and status was `faulted`.
+- Acceptance stopped. Read-only tracing found the default-store recovery path.
+  A standalone reproduction used synthetic Basic sessions in two temporary
+  directories: `TestClient(create_app())` changed each active session to
+  abandoned, then RX append raised `ValueError: schema-v2 evidence can only
+  append while active`. No serial or original session was touched by that
+  reproduction. This establishes a service-test isolation defect, rather than
+  a physical wiring failure or a normal single-owner RX failure. No production,
+  fixture, or tracked test fix was made during acceptance.
+- Preserved all 113 raw bytes, two RX records (sequences 4, 8), six operation
+  records, metadata, and command/status outputs. Decoded RX exactly equals raw;
+  requested TX `INFO\n` is absent from receive-only raw. The service was stopped
+  through the public CLI, no port owner remained, and original/preserved hashes
+  still matched. Evidence is under `.dutchmate/hil/basic-phase1a-20261026/`;
+  the original session remains under `.dutchmate/sessions/`. Full criterion and
+  command records are appended to the Basic HIL validation document.
+
+Fresh software checks performed during this attempt:
+
+| Command | Result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,496 passed in 36.01 s; concurrent default-root test side effect invalidated physical HIL |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 files |
+| `rtk proxy .venv/bin/python .dutchmate/hil/basic-phase1a-20261026/reproduce_test_isolation.py` | Reproduced active→abandoned→RX append rejection twice in temporary directories |
+| `rtk proxy git diff --check` | Passed for final documentation |
+
+No real follow, successful Monitor, delayed-fault ordering, console, handoff,
+rollover, or unexpected reconnect claim was made. Stage 8, Phase 1A, Phase 1B,
+and Phase 1 remain incomplete. Enhanced HIL and MCP work were not started.
+New HIL documentation was left uncommitted for review, with earlier records
+preserved. No hardware was flashed by the agent.
+
+
 ## Operator Confirmed Basic Setup; Acceptance Paused for Push — 2026-10-26
 
 - Read-only inventory at `2026-10-26T19:08:29.149606+05:30` again identified
