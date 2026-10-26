@@ -406,10 +406,12 @@ class BasicBackendEventSource:
             )
 
     def _next_event(self, timeout_s: float | None) -> BackendEvent | None:
-        if self._terminal_error is not None:
+        # Close may enqueue its wakeup after EOF was already observed. Drain
+        # the FIFO before replaying a cached error so settlement can finish.
+        if self._terminal_error is not None and self._outcomes.empty():
             raise self._terminal_error
         self._ensure_reader_started()
-        if self._terminal_error is not None:
+        if self._terminal_error is not None and self._outcomes.empty():
             raise self._terminal_error
         reader = self._reader
         if (
@@ -439,9 +441,10 @@ class BasicBackendEventSource:
             self._terminal_error = outcome.error
             raise outcome.error
         if isinstance(outcome, _SourceClosed):
-            self._terminal_error = BackendDisconnectedError(
-                "Basic backend event source is closed"
-            )
+            if self._terminal_error is None:
+                self._terminal_error = BackendDisconnectedError(
+                    "Basic backend event source is closed"
+                )
             raise self._terminal_error
         return outcome
 

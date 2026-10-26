@@ -7,6 +7,7 @@ import pytest
 from dutchmate_core.backends import (
     BackendCapabilityError,
     BackendDisconnectedError,
+    BackendInputError,
     BackendWriteError,
     UartReceiveEvent,
 )
@@ -254,6 +255,60 @@ async def test_basic_source_drains_queued_data_before_disconnect() -> None:
     with pytest.raises(BackendDisconnectedError, match="Basic serial read failed"):
         await source.receive_event(timeout_s=0.5)
     source.close()
+
+
+async def test_basic_close_drains_wakeup_after_terminal_was_already_observed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch a late close sentinel stranded behind the cached terminal error."""
+    serial = ScriptedRawSerial()
+    source = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=serial, settings=_settings()), segment_id=0
+    )
+    assert await source.receive_event(timeout_s=0.01) is None
+    original_put = source._outcomes.put_nowait
+
+    def terminal_before_wakeup(outcome: object) -> None:
+        # Real close has already stopped/joined the serial reader, but has not
+        # published its wakeup. The consumer can observe EOF in that interval.
+        assert serial.closed and not source._reader.is_alive()
+        with pytest.raises(BackendDisconnectedError):
+            source.read_event()
+        original_put(outcome)
+
+    monkeypatch.setattr(source._outcomes, "put_nowait", terminal_before_wakeup)
+    source.close()
+    with pytest.raises(BackendDisconnectedError):
+        await source.receive_event(timeout_s=0.1)
+    assert source.has_pending_events is False
+
+
+@pytest.mark.parametrize("input_failure", [False, True])
+async def test_basic_close_drains_wakeup_without_replacing_original_terminal_error(
+    input_failure: bool,
+) -> None:
+    """Catch permanent pending state or lost diagnostics after a reader failure."""
+    serial = ScriptedRawSerial(
+        [b"admitted\n", b"bad clock"]
+        if input_failure else [b"admitted\n", OSError("adapter removed")]
+    )
+    clocks = iter([1_000_000, 2_000_000, True])
+    source = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=serial, settings=_settings()),
+        segment_id=0, monotonic_ns=lambda: next(clocks),
+    )
+    try:
+        assert (await source.receive_event(timeout_s=0.5)).data == b"admitted\n"
+        error_type = BackendInputError if input_failure else BackendDisconnectedError
+        with pytest.raises(error_type) as first:
+            await source.receive_event(timeout_s=0.5)
+        source.close()
+        with pytest.raises(error_type) as after_close:
+            await source.receive_event(timeout_s=0.1)
+        assert str(after_close.value) == str(first.value)
+        assert source.has_pending_events is False
+    finally:
+        source.close()
 
 
 def test_basic_source_records_raw_bytes_through_continuous_v2_pipeline(tmp_path: Path) -> None:

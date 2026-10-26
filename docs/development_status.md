@@ -5,7 +5,8 @@
 > Reviewed fixture baseline: `746121a35633c070f4e7112010ce26b656d8ef1d` (pushed)
 > Basic HIL code baseline: `ad8b63abc3c9330864eaa49cb48aab57cd03f2cd` (clean rerun)
 > Test-isolation fix: `7f30a916a3033289dec6908ebeac17a687c0d806` (merged)
-> Documentation state reviewed: 2026-10-26
+> Basic release fix branch base: `b4ad4f32c138a42f255110dc222c1258723cc138`
+> Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -18,9 +19,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Stage 8 software acceptance has passed review on
   `stage8-phase1-acceptance`. Stage 8 itself
   and Phase 1A/1B/Phase 1 remain **Incomplete** because real v2 HIL is required.
-  The clean Basic rerun passed ambient boot/INFO, follow, Monitor, audited TX,
-  Interact/delayed fault, and console checks, then stopped on a release hang.
-  Phase 1A is not accepted; the isolated software gate completed before service start.
+  The Basic release hang is deterministically reproduced and fixed on
+  `fix/basic-release-lifecycle`, validated, reviewed and accepted. No new
+  physical acceptance occurred; the failed HIL run remains diagnostic evidence.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -29,18 +30,19 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Diagnose/fix the Basic release/drain failure in a separate
-  software slice, then rerun full Basic HIL after its software gate. Preserve
-  both diagnostic sessions; do not resume them as acceptance. Enhanced HIL,
-  Revision A measurements, and MCP migration remain deferred.
-- **Open blockers:** `dutchmate release` recorded intent at evidence sequence 57
-  but timed out after 65.16 s without a released boundary. Status initially
-  remained connected, then requests timed out. The serial descriptor closed,
-  but the process stayed alive after graceful stop and required SIGKILL. No
-  external owner was opened; handoff/reacquire and unexpected reconnect remain
-  unproven. The earlier `E_COMMAND_001` did not recur in this run; its old
-  evidence remains unchanged. Service, HTTP listener, and serial ownership are
-  now stopped/released. Enhanced/Phase 4 blockers remain unchanged.
+- **Next step:** Integrate the reviewed release fix into
+  `stage8-phase1-acceptance` and rerun full Basic HIL from the beginning. Complete all
+  software checks before starting the physical service. Preserve both failed
+  sessions; neither is resumable acceptance. Enhanced HIL, Revision A, and MCP
+  remain deferred.
+- **Open blockers:** Real Basic handoff/reacquire/unexpected-reconnect HIL
+  is still unproven. Root cause was a
+  cached terminal error bypassing a late close wakeup in the Basic FIFO, keeping
+  recorder drain permanently pending. The corrected source drains that FIFO
+  while preserving the original terminal diagnostic. No hardware was accessed
+  in this slice; all failed HIL evidence is unchanged. The earlier physical
+  `E_COMMAND_001` observation is retained for retest; Enhanced/Phase 4 blockers
+  remain unchanged.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -82,7 +84,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software gate passed; HIL incomplete | Clean Basic HIL stopped on release failure; separate lifecycle fix and complete rerun required before Enhanced HIL |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software gate passed; HIL incomplete | Basic release fix reviewed and accepted; integration and complete fresh Basic HIL required before Enhanced HIL |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -103,26 +105,25 @@ progress; it does not redefine either document.
 
 | Gate | Status |
 |---|---|
-| Phase 1A — Basic | Incomplete; clean HIL stopped on Basic release hang; handoff/reacquire and unexpected reconnect not accepted |
+| Phase 1A — Basic | Incomplete; software release fix reviewed and accepted; fresh Basic HIL including handoff/reacquire and unexpected reconnect required |
 | Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
 
-Clean Basic HIL, 2026-10-26: all software validation finished before physical
-service startup. Full pytest: 1,499 passed in 35.84 s; Ruff, mypy (103 source
-files), offline lockfile check (66 packages), and preflight diff check passed.
-No pytest/runtime/store construction occurred afterward. New schema-v2 session
-`20261026T175336Z-3d1dd5a9` retained 590 RX bytes, 16 RX records, 13 audited
-TX attempts/results, and seven completed operations. Delayed-fault terminal
-47 precedes fault RX 48; ACK→fault is 10.034749 s. Release intent 57 has no
-completed handoff boundary. Evidence and process sample are preserved; forced
-cleanup verified no service or port owner remains. Metadata is preserved as
-stale `active` after forced shutdown, not rewritten as accepted/complete.
+Basic release fix, 2026-10-26: three source regressions failed RED on stranded
+wakeups; the real HTTP/Basic-source/recorder regression failed RED with release
+blocked after physical close and final RX drain. Ten new hardware-free cases
+now pass, including cancellation, concurrent shutdown, and close/persistence
+errors. Focused lifecycle/backend/recorder/service/architecture gate: 345 passed
+in 8.37 s. Full pytest: 1,509 passed in 37.62 s. Ruff, mypy (103 source files),
+offline lockfile check (66 packages), and `git diff --check` passed. All 521 real
+`.dutchmate` file hashes and prior HIL documentation are unchanged.
 
-Only new HIL documentation is uncommitted; no production/fixture/test fix was
-made. Final `git diff --check` and preservation hashes passed. Both this run
-and the unchanged older diagnostic session are recorded in
+No timeout, ownership arbitration, recorder settlement, session persistence,
+or interface contract was weakened. Only Basic FIFO consumption, regressions,
+and status/history changed. The software fix is reviewed and accepted. Hardware
+was not accessed; historical physical evidence remains in
 [Basic HIL validation](../hardware/validation/phase1_basic_hil.md).
 
 Stage 8 software validation, 2026-10-26: all 1,491 pytest tests passed (39.58 s),

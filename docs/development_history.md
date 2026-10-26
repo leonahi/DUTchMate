@@ -10,6 +10,82 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Basic Release Terminal/FIFO Race Fixed in Software — 2026-10-26
+
+- Worked from clean `fix/basic-release-lifecycle`, baseline
+  `b4ad4f32c138a42f255110dc222c1258723cc138`, containing the failed Basic HIL
+  report. The real service was stopped. No serial device, firmware flash,
+  physical service, Basic/Enhanced HIL, or MCP work was accessed or started.
+  Both diagnostic sessions, including `20261026T175336Z-3d1dd5a9`, are unchanged.
+- Traced the full release path against actual source and the Stage 7 contract:
+  sync `POST /connection/release` → runtime `_ownership_change` arbitration →
+  coordinator manual claim/suspend → recorder durable `release_requested` →
+  Basic source stop/serial close/reader join/final wakeup → recorder drain →
+  line flush → durable `released` transaction closing the segment/counting its
+  intentional gap → final released-state publication and lifecycle-claim release.
+  One Graphify query with budget 1600 supported impact navigation (its output
+  was truncated); important relationships were verified directly in source.
+- **Exact blocking cause:** after serial close and reader termination, the
+  consumer can observe empty FIFO/EOF and cache `_terminal_error` before close
+  enqueues `_SourceClosed`. The next `_next_event` raised the cached error
+  without consuming the newly queued wakeup. `has_pending_events` stayed true,
+  `_finish_release_drain` could not set `_release_drained`, and release waited
+  indefinitely. No `released` transaction or final ownership state was reached.
+  Runtime mutation/lifecycle ownership stayed held, blocking shutdown; repeated
+  raises of the same exception accumulated traceback frames, consistent with
+  the preserved process sample's large footprint and later unresponsiveness.
+- **Minimal fix:** replay cached terminal errors only once the FIFO is empty,
+  allowing normal consumption of a late close wakeup. Consuming that wakeup
+  preserves an existing reader/input failure instead of overwriting its
+  diagnostic with generic EOF. No queue is cleared, no RX is discarded, no
+  physical-close confirmation is bypassed, and no HTTP/release timeout changes.
+  Runtime/coordinator/recorder/store code and interfaces are unchanged.
+- **RED:** three real Basic async-source cases failed because the late wakeup
+  remained pending after terminal delivery (EOF, serial-read failure, invalid
+  timestamp input). The HTTP regression exercised real startup, Basic reader,
+  recorder, coordinator, runtime and endpoint with a controlled serial surrogate:
+  durable intent preceded close, physical ownership closed, final RX drained,
+  but the release request failed its one-second completion assertion. Event
+  barriers force the real EOF-before-wakeup ordering; test-only failed-baseline
+  rescue resets the error latch after failure so teardown consumes the queue
+  normally, avoiding a runaway spin or a hanging pytest process.
+- **GREEN:** ten new cases pass (three source, seven service). The success case
+  proves exact ambient/final RX preservation, durable segment end and one gap,
+  prompt HTTP return, responsive released status, same-session reacquire with a
+  fresh segment and RX, and clean recorder/reader/coordinator shutdown. Other
+  cases cover cancelled HTTP release, cancellation plus concurrent shutdown,
+  direct shutdown with the same late-wakeup ordering, physical-close error, and
+  failures persisting either release intent or the released boundary. Errors
+  remain faulted rather than claiming released, and lifecycle claims/threads
+  settle; busy arbitration remains effective until an accepted release settles.
+- All four architecture checks and existing Stage 7 operation/ownership/error
+  tests passed in the focused gate. No architecture ownership or shared port
+  changed, so an architecture rewrite or Graphify update was unnecessary.
+- Before/after SHA-256 inventories of all 521 real `.dutchmate` files matched,
+  including preserved HIL sessions/sample. The Basic HIL validation record and
+  older development history were not rewritten. Working implementation notes
+  were temporary; durable diagnosis and evidence are recorded here.
+
+Validation (all hardware-free, physical service stopped):
+
+| Command | Result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q tests/unit/backends/test_basic.py -k drains_wakeup` | RED: 3 failed on pending wakeups; GREEN: 3 passed in 0.05 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q apps/service/tests/test_basic_release.py -k http_release_drains --tb=short` | RED: request never completed after confirmed close/drain, 1 failed in 1.38 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q apps/service/tests/test_basic_release.py tests/unit/backends/test_basic.py --tb=short` | GREEN: 26 passed in 1.27 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q apps/service/tests tests/unit/backends tests/unit/evidence tests/unit/runtime/test_connection_ownership.py tests/architecture --tb=short` | 345 passed in 8.37 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,509 passed in 37.62 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 source files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed; 66 packages; lockfile unchanged |
+| `rtk proxy git diff --check` | Passed |
+
+The software fix is reviewed and accepted. Phase 1A and Stage 8 remain incomplete;
+the complete Basic HIL procedure must be rerun after integration of
+this fix. Phase 1B/Phase 1 are incomplete, Enhanced HIL was not started, and MCP
+remains deferred. No physical INFO-anomaly diagnosis or acceptance claim was made.
+
+
 ## Clean Basic Phase 1A HIL Stopped on Release Failure — 2026-10-26
 
 - Restarted from clean `stage8-phase1-acceptance`, HEAD/upstream tracking ref
