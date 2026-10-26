@@ -10,6 +10,76 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Service-Test Session-Store Isolation Fix Validated — 2026-10-26
+
+- Worked on clean `fix/service-test-session-isolation`, starting at
+  `5b2cec1769773edde9ba2503e13c8929f8080809`, matching the local
+  `stage8-phase1-acceptance` and `origin/stage8-phase1-acceptance` baseline
+  containing the preserved failed HIL report. A direct remote SHA requery was
+  unavailable because SSH authentication still returned `Permission denied
+  (publickey)`; no branch/remote history was changed.
+- Root cause: these three `apps/service/tests/test_errors.py` tests create real
+  application runtimes with an implicit `.dutchmate/sessions` root:
+  `test_exception_handlers_return_json_error_response`,
+  `test_input_validation_handler_returns_json_error_response`, and
+  `test_exception_handlers_preserve_firmware_error_code`. App startup intentionally
+  recovers stale sessions; tests were applying that recovery to developer state.
+- Audit before implementation:
+
+  | Boundary inspected | Finding |
+  |---|---|
+  | All service `create_app` calls | Three unsafe error tests; three lifecycle calls replace the runtime builder; other calls inject runtimes or explicit temporary roots |
+  | Service `build_startup_runtime` / `SessionStore` calls | Explicit temporary roots, including recovery-order tests; no additional unsafe persistent root found |
+  | Service entrypoint/config | Relative default config and session paths; entrypoint test uses a temporary config and fake app/server |
+  | Session listing/baseline/retention service tests | Injected stores rooted in test temporary directories |
+  | Complete-suite app/store/startup call and `.dutchmate` path search | Other application calls inject runtimes; store/recovery tests use explicit temporary roots |
+  | CLI config/PID/log boundaries | Existing CLI autouse fixture replaces default config loading; direct config tests use temporary files; lifecycle tests use fake process/health/kill seams and temporary PID/log files |
+
+- Added `apps/service/tests/conftest.py`: an autouse fixture changes each service
+  test's working directory to its own `tmp_path`. Existing relative config,
+  session, PID, and log defaults resolve inside that test; explicit temporary
+  roots and injected runtimes continue working. No production function,
+  configuration default, recovery/retention policy, or hardware behavior changed.
+- Added `test_state_isolation.py`: a real subprocess runs the affected error
+  tests and a default-root write/recovery probe from a temporary developer
+  directory containing an unrelated active schema-v2 sentinel plus config,
+  PID, and log files. The sentinel remains active with null terminal fields;
+  all file bytes and mtimes, including evidence/connection files, stay unchanged.
+  The test app writes/retrieves its own recovered session under isolated state.
+  Two parameterized cases separately preserve real stale-session recovery for
+  implicit and explicit test roots, including raw RX/event preservation.
+- RED: before isolation, the regression failed because the sentinel became
+  `abandoned`; the explicit-root recovery control passed. The final regression
+  was also rerun with the shared fixture temporarily removed and failed at the
+  same active-state assertion. GREEN after restoring the fixture: 3 passed in
+  0.52 s, including both production recovery cases.
+- Confirmed no service listening on the known HIL endpoint before running
+  checks. No service process was started, no serial device opened, and no
+  hardware/HIL, Enhanced HIL, or MCP work occurred. Compared SHA-256 inventories
+  of all 424 real `.dutchmate` files before/after validation; no file was added,
+  removed, or changed. The failed Basic HIL report and original/preserved session
+  `20261026T134413Z-e8d17b99` remain untouched. The earlier physical INFO anomaly
+  was neither investigated nor reclassified in this slice.
+
+Validation (repository root, physical service stopped):
+
+| Command | Result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q apps/service/tests/test_state_isolation.py` | RED before isolation; GREEN 3 passed in 0.52 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q apps/service/tests tests/unit/session_store/test_recovery.py tests/unit/session_store/test_v2_persistence.py tests/architecture` | 214 passed in 7.24 s; service startup and all four architecture checks included |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,499 passed in 37.13 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 source files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed; 66 packages; lockfile unchanged |
+| `rtk proxy git diff --check` | Passed |
+
+Basic HIL must
+still be rerun from the beginning; this software result grants no physical
+acceptance. Phase 1A, Stage 8, Phase 1B, and Phase 1 remain incomplete, Enhanced
+HIL was not started, and MCP remains deferred. Graphify/architecture changes
+were unnecessary for this test-only isolation boundary.
+
+
 ## Basic Phase 1A HIL Stopped After Test-Isolation Interference — 2026-10-26
 
 - Began from clean `stage8-phase1-acceptance`; HEAD and its upstream tracking

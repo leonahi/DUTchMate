@@ -4,6 +4,7 @@
 > Stage 8 base: `9a228fcc37d746241c4624469cf3d18b4a7fab4a` (pushed Stage 7)
 > Reviewed fixture baseline: `746121a35633c070f4e7112010ce26b656d8ef1d` (pushed)
 > Basic HIL code baseline: `b3f850a4b71cc80c2081fb24f5f151ea01625c84` (pushed)
+> Test-isolation fix baseline: `5b2cec1769773edde9ba2503e13c8929f8080809`
 > Documentation state reviewed: 2026-10-26
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -17,8 +18,9 @@ Read this document first whenever development resumes.
 - **Current milestone:** Stage 8 software acceptance has passed review on
   `stage8-phase1-acceptance`. Stage 8 itself
   and Phase 1A/1B/Phase 1 remain **Incomplete** because real v2 HIL is required.
-  Basic HIL started on real hardware but stopped after concurrent pytest
-  default-store recovery invalidated the live evidence session. No acceptance.
+  The service-test state isolation fix is validated and accepted on
+  `fix/service-test-session-isolation`. Failed Basic HIL evidence remains
+  preserved; no new HIL or physical acceptance occurred.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -27,18 +29,17 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Address the reproduced service-test isolation defect in a
-  separate slice, then rerun Basic HIL with software checks completed before
-  starting the physical service. Preserve the failed session and reproduction.
-  Enhanced HIL, Revision A measurements, and MCP migration remain pending.
-- **Open blockers:** Service error-handler tests call `create_app()` against
-  the real default session directory, recovering a live session as abandoned.
-  Running pytest during HIL triggered this; the recorder then faulted on RX and
-  duration Monitor returned HTTP 503. The isolated reproduction repeats twice.
-  FTDI `0403:6015`/`D358SG6A` and the physical Pico INFO build ID were verified;
-  the first INFO command rejection remains an unexplained fixture-path anomaly.
-  Full ambient boot/delayed-fault/follow/Monitor/console/handoff/reconnect HIL
-  remains unproven. The service is stopped; Enhanced/Phase 4 blockers are unchanged.
+- **Next step:** Commit/push the accepted isolation fix, integrate it into
+  `stage8-phase1-acceptance`, then rerun Basic HIL from the beginning with all
+  software checks completed before starting the physical service.
+  Preserve failed session `20261026T134413Z-e8d17b99`; no acceptance carries
+  forward from that run. Enhanced HIL, Revision A, and MCP remain pending.
+- **Open blockers:** Real Basic HIL remains incomplete. Its ambient
+  boot/delayed-fault/follow/Monitor/console/handoff/
+  reconnect criteria must be proved in a clean rerun. The earlier physical
+  `E_COMMAND_001` INFO anomaly remains an observation to retest, unchanged by
+  this software slice. No hardware or serial access occurred on the fix branch;
+  the physical service remained stopped. Enhanced/Phase 4 blockers are unchanged.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -80,7 +81,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software acceptance baseline retained; HIL incomplete | Basic run stopped after reproduced test-isolation interference; separate fix and fresh Basic HIL required before Enhanced HIL |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software acceptance baseline retained; HIL incomplete | Test-isolation fix validated and accepted; integrate the fix, then restart Basic HIL from the beginning before Enhanced HIL |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -101,26 +102,24 @@ progress; it does not redefine either document.
 
 | Gate | Status |
 |---|---|
-| Phase 1A — Basic | Incomplete; real HIL stopped after test-isolation interference; separate fix and rerun required |
+| Phase 1A — Basic | Incomplete; isolation fix validated and accepted; clean Basic HIL rerun required |
 | Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
 
-Basic HIL attempt, 2026-10-26: session `20261026T134413Z-e8d17b99` preserved
-113 raw RX bytes and audited INFO attempts/results with truthful Basic serial,
-line, timestamp, and loss provenance. Physical INFO confirmed
-`basic-v2-20261026-7bc2ec377767`. Concurrent pytest recovered the live session
-as `abandoned/service_restart`; subsequent RX faulted and Monitor returned 503.
-HIL stopped per failure policy; no production/fixture fix was made. Synthetic
-temporary-store reproduction passed twice, without hardware access.
-
-Fresh pytest: 1,496 passed in 36.01 s; Ruff and mypy (103 files) passed. This
-green suite does not establish isolation: three tests recovered the HIL store.
-Final documentation `git diff --check` passed. Original/preserved session hashes
-match after service shutdown. Exact evidence, criterion dispositions, and command
-logs are in [Basic HIL validation](../hardware/validation/phase1_basic_hil.md)
-and development history. HIL documentation remains uncommitted for review.
+Service-test isolation, 2026-10-26: regression demonstrated active→abandoned
+before the fix and again with the shared fixture temporarily removed. With
+per-test working directories, the external sentinel remains active with all
+state bytes/mtimes unchanged; default and explicit production startup recovery
+still work. Three new regression cases passed. Focused service/startup/recovery/
+architecture gate: 214 passed in 7.24 s. Full pytest: 1,499 passed in 37.13 s.
+Ruff, configured mypy (103 source files), offline lockfile check (66 packages),
+and `git diff --check` passed. All 424 real `.dutchmate` file hashes and the
+failed HIL validation record remain unchanged. Only service-test infrastructure,
+regressions, and status/history changed; no production or hardware changes.
+Detailed commands/audit are in development history. Prior failed physical
+evidence remains in [Basic HIL validation](../hardware/validation/phase1_basic_hil.md).
 
 Stage 8 software validation, 2026-10-26: all 1,491 pytest tests passed (39.58 s),
 including the firmware harness and architecture/dependency checks. The focused
