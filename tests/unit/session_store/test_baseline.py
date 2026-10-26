@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot
 
 import dutchmate_core.session_store.baseline as baseline_policy
@@ -14,7 +15,7 @@ from dutchmate_core.session_store.models import (
     NativeSessionListItem,
     SessionPersistenceError,
 )
-from dutchmate_core.session_store.store import SessionHandle, SessionStore
+from dutchmate_core.session_store.store import SessionHandle
 
 
 def _store(
@@ -23,10 +24,10 @@ def _store(
     moments: list[datetime],
     suffixes: list[str],
     max_count: int | None = None,
-) -> SessionStore:
+) -> LegacySessionFixtureBuilder:
     moment_iter = iter(moments)
     suffix_iter = iter(suffixes)
-    return SessionStore(
+    return LegacySessionFixtureBuilder(
         root=root,
         max_count=max_count,
         clock=lambda: next(moment_iter),
@@ -34,7 +35,7 @@ def _store(
     )
 
 
-def _create_capture(Session_store: SessionStore) -> SessionHandle:
+def _create_capture(Session_store: LegacySessionFixtureBuilder) -> SessionHandle:
     return Session_store.create_session(
         command="capture --seconds 1",
         backend_snapshot=enhanced_snapshot(),

@@ -449,11 +449,6 @@ class AsyncEnhancedSerialAdapter:
                 with suppress(asyncio.CancelledError):
                     await task
 
-    async def discard_pending_events(self) -> None:
-        """Discard events already admitted before a new workflow cursor begins."""
-
-        while not self._events.empty():
-            self._events.get_nowait()
 
     async def close_and_drain_events(self) -> tuple[BackendEvent, ...]:
         """Stop physical receive and return every event already normalized."""

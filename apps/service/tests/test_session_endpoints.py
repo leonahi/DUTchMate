@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from helpers import FakeRuntime, _enhanced_segment, disconnected_status
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -31,7 +32,6 @@ from dutchmate_core.session_store.models import (
     V2SessionDetail,
     V2SessionListItem,
 )
-from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_service.app import create_app
 from dutchmate_service.schemas import recent_logs_payload
@@ -43,7 +43,7 @@ class SessionRuntime(FakeRuntime):
         *,
         page: SessionListPage | None = None,
         detail: SessionDetail | None = None,
-        store: SessionStore | None = None,
+        store: LegacySessionFixtureBuilder | None = None,
     ) -> None:
         super().__init__(disconnected_status())
         self.page = page
@@ -188,7 +188,7 @@ def test_session_endpoints_serialize_discriminated_v2_projections() -> None:
 
 
 def test_session_endpoints_use_validation_and_query_error_contracts(tmp_path: Path) -> None:
-    runtime = SessionRuntime(store=SessionStore(root=tmp_path))
+    runtime = SessionRuntime(store=LegacySessionFixtureBuilder(root=tmp_path))
     client = TestClient(create_app(runtime))
 
     invalid_limit = client.get("/sessions", params={"limit": 101})
@@ -234,7 +234,7 @@ def test_unsupported_session_schema_returns_exact_context() -> None:
 
 
 def test_default_service_composition_queries_sessions_while_disconnected(tmp_path: Path) -> None:
-    handle = SessionStore(
+    handle = LegacySessionFixtureBuilder(
         root=tmp_path,
         clock=lambda: datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
         id_factory=lambda: "legacy",
@@ -253,7 +253,7 @@ def test_default_service_composition_queries_sessions_while_disconnected(tmp_pat
 
 
 def test_recent_logs_endpoint_replays_native_uart_and_validates_limit(tmp_path: Path) -> None:
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path,
         clock=lambda: datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
         id_factory=lambda: "logs",
@@ -266,13 +266,9 @@ def test_recent_logs_endpoint_replays_native_uart_and_validates_limit(tmp_path: 
                 port="/dev/ttyACM0",
                 device="dutchmate-rp2350",
                 firmware="0.1.0",
-                capabilities=frozenset(
-                    {"uart_receive", "gpio_control", "device_timestamp"}
-                ),
+                capabilities=frozenset({"uart_receive", "gpio_control", "device_timestamp"}),
             ),
-            capabilities=frozenset(
-                {"uart_receive", "gpio_control", "device_timestamp"}
-            ),
+            capabilities=frozenset({"uart_receive", "gpio_control", "device_timestamp"}),
             capability_policy=BackendCapabilityPolicy(
                 uart_send=UartSendCapabilityPolicy(tx_policy_enabled=False)
             ),

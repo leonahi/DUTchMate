@@ -278,7 +278,6 @@ def test_confirmed_open_cleanup_preserves_idle_retry_backoff():
         source_owner=source,
         open_replacement=opening,
         monotonic_clock=clock,
-        sleep=clock.sleep,
         wait_for_idle_retry=wait,
     )
     try:

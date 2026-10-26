@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import (
     enhanced_snapshot,
     evidence_bytes,
@@ -13,15 +14,11 @@ from session_store_support import (
 import dutchmate_core.session_store.persistence as persistence
 from dutchmate_core.backends import BufferOverflowEvent, BufferStatusEvent, UartIntegrity
 from dutchmate_core.session_store.models import SessionHandle
-from dutchmate_core.session_store.store import (
-    EvidenceQuotaExceeded,
-    SessionPersistenceError,
-    SessionStore,
-)
+from dutchmate_core.session_store.store import EvidenceQuotaExceeded, SessionPersistenceError
 
 
 def test_append_control_action_writes_normalized_reset_evidence(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="boot-test --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -60,7 +57,7 @@ def test_append_control_action_writes_normalized_reset_evidence(tmp_path: Path) 
 
 
 def test_control_action_quota_admission_is_whole_unit(tmp_path: Path) -> None:
-    def append_action(store: SessionStore, handle: SessionHandle) -> None:
+    def append_action(store: LegacySessionFixtureBuilder, handle: SessionHandle) -> None:
         store.append_control_action(
             handle,
             action="reset",
@@ -71,7 +68,7 @@ def test_control_action_quota_admission_is_whole_unit(tmp_path: Path) -> None:
             device_timestamp_us=1025,
         )
 
-    reference = SessionStore(
+    reference = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -86,7 +83,7 @@ def test_control_action_quota_admission_is_whole_unit(tmp_path: Path) -> None:
     append_action(reference, reference_handle)
     exact_budget = evidence_bytes(reference_handle)
 
-    exact = SessionStore(
+    exact = LegacySessionFixtureBuilder(
         root=tmp_path / "exact",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -102,7 +99,7 @@ def test_control_action_quota_admission_is_whole_unit(tmp_path: Path) -> None:
     append_action(exact, exact_handle)
     assert evidence_bytes(exact_handle) == exact_budget
 
-    rejected = SessionStore(
+    rejected = LegacySessionFixtureBuilder(
         root=tmp_path / "rejected",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -129,7 +126,7 @@ def test_control_action_transaction_rolls_back_partial_append(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="boot-test --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -168,7 +165,7 @@ def test_control_action_transaction_rolls_back_partial_append(
 
 
 def test_append_buffer_overflow_writes_hardware_event_and_marks_metadata(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = BufferOverflowEvent(
         segment_id=0,
@@ -203,7 +200,7 @@ def test_native_hardware_event_admits_exact_budget(tmp_path: Path) -> None:
         dropped_bytes_total=0,
         overflow_events=0,
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -218,7 +215,7 @@ def test_native_hardware_event_admits_exact_budget(tmp_path: Path) -> None:
     reference_store.append_buffer_status(reference_handle, event=event)
     exact_budget = evidence_bytes(reference_handle)
 
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path / "exact",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -254,7 +251,7 @@ def test_rejected_overflow_event_preserves_summary_facts_without_evidence(
         timestamp_us=4321,
         dropped_bytes=512,
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -269,7 +266,7 @@ def test_rejected_overflow_event_preserves_summary_facts_without_evidence(
     reference_store.append_buffer_overflow(reference_handle, event=event)
     projected_bytes = evidence_bytes(reference_handle)
 
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path / "rejected",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -316,7 +313,7 @@ def test_rejected_overflow_event_preserves_summary_facts_without_evidence(
 
 
 def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
 
     store.append_buffer_overflow(
@@ -344,7 +341,7 @@ def test_append_buffer_overflow_updates_segment_device_timestamps(tmp_path: Path
 
 
 def test_append_buffer_overflow_can_write_nonzero_segment(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["segments"].append(
@@ -380,7 +377,7 @@ def test_append_buffer_overflow_can_write_nonzero_segment(tmp_path: Path) -> Non
 
 
 def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
 
     with pytest.raises(ValueError):
@@ -399,7 +396,7 @@ def test_append_buffer_overflow_rejects_missing_segment(tmp_path: Path) -> None:
 
 
 def test_append_buffer_status_writes_hardware_event(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = BufferStatusEvent(
         segment_id=0,
@@ -433,7 +430,7 @@ def test_append_buffer_status_writes_hardware_event(tmp_path: Path) -> None:
 def test_append_buffer_status_marks_overflow_when_telemetry_reports_drops(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = BufferStatusEvent(
         segment_id=0,
@@ -452,7 +449,7 @@ def test_append_buffer_status_marks_overflow_when_telemetry_reports_drops(
 
 
 def test_append_buffer_status_updates_backend_integrity_loss(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="capture",
         firmware="0.1.0",
@@ -485,7 +482,7 @@ def test_append_buffer_status_updates_backend_integrity_loss(tmp_path: Path) -> 
 
 
 def test_append_buffer_status_updates_segment_device_timestamps(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
 
     store.append_buffer_status(
@@ -519,7 +516,7 @@ def test_append_buffer_status_updates_segment_device_timestamps(tmp_path: Path) 
 
 
 def test_append_buffer_status_can_write_nonzero_segment(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["segments"].append(
@@ -558,7 +555,7 @@ def test_append_buffer_status_can_write_nonzero_segment(tmp_path: Path) -> None:
 
 
 def test_append_buffer_status_rejects_missing_segment(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
 
     with pytest.raises(ValueError):

@@ -4,6 +4,7 @@ from itertools import count
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot
 
 from dutchmate_core.backends import (
@@ -18,7 +19,7 @@ from dutchmate_core.session_store.models import (
     PatternCountComparison,
     SessionComparisonError,
 )
-from dutchmate_core.session_store.store import SessionHandle, SessionStore
+from dutchmate_core.session_store.store import SessionHandle
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
 
@@ -185,11 +186,11 @@ def test_corrupt_baseline_pointer_is_a_comparison_persistence_fault(
     assert error.value.operation == "compare_session"
 
 
-def _store(root: Path, suffixes: list[str]) -> SessionStore:
+def _store(root: Path, suffixes: list[str]) -> LegacySessionFixtureBuilder:
     ticks = count()
     suffix_iter = iter(suffixes)
     started = datetime(2026, 8, 21, 22, 0, tzinfo=timezone.utc)
-    return SessionStore(
+    return LegacySessionFixtureBuilder(
         root=root,
         clock=lambda: started + timedelta(seconds=next(ticks)),
         id_factory=lambda: next(suffix_iter),
@@ -197,7 +198,7 @@ def _store(root: Path, suffixes: list[str]) -> SessionStore:
 
 
 def _active_capture(
-    store: SessionStore,
+    store: LegacySessionFixtureBuilder,
     *,
     snapshot: BackendSnapshot | None = None,
 ) -> SessionHandle:
@@ -211,7 +212,7 @@ def _active_capture(
 
 
 def _capture_with_lines(
-    store: SessionStore,
+    store: LegacySessionFixtureBuilder,
     lines: tuple[bytes, ...],
     *,
     timestamps: tuple[int, ...] | None = None,

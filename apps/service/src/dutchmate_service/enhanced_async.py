@@ -54,7 +54,6 @@ class _AsyncEnhancedAdapter(Protocol):
 
     async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None: ...
 
-    async def discard_pending_events(self) -> None: ...
 
     async def close_and_drain_events(self) -> tuple[BackendEvent, ...]: ...
 
@@ -196,9 +195,6 @@ class EnhancedAsyncHost:
             self._segment = segment
         return segment
 
-    def discard_pending_events(self) -> None:
-        adapter = self._adapter_for_operation()
-        self._submit(adapter.discard_pending_events)
 
     def close(self) -> None:
         """Terminalize the adapter once, then stop and join its owner loop."""

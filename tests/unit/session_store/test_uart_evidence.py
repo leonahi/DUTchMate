@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import (
     enhanced_snapshot,
     evidence_bytes,
@@ -13,11 +14,7 @@ from session_store_support import (
 
 import dutchmate_core.session_store.transactions as transactions
 from dutchmate_core.backends import UartReceiveEvent
-from dutchmate_core.session_store.store import (
-    EvidenceQuotaExceeded,
-    LineProcessing,
-    SessionStore,
-)
+from dutchmate_core.session_store.store import EvidenceQuotaExceeded, LineProcessing
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 
 
@@ -30,7 +27,7 @@ def test_native_uart_evidence_admits_exact_budget_with_pattern_growth(
         timestamp_us=100,
         data=b"BOOT_OK\n",
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -49,7 +46,7 @@ def test_native_uart_evidence_admits_exact_budget_with_pattern_growth(
     )
     exact_budget = evidence_bytes(reference_handle)
 
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path / "exact",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -92,7 +89,7 @@ def test_native_uart_evidence_rejects_one_byte_over_without_counted_mutation(
         timestamp_us=321,
         data=b"BOOT_OK\n",
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -111,7 +108,7 @@ def test_native_uart_evidence_rejects_one_byte_over_without_counted_mutation(
     )
     projected_bytes = evidence_bytes(reference_handle)
 
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path / "rejected",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -154,9 +151,12 @@ def test_native_uart_evidence_rejects_one_byte_over_without_counted_mutation(
     assert summary.truncated is True
     assert summary.error is None
     assert summary.truncation == raised.value.truncation
-    assert store.load_metadata(handle.session_id)["storage"][  # type: ignore[index]
-        "evidence_bytes_written"
-    ] == 3
+    assert (
+        store.load_metadata(handle.session_id)["storage"][  # type: ignore[index]
+            "evidence_bytes_written"
+        ]
+        == 3
+    )
 
 
 def test_rejected_uart_unit_omits_associated_line_processing_event(
@@ -171,7 +171,7 @@ def test_rejected_uart_unit_omits_associated_line_processing_event(
     result = UartCaptureProcessor().process_event(event)
     assert len(result.oversized_lines) == 1
 
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -186,7 +186,7 @@ def test_rejected_uart_unit_omits_associated_line_processing_event(
     reference_store.append_uart_capture(reference_handle, event=event, result=result)
     projected_bytes = evidence_bytes(reference_handle)
 
-    store = SessionStore(
+    store = LegacySessionFixtureBuilder(
         root=tmp_path / "rejected",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -219,7 +219,7 @@ def test_finalized_line_event_uses_exact_session_event_quota_boundary(
         timestamp_us=700,
         data=b"x" * 65537,
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -246,7 +246,7 @@ def test_finalized_line_event_uses_exact_session_event_quota_boundary(
     exact_budget = evidence_bytes(reference_handle)
     assert exact_budget > admitted_uart_bytes
 
-    exact_store = SessionStore(
+    exact_store = LegacySessionFixtureBuilder(
         root=tmp_path / "exact",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -272,7 +272,7 @@ def test_finalized_line_event_uses_exact_session_event_quota_boundary(
     assert evidence_bytes(exact_handle) == exact_budget
     assert exact_store.summarize_session(exact_handle.session_id).truncated is False
 
-    rejected_store = SessionStore(
+    rejected_store = LegacySessionFixtureBuilder(
         root=tmp_path / "rejected",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -310,9 +310,8 @@ def test_finalized_line_event_uses_exact_session_event_quota_boundary(
     assert summary.line_processing.status == "limit_exceeded"
 
 
-
 def test_append_uart_capture_preserves_raw_bytes_and_writes_uart_event(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=1234, data=b"BOOT_OK\n")
@@ -335,7 +334,7 @@ def test_append_uart_capture_preserves_raw_bytes_and_writes_uart_event(tmp_path:
 
 
 def test_append_uart_capture_appends_multiple_uart_events(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     first = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"one\n")
@@ -357,7 +356,7 @@ def test_append_uart_capture_batch_matches_sequential_evidence_in_one_transactio
         UartReceiveEvent(segment_id=0, channel=0, timestamp_us=200, data=b"OK\n"),
         UartReceiveEvent(segment_id=0, channel=1, timestamp_us=300, data=b"ERROR\n"),
     )
-    reference_store = SessionStore(
+    reference_store = LegacySessionFixtureBuilder(
         root=tmp_path / "reference",
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -379,7 +378,9 @@ def test_append_uart_capture_batch_matches_sequential_evidence_in_one_transactio
         for event in events
     )
 
-    store = SessionStore(root=tmp_path / "batch", clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(
+        root=tmp_path / "batch", clock=fixed_clock, id_factory=fixed_id
+    )
     handle = store.create_session(
         command="capture --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -414,7 +415,7 @@ def test_append_uart_capture_batch_matches_sequential_evidence_in_one_transactio
 
 
 def test_append_uart_capture_writes_detected_patterns(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     event = UartReceiveEvent(
@@ -459,7 +460,7 @@ def test_append_uart_capture_writes_detected_patterns(tmp_path: Path) -> None:
 
 
 def test_append_uart_capture_leaves_detected_patterns_empty_when_no_match(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=500, data=b"idle\n")
@@ -470,7 +471,7 @@ def test_append_uart_capture_leaves_detected_patterns_empty_when_no_match(tmp_pa
 
 
 def test_summary_selects_first_error_by_segment_then_ingestion_order(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
@@ -521,7 +522,7 @@ def test_summary_selects_first_error_by_segment_then_ingestion_order(tmp_path: P
 
 
 def test_summary_returns_null_first_error_for_success_marker_only(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     event = UartReceiveEvent(
@@ -536,7 +537,7 @@ def test_summary_returns_null_first_error_for_success_marker_only(tmp_path: Path
 
 
 def test_detected_pattern_excerpt_is_bounded_and_contains_match(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     line_raw = (b"a" * 4990) + b"ERROR\n"
@@ -563,7 +564,7 @@ def test_detected_pattern_excerpt_is_bounded_and_contains_match(tmp_path: Path) 
 def test_oversized_line_updates_metadata_without_omitting_raw_evidence(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     chunks = (
@@ -608,7 +609,7 @@ def test_oversized_line_updates_metadata_without_omitting_raw_evidence(
 
 
 def test_append_uart_capture_updates_segment_device_timestamps(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     first = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"one\n")
@@ -623,7 +624,7 @@ def test_append_uart_capture_updates_segment_device_timestamps(tmp_path: Path) -
 
 
 def test_append_uart_capture_can_write_nonzero_segment(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     processor = UartCaptureProcessor()
     event = UartReceiveEvent(segment_id=1, channel=0, timestamp_us=100, data=b"idle\n")
@@ -657,7 +658,7 @@ def test_append_uart_capture_can_write_nonzero_segment(tmp_path: Path) -> None:
 
 
 def test_append_uart_capture_rejects_channel_mismatch(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
     result = UartCaptureResult(
@@ -673,7 +674,7 @@ def test_append_uart_capture_rejects_channel_mismatch(tmp_path: Path) -> None:
 
 
 def test_append_uart_capture_rejects_segment_mismatch(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
     result = UartCaptureResult(
@@ -689,7 +690,7 @@ def test_append_uart_capture_rejects_segment_mismatch(tmp_path: Path) -> None:
 
 
 def test_append_uart_capture_rejects_timestamp_mismatch(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     event = UartReceiveEvent(segment_id=0, channel=0, timestamp_us=100, data=b"idle\n")
     result = UartCaptureResult(

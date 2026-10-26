@@ -9,7 +9,6 @@ from typing import cast
 from uuid import uuid4
 
 from dutchmate_core.session_store.models import (
-    SessionHandle,
     SessionPaths,
     SessionPersistenceError,
 )
@@ -127,13 +126,6 @@ def read_json_list(path: Path) -> list[object]:
     if not isinstance(loaded, list):
         raise ValueError(f"{path.name} must contain a JSON array")
     return cast(list[object], loaded)
-
-
-def require_session_appendable(handle: SessionHandle) -> None:
-    metadata = read_json_object(handle.paths.metadata)
-    schema_version = metadata.get("schema_version", 0)
-    if schema_version == 1 and metadata.get("state") != "active":
-        raise ValueError("native session evidence can only append while active")
 
 
 def append_bytes(path: Path, data: bytes) -> None:

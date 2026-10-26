@@ -332,7 +332,7 @@ Owns filesystem-backed sessions under
   and TX/Control evidence; v2 rolls over before admitting an over-budget unit,
   flushes continuous line boundaries, and transfers pending operation/action ownership
 - creates schema-v2 ownership sessions with a terminal reserve and one-way
-  lifecycle; legacy v1 writer helpers remain available for compatibility fixtures
+  lifecycle; no schema-v0/v1 creation or append API ships in production
 - atomically closes disconnected segments and appends validated contiguous
   reconnect segments with `usb_disconnect`, `usb_reconnect`, and
   `timestamp_discontinuity` evidence
@@ -363,8 +363,7 @@ Owns filesystem-backed sessions under
 - selects an explicit, active, or newest terminal native session and replays
   persisted UART events through the shared segment/channel line buffer, retaining
   bounded complete, partial, and oversized records with evidence coordinates
-- records wait-pattern policy and authoritative detected-pattern references in
-  the same native lifecycle/evidence schema used by other capture-like workflows
+- serves capture/wait aliases through the same bounded Monitor operation records
 - rejects path-unsafe session IDs
 
 Session persistence and service delivery share the core `diagnostics`
@@ -391,8 +390,9 @@ list/detail baseline flags are derived only from that pointer. The comparison
 module owns bounded pattern and exact-line count deltas plus timing-provenance
 compatibility against that explicit pointer; it does not select a baseline
 heuristically or expose unbounded raw evidence.
-Startup recovery
-retains structured diagnostics for malformed/reserve conditions and treats a
+Startup recovery skips schema-v0/v1 artifacts, including transaction markers,
+without mutation. It retains structured diagnostics for malformed/reserve
+conditions and treats a
 failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
 or schema-v1 evidence formats.
@@ -452,12 +452,23 @@ used by backend/service consumers. Capture/wait spellings remain thin Monitor
 aliases; they cannot create v1 sessions or independent readers. Historical v0/v1
 session reading, replay, and compatibility fixtures remain available.
 
+Legacy fixture construction is isolated in `tests/support/legacy_*`; those modules
+are absent from all distributable source roots. Compatibility reader and Debug
+Agent tests consume these fixtures through the production query boundary.
+The Debug Agent requires schema-v1 `NativeSessionDetail`; v2 evidence packages,
+operations, and Control/TX references need its separate Phase 4 migration.
+
 The service-owned `BackendReconnectCoordinator` continues to reopen and validate
 replacement sources and publish stable control/TX ports. The core continuous
 recorder owns evidence and connection generations. New v2 runtime actions use
 explicit payload transformations; the public send API and CLI have no `force`
 or implicit newline append. Low-level protocol and deferred MCP text helpers are
 unchanged and do not restore the retired service request contract.
+
+The coordinator has no finite-workflow callable/retry path. Its continuous worker
+and explicit release/reacquire share one attempt claim. Adapter and host APIs
+cannot discard normalized events at a workflow boundary. Runtime receives only a
+shutdown contract for the reconnect supervisor, separate from ownership actions.
 
 Manual release/reacquire share the coordinator's attempt claim with automatic
 reconnect. Release suspends automatic opening; competing lifecycle requests fail

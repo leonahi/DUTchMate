@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -19,7 +20,6 @@ from dutchmate_core.backends import (
     UartSendCapabilityPolicy,
 )
 from dutchmate_core.session_store.models import SessionQueryError
-from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_core.validation import InputValidationError
 from dutchmate_debug_agent.session_facts import load_session_facts
@@ -119,8 +119,8 @@ def test_rejects_path_traversal_session_id(tmp_path: Path) -> None:
         load_session_facts(_store(tmp_path), "../other-session")
 
 
-def _store(root: Path) -> SessionStore:
-    return SessionStore(
+def _store(root: Path) -> LegacySessionFixtureBuilder:
+    return LegacySessionFixtureBuilder(
         root=root,
         clock=lambda: datetime(2026, 7, 14, 12, 30, 45, tzinfo=timezone.utc),
         id_factory=lambda: "phase4-facts",
@@ -157,3 +157,22 @@ def _snapshot() -> BackendSnapshot:
             dropped_bytes=0,
         ),
     )
+
+
+def test_v2_requires_explicit_future_evidence_package_migration(tmp_path):
+    from dutchmate_core.profile import DutProfileConfig, resolve_dut_profile
+    from dutchmate_core.session_store.store import SessionStore
+
+    store = SessionStore(root=tmp_path)
+    handle = store.create_v2_session(
+        profile=resolve_dut_profile(
+            DutProfileConfig(), mode="enhanced", serial_port="/dev/ttyACM0"
+        ),
+        backend_snapshot=_snapshot(),
+    )
+    before = handle.paths.metadata.read_bytes()
+    with pytest.raises(SessionQueryError) as error:
+        load_session_facts(store, handle.session_id)
+    assert error.value.error == "unsupported_session_schema"
+    assert error.value.detected_schema_version == 2
+    assert handle.paths.metadata.read_bytes() == before

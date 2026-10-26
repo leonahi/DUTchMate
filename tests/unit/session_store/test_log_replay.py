@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot
 
 from dutchmate_core.backends import UartReceiveEvent
 from dutchmate_core.session_store.models import SessionHandle, SessionQueryError
-from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
@@ -64,13 +64,13 @@ def test_recent_logs_prefers_active_then_latest_terminal_native(tmp_path: Path) 
 def test_recent_logs_rejects_legacy_and_malformed_complete_uart_evidence(
     tmp_path: Path,
 ) -> None:
-    legacy = SessionStore(
+    legacy = LegacySessionFixtureBuilder(
         root=tmp_path,
         clock=lambda: datetime(2026, 8, 21, tzinfo=timezone.utc),
         id_factory=lambda: "legacy",
     ).create_session(command="capture")
     with pytest.raises(SessionQueryError) as unsupported:
-        SessionStore(root=tmp_path).replay_recent_logs(session_id=legacy.session_id)
+        LegacySessionFixtureBuilder(root=tmp_path).replay_recent_logs(session_id=legacy.session_id)
     assert unsupported.value.error == "unsupported_session_schema"
     assert unsupported.value.operation == "get_logs"
     assert unsupported.value.detected_schema_version == 0
@@ -87,7 +87,7 @@ def test_recent_logs_rejects_legacy_and_malformed_complete_uart_evidence(
 @pytest.mark.parametrize("lines", [0, 1001, True])
 def test_recent_logs_rejects_invalid_line_limit(tmp_path: Path, lines: object) -> None:
     with pytest.raises(ValueError, match="1 to 1000"):
-        SessionStore(root=tmp_path).replay_recent_logs(lines=lines)  # type: ignore[arg-type]
+        LegacySessionFixtureBuilder(root=tmp_path).replay_recent_logs(lines=lines)  # type: ignore[arg-type]
 
 
 def _native_store(
@@ -95,8 +95,8 @@ def _native_store(
     *,
     second: int = 0,
     suffix: str,
-) -> tuple[SessionStore, SessionHandle]:
-    store = SessionStore(
+) -> tuple[LegacySessionFixtureBuilder, SessionHandle]:
+    store = LegacySessionFixtureBuilder(
         root=root,
         clock=lambda: datetime(2026, 8, 21, 12, 0, second, tzinfo=timezone.utc),
         id_factory=lambda: suffix,

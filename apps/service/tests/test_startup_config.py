@@ -216,8 +216,6 @@ class FakeEnhancedAsyncHost:
             self._read_outcomes.append(outcome)
             self._condition.notify_all()
 
-    def discard_pending_events(self) -> None:
-        self.discard_count += 1
 
     def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
         del timeout_s

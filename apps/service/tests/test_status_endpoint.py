@@ -46,7 +46,6 @@ def test_status_returns_disconnected_runtime_state() -> None:
         "timestamp_provenance": None,
         "integrity": None,
         "active_session_id": None,
-        "active_workflow": None,
         "active_operations": [],
         "commanded_boot_mode": None,
         "reconnect_remaining_s": None,
@@ -166,7 +165,6 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
                     dropped_bytes=0,
                 ),
                 connection_state="connected",
-                active_workflow="capture",
                 profile_name="fixture",
                 profile_digest_sha256="a" * 64,
                 effective_profile={
@@ -193,7 +191,7 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["integrity"]["loss_status"] == "none_reported"
     assert payload["active_session_id"] == "20260724T100000Z-abc12345"
     assert payload["connection_state"] == "connected"
-    assert payload["active_workflow"] == "capture"
+    assert payload["active_operations"] == []
     assert payload["profile_name"] == "fixture"
     assert payload["profile_digest_sha256"] == "a" * 64
     assert payload["effective_profile"] == {

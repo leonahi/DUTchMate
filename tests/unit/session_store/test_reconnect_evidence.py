@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import (
     enhanced_snapshot,
     evidence_bytes,
@@ -17,7 +18,6 @@ from dutchmate_core.session_store.store import (
     DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
     EvidenceQuotaExceeded,
     SessionHandle,
-    SessionStore,
 )
 
 
@@ -44,8 +44,8 @@ def _create_active_session(
     root: Path,
     *,
     evidence_budget_bytes: int = DEFAULT_SESSION_EVIDENCE_BUDGET_BYTES,
-) -> tuple[SessionStore, SessionHandle]:
-    store = SessionStore(
+) -> tuple[LegacySessionFixtureBuilder, SessionHandle]:
+    store = LegacySessionFixtureBuilder(
         root=root,
         clock=fixed_clock,
         id_factory=fixed_id,
@@ -258,7 +258,7 @@ def test_thirty_two_maximum_length_segment_identities_fit_terminal_metadata(
         device="d" * 64,
         firmware="f" * 64,
     )
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="c" * 256,
         backend_snapshot=replace(initial, info=maximum_info),

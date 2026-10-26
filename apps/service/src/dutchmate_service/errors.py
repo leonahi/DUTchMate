@@ -30,7 +30,6 @@ from dutchmate_core.validation import (
     InputValidationError,
     UartSendValidationError,
 )
-from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_core.workflows.uart_send import UartSendError
 
@@ -144,14 +143,6 @@ def service_error_from_exception(exc: Exception) -> ServiceError:
             context=_session_query_context(exc),
         )
 
-    if isinstance(exc, CaptureReconnectError):
-        return _service_error(
-            error=exc.error,
-            detail=str(exc),
-            status_code=503,
-            context=_reconnect_context(exc),
-        )
-
     if isinstance(exc, BackendInputError):
         return _service_error(
             error=exc.error,
@@ -209,34 +200,6 @@ def _service_error(
         detail_truncated=truncated,
         context=context,
     )
-
-
-def _reconnect_context(exc: CaptureReconnectError) -> dict[str, object] | None:
-    if (
-        exc.end_reason == "reconnect_timeout"
-        and exc.operation is not None
-        and exc.session_id is not None
-        and exc.reconnect_timeout_s is not None
-    ):
-        return {
-            "operation": exc.operation,
-            "session_id": exc.session_id,
-            "reconnect_timeout_s": exc.reconnect_timeout_s,
-        }
-    if (
-        exc.end_reason == "reconnect_limit"
-        and exc.operation is not None
-        and exc.session_id is not None
-        and exc.segment_count is not None
-        and exc.max_segments is not None
-    ):
-        return {
-            "operation": exc.operation,
-            "session_id": exc.session_id,
-            "segment_count": exc.segment_count,
-            "max_segments": exc.max_segments,
-        }
-    return None
 
 
 def _request_gpio_identifier_error(
@@ -399,12 +362,6 @@ def register_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return _json_response(service_error_from_exception(exc))
 
-    @app.exception_handler(CaptureReconnectError)
-    async def handle_capture_reconnect_error(
-        request: Request,
-        exc: CaptureReconnectError,
-    ) -> JSONResponse:
-        return _json_response(service_error_from_exception(exc))
 
     @app.exception_handler(BackendInputError)
     async def handle_backend_input_error(
@@ -468,7 +425,6 @@ def _status_for_error(error: str) -> int:
         "not_configured",
         "operation_active",
         "invalid_connection_state",
-        "capture_active",
         "unsupported_capability",
     }:
         return 409

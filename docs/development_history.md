@@ -10,6 +10,105 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Stage 8 Software Acceptance and Hardware Availability Audit — 2026-10-26
+
+- Work was scoped to Stage 8 in DUTchMate only. Clean `main` and its upstream
+  tracking ref both named `9a228fcc37d746241c4624469cf3d18b4a7fab4a`.
+  Created `stage8-phase1-acceptance`; software acceptance passed review.
+  No MCP source, firmware, wire schema, or historical hardware evidence changed.
+- Enhanced parity required no firmware/protocol redesign. A new test drives the
+  real NDJSON parser, async serial adapter, owner-loop host, startup composition,
+  continuous recorder, runtime, and v2 store through idle RX, interleaved command
+  responses, exact TX/Interact, audited reset/boot configuration, immediate boot
+  bytes before later Monitor, overflow/status telemetry, release/reacquire, and
+  per-segment RP2350 provenance. Generic wire commands exclude role/DUT-signal
+  metadata. Existing protocol/firmware safety and EVENTn tests remain in the gate.
+  The historical ring-buffer decision remains `accepted_32k`; no new ring-buffer
+  measurement or acceptance claim was made.
+- New Basic/Enhanced CLI acceptance invokes the actual Typer CLI and HTTP client
+  against the real FastAPI service/runtime/store with controlled normalized
+  backends. It covers status, Monitor duration/condition, exact binary TX,
+  condition Interact, a later ambient HardFault with a 30-second source timestamp
+  advance, follow interrupt/detach, service-only console TX, GPIO/reset/boot where
+  supported, durable retrieval/list/detail/logs, and release/reacquire with an
+  explicit segment/gap. Existing suites cover rollover/reconnect/retention and
+  persistence-fault shutdown; no wall-clock 30-second delay was substituted for
+  actual HIL evidence.
+- Reference/impact inventory before deletion:
+
+  | Retired path | Remaining consumers found | Disposition |
+  |---|---|---|
+  | `SessionStore.create_session` and v0/v1 append/control/TX/reconnect writers | Core compatibility, service retrieval/baseline, Debug Agent fixture tests only | Removed from production; frozen fixture construction moved to `tests/support/legacy_*` |
+  | Legacy metadata/event writer projections | Those writers only | Moved to the same test-only fixture boundary; shared reader/projection helpers retained |
+  | Coordinator finite-workflow callable/retry path and retry injection | Obsolete active-capture tests; runtime used only `close` | Removed; runtime now depends on `ReconnectLifecycle.close`; continuous worker and manual handoff retained |
+  | Adapter/host `discard_pending_events` | Discard-specific tests/fakes only | Removed with obsolete tests; continuous queue/drain coverage retained |
+  | `CaptureReconnectError`, host `capture_active`, `active_workflow` | Legacy mappings/status/fixtures only | Removed; status displays `active_operations`, host conflicts use `operation_active` |
+  | Capture/wait response and CLI-format fallbacks | Old fake workflow results only | Removed; documented aliases serialize/display only Monitor results |
+  | `_capture_in_progress`, finite capture/session owner, workflow FIFO, live force send | Already absent from current host runtime | Confirmed absent; explicit rejection tests remain |
+
+- Read-only boundary correction: regression tests first demonstrated that startup
+  could abandon v1 and that lifecycle calls could rewrite it. Production now
+  classifies schema before transaction recovery, skips v0/v1 bookkeeping unchanged,
+  and rejects legacy terminal writes. Recovery fault/transaction tests exercise
+  v2. Historical readers/replay and recognized wire error vocabulary remain.
+  Normal schema-specific retention/baseline policies were preserved.
+- Thirty-one tests for retired workflow/discard/legacy-response behavior were
+  removed; seven new acceptance/read-only/Debug Agent regressions were added.
+  Other legacy compatibility tests retain their data through explicit test-only
+  builders, which are absent from production wheels. This accounts for the full
+  suite changing from 1,515 to 1,491 tests.
+- Debug Agent schema-v1 fact/evidence tests remain healthy. A new regression
+  confirms v2 returns `unsupported_session_schema` without mutating evidence;
+  full v2 evidence-package migration was not performed. README/developer guide
+  make this limitation explicit. Reconnect documentation now describes current
+  continuous ownership instead of the superseded finite-workflow contract.
+
+Validation commands (run from repository root; `rtk proxy` preserves command
+semantics and output):
+
+| Command | Observed result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,491 passed in 39.58 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q tests/architecture tests/unit/session_store/test_legacy_read_only.py tests/unit/backends/test_stage8_enhanced_parity.py tests/unit/runtime/test_phase1_cli_acceptance.py apps/service/tests/test_monitor_endpoint.py apps/cli/tests/test_monitor_command.py apps/debug_agent/tests/test_session_facts.py` | 23 passed in 1.36 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 source files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed; 66 packages; lockfile unchanged |
+| `rtk proxy uv build --package dutchmate-debug-agent --out-dir /tmp/dutchmate-stage8-dist --offline` | sdist and wheel built successfully |
+| `rtk proxy uv build --package dutchmate-core --out-dir /tmp/dutchmate-stage8-dist --offline` | sdist and wheel built successfully |
+| `rtk proxy graphify query 'session_store create_session capture runtime' --budget 1800` | Focused impact navigation; verified writer callers and runtime/reconnect boundaries against source/reference searches |
+| `rtk proxy graphify update .` | Refreshed structural index; 5,667 nodes, 14,676 edges, 289 communities; existing partial-extraction warning for `hardware/firmware/zephyr_dut/src/fixture_protocol.h` and community-label notice |
+| `rtk proxy git diff --check` | Passed |
+
+The temporary writable uv cache initially lacked `uv-build`, so the first offline
+Debug Agent build could not resolve its build backend. The successful build
+commands above used the existing user cache with sandbox escalation; no dependency
+or lockfile change was needed. Wheel inspection found 21 Debug Agent files and 74
+core files, with no test fixture builders. Import Linter is not configured;
+executable architecture checks are part of both focused and full pytest gates.
+Reference searches confirmed no production legacy create/append API, discard API,
+finite-workflow retry, single-workflow status, or host capture-exclusion error.
+The Enhanced wire schema's recognized `capture_active` error remains a protocol
+compatibility value, not host arbitration. Deferred MCP files were untouched.
+
+After the software gate passed, a read-only hardware availability inventory ran:
+`rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen --package dutchmate-service python -`
+with `serial.tools.list_ports.comports()` projecting device, description, HWID,
+VID/PID, serial number, manufacturer, and product. At
+`2026-10-26T03:47:57.412758+00:00` (09:17:57 IST), macOS 26.2 arm64 reported only
+`/dev/cu.debug-console` and `/dev/cu.Bluetooth-Incoming-Port`; all USB identity
+fields were null and description/HWID were `n/a`. No serial port was opened.
+
+- **Basic HIL:** not run; no identifiable generic USB-UART + Zephyr Pico 1 fixture.
+- **Enhanced HIL:** not run; no identifiable RP2350/Pico 2 Debug Helper + same DUT
+  fixture. Firmware/build identity and physical wiring could not be established.
+- No new HIL session IDs, measured overflow, boot timing, leakage, sequencing, or
+  analog UART evidence exists for this slice. Historical ring-buffer and Revision A
+  records were preserved byte-for-byte. Their open physical gates remain open.
+- These results establish software acceptance only. They do not establish Stage 8,
+  Phase 1A, Phase 1B, or shared Phase 1 completion. Current disposition is owned
+  solely by `development_status.md`.
+
+
 ## Phase 1 v2 Migration Stage 7 Completed — 2026-10-25
 
 - Started from clean HEAD `5643c65` (committed Stage 6). Implemented only the

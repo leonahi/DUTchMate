@@ -17,7 +17,6 @@ from dutchmate_core.backends.contracts import (
     BackendCapabilityPolicy,
     BackendInfo,
     BackendInputError,
-    BackendOpenError,
     BackendSnapshot,
     BackendUartSendResult,
     ControlState,
@@ -132,7 +131,7 @@ class ManualSourceOwner(Protocol):
 
 
 class BackendReconnectCoordinator:
-    """Serialize idle and active reconnect attempts for one stable source owner."""
+    """Supervise continuous reconnect and explicit ownership handoff."""
 
     def __init__(
         self,
@@ -142,16 +141,11 @@ class BackendReconnectCoordinator:
         on_connected: Callable[[ReconnectedCaptureSource], None] | None = None,
         on_rejected: Callable[[ReconnectedCaptureSource], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
         wait_for_idle_retry: Callable[[float], bool] | None = None,
-        wait_for_active_retry: Callable[[float], bool] | None = None,
-        active_retry_interval_s: float = 0.1,
         idle_initial_retry_s: float = 0.1,
         idle_max_retry_s: float = 2.0,
         reconnect_timeout_s: float = 5.0,
     ) -> None:
-        if active_retry_interval_s <= 0:
-            raise ValueError("active reconnect retry interval must be positive")
         if idle_initial_retry_s <= 0:
             raise ValueError("idle reconnect initial retry interval must be positive")
         if idle_max_retry_s <= 0:
@@ -168,7 +162,6 @@ class BackendReconnectCoordinator:
         self._on_connected = on_connected
         self._on_rejected = on_rejected
         self._clock = monotonic_clock
-        self._active_retry_interval_s = active_retry_interval_s
         self._idle_initial_retry_s = idle_initial_retry_s
         self._idle_max_retry_s = idle_max_retry_s
         self._reconnect_timeout_s = reconnect_timeout_s
@@ -179,17 +172,6 @@ class BackendReconnectCoordinator:
             if wait_for_idle_retry is not None
             else self._stop_requested.wait
         )
-        if wait_for_active_retry is not None:
-            self._active_retry_wait = wait_for_active_retry
-        elif sleep is time.sleep:
-            self._active_retry_wait = self._stop_requested.wait
-        else:
-
-            def deterministic_active_retry_wait(delay: float) -> bool:
-                sleep(delay)
-                return self._stop_requested.is_set()
-
-            self._active_retry_wait = deterministic_active_retry_wait
         self._failure: ConnectionLifecycleError | None = None
         self._suspended = False
         self._worker: Thread | None = None
@@ -363,29 +345,6 @@ class BackendReconnectCoordinator:
                 self._worker = None
                 raise
 
-    def __call__(
-        self,
-        *,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource | None:
-        """Own one bounded active-workflow reconnect attempt."""
-
-        with self._condition:
-            if self._closing or self._closed or self._suspended:
-                return None
-            if self._attempt_active:
-                raise RuntimeError("backend reconnect is already active")
-            self._attempt_active = True
-            self._attempt_owner = current_thread()
-        try:
-            self._source_owner.close_current_source_for_reconnect()
-            return self._retry_active(segment_id=segment_id, deadline=deadline)
-        finally:
-            with self._condition:
-                self._attempt_active = False
-                self._attempt_owner = None
-                self._condition.notify_all()
 
     def close(self) -> None:
         """Stop reconnect activity and join the idle worker exactly once."""
@@ -479,47 +438,6 @@ class BackendReconnectCoordinator:
         except BaseException as exc:
             self._retain_close_error(exc)
 
-    def _retry_active(
-        self,
-        *,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource | None:
-        while not self._stop_requested.is_set() and self._clock() < deadline:
-            try:
-                replacement = self._open_replacement(
-                    segment_id=segment_id,
-                    deadline=deadline,
-                    stop_requested=self._stop_requested,
-                )
-            except BackendOpenError as exc:
-                if not exc.cleanup_confirmed:
-                    self._retain_close_error(exc)
-                    return None
-                if self._wait_for_active_retry(deadline):
-                    return None
-                continue
-            except _CandidateCleanupFailure as exc:
-                self._retain_close_error(exc.cleanup_error)
-                if isinstance(exc.primary_error, BackendInputError):
-                    raise exc.primary_error from exc
-                if not isinstance(exc.primary_error, Exception):
-                    raise exc.primary_error from exc
-                return None
-            except BackendInputError:
-                raise
-            except Exception as exc:
-                if getattr(exc, "cleanup_confirmed", None) is False:
-                    self._retain_close_error(exc)
-                    return None
-                if self._wait_for_active_retry(deadline):
-                    return None
-                continue
-            if self._stop_requested.is_set() or self._clock() >= deadline:
-                self._close_rejected(replacement)
-                return None
-            return self._publish(replacement)
-        return None
 
     def _retry_idle(self, *, deadline: float) -> bool:
         retry_delay_s = self._idle_initial_retry_s
@@ -557,14 +475,6 @@ class BackendReconnectCoordinator:
             return True
         return False
 
-    def _wait_for_active_retry(self, deadline: float) -> bool:
-        remaining_s = deadline - self._clock()
-        if remaining_s > 0 and not self._stop_requested.is_set():
-            interrupted = self._active_retry_wait(
-                min(self._active_retry_interval_s, remaining_s)
-            )
-            return interrupted or self._stop_requested.is_set()
-        return self._stop_requested.is_set()
 
     def _publish(
         self,
@@ -702,9 +612,8 @@ def build_basic_capture_reconnect(
     open_connection: OpenBasicConnection,
     sender: ReplaceableUartSender,
     monotonic_clock: Callable[[], float],
-    sleep: Callable[[float], None],
 ) -> BackendReconnectCoordinator:
-    """Build coordinated idle and active reopen for one selected Basic backend."""
+    """Build continuous reopen and ownership handoff for one selected Basic backend."""
 
     opened_senders: dict[int, BasicBackendConnection] = {}
 
@@ -757,7 +666,6 @@ def build_basic_capture_reconnect(
         on_connected=publish_sender,
         on_rejected=discard_sender,
         monotonic_clock=monotonic_clock,
-        sleep=sleep,
         reconnect_timeout_s=settings.reconnect_timeout_s,
     )
 
@@ -772,7 +680,6 @@ def build_enhanced_capture_reconnect(
     sender: ReplaceableUartSender,
     open_host: OpenEnhancedHost,
     monotonic_clock: Callable[[], float],
-    sleep: Callable[[float], None],
 ) -> BackendReconnectCoordinator:
     """Build coordinated Enhanced reopen through the async host boundary."""
 
@@ -789,7 +696,6 @@ def build_enhanced_capture_reconnect(
         sender=sender,
         open_host=open_host,
         monotonic_clock=monotonic_clock,
-        sleep=sleep,
     )
 
 
@@ -802,7 +708,6 @@ def _build_async_enhanced_capture_reconnect(
     sender: ReplaceableUartSender,
     open_host: OpenEnhancedHost,
     monotonic_clock: Callable[[], float],
-    sleep: Callable[[float], None],
 ) -> BackendReconnectCoordinator:
     def open_replacement(
         *,
@@ -871,7 +776,6 @@ def _build_async_enhanced_capture_reconnect(
         open_replacement=open_replacement,
         on_connected=publish_host,
         monotonic_clock=monotonic_clock,
-        sleep=sleep,
         reconnect_timeout_s=settings.reconnect_timeout_s,
     )
 

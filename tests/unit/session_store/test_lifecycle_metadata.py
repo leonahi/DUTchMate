@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot, fixed_clock, fixed_id
 
 import dutchmate_core.session_store.persistence as persistence
@@ -12,12 +13,12 @@ from dutchmate_core.backends import (
     UartReceiveEvent,
 )
 from dutchmate_core.session_store.models import SessionPersistenceError
-from dutchmate_core.session_store.store import SessionHandle, SessionStore, SessionSummary
+from dutchmate_core.session_store.store import SessionHandle, SessionSummary
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
 
 def test_create_session_initializes_required_files(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     handle = store.create_session(
         command="capture",
@@ -37,7 +38,7 @@ def test_create_session_initializes_required_files(tmp_path: Path) -> None:
 def test_wait_session_stores_policy_and_requires_authoritative_match_index(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="wait-pattern",
         backend_snapshot=enhanced_snapshot(),
@@ -75,7 +76,7 @@ def test_wait_session_stores_policy_and_requires_authoritative_match_index(
 
 
 def test_create_session_writes_initial_metadata(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     handle = store.create_session(
         command="boot-test --seconds 15",
@@ -118,7 +119,7 @@ def test_create_session_writes_initial_metadata(tmp_path: Path) -> None:
 def test_create_session_writes_backend_identity_policy_and_provenance(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     handle = store.create_session(
         command="capture --seconds 1",
@@ -171,7 +172,7 @@ def test_create_session_writes_backend_identity_policy_and_provenance(
 def test_create_native_session_writes_active_schema_v1_and_terminal_reserve(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     handle = store.create_session(
         command="capture --seconds 2.5",
@@ -210,7 +211,7 @@ def test_create_native_session_does_not_publish_metadata_when_reserve_write_fail
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     real_write = persistence.write_serialized
 
     def fail_reserve(path: Path, data: bytes) -> None:
@@ -239,7 +240,7 @@ def test_create_native_session_does_not_publish_metadata_when_reserve_write_fail
 
 
 def test_complete_native_session_is_terminal_and_one_way(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="capture --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -273,7 +274,7 @@ def test_complete_native_session_is_terminal_and_one_way(tmp_path: Path) -> None
 
 
 def test_failed_native_session_sanitizes_and_bounds_error_detail(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="boot-test --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -301,7 +302,7 @@ def test_failed_native_session_sanitizes_and_bounds_error_detail(tmp_path: Path)
 
 
 def test_load_metadata_reads_metadata_json(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
 
     metadata = store.load_metadata(handle.session_id)
@@ -311,7 +312,7 @@ def test_load_metadata_reads_metadata_json(tmp_path: Path) -> None:
 
 
 def test_summarize_session_reads_legacy_rp2040_identity_and_timer(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="capture",
         firmware="0.1.0",
@@ -336,7 +337,7 @@ def test_summarize_session_reads_legacy_rp2040_identity_and_timer(tmp_path: Path
 
 
 def test_record_segment_context_sets_unknown_provenance_once(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     context = SegmentContext(
         segment_id=0,
@@ -374,7 +375,7 @@ def test_record_segment_context_sets_unknown_provenance_once(tmp_path: Path) -> 
 
 
 def test_summarize_session_returns_compact_metadata_summary(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="boot-test --seconds 15",
         firmware="0.1.0",
@@ -400,7 +401,7 @@ def test_summarize_session_returns_compact_metadata_summary(tmp_path: Path) -> N
 
 
 def test_summarize_session_reflects_metadata_updates(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["interrupted"] = True
@@ -439,7 +440,7 @@ def test_summarize_session_reflects_metadata_updates(tmp_path: Path) -> None:
 
 
 def test_summarize_session_rejects_invalid_segments_metadata(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["segments"] = "not a list"
@@ -450,7 +451,7 @@ def test_summarize_session_rejects_invalid_segments_metadata(tmp_path: Path) -> 
 
 
 def test_summarize_session_rejects_invalid_required_metadata_type(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(command="capture")
     metadata = json.loads(handle.paths.metadata.read_text(encoding="utf-8"))
     metadata["overflow"] = "false"
@@ -461,7 +462,7 @@ def test_summarize_session_rejects_invalid_required_metadata_type(tmp_path: Path
 
 
 def test_create_session_defaults_optional_metadata_to_none_and_false(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     handle = store.create_session(command="capture")
 
@@ -472,14 +473,14 @@ def test_create_session_defaults_optional_metadata_to_none_and_false(tmp_path: P
 
 
 def test_create_session_requires_command(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
 
     with pytest.raises(ValueError):
         store.create_session(command="")
 
 
 def test_create_session_fails_if_generated_session_id_already_exists(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
+    store = LegacySessionFixtureBuilder(root=tmp_path, clock=fixed_clock, id_factory=fixed_id)
     store.create_session(command="capture")
 
     with pytest.raises(FileExistsError):

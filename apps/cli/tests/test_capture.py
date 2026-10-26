@@ -4,62 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 from dutchmate_cli import main
-from dutchmate_cli.capture import format_capture_result
 from dutchmate_cli.client import ServiceApiError
-
-
-def test_format_capture_result_renders_session_summary() -> None:
-    assert (
-        format_capture_result(
-            {
-                "session_id": "20260729T100000Z-capture01",
-                "backend_mode": "basic",
-                "state": "completed",
-                "end_reason": "duration_elapsed",
-                "integrity": {"loss_status": "not_observable"},
-                "timestamp_provenance": [
-                    {
-                        "segment_id": 0,
-                        "timestamp": {
-                            "source": "host",
-                            "clock": "monotonic",
-                            "observation_point": "host_serial_read",
-                            "event_granularity": "serial_read_chunk",
-                        },
-                    }
-                ],
-                "line_processing": {
-                    "status": "complete",
-                    "oversized_line_count": 0,
-                },
-                "segments": 2,
-                "overflow": True,
-                "interrupted": False,
-                "resumed": False,
-                "truncated": True,
-            }
-        )
-        == "Capture complete: 20260729T100000Z-capture01 "
-        "(backend=basic, state=completed, end=duration_elapsed, loss=not_observable, "
-        "timestamp=host/monotonic:host_serial_read/serial_read_chunk, "
-        "first_error=none, lines=complete/oversized:0, segments=2, "
-        "overflow=yes, interrupted=no, resumed=no, truncated=yes)"
-    )
-
-
-def test_format_capture_result_identifies_first_error_location() -> None:
-    output = format_capture_result(
-        {
-            "session_id": "session-error",
-            "first_error": {
-                "pattern": "HardFault",
-                "segment_id": 2,
-                "ingestion_index": 19,
-            },
-        }
-    )
-
-    assert "first_error=HardFault@segment:2/event:19" in output
 
 
 def test_capture_command_passes_duration_to_service(
@@ -96,14 +41,14 @@ def test_capture_command_reports_service_error(monkeypatch: pytest.MonkeyPatch) 
         duration_s: float,
         service_url: str,
     ) -> dict[str, object]:
-        raise ServiceApiError("capture is already active")
+        raise ServiceApiError("an exclusive operation is active")
 
     monkeypatch.setattr(main, "capture_uart", fake_capture_uart)
 
     result = CliRunner().invoke(main.app, ["capture", "--seconds", "1"])
 
     assert result.exit_code == 1
-    assert "Error: capture is already active" in result.output
+    assert "Error: an exclusive operation is active" in result.output
 
 
 @pytest.mark.parametrize("seconds", ["0", "-1", "301", "inf", "nan"])

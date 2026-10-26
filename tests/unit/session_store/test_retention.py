@@ -4,10 +4,11 @@ from pathlib import Path
 from threading import Event, Thread
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot
 
 import dutchmate_core.session_store.store as store_module
-from dutchmate_core.session_store.store import SessionHandle, SessionStore
+from dutchmate_core.session_store.store import SessionHandle
 
 
 def _native_store(
@@ -16,10 +17,10 @@ def _native_store(
     max_count: int | None,
     moments: list[datetime],
     suffixes: list[str],
-) -> SessionStore:
+) -> LegacySessionFixtureBuilder:
     moment_iter = iter(moments)
     suffix_iter = iter(suffixes)
-    return SessionStore(
+    return LegacySessionFixtureBuilder(
         root=root,
         max_count=max_count,
         clock=lambda: next(moment_iter),
@@ -27,7 +28,7 @@ def _native_store(
     )
 
 
-def _create_capture(store: SessionStore) -> SessionHandle:
+def _create_capture(store: LegacySessionFixtureBuilder) -> SessionHandle:
     return store.create_session(
         command="capture --seconds 1",
         backend_snapshot=enhanced_snapshot(),
@@ -73,7 +74,7 @@ def test_startup_recovery_runs_retention_after_recovery(tmp_path: Path) -> None:
     second = _create_capture(creating_store)
     creating_store.complete_session(second)
 
-    store = SessionStore(root=tmp_path, max_count=1)
+    store = LegacySessionFixtureBuilder(root=tmp_path, max_count=1)
     store.recover_stale_sessions()
 
     assert not first.paths.root.exists()
@@ -148,7 +149,7 @@ def test_retention_protects_valid_baseline_pointer(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    status = SessionStore(root=tmp_path, max_count=1).run_retention()
+    status = LegacySessionFixtureBuilder(root=tmp_path, max_count=1).run_retention()
 
     assert baseline.paths.root.exists()
     assert not other.paths.root.exists()
@@ -173,7 +174,7 @@ def test_corrupt_pointer_and_unknown_schema_suspend_retention(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    status = SessionStore(root=tmp_path, max_count=1).run_retention()
+    status = LegacySessionFixtureBuilder(root=tmp_path, max_count=1).run_retention()
 
     assert status.diagnostic == "unsupported_session_schema"
     assert native.paths.root.exists()
@@ -181,7 +182,7 @@ def test_corrupt_pointer_and_unknown_schema_suspend_retention(tmp_path: Path) ->
 
     unknown.rename(tmp_path / "unknown-evidence")
     (tmp_path / "baseline.json").write_text("not JSON", encoding="utf-8")
-    status = SessionStore(root=tmp_path, max_count=1).run_retention()
+    status = LegacySessionFixtureBuilder(root=tmp_path, max_count=1).run_retention()
     assert status.diagnostic == "persistence_fault"
     assert native.paths.root.exists()
 
@@ -200,7 +201,7 @@ def test_corrupt_session_evidence_suspends_retention(tmp_path: Path) -> None:
     creating_store.complete_session(second)
     first.paths.detected_patterns.write_text("not JSON", encoding="utf-8")
 
-    status = SessionStore(root=tmp_path, max_count=1).run_retention()
+    status = LegacySessionFixtureBuilder(root=tmp_path, max_count=1).run_retention()
 
     assert status.diagnostic == "persistence_fault"
     assert first.paths.root.exists()
@@ -222,7 +223,7 @@ def test_reader_holds_store_lock_until_its_snapshot_is_complete(
     creating_store.complete_session(first)
     second = _create_capture(creating_store)
     creating_store.complete_session(second)
-    store = SessionStore(root=tmp_path, max_count=1)
+    store = LegacySessionFixtureBuilder(root=tmp_path, max_count=1)
     reader_started = Event()
     release_reader = Event()
     retention_finished = Event()

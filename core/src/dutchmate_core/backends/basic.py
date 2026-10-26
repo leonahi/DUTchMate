@@ -306,23 +306,10 @@ class BasicBackendEventSource:
         return await asyncio.to_thread(self._next_event, timeout_s)
 
     def read_event(self) -> BackendEvent | None:
-        """Blocking compatibility adapter used by the current capture runner."""
+        """Blocking receive boundary used by the continuous evidence recorder."""
 
         return self._next_event(self._read_timeout_s)
 
-    def discard_pending_events(self) -> None:
-        """Advance a workflow ingestion cursor past already-normalized UART events."""
-
-        retained: list[_ReaderOutcome] = []
-        while True:
-            try:
-                outcome = self._outcomes.get_nowait()
-            except Empty:
-                break
-            if not isinstance(outcome, UartReceiveEvent):
-                retained.append(outcome)
-        for outcome in retained:
-            self._outcomes.put(outcome)
 
     @property
     def has_pending_events(self) -> bool:

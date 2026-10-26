@@ -29,9 +29,7 @@ from dutchmate_core.session_store.models import (
     V2FirstErrorReference,
     V2SessionDetail,
     V2SessionListItem,
-    WaitPatternResult,
 )
-from dutchmate_core.session_store.store import SessionSummary
 from dutchmate_core.validation import (
     MAX_CAPTURE_DURATION_S,
     GpioControlChannel,
@@ -82,7 +80,6 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
         ),
         "integrity": asdict(status.integrity) if status.integrity is not None else None,
         "active_session_id": status.active_session_id,
-        "active_workflow": status.active_workflow,
         "active_operations": [asdict(operation) for operation in status.active_operations],
         "commanded_boot_mode": status.commanded_boot_mode,
         "reconnect_remaining_s": status.reconnect_remaining_s,
@@ -285,87 +282,6 @@ class UartSendRequest(BaseModel):
 
 class InteractRequest(MonitorRequest, UartSendRequest):
     """One exact payload plus one bounded observation mode."""
-
-
-def capture_summary_payload(summary: SessionSummary) -> dict[str, object]:
-    """Serialize a completed capture session summary."""
-
-    return {
-        "ok": True,
-        "session_id": summary.session_id,
-        "schema_version": summary.schema_version,
-        "state": summary.state,
-        "workflow": summary.workflow,
-        "duration_s": summary.duration_s,
-        "reconnect_timeout_s": summary.reconnect_timeout_s,
-        "ended_at": summary.ended_at,
-        "end_reason": summary.end_reason,
-        "error": summary.error,
-        "truncation": summary.truncation,
-        "backend_mode": summary.backend_mode,
-        "backend_identity": {
-            "port": summary.port,
-            "firmware": summary.firmware,
-            "device": summary.device,
-        },
-        "backend_capabilities": list(summary.backend_capabilities),
-        "capabilities": list(summary.capabilities),
-        "capability_policy": (
-            asdict(summary.capability_policy) if summary.capability_policy is not None else None
-        ),
-        "timestamp_provenance": [asdict(segment) for segment in summary.segment_contexts],
-        "integrity": asdict(summary.integrity) if summary.integrity is not None else None,
-        "first_error": (asdict(summary.first_error) if summary.first_error is not None else None),
-        "line_processing": asdict(summary.line_processing),
-        "truncated": summary.truncated,
-        "interrupted": summary.interrupted,
-        "resumed": summary.resumed,
-        "overflow": summary.overflow,
-        "segments": summary.segment_count,
-    }
-
-
-def wait_pattern_payload(result: WaitPatternResult) -> dict[str, object]:
-    """Serialize one successful matched or unmatched wait-pattern outcome."""
-
-    payload = capture_summary_payload(result.summary)
-    match = result.match
-    payload.update(
-        {
-            "matched": result.matched,
-            "pattern": result.pattern,
-            "match_mode": result.summary.match_mode,
-            "case_sensitive": result.summary.case_sensitive,
-            "timeout_s": result.summary.timeout_s,
-            "match_excerpt": (
-                asdict(match.match_excerpt) if match is not None else None
-            ),
-            "detected_pattern_index": (
-                match.detected_pattern_index if match is not None else None
-            ),
-            "channel": match.channel if match is not None else None,
-            "segment_id": match.segment_id if match is not None else None,
-            "timestamp_us": match.timestamp_us if match is not None else None,
-            "ingestion_index": match.ingestion_index if match is not None else None,
-            "line_index_in_event": match.line_index_in_event if match is not None else None,
-            "match_start_byte": match.match_start_byte if match is not None else None,
-            "match_end_byte": match.match_end_byte if match is not None else None,
-            "total_line_bytes": match.total_line_bytes if match is not None else None,
-            "line_start_ingestion_index": (
-                match.line_start_ingestion_index if match is not None else None
-            ),
-            "line_start_event_offset": (
-                match.line_start_event_offset if match is not None else None
-            ),
-            "line_end_ingestion_index": (
-                match.line_end_ingestion_index if match is not None else None
-            ),
-            "line_end_event_offset": (
-                match.line_end_event_offset if match is not None else None
-            ),
-        }
-    )
-    return payload
 
 
 def monitor_result_payload(result: MonitorResult) -> dict[str, object]:

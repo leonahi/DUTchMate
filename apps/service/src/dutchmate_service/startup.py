@@ -85,7 +85,6 @@ def build_startup_runtime(
     session_max_count: int | None = None,
     profile: DutProfile | None = None,
     monotonic_clock: Callable[[], float] | None = None,
-    sleep: Callable[[float], None] | None = None,
 ) -> DeviceCoreRuntime:
     """Build the service runtime for one explicitly selected backend."""
 
@@ -96,7 +95,6 @@ def build_startup_runtime(
     )
     session_store.recover_stale_sessions()
     reconnect_clock = monotonic_clock or time.monotonic
-    reconnect_sleep = sleep or time.sleep
 
     if profile is None:
         return DeviceCoreRuntime(
@@ -127,7 +125,6 @@ def build_startup_runtime(
                 open_connection=open_basic_backend_connection,
                 sender=sender,
                 monotonic_clock=reconnect_clock,
-                sleep=reconnect_sleep,
             )
             runtime = DeviceCoreRuntime(
                 device_control=control,
@@ -202,7 +199,6 @@ def build_startup_runtime(
             sender=sender,
             open_host=open_enhanced_async_host,
             monotonic_clock=reconnect_clock,
-            sleep=reconnect_sleep,
         )
         runtime = DeviceCoreRuntime(
             device_control=control,

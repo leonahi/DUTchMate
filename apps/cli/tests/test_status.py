@@ -61,7 +61,6 @@ def test_format_status_renders_channel_first_state() -> None:
             "dropped_bytes": 0,
         },
         "active_session_id": None,
-        "active_workflow": None,
         "commanded_boot_mode": "bootloader",
         "reconnect_remaining_s": None,
         "retention": {
@@ -95,7 +94,7 @@ def test_format_status_renders_channel_first_state() -> None:
             "Effective UART: external_uart, 460800 8N1, rtscts=false, "
             "xonxoff=false, tx=false, line-ending=none, "
             "DTR=driver_default, RTS=driver_default",
-            "Workflow: none",
+            "Operations: none",
             "Session: none",
             "Commanded boot mode: bootloader",
             "Connection: connected",
@@ -168,13 +167,16 @@ def test_format_status_renders_active_reconnect_window() -> None:
             "connected": False,
             "connection_state": "reconnecting",
             "backend_mode": "enhanced",
-            "active_workflow": "boot_test",
+            "active_operations": [
+                {"operation_id": "monitor-1", "operation_type": "monitor"},
+                {"operation_id": "interact-2", "operation_type": "interact"},
+            ],
             "active_session_id": "20260820T120000Z-a1b2c3d4",
             "reconnect_remaining_s": 2.14,
         }
     )
 
-    assert "Workflow: boot-test (active)" in output
+    assert "Operations: monitor (monitor-1), interact (interact-2)" in output
     assert "Session: 20260820T120000Z-a1b2c3d4" in output
     assert "Connection: reconnecting (2.1s remaining)" in output
 

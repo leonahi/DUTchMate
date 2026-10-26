@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
@@ -24,7 +25,6 @@ from dutchmate_core.session_store.models import (
     SessionHandle,
     SessionQueryError,
 )
-from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.line_buffer import MAX_UART_LINE_BYTES
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_debug_agent.analysis_request import build_analysis_request
@@ -100,7 +100,7 @@ def test_analysis_request_combines_native_evidence_and_selected_source(tmp_path:
 def test_analysis_request_rejects_context_for_different_sessions_before_reading(
     tmp_path: Path,
 ) -> None:
-    store = SessionStore(root=tmp_path)
+    store = LegacySessionFixtureBuilder(root=tmp_path)
     context = {
         "schema_version": 1,
         "objective": "Investigate",
@@ -217,7 +217,7 @@ def test_hardware_cap_preserves_failed_and_unknown_tx_outcomes(tmp_path: Path) -
 
 
 def test_evidence_rejects_legacy_sessions(tmp_path: Path) -> None:
-    store = SessionStore(root=tmp_path)
+    store = LegacySessionFixtureBuilder(root=tmp_path)
     handle = store.create_session(command="capture", firmware="0.0.1", device="legacy")
 
     with pytest.raises(SessionQueryError) as raised:
@@ -415,8 +415,8 @@ def _native_session(
     *,
     suffix: str = "evidence",
     snapshot: BackendSnapshot | None = None,
-) -> tuple[SessionStore, SessionHandle]:
-    store = SessionStore(
+) -> tuple[LegacySessionFixtureBuilder, SessionHandle]:
+    store = LegacySessionFixtureBuilder(
         root=root,
         clock=lambda: datetime(2026, 9, 20, 12, tzinfo=timezone.utc),
         id_factory=lambda: suffix,
@@ -464,7 +464,9 @@ def _snapshot(segment_id: int) -> BackendSnapshot:
     )
 
 
-def _append_lines(store: SessionStore, handle: SessionHandle, lines: list[str]) -> None:
+def _append_lines(
+    store: LegacySessionFixtureBuilder, handle: SessionHandle, lines: list[str]
+) -> None:
     processor = UartCaptureProcessor()
     captures = []
     for index in range(0, len(lines), 20):

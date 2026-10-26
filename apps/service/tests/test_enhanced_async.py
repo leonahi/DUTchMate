@@ -127,10 +127,6 @@ class FakeAsyncEnhancedAdapter:
             raise outcome
         return outcome
 
-    async def discard_pending_events(self) -> None:
-        self.operation_thread_ids.append(threading.get_ident())
-        self.discard_thread_id = threading.get_ident()
-        self.discard_count += 1
 
     async def close_and_drain_events(self) -> tuple[BackendEvent, ...]:
         await self.close()
@@ -306,23 +302,6 @@ def test_segment_readiness_uses_owner_loop_without_consuming_an_event() -> None:
     assert fake.wait_for_segment_timeouts == [1.0]
     assert fake.receive_count == 0
     assert fake.operation_thread_ids == [host.owner_thread_id]
-    host.close()
-
-
-def test_discard_is_submitted_to_the_adapter_owner_loop() -> None:
-    fake = FakeAsyncEnhancedAdapter(info=_info(), segment_id=0)
-    opener = OpenAdapterFake(fake)
-    host = open_enhanced_async_host(
-        port="/dev/ttyACM0",
-        baudrate=460800,
-        segment_id=0,
-        open_adapter=opener,
-    )
-
-    host.discard_pending_events()
-
-    assert fake.discard_count == 1
-    assert fake.discard_thread_id == opener.thread_id
     host.close()
 
 

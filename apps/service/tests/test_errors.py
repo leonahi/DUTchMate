@@ -12,7 +12,6 @@ from dutchmate_core.gpio_config.modes import GpioConfigurationError
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.models import SessionPersistenceError
 from dutchmate_core.validation import GpioIdentifierValidationError, InputValidationError
-from dutchmate_core.workflows.capture import CaptureReconnectError
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
 from dutchmate_service.errors import ServiceError, service_error_from_exception
@@ -91,66 +90,6 @@ def test_maps_session_persistence_error_to_server_fault() -> None:
         detail="session persistence append failed for uart_events.jsonl: disk full",
         status_code=500,
     )
-
-
-def test_maps_reconnect_error_to_service_unavailable() -> None:
-    error = service_error_from_exception(
-        CaptureReconnectError(
-            end_reason="reconnect_timeout",
-            detail="Backend did not reconnect before the reconnect deadline",
-            operation="capture",
-            session_id="20260820T120000Z-a1b2c3d4",
-            reconnect_timeout_s=5.0,
-        )
-    )
-
-    assert error == ServiceError(
-        error="service_unavailable",
-        detail="Backend did not reconnect before the reconnect deadline",
-        status_code=503,
-        context={
-            "operation": "capture",
-            "session_id": "20260820T120000Z-a1b2c3d4",
-            "reconnect_timeout_s": 5.0,
-        },
-    )
-    assert error.payload() == {
-        "ok": False,
-        "error": "service_unavailable",
-        "detail": "Backend did not reconnect before the reconnect deadline",
-        "detail_truncated": False,
-        "context": {
-            "operation": "capture",
-            "session_id": "20260820T120000Z-a1b2c3d4",
-            "reconnect_timeout_s": 5.0,
-        },
-    }
-
-
-def test_maps_reconnect_limit_with_exact_context() -> None:
-    error = service_error_from_exception(
-        CaptureReconnectError(
-            end_reason="reconnect_limit",
-            detail="Session reached the 32-segment reconnect limit",
-            operation="boot_test",
-            session_id="20260820T120000Z-a1b2c3d4",
-            segment_count=32,
-            max_segments=32,
-        )
-    )
-
-    assert error.payload() == {
-        "ok": False,
-        "error": "service_unavailable",
-        "detail": "Session reached the 32-segment reconnect limit",
-        "detail_truncated": False,
-        "context": {
-            "operation": "boot_test",
-            "session_id": "20260820T120000Z-a1b2c3d4",
-            "segment_count": 32,
-            "max_segments": 32,
-        },
-    }
 
 
 def test_service_error_sanitizes_and_bounds_diagnostic_detail() -> None:
@@ -314,14 +253,14 @@ def test_exception_handlers_preserve_firmware_error_code() -> None:
 
     @app.get("/raise-firmware-error")
     def raise_firmware_error() -> None:
-        raise DeviceActionError(error="capture_active", detail="capture is already active")
+        raise DeviceActionError(error="operation_active", detail="an exclusive operation is active")
 
     response = TestClient(app).get("/raise-firmware-error")
 
     assert response.status_code == 409
     assert response.json() == {
         "ok": False,
-        "error": "capture_active",
-        "detail": "capture is already active",
+        "error": "operation_active",
+        "detail": "an exclusive operation is active",
         "detail_truncated": False,
     }

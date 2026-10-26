@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from threading import Condition, Event, Lock, Thread
+from threading import Condition, Event
 from typing import cast
 
 import pytest
@@ -15,7 +15,6 @@ from dutchmate_core.backends import (
     SegmentContext,
     SegmentTimestamp,
     UartIntegrity,
-    UartReceiveEvent,
     UartSendCapabilityPolicy,
 )
 from dutchmate_core.backends.basic import BasicBackendConnection, BasicBackendEventSource
@@ -343,92 +342,6 @@ def test_idle_reconnect_stops_at_profile_deadline_and_reports_timeout() -> None:
     assert owner.reconnect_timeouts == 1
 
 
-def test_active_reconnect_suppresses_stale_idle_claim_and_open_overlap() -> None:
-    owner = FakeSourceOwner()
-    active_opened = Event()
-    release_active = Event()
-    concurrent_lock = Lock()
-    concurrent_opens = 0
-    maximum_concurrent_opens = 0
-    active_result: list[ReconnectedCaptureSource | None] = []
-
-    def open_replacement(
-        *,
-        segment_id: int,
-        deadline: float | None,
-        stop_requested: Event,
-    ) -> ReconnectedCaptureSource:
-        nonlocal concurrent_opens, maximum_concurrent_opens
-        assert deadline == 1.0
-        assert not stop_requested.is_set()
-        with concurrent_lock:
-            concurrent_opens += 1
-            maximum_concurrent_opens = max(maximum_concurrent_opens, concurrent_opens)
-        try:
-            active_opened.set()
-            assert release_active.wait(timeout=1.0)
-            return ReconnectedCaptureSource(
-                source=ClosableSource(),
-                backend_snapshot=_snapshot(segment_id),
-            )
-        finally:
-            with concurrent_lock:
-                concurrent_opens -= 1
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=open_replacement,
-        monotonic_clock=lambda: 0.0,
-    )
-    reconnect.start()
-    active_thread = Thread(
-        target=lambda: active_result.append(reconnect(segment_id=1, deadline=1.0))
-    )
-    active_thread.start()
-    try:
-        assert active_opened.wait(timeout=1.0)
-        owner.disconnect_while_idle()
-        assert owner.idle_disconnect_observed.wait(timeout=1.0)
-        assert owner.idle_claims == 0
-        release_active.set()
-        active_thread.join(timeout=1.0)
-        assert not active_thread.is_alive()
-        assert owner.wait_for_idle_waits(2)
-    finally:
-        release_active.set()
-        active_thread.join(timeout=1.0)
-        reconnect.close()
-
-    assert maximum_concurrent_opens == 1
-    assert owner.active_claims == 1
-    assert owner.idle_claims == 0
-    assert len(active_result) == 1
-    assert active_result[0] is not None
-
-
-def test_active_reconnect_reraises_backend_input_without_retry() -> None:
-    owner = FakeSourceOwner()
-    attempts = 0
-
-    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
-        nonlocal attempts
-        attempts += 1
-        raise BackendInputError("invalid reconnect hello")
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=open_replacement,
-        monotonic_clock=lambda: 0.0,
-    )
-
-    with pytest.raises(BackendInputError, match="invalid reconnect hello"):
-        reconnect(segment_id=1, deadline=1.0)
-    reconnect.close()
-
-    assert attempts == 1
-    assert owner.active_claims == 1
-
-
 def test_idle_reconnect_retries_backend_input() -> None:
     owner = FakeSourceOwner()
     replacement_source = ClosableSource()
@@ -458,107 +371,6 @@ def test_idle_reconnect_retries_backend_input() -> None:
 
     assert attempts == 2
     assert owner.replacements == [replacement_source]
-
-
-def test_active_reconnect_closes_candidate_opened_at_deadline() -> None:
-    clock = FakeClock()
-    owner = FakeSourceOwner()
-    replacement_source = ClosableSource()
-
-    def open_replacement(
-        *,
-        segment_id: int,
-        deadline: float | None,
-        stop_requested: Event,
-    ) -> ReconnectedCaptureSource:
-        del stop_requested
-        assert deadline is not None
-        clock.value = deadline
-        return ReconnectedCaptureSource(
-            source=replacement_source,
-            backend_snapshot=_snapshot(segment_id),
-        )
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=open_replacement,
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    assert reconnect(segment_id=1, deadline=0.5) is None
-    reconnect.close()
-
-    assert replacement_source.closed is True
-    assert owner.replacements == []
-
-
-def test_reconnect_discards_rejected_candidate_before_closing_it() -> None:
-    clock = FakeClock()
-    discarded: list[CaptureEventSource] = []
-
-    class DiscardCheckingSource(ClosableSource):
-        def close(self) -> None:
-            assert discarded == [self]
-            super().close()
-
-    replacement_source = DiscardCheckingSource()
-
-    def open_replacement(
-        *,
-        segment_id: int,
-        deadline: float | None,
-        stop_requested: Event,
-    ) -> ReconnectedCaptureSource:
-        del stop_requested
-        assert deadline is not None
-        clock.value = deadline
-        return ReconnectedCaptureSource(
-            source=replacement_source,
-            backend_snapshot=_snapshot(segment_id),
-        )
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=FakeSourceOwner(),
-        open_replacement=open_replacement,
-        on_rejected=lambda replacement: discarded.append(replacement.source),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    assert reconnect(segment_id=1, deadline=0.5) is None
-    reconnect.close()
-
-    assert discarded == [replacement_source]
-    assert replacement_source.closed is True
-
-
-def test_reconnect_publishes_ports_before_source_with_snapshot() -> None:
-    clock = FakeClock()
-    order: list[str] = []
-    owner = FakeSourceOwner(order=order, record_install_order=True)
-    replacement_source = ClosableSource()
-    replacement = ReconnectedCaptureSource(
-        source=replacement_source,
-        backend_snapshot=_snapshot(1),
-    )
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=lambda **_kwargs: replacement,
-        on_connected=lambda _replacement: order.append("ports_published"),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    result = reconnect(segment_id=1, deadline=1.0)
-    reconnect.close()
-
-    assert result == ReconnectedCaptureSource(
-        source=owner,
-        backend_snapshot=replacement.backend_snapshot,
-    )
-    assert order == ["current_closed", "ports_published", "source_installed"]
-    assert owner.replacement_snapshots == [replacement.backend_snapshot]
 
 
 def test_close_interrupts_idle_retry_and_joins_worker() -> None:
@@ -624,55 +436,6 @@ def test_close_rejects_candidate_returned_after_shutdown_begins() -> None:
     assert owner.replacements == []
 
 
-def test_active_callback_can_close_without_waiting_on_its_own_attempt() -> None:
-    owner = FakeSourceOwner()
-    replacement_source = ClosableSource()
-    callback_entered = Event()
-    callback_returned = Event()
-    call_complete = Event()
-    results: list[ReconnectedCaptureSource | None] = []
-    errors: list[BaseException] = []
-    reconnect: BackendReconnectCoordinator
-
-    def close_from_callback(_replacement: ReconnectedCaptureSource) -> None:
-        callback_entered.set()
-        reconnect.close()
-        callback_returned.set()
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=lambda **_kwargs: ReconnectedCaptureSource(
-            source=replacement_source,
-            backend_snapshot=_snapshot(1),
-        ),
-        on_connected=close_from_callback,
-        monotonic_clock=lambda: 0.0,
-    )
-
-    def run_active() -> None:
-        try:
-            results.append(reconnect(segment_id=1, deadline=1.0))
-        except BaseException as exc:
-            errors.append(exc)
-        finally:
-            call_complete.set()
-
-    active_thread = Thread(target=run_active, daemon=True)
-    active_thread.start()
-    assert callback_entered.wait(timeout=1.0)
-    returned_without_self_deadlock = callback_returned.wait(timeout=0.1)
-    if not returned_without_self_deadlock:
-        _release_stuck_attempt(reconnect)
-    assert call_complete.wait(timeout=1.0)
-    active_thread.join(timeout=1.0)
-
-    assert returned_without_self_deadlock
-    assert errors == []
-    assert results == [None]
-    assert replacement_source.closed is True
-    assert owner.replacements == []
-
-
 def test_idle_callback_can_close_without_waiting_on_its_own_attempt() -> None:
     owner = FakeSourceOwner()
     replacement_source = ClosableSource()
@@ -710,157 +473,10 @@ def test_idle_callback_can_close_without_waiting_on_its_own_attempt() -> None:
     reconnect.close()
 
 
-def test_close_interrupts_active_retry_wait() -> None:
-    owner = FakeSourceOwner()
-    open_failed = Event()
-    retry_wait_entered = Event()
-    close_returned = Event()
-    active_complete = Event()
-    stop_requests: list[Event] = []
-    results: list[ReconnectedCaptureSource | None] = []
-
-    def open_replacement(
-        *,
-        segment_id: int,
-        deadline: float | None,
-        stop_requested: Event,
-    ) -> ReconnectedCaptureSource:
-        del segment_id, deadline
-        stop_requests.append(stop_requested)
-        open_failed.set()
-        raise OSError("port unavailable")
-
-    def wait_for_active_retry(delay: float) -> bool:
-        assert delay == 0.1
-        retry_wait_entered.set()
-        return stop_requests[0].wait(timeout=delay)
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=owner,
-        open_replacement=open_replacement,
-        monotonic_clock=lambda: 0.0,
-        wait_for_active_retry=wait_for_active_retry,
-    )
-
-    def run_active() -> None:
-        results.append(reconnect(segment_id=1, deadline=1.0))
-        active_complete.set()
-
-    active_thread = Thread(target=run_active)
-    active_thread.start()
-    assert open_failed.wait(timeout=1.0)
-    assert retry_wait_entered.wait(timeout=1.0)
-
-    def run_close() -> None:
-        reconnect.close()
-        close_returned.set()
-
-    close_thread = Thread(target=run_close)
-    close_thread.start()
-
-    assert close_returned.wait(timeout=1.0)
-    assert active_complete.wait(timeout=1.0)
-    close_thread.join(timeout=1.0)
-    active_thread.join(timeout=1.0)
-    assert results == [None]
-
-
-def test_active_retry_wait_is_clipped_to_the_remaining_deadline() -> None:
-    clock = FakeClock()
-    retry_delays: list[float] = []
-
-    def open_replacement(**_kwargs: object) -> ReconnectedCaptureSource:
-        raise OSError("port unavailable")
-
-    def wait_for_active_retry(delay: float) -> bool:
-        retry_delays.append(delay)
-        clock.sleep(delay)
-        return False
-
-    reconnect = BackendReconnectCoordinator(
-        source_owner=FakeSourceOwner(),
-        open_replacement=open_replacement,
-        monotonic_clock=clock,
-        wait_for_active_retry=wait_for_active_retry,
-    )
-
-    assert reconnect(segment_id=1, deadline=0.05) is None
-    reconnect.close()
-
-    assert retry_delays == [0.05]
-
-
 def _release_stuck_attempt(reconnect: BackendReconnectCoordinator) -> None:
     with reconnect._condition:
         reconnect._attempt_active = False
         reconnect._condition.notify_all()
-
-
-def test_enhanced_active_candidate_waits_for_origin_without_consuming_event() -> None:
-    clock = FakeClock()
-    expected_info = _enhanced_info()
-    origin = _segment(1, source_origin_us=4_000)
-    origin_event = UartReceiveEvent(
-        segment_id=1,
-        timestamp_us=4_000,
-        channel=0,
-        data=b"ready\n",
-    )
-    host = FakeEnhancedReconnectHost(
-        info=expected_info,
-        segment=None,
-        established_segment=origin,
-        events=[origin_event],
-    )
-    opened: list[tuple[str, int, int]] = []
-    control = ReplaceableDeviceControl(FakeControl(10))
-    sender = ReplaceableUartSender(FakeSender(20))
-
-    class PortCheckingOwner(FakeSourceOwner):
-        def replace_source(
-            self,
-            replacement: CaptureEventSource,
-            *,
-            backend_snapshot: BackendSnapshot | None = None,
-        ) -> None:
-            assert control.pulse_control(channel="CTRL0", pulse_ms=1) == 123
-            assert sender.send_uart(b"x").device_timestamp_us == 456
-            super().replace_source(
-                replacement,
-                backend_snapshot=backend_snapshot,
-            )
-
-    owner = PortCheckingOwner()
-
-    def open_host(*, port: str, baudrate: int, segment_id: int) -> FakeEnhancedReconnectHost:
-        opened.append((port, baudrate, segment_id))
-        return host
-
-    reconnect = build_enhanced_capture_reconnect(
-        settings=_enhanced_settings(),
-        source_owner=owner,
-        expected_info=expected_info,
-        control=control,
-        sender=sender,
-        open_host=open_host,
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    result = reconnect(segment_id=1, deadline=1.0)
-    reconnect.close()
-
-    assert isinstance(reconnect, BackendReconnectCoordinator)
-    assert result is not None
-    assert opened == [("/dev/ttyACM0", 460800, 1)]
-    assert host.segment_wait_timeouts == [0.1]
-    assert host.read_event() == origin_event
-    assert owner.replacements == [host]
-    assert result.backend_snapshot.info == expected_info
-    assert result.backend_snapshot.segment == origin
-    assert result.backend_snapshot.capabilities == frozenset(
-        {"uart_receive", "gpio_control", "device_timestamp"}
-    )
 
 
 def test_enhanced_idle_candidate_waits_for_origin_before_publish() -> None:
@@ -886,7 +502,6 @@ def test_enhanced_idle_candidate_waits_for_origin_before_publish() -> None:
         sender=ReplaceableUartSender(FakeSender(20)),
         open_host=open_host,
         monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
     )
     reconnect.start()
     try:
@@ -902,69 +517,6 @@ def test_enhanced_idle_candidate_waits_for_origin_before_publish() -> None:
     assert snapshot is not None
     assert snapshot.info == expected_info
     assert snapshot.segment == origin
-
-
-def test_enhanced_active_identity_mismatch_is_fatal_and_closes_host() -> None:
-    host = FakeEnhancedReconnectHost(
-        info=_enhanced_info(firmware="9.9.9"),
-        segment=_segment(1),
-    )
-    attempts = 0
-
-    def open_host(**_kwargs: object) -> FakeEnhancedReconnectHost:
-        nonlocal attempts
-        attempts += 1
-        return host
-
-    reconnect = build_enhanced_capture_reconnect(
-        settings=_enhanced_settings(),
-        source_owner=FakeSourceOwner(),
-        expected_info=_enhanced_info(),
-        control=ReplaceableDeviceControl(FakeControl(10)),
-        sender=ReplaceableUartSender(FakeSender(20)),
-        open_host=open_host,
-        monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
-    )
-
-    with pytest.raises(
-        BackendInputError,
-        match="Reconnected Debug Helper identity changed",
-    ):
-        reconnect(segment_id=1, deadline=1.0)
-    reconnect.close()
-
-    assert attempts == 1
-    assert host.close_count == 1
-
-
-def test_enhanced_active_rejection_retains_candidate_cleanup_failure() -> None:
-    cleanup_error = RuntimeError("host cleanup failed")
-    host = FakeEnhancedReconnectHost(
-        info=_enhanced_info(firmware="9.9.9"),
-        segment=_segment(1),
-        close_error=cleanup_error,
-    )
-    reconnect = build_enhanced_capture_reconnect(
-        settings=_enhanced_settings(),
-        source_owner=FakeSourceOwner(),
-        expected_info=_enhanced_info(),
-        control=ReplaceableDeviceControl(FakeControl(10)),
-        sender=ReplaceableUartSender(FakeSender(20)),
-        open_host=lambda **_kwargs: host,
-        monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
-    )
-
-    with pytest.raises(BackendInputError, match="identity changed") as raised:
-        reconnect(segment_id=1, deadline=1.0)
-
-    assert raised.value.backend_mode == "enhanced"
-    with pytest.raises(RuntimeError) as retained:
-        reconnect.close()
-
-    assert retained.value is cleanup_error
-    assert host.close_count == 1
 
 
 def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
@@ -988,7 +540,6 @@ def test_enhanced_idle_identity_mismatch_closes_host_then_retries() -> None:
         sender=ReplaceableUartSender(FakeSender(20)),
         open_host=lambda **_kwargs: candidates.pop(0),
         monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
     )
     reconnect.start()
     try:
@@ -1023,7 +574,6 @@ def test_enhanced_idle_capability_mismatch_closes_host_then_retries() -> None:
         sender=ReplaceableUartSender(FakeSender(20)),
         open_host=lambda **_kwargs: candidates.pop(0),
         monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
     )
     reconnect.start()
     try:
@@ -1035,95 +585,6 @@ def test_enhanced_idle_capability_mismatch_closes_host_then_retries() -> None:
     assert mismatched.close_count == 1
     assert accepted.close_count == 0
     assert owner.replacements == [accepted]
-
-
-def test_enhanced_active_capability_mismatch_is_fatal_and_closes_host() -> None:
-    host = FakeEnhancedReconnectHost(
-        info=_enhanced_info(capabilities=frozenset({"gpio_control", "device_timestamp"})),
-        segment=_segment(1),
-    )
-    reconnect = build_enhanced_capture_reconnect(
-        settings=_enhanced_settings(),
-        source_owner=FakeSourceOwner(),
-        expected_info=_enhanced_info(),
-        control=ReplaceableDeviceControl(FakeControl(10)),
-        sender=ReplaceableUartSender(FakeSender(20)),
-        open_host=lambda **_kwargs: host,
-        monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
-    )
-
-    with pytest.raises(
-        BackendInputError,
-        match="Reconnected Debug Helper capabilities changed",
-    ):
-        reconnect(segment_id=1, deadline=1.0)
-    reconnect.close()
-
-    assert host.close_count == 1
-
-
-def test_enhanced_active_origin_timeout_closes_host() -> None:
-    clock = FakeClock()
-    host = FakeEnhancedReconnectHost(
-        info=_enhanced_info(),
-        segment=None,
-        wait_hook=clock.sleep,
-    )
-    reconnect = build_enhanced_capture_reconnect(
-        settings=_enhanced_settings(),
-        source_owner=FakeSourceOwner(),
-        expected_info=_enhanced_info(),
-        control=ReplaceableDeviceControl(FakeControl(10)),
-        sender=ReplaceableUartSender(FakeSender(20)),
-        open_host=lambda **_kwargs: host,
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    assert reconnect(segment_id=1, deadline=0.25) is None
-    reconnect.close()
-
-    assert host.segment_wait_timeouts == pytest.approx([0.1, 0.1, 0.05])
-    assert host.close_count == 1
-
-
-def test_basic_active_candidate_uses_coordinator_and_replaces_sender() -> None:
-    clock = FakeClock()
-    settings = _basic_settings(port="/dev/ttyUSB0", tx_enabled=True)
-    expected = BasicBackendEventSource(
-        BasicBackendConnection(serial_port=FakeBasicSerial(), settings=settings),
-        segment_id=0,
-    ).snapshot
-    replacement_serial = FakeBasicSerial()
-    replacement = BasicBackendConnection(
-        serial_port=replacement_serial,
-        settings=settings,
-    )
-    sender = ReplaceableUartSender(FakeSender(20))
-    owner = FakeSourceOwner()
-    reconnect = build_basic_capture_reconnect(
-        settings=settings,
-        source_owner=owner,
-        expected_snapshot=expected,
-        open_connection=lambda _settings: replacement,
-        sender=sender,
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    result = reconnect(segment_id=2, deadline=1.0)
-    reconnect.close()
-
-    assert isinstance(reconnect, BackendReconnectCoordinator)
-    assert result is not None
-    assert result.backend_snapshot.info == expected.info
-    assert result.backend_snapshot.segment is not None
-    assert result.backend_snapshot.segment.segment_id == 2
-    assert sender.send_uart(b"abc").bytes_accepted == 3
-    assert len(owner.replacements) == 1
-    cast(BasicBackendEventSource, owner.replacements[0]).close()
-    assert replacement_serial.close_count == 1
 
 
 def test_basic_idle_candidate_preserves_identity_and_segment_zero() -> None:
@@ -1144,7 +605,6 @@ def test_basic_idle_candidate_preserves_identity_and_segment_zero() -> None:
         open_connection=lambda _settings: replacement,
         sender=ReplaceableUartSender(FakeSender(20)),
         monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
     )
     reconnect.start()
     try:
@@ -1160,80 +620,6 @@ def test_basic_idle_candidate_preserves_identity_and_segment_zero() -> None:
     assert snapshot.segment is not None
     assert snapshot.segment.segment_id == 0
     cast(BasicBackendEventSource, owner.replacements[0]).close()
-
-
-def test_basic_reconnect_rejects_identity_before_transferring_source() -> None:
-    clock = FakeClock()
-    owner = FakeSourceOwner()
-    expected_settings = _basic_settings(port="/dev/ttyUSB0")
-    expected_source = BasicBackendEventSource(
-        BasicBackendConnection(
-            serial_port=FakeBasicSerial(),
-            settings=expected_settings,
-        ),
-        segment_id=0,
-    )
-    replacement_serial = FakeBasicSerial()
-    replacement_connection = BasicBackendConnection(
-        serial_port=replacement_serial,
-        settings=_basic_settings(port="/dev/ttyUSB1"),
-    )
-    reconnect = build_basic_capture_reconnect(
-        settings=expected_settings,
-        source_owner=owner,
-        expected_snapshot=expected_source.snapshot,
-        open_connection=lambda _settings: replacement_connection,
-        sender=ReplaceableUartSender(replacement_connection),
-        monotonic_clock=clock,
-        sleep=clock.sleep,
-    )
-
-    with pytest.raises(
-        BackendInputError,
-        match="Reconnected Basic backend identity changed",
-    ) as raised:
-        reconnect(segment_id=1, deadline=1.0)
-
-    assert raised.value.backend_mode == "basic"
-    assert owner.closed_current == 1
-    assert owner.replacements == []
-    assert replacement_serial.close_count == 1
-    reconnect.close()
-
-
-def test_basic_active_rejection_retains_candidate_cleanup_failure() -> None:
-    cleanup_error = RuntimeError("serial cleanup failed")
-    expected_settings = _basic_settings(port="/dev/ttyUSB0")
-    expected_source = BasicBackendEventSource(
-        BasicBackendConnection(
-            serial_port=FakeBasicSerial(),
-            settings=expected_settings,
-        ),
-        segment_id=0,
-    )
-    replacement_serial = FakeBasicSerial(close_error=cleanup_error)
-    reconnect = build_basic_capture_reconnect(
-        settings=expected_settings,
-        source_owner=FakeSourceOwner(),
-        expected_snapshot=expected_source.snapshot,
-        open_connection=lambda _settings: BasicBackendConnection(
-            serial_port=replacement_serial,
-            settings=_basic_settings(port="/dev/ttyUSB1"),
-        ),
-        sender=ReplaceableUartSender(FakeSender(20)),
-        monotonic_clock=lambda: 0.0,
-        sleep=lambda _seconds: None,
-    )
-
-    with pytest.raises(BackendInputError, match="identity changed") as raised:
-        reconnect(segment_id=1, deadline=1.0)
-
-    assert raised.value.backend_mode == "basic"
-    with pytest.raises(RuntimeError) as retained:
-        reconnect.close()
-
-    assert retained.value is cleanup_error
-    assert replacement_serial.close_count == 1
 
 
 def test_replaceable_device_control_forwards_to_latest_adapter() -> None:

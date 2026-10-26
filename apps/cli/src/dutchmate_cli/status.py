@@ -17,7 +17,7 @@ def format_status(payload: Mapping[str, object]) -> str:
         f"Backend: {_display(payload.get('backend_mode'))}",
         f"Profile: {_format_profile(payload)}",
         f"Effective UART: {_format_effective_uart(payload.get('effective_profile'))}",
-        f"Workflow: {_format_workflow(payload.get('active_workflow'))}",
+        f"Operations: {_format_operations(payload.get('active_operations'))}",
         f"Session: {_display(payload.get('active_session_id'))}",
         f"Commanded boot mode: {_display(payload.get('commanded_boot_mode'))}",
         f"Connection: {_format_connection(payload)}",
@@ -83,10 +83,14 @@ def _bool_display(value: object) -> str:
     return "unknown"
 
 
-def _format_workflow(value: object) -> str:
-    if not isinstance(value, str) or not value:
+def _format_operations(value: object) -> str:
+    if not isinstance(value, (list, tuple)):
         return "none"
-    return f"{value.replace('_', '-')} (active)"
+    operations = [
+        f"{_display(item.get('operation_type'))} ({_display(item.get('operation_id'))})"
+        for item in value if isinstance(item, Mapping)
+    ]
+    return ", ".join(operations) or "none"
 
 
 def _format_connection(payload: Mapping[str, object]) -> str:

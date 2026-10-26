@@ -79,10 +79,15 @@ The final command is a workspace-development interface. The Debug Agent is
 tested in normal CI but is not a dependency, extra, command, or artifact of the
 public `v0.1.0` release. Its first public release is planned for `v0.2.0`.
 
-To analyze a completed native session with a locally running Ollama model,
+To analyze a completed schema-v1 session with a locally running Ollama model,
 first review the manifest returned by `preview`. Then pass its
 `manifest_digest` to `analyze` using the same arguments. Both commands read
 selected sessions through `SessionStore`; `preview` does not call the model.
+New Device Core recordings are schema v2. The Debug Agent explicitly rejects v2
+with `unsupported_session_schema`; full v2 evidence packaging is separate Phase 4
+work. Use the service/CLI evidence APIs for v2 sessions. Legacy fixture generation
+lives only in `tests/support`, outside all packaged source roots.
+
 
 ```bash
 uv run --package dutchmate-debug-agent dutchmate-debug preview \
@@ -197,6 +202,60 @@ Generated `graphify-out/` content is also local and untracked. Run
 full graph that semantically extracts documentation, papers, or images, use the
 installed Graphify skill or run `graphify extract .` followed by
 `graphify cluster-only .` with the required model backend configured.
+
+## Continuous evidence through the CLI
+
+The connected service starts recording before the first operation. Enable TX
+explicitly in `[hardware.uart]` with `tx_enabled = true` before using send,
+Interact, or console. Select one Basic or Enhanced backend; both share this flow:
+
+```bash
+uv run --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.EXAMPLE
+uv run --package dutchmate dutchmate status
+uv run --package dutchmate dutchmate monitor --seconds 0.5
+uv run --package dutchmate dutchmate monitor --until READY --timeout 5
+uv run --package dutchmate dutchmate send PING --line-ending lf
+uv run --package dutchmate dutchmate send --data-b64 AP8=
+uv run --package dutchmate dutchmate interact INFO --line-ending lf --until 'DMF/1 INFO' --timeout 5
+uv run --package dutchmate dutchmate follow
+uv run --package dutchmate dutchmate console --line-ending lf
+uv run --package dutchmate dutchmate sessions
+uv run --package dutchmate dutchmate session SESSION_ID
+uv run --package dutchmate dutchmate logs --session SESSION_ID --last 100
+uv run --package dutchmate dutchmate release
+# Run and close the external same-port tool, then:
+uv run --package dutchmate dutchmate reacquire
+```
+
+Use `--backend enhanced` with the configured DUT voltage and Debug Helper path
+for Enhanced. Configure generic CTRL channels with host-side roles before Control:
+
+```bash
+uv run --package dutchmate dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
+uv run --package dutchmate dutchmate gpio mode CTRL1 boot BOOT0 --mode push_pull --active-level high --idle-level low
+uv run --package dutchmate dutchmate dut boot-mode normal
+uv run --package dutchmate dutchmate dut reset --pulse-ms 100
+uv run --package dutchmate dutchmate logs --session SESSION_ID --last 100
+```
+
+A later Monitor starts at its own cursor; boot bytes already recorded by reset
+are retrieved from the session/evidence cursor. Capture/wait commands and
+`/dut/capture`/`/dut/wait-pattern` are intentionally thin Monitor aliases, without
+separate session ownership, reconnect, or acquisition behavior. TX has no force
+option or implicit LF. Follow/console detach without stopping acquisition.
+Release closes ownership and records an observation gap; close the external tool
+before reacquiring. Rollover links sessions while acquisition continues.
+
+`GET /dut/evidence` without a cursor attaches at the current tail. Save its
+`next_cursor` before Control/TX to retrieve subsequent exact bytes and audited
+markers; page it again until caught up. Session list/detail and logs can retrieve
+older retained evidence. An expired cursor is explicit and never jumps silently.
+
+Historical hardware records describe their recorded firmware and schema-v1
+commands. For current acceptance use specification sections 32–35 and the Stage 8
+scenarios in `dutchmate_phase1_v2_coding_agent_plan.md`, retaining hardware/build
+identity, configuration, session IDs, raw bytes, and measured loss/provenance.
+Historical `accepted_32k` evidence remains scoped to its actual measurements.
 
 ## Package Boundaries
 

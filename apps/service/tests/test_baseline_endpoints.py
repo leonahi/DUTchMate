@@ -9,6 +9,7 @@ from helpers import (
     _tx_policy,
     disconnected_status,
 )
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 
 from dutchmate_core.backends import BackendInfo, BackendSnapshot, UartReceiveEvent
 from dutchmate_core.session_store.models import (
@@ -18,13 +19,12 @@ from dutchmate_core.session_store.models import (
     SessionHandle,
     SessionListPage,
 )
-from dutchmate_core.session_store.store import SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 from dutchmate_service.app import create_app
 
 
 class BaselineRuntime(FakeRuntime):
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: LegacySessionFixtureBuilder) -> None:
         super().__init__(disconnected_status())
         self.store = store
 
@@ -49,18 +49,18 @@ class BaselineRuntime(FakeRuntime):
         return self.store.get_session_detail(session_id)
 
 
-def _store(root: Path) -> SessionStore:
+def _store(root: Path) -> LegacySessionFixtureBuilder:
     start = datetime(2026, 8, 21, 22, 0, tzinfo=timezone.utc)
     moments = iter(start + timedelta(seconds=index) for index in range(10))
     suffixes = iter(("aaaa1111", "bbbb2222", "legacy1"))
-    return SessionStore(
+    return LegacySessionFixtureBuilder(
         root=root,
         clock=lambda: next(moments),
         id_factory=lambda: next(suffixes),
     )
 
 
-def _capture(store: SessionStore) -> SessionHandle:
+def _capture(store: LegacySessionFixtureBuilder) -> SessionHandle:
     info = BackendInfo(
         mode="enhanced",
         port="/dev/ttyACM0",
@@ -174,7 +174,7 @@ def test_compare_endpoint_returns_bounded_deltas_and_maps_preconditions(
 
 
 def _append_line(
-    store: SessionStore,
+    store: LegacySessionFixtureBuilder,
     handle: SessionHandle,
     data: bytes,
     *,

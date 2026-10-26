@@ -44,7 +44,6 @@ from dutchmate_service.schemas import (
     UartSendRequest,
     WaitPatternRequest,
     baseline_mutation_payload,
-    capture_summary_payload,
     device_action_payload,
     gpio_mode_payload,
     monitor_result_payload,
@@ -54,7 +53,6 @@ from dutchmate_service.schemas import (
     session_list_payload,
     status_payload,
     uart_send_payload,
-    wait_pattern_payload,
 )
 from dutchmate_service.startup import apply_startup_hardware_config, build_startup_runtime
 
@@ -288,11 +286,7 @@ def create_app(
     @app.post("/dut/capture")
     def capture_uart(request: CaptureRequest) -> dict[str, object]:
         result = runtime_provider.capture_uart(duration_s=request.duration_s)
-        return (
-            monitor_result_payload(result)
-            if isinstance(result, MonitorResult)
-            else capture_summary_payload(result)
-        )
+        return monitor_result_payload(result)
 
     async def bounded(
         operation: Callable[..., MonitorResult],
@@ -344,11 +338,7 @@ def create_app(
             pattern=request.pattern,
             timeout_s=request.timeout_s,
         )
-        return (
-            monitor_result_payload(result)
-            if isinstance(result, MonitorResult)
-            else wait_pattern_payload(result)
-        )
+        return monitor_result_payload(result)
 
     @app.post("/dut/uart/send")
     def send_uart(request: UartSendRequest) -> dict[str, object]:

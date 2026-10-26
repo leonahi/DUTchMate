@@ -1,24 +1,37 @@
 from pathlib import Path
 
 import pytest
+from legacy_session_fixtures import LegacySessionFixtureBuilder
 from session_store_support import enhanced_snapshot, fixed_clock, fixed_id
 
 import dutchmate_core.session_store.persistence as persistence
 import dutchmate_core.session_store.transactions as transactions
 from dutchmate_core.backends import UartReceiveEvent
+from dutchmate_core.profile import DutProfileConfig, resolve_dut_profile
 from dutchmate_core.session_store.models import SessionHandle, SessionPersistenceError
 from dutchmate_core.session_store.store import SessionRecoveryError, SessionStore
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor
 
 
-def _create_active_session(root: Path) -> tuple[SessionStore, SessionHandle]:
-    store = SessionStore(root=root, clock=fixed_clock, id_factory=fixed_id)
+def _create_active_session(root: Path) -> tuple[LegacySessionFixtureBuilder, SessionHandle]:
+    store = LegacySessionFixtureBuilder(root=root, clock=fixed_clock, id_factory=fixed_id)
     handle = store.create_session(
         command="capture --seconds 1",
         backend_snapshot=enhanced_snapshot(),
         workflow="capture",
         duration_s=1.0,
         reconnect_timeout_s=5.0,
+    )
+    return store, handle
+
+
+def _create_active_v2(root):
+    store = SessionStore(root=root, clock=fixed_clock, id_factory=fixed_id)
+    handle = store.create_v2_session(
+        profile=resolve_dut_profile(
+            DutProfileConfig(), mode="enhanced", serial_port="/dev/ttyACM0"
+        ),
+        backend_snapshot=enhanced_snapshot(),
     )
     return store, handle
 
@@ -129,7 +142,7 @@ def test_uart_batch_rolls_back_every_file_when_metadata_write_fails(
 
 
 def test_startup_rolls_back_prepared_interrupted_transaction(tmp_path: Path) -> None:
-    store, handle = _create_active_session(tmp_path)
+    store, handle = _create_active_v2(tmp_path)
     before_raw = handle.paths.uart_raw.read_bytes()
     before_events = handle.paths.uart_events.read_bytes()
     before_patterns = handle.paths.detected_patterns.read_bytes()
@@ -156,12 +169,16 @@ def test_startup_rolls_back_prepared_interrupted_transaction(tmp_path: Path) -> 
     assert handle.paths.uart_events.read_bytes() == before_events
     assert handle.paths.detected_patterns.read_bytes() == before_patterns
     assert _transaction_artifacts(handle.paths.root) == []
-    assert store.summarize_session(handle.session_id).state == "abandoned"
+    assert store.get_session_detail(handle.session_id).summary.state == "abandoned"
 
 
 def test_startup_keeps_unit_when_expected_metadata_was_written(tmp_path: Path) -> None:
-    store, handle = _create_active_session(tmp_path)
-    event_bytes = b'{"type":"buffer_status"}\n'
+    store, handle = _create_active_v2(tmp_path)
+    event_bytes = (
+        b'{"type":"buffer_status","evidence_seq":0,"segment_id":0,'
+        b'"recorded_at":"2026-07-14T12:30:45Z","timestamp_us":0,"size_bytes":32768,'
+        b'"used_bytes":0,"high_water_bytes":0,"dropped_bytes_total":0,"overflow_events":0}\n'
+    )
     transaction = transactions.begin_evidence_transaction(
         handle.paths,
         append_paths=[handle.paths.hardware_events],
@@ -169,6 +186,7 @@ def test_startup_keeps_unit_when_expected_metadata_was_written(tmp_path: Path) -
     persistence.append_serialized(handle.paths.hardware_events, event_bytes)
     metadata = persistence.read_json_object(handle.paths.metadata)
     metadata["overflow"] = True
+    metadata["next_evidence_seq"] = 1
     persistence.refresh_storage_accounting(metadata, handle.paths)
     serialized_metadata = persistence.serialize_json(metadata)
     transaction.prepare_metadata(serialized_metadata)
@@ -182,18 +200,18 @@ def test_startup_keeps_unit_when_expected_metadata_was_written(tmp_path: Path) -
     ]
     assert handle.paths.hardware_events.read_bytes() == event_bytes
     assert _transaction_artifacts(handle.paths.root) == []
-    summary = store.summarize_session(handle.session_id)
+    summary = store.get_session_detail(handle.session_id).summary
     assert summary.state == "abandoned"
-    assert summary.overflow is True
+    assert store.load_metadata(handle.session_id)["overflow"] is True
 
 
 def test_malformed_transaction_blocks_lifecycle_mutation(tmp_path: Path) -> None:
-    store, handle = _create_active_session(tmp_path)
+    store, handle = _create_active_v2(tmp_path)
     marker = handle.paths.root / ".evidence-transaction.json"
     persistence.write_json(marker, {"schema_version": 99})
 
     with pytest.raises(SessionRecoveryError, match="failed to recover evidence transaction"):
         SessionStore(root=tmp_path, clock=fixed_clock).recover_stale_sessions()
 
-    assert store.summarize_session(handle.session_id).state == "active"
+    assert store.load_metadata(handle.session_id)["state"] == "active"
     assert marker.exists()

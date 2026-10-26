@@ -8,11 +8,10 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from dutchmate_core.backends.contracts import BackendEvent, BackendSnapshot, UartIntegrity
-from dutchmate_core.session_store.models import SessionWorkflow
 
 
 class CaptureEventSource(Protocol):
-    """Interim blocking source of normalized backend events."""
+    """Blocking source of normalized events for the continuous recorder."""
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
@@ -48,38 +47,8 @@ class ReconnectedCaptureSource:
     backend_snapshot: BackendSnapshot
 
 
-class CaptureReconnect(Protocol):
-    """Backend-specific reopen operation used by a capture workflow."""
+class ReconnectLifecycle(Protocol):
+    """Shutdown boundary for the service-owned continuous reconnect supervisor."""
 
-    def __call__(
-        self,
-        *,
-        segment_id: int,
-        deadline: float,
-    ) -> ReconnectedCaptureSource | None:
-        """Return a ready replacement before ``deadline``, or ``None``."""
-
-
-class CaptureReconnectError(RuntimeError):
-    """Raised when an interrupted capture cannot resume within policy."""
-
-    error = "service_unavailable"
-
-    def __init__(
-        self,
-        *,
-        end_reason: str,
-        detail: str,
-        operation: SessionWorkflow | None = None,
-        session_id: str | None = None,
-        reconnect_timeout_s: float | None = None,
-        segment_count: int | None = None,
-        max_segments: int | None = None,
-    ) -> None:
-        super().__init__(detail)
-        self.end_reason = end_reason
-        self.operation = operation
-        self.session_id = session_id
-        self.reconnect_timeout_s = reconnect_timeout_s
-        self.segment_count = segment_count
-        self.max_segments = max_segments
+    def close(self) -> None:
+        """Stop reopen attempts and wait for candidate cleanup."""

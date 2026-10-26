@@ -4,244 +4,10 @@ from helpers import FakeRuntime, connected_status
 
 from dutchmate_core.runtime import DeviceCoreRuntimeError
 from dutchmate_core.session_store.store import (
-    FirstError,
-    LineProcessing,
-    MatchExcerpt,
     SessionSummary,
 )
 from dutchmate_core.workflows.device_actions import DeviceActionError
 from dutchmate_service.app import create_app
-from dutchmate_service.schemas import capture_summary_payload
-
-
-def test_capture_summary_serializes_bounded_first_error_evidence() -> None:
-    summary = SessionSummary(
-        session_id="20260729T100000Z-capture-error",
-        started_at="2026-07-29T10:00:00Z",
-        command="capture --seconds 1",
-        truncated=False,
-        interrupted=False,
-        resumed=False,
-        overflow=False,
-        baseline=False,
-        firmware=None,
-        device=None,
-        segment_count=1,
-        line_processing=LineProcessing(
-            status="limit_exceeded",
-            oversized_line_count=2,
-        ),
-        first_error=FirstError(
-            pattern="ERROR",
-            detected_pattern_index=3,
-            segment_id=0,
-            timestamp_us=10,
-            channel=1,
-            ingestion_index=2,
-            line_index_in_event=0,
-            line_start_ingestion_index=1,
-            line_start_event_offset=4,
-            line_end_ingestion_index=2,
-            line_end_event_offset=6,
-            total_line_bytes=12,
-            match_start_byte=2,
-            match_end_byte=7,
-            match_excerpt=MatchExcerpt(
-                start_byte=0,
-                end_byte=12,
-                text="x ERROR log\n",
-                raw_b64="eCBFUlJPUiBsb2cK",
-                excerpt_truncated=False,
-            ),
-        ),
-    )
-
-    payload = capture_summary_payload(summary)
-
-    assert payload["first_error"] == {
-        "pattern": "ERROR",
-        "detected_pattern_index": 3,
-        "segment_id": 0,
-        "timestamp_us": 10,
-        "channel": 1,
-        "ingestion_index": 2,
-        "line_index_in_event": 0,
-        "line_start_ingestion_index": 1,
-        "line_start_event_offset": 4,
-        "line_end_ingestion_index": 2,
-        "line_end_event_offset": 6,
-        "total_line_bytes": 12,
-        "match_start_byte": 2,
-        "match_end_byte": 7,
-        "match_excerpt": {
-            "start_byte": 0,
-            "end_byte": 12,
-            "text": "x ERROR log\n",
-            "raw_b64": "eCBFUlJPUiBsb2cK",
-            "excerpt_truncated": False,
-        },
-    }
-    assert payload["line_processing"] == {
-        "status": "limit_exceeded",
-        "max_line_bytes": 65536,
-        "oversized_line_count": 2,
-    }
-
-
-def test_capture_summary_serializes_quota_truncation_context() -> None:
-    truncation: dict[str, object] = {
-        "reason": "size_limit",
-        "rejected_unit_type": "uart_receive",
-        "rejected_unit_evidence_bytes": 120,
-        "projected_evidence_bytes": 1025,
-        "rejected_uart_payload_bytes": 8,
-        "segment_id": 0,
-        "channel": 1,
-        "timestamp_us": 42,
-        "occurred_at": "2026-07-29T10:00:03Z",
-    }
-    summary = SessionSummary(
-        session_id="20260729T100000Z-quota",
-        started_at="2026-07-29T10:00:00Z",
-        command="capture --seconds 1",
-        truncated=True,
-        interrupted=False,
-        resumed=False,
-        overflow=False,
-        baseline=False,
-        firmware=None,
-        device=None,
-        segment_count=1,
-        truncation=truncation,
-    )
-
-    assert capture_summary_payload(summary)["truncation"] == truncation
-
-
-def test_capture_passes_duration_to_runtime_and_returns_summary() -> None:
-    runtime = FakeRuntime(connected_status())
-    app = create_app(runtime)
-
-    response = TestClient(app).post("/dut/capture", json={"duration_s": 2.5})
-
-    assert response.status_code == 200
-    assert runtime.capture_requests == [2.5]
-    assert response.json() == {
-        "ok": True,
-        "session_id": "20260729T100000Z-capture01",
-        "schema_version": 1,
-        "state": "completed",
-        "workflow": "capture",
-        "duration_s": 2.5,
-        "reconnect_timeout_s": 5.0,
-        "ended_at": "2026-07-29T10:00:03Z",
-        "end_reason": "duration_elapsed",
-        "error": None,
-        "truncation": None,
-        "backend_mode": "enhanced",
-        "backend_identity": {
-            "port": "/dev/ttyACM0",
-            "firmware": "0.1.0",
-            "device": "dutchmate-rp2350",
-        },
-        "backend_capabilities": ["gpio_control", "uart_receive", "uart_send"],
-        "capabilities": ["gpio_control", "uart_receive"],
-        "capability_policy": {
-            "uart_send": {
-                "tx_policy_enabled": False,
-                "source": "hardware.uart.tx_enabled",
-            }
-        },
-        "timestamp_provenance": [
-            {
-                "segment_id": 0,
-                "timestamp": {
-                    "source": "device",
-                    "clock": "rp2350_timer",
-                    "unit": "us",
-                    "origin": "segment_start",
-                    "source_origin_us": 100,
-                    "observation_point": "debug_helper_uart_receive",
-                    "event_granularity": "uart_event",
-                },
-            }
-        ],
-        "integrity": {
-            "loss_status": "none_reported",
-            "observation_scope": "debug_helper_rx_buffer",
-            "dropped_bytes": 0,
-        },
-        "first_error": None,
-        "line_processing": {
-            "status": "complete",
-            "max_line_bytes": 65536,
-            "oversized_line_count": 0,
-        },
-        "truncated": False,
-        "interrupted": False,
-        "resumed": False,
-        "overflow": False,
-        "segments": 1,
-    }
-
-
-def test_capture_serializes_incomplete_evidence_flags() -> None:
-    class IncompleteCaptureRuntime(FakeRuntime):
-        def capture_uart(self, *, duration_s: float) -> SessionSummary:
-            return SessionSummary(
-                session_id="20260729T100000Z-capture02",
-                started_at="2026-07-29T10:00:00Z",
-                command="capture --seconds 5",
-                truncated=True,
-                interrupted=True,
-                resumed=True,
-                overflow=True,
-                baseline=False,
-                firmware="0.1.0",
-                device="dutchmate-rp2350",
-                segment_count=2,
-            )
-
-    app = create_app(IncompleteCaptureRuntime(connected_status()))
-
-    response = TestClient(app).post("/dut/capture", json={"duration_s": 5})
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "ok": True,
-        "session_id": "20260729T100000Z-capture02",
-        "schema_version": 0,
-        "state": None,
-        "workflow": None,
-        "duration_s": None,
-        "reconnect_timeout_s": None,
-        "ended_at": None,
-        "end_reason": None,
-        "error": None,
-        "truncation": None,
-        "backend_mode": None,
-        "backend_identity": {
-            "port": None,
-            "firmware": "0.1.0",
-            "device": "dutchmate-rp2350",
-        },
-        "backend_capabilities": [],
-        "capabilities": [],
-        "capability_policy": None,
-        "timestamp_provenance": [],
-        "integrity": None,
-        "first_error": None,
-        "line_processing": {
-            "status": "complete",
-            "max_line_bytes": 65536,
-            "oversized_line_count": 0,
-        },
-        "truncated": True,
-        "interrupted": True,
-        "resumed": True,
-        "overflow": True,
-        "segments": 2,
-    }
 
 
 @pytest.mark.parametrize("duration_s", [0, 300.1, True, "1"])
@@ -261,12 +27,12 @@ def test_capture_rejects_invalid_duration(duration_s: object) -> None:
     assert runtime.capture_requests == []
 
 
-def test_capture_active_uses_conflict_error_contract() -> None:
+def test_operation_active_uses_conflict_error_contract() -> None:
     class ActiveCaptureRuntime(FakeRuntime):
         def capture_uart(self, *, duration_s: float) -> SessionSummary:
             raise DeviceActionError(
-                error="capture_active",
-                detail="capture is already active",
+                error="operation_active",
+                detail="an exclusive operation is active",
             )
 
     app = create_app(ActiveCaptureRuntime(connected_status()))
@@ -276,8 +42,8 @@ def test_capture_active_uses_conflict_error_contract() -> None:
     assert response.status_code == 409
     assert response.json() == {
         "ok": False,
-        "error": "capture_active",
-        "detail": "capture is already active",
+        "error": "operation_active",
+        "detail": "an exclusive operation is active",
         "detail_truncated": False,
     }
 

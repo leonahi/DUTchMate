@@ -55,7 +55,7 @@ def test_service_error_message_preserves_structured_error_code() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             409,
-            json={"error": "capture_active", "detail": "capture is already active"},
+            json={"error": "operation_active", "detail": "an exclusive operation is active"},
         )
 
     with pytest.raises(ServiceApiError) as error:
@@ -65,7 +65,7 @@ def test_service_error_message_preserves_structured_error_code() -> None:
             transport=httpx.MockTransport(handler),
         )
 
-    assert "[capture_active]: capture is already active" in str(error.value)
+    assert "[operation_active]: an exclusive operation is active" in str(error.value)
 
 
 def test_list_debug_sessions_forwards_bounded_page_arguments() -> None:

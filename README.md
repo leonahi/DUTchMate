@@ -26,7 +26,7 @@ dutchmate gpio mode CTRL0 reset RESET_N \
   --mode open_drain --active-level low
 dutchmate dut reset
 dutchmate monitor --seconds 15
-dutchmate logs --lines 100
+dutchmate logs --last 100
 ```
 
 An illustrative Monitor result identifies its bounded evidence window:
@@ -41,6 +41,29 @@ Recording is already active before reset. A later Monitor observes only evidence
 after its own start; immediate boot output remains in the session and is available
 through log retrieval. These are independent atomic requests, with no dedicated
 reset-and-observe workflow in Device Core.
+
+With `[hardware.uart].tx_enabled = true`, ordinary UART interaction uses the
+same service-owned connection and evidence journal:
+
+```bash
+dutchmate monitor --until BOOT_OK --timeout 10
+dutchmate send PING --line-ending lf
+dutchmate send --data-b64 AP8=
+dutchmate interact INFO --line-ending lf --until 'DMF/1 INFO' --timeout 5
+dutchmate follow                  # Ctrl-C detaches the view; recording continues
+dutchmate console --line-ending lf
+dutchmate sessions
+dutchmate session SESSION_ID
+dutchmate release                 # external same-port tool may now open the port
+# Close the external tool before reacquiring.
+dutchmate reacquire
+```
+
+Monitor/Interact return operation IDs and evidence ranges; finishing an operation
+leaves the continuous session active. Release/reacquire records the unobserved
+interval and opens a fresh timestamp segment. `capture` and `wait` are thin
+Monitor aliases. New evidence uses schema v2; historical v0/v1 sessions remain
+readable. The Debug Agent currently accepts schema-v1 evidence only.
 
 Coding agents can use the CLI or service to compose procedures from Monitor,
 Interact, audited UART TX, and audited reset/boot/GPIO Control. UART TX requires

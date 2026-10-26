@@ -57,6 +57,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 pythonpath = [
+  "tests/support",
   "core/src",
   "packages/dutchmate/src",
   "apps/cli/src",

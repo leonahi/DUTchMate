@@ -74,7 +74,6 @@ from dutchmate_core.session_store.models import (
     SessionDetail,
     SessionListPage,
     SessionRetentionStatus,
-    SessionWorkflow,
 )
 from dutchmate_core.validation import (
     UartTxPayload,
@@ -89,8 +88,8 @@ from dutchmate_core.validation import (
 )
 from dutchmate_core.workflows.capture import (
     CaptureEventSource,
-    CaptureReconnect,
     CaptureSourceMonitor,
+    ReconnectLifecycle,
 )
 from dutchmate_core.workflows.device_actions import (
     DeviceActionError,
@@ -170,7 +169,6 @@ class DeviceCoreStatus:
     timestamp_provenance: SegmentContext | None = None
     integrity: UartIntegrity | None = None
     connection_state: ConnectionState = "disconnected"
-    active_workflow: SessionWorkflow | None = None
     reconnect_remaining_s: float | None = None
     retention: SessionRetentionStatus = SessionRetentionStatus()
     profile_name: str | None = None
@@ -196,7 +194,7 @@ class DeviceCoreRuntime:
         backend_mode: BackendMode | None = None,
         tx_policy_enabled: bool = False,
         segment_context: SegmentContext | None = None,
-        backend_reconnect: CaptureReconnect | None = None,
+        backend_reconnect: ReconnectLifecycle | None = None,
         dut_io_voltage: float | None = None,
         action_wall_clock: Callable[[], datetime] | None = None,
         uart_wall_clock: Callable[[], datetime] | None = None,
