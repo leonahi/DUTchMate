@@ -10,6 +10,83 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Clean Basic Phase 1A HIL Stopped on Release Failure — 2026-10-26
+
+- Restarted from clean `stage8-phase1-acceptance`, HEAD/upstream tracking ref
+  `ad8b63abc3c9330864eaa49cb48aab57cd03f2cd`, containing merged isolation fix
+  `7f30a916a3033289dec6908ebeac17a687c0d806`. The former failed session
+  `20261026T134413Z-e8d17b99` was neither resumed nor counted; its hashes stayed
+  unchanged. Current normative section 33, developer CLI guide, fixture README,
+  and Basic validation history were read before hardware startup.
+- Completed all software checks with the real service stopped: pytest 1,499
+  passed in 35.84 s; Ruff passed; mypy passed (103 files); offline lock check
+  passed (66 packages); diff check passed. No pytest, extra application/runtime,
+  or session-store construction ran after physical service startup. CLI/HTTP
+  clients and read-only JSON/artifact inspection were used during HIL.
+- FTDI FT231X `0403:6015`, serial `D358SG6A`, was identifiable at
+  `/dev/cu.usbserial-D358SG6A`, USB location `0-1.3`; no preflight owner existed.
+  Retained operator-confirmed Pico 1/H wiring and reviewed flash. Independently
+  rehashed UF2 to `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`.
+  No firmware was rebuilt or flashed. Actual first INFO returned
+  `basic-v2-20261026-7bc2ec377767`, with no `E_COMMAND_001` in any new raw RX.
+- Real Basic service PID 3451 started at 17:53:36 UTC (23:23:36 IST), creating
+  fresh native-v2 session `20261026T175336Z-3d1dd5a9`. Effective UART/profile
+  remained 115200 8-N-1, no flow control, explicit TX enabled, driver-default
+  DTR/RTS; host-observation timestamps and Basic `not_observable` loss were
+  truthful. Profile digest remained
+  `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+- Ambient RUN-reset boot bytes were preserved without operation/view ownership.
+  Follow displayed PONG, Ctrl-C detached only the view, and INFO RX continued.
+  Duration/literal Monitor passed. Interact matched/elapsed/timeout outcomes
+  and exact ranges were recorded with one TX each. A PING Interact retained an
+  unrelated fault from an earlier DELAYFAULT command. The dedicated DELAYFAULT
+  Interact ACK was RX 46, durable matched terminal 47, and later fault RX 48,
+  outside range `[43,48)`; ACK→fault host timestamp difference 10,034,749 us.
+  No bounded operation or view ran during its 11-second idle interval.
+- Service-backed console sent PING/INFO with LF, retained TX/RX audit, and
+  acquisition continued after EOF. Pre-release retrieval worked through detail,
+  logs and the durable evidence cursor. The saved session had 590 raw bytes,
+  16 RX records, 13 successful TX attempts/results, seven completed operations,
+  and contiguous evidence sequences 0..57. Two expected synthetic ASYNC fault
+  patterns were retained; TX request bytes were absent from RX raw.
+- `dutchmate release` began at 17:58:26.789445 UTC, persisted
+  `release_requested` sequence 57, then timed out after 65.161843 seconds.
+  No `released` boundary appeared. A subsequent status initially remained
+  connected; later status requests timed out. The guarded external-owner script
+  stopped in its status precondition before `serial.Serial` was called; no
+  external reader/consumer or concurrent serial ownership occurred.
+- Stopped acceptance per failure policy. Read-only source tracing and macOS
+  `sample 3451 1 1` were captured without injecting code or constructing a
+  store. Physical serial ownership had closed, but the process remained live;
+  the sample reported 11.8G physical footprint. The precise internal failure
+  mechanism remains unconfirmed. No production/fixture/test patch was made.
+- Public CLI stop sent SIGTERM but the process stayed alive. After preserving
+  the session and validating PID/command identity, SIGKILL terminated only the
+  owned HIL service. Verified process absent, no HTTP listener, and no FTDI
+  owner. Preserved metadata remains stale `active`, with no synthetic terminal
+  or release-gap record added after the fact. Both pre-stop/final copies and
+  SHA-256 manifests are in `.dutchmate/hil/basic-clean-20261026/`.
+
+Pre-hardware validation commands (all completed before service start):
+
+| Command | Result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,499 passed in 35.84 s; architecture/isolation/recovery/fixture checks included |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed; 66 packages |
+| `rtk proxy git diff --check` | Passed before hardware startup and for final docs |
+
+Exact client commands, all operation IDs/ranges, hardware/provenance, release
+failure reproduction, cleanup, and per-criterion outcomes are appended to
+[Basic HIL validation](../hardware/validation/phase1_basic_hil.md). No new
+runtime or physical reproduction was attempted after the release failure.
+Basic Phase 1A remains incomplete because handoff/reacquire and unexpected
+reconnect were not proven. Stage 8, Phase 1B, and Phase 1 remain incomplete;
+Enhanced HIL and MCP were not started. HIL documentation remains uncommitted
+for review; previous historical records and diagnostic evidence are preserved.
+
+
 ## Service-Test Session-Store Isolation Fix Validated — 2026-10-26
 
 - Worked on clean `fix/service-test-session-isolation`, starting at

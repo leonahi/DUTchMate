@@ -699,3 +699,184 @@ Ruff and configured mypy (103 files) passed. Final documentation
 incomplete. Enhanced HIL and MCP work were not started. New HIL documentation
 remains uncommitted for review; no production, fixture, or tracked test code
 was changed, and the agent did not flash hardware.
+
+## Clean Basic v2 rerun: release failure — 2026-10-26
+
+Result: **incomplete; stopped at Basic release lifecycle failure**. This is a
+new physical run. Session `20261026T134413Z-e8d17b99` remains unchanged failed-run
+diagnostic evidence and contributes no acceptance to this run. All software
+validation completed before physical service startup; no pytest, additional
+service/runtime, or session store was created while it was running.
+
+### Preflight and provenance
+
+| Field | Observation |
+|---|---|
+| Branch / HEAD | Clean `stage8-phase1-acceptance`, `ad8b63abc3c9330864eaa49cb48aab57cd03f2cd`; upstream tracking ref matched |
+| Isolation / fixture commits | `7f30a916a3033289dec6908ebeac17a687c0d806` merged; fixture source `746121a35633c070f4e7112010ce26b656d8ef1d` |
+| Host | macOS 26.2, build 25C56; Darwin 25.2.0 arm64 |
+| FTDI | FT231X USB UART; VID/PID `0403:6015`; serial `D358SG6A`; path `/dev/cu.usbserial-D358SG6A`; location `0-1.3` |
+| Physical DUT | Operator-confirmed Pico 1/Pico H, RP2040; actual boot and INFO both identify `board=rpi_pico`; no independent unique board serial obtained |
+| Fixture image | Reviewed `basic-v2-20261026-7bc2ec377767`, operator-confirmed flash; no new flash/readback by the agent |
+| UF2 | `build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767/zephyr/zephyr.uf2`; independently verified SHA-256 `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16` |
+| Zephyr / SDK | Reviewed build v4.4.0, revision `684c9e8f32e4373a21098559f748f06915f950c9`, SDK 1.0.1; normal `rpi_pico` target, no Enhanced overlay |
+| Wiring | Existing operator confirmation: GP0/pin 1→FTDI RX; GP1/pin 2→FTDI TX; GND/pin 3→FTDI GND; Pico USB-powered; FTDI VCC disconnected; 3.3 V logic; GP2/GP3 open |
+| Ownership | No preflight serial owner or service listener. PID 3451 then owned exactly one serial FD; follow added no serial descriptor |
+| Service / session | `127.0.0.1:2040`; new schema-v2 `20261026T175336Z-3d1dd5a9`, started 17:53:36 UTC / 23:23:36 IST |
+| Current config | `.dutchmate/config.toml`; 115200 8-N-1, `rtscts=false`, `xonxoff=false`, explicit `tx_enabled=true`, default ending `none`, sessions budget 16 MiB, retention disabled |
+| Profile | Unnamed; digest `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`; exact-path selector, external UART, reconnect timeout 5 s |
+| DTR/RTS | Both requested `driver_default`, open transition `driver_managed`, RTS owner `driver`; no electrical readback or glitch-free claim |
+| Timestamps / loss | Host monotonic microseconds, `host_serial_read/serial_read_chunk`, segment-relative; Basic `not_observable`, null observer/drop count |
+
+Software gate: pytest **1,499 passed in 35.84 s**, Ruff passed, configured mypy
+passed (103 source files), offline lockfile check passed (66 packages), diff
+check passed. Current CLI help was captured before service startup. Gate outputs
+and completion timestamp are in `.dutchmate/hil/basic-clean-20261026/gate-*.json`
+and `software-gate-complete.json`. No gate was rerun after hardware started.
+
+### Workflows actually executed
+
+All CLI commands below used the actual repository `.venv/bin/dutchmate`.
+Service start/stop ran under the documented `uv run --frozen --package
+dutchmate` environment so its sibling service executable was on PATH. Local
+`run.py` and `scenarios.py` saved exact arguments/bodies, UTC timestamps,
+results, outputs, evidence cursors and ownership observations; they use only
+CLI/HTTP during service ownership and never construct a session store.
+
+1. `dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200`.
+   `GET /status` / `dutchmate status` confirmed the new session and Basic settings.
+2. First TX was `POST /dut/uart/send` with
+   `{"text":"INFO","line_ending":"lf"}`. It accepted exact `INFO\n`
+   (`SU5GTwo=`), attempt/result sequences 1/2; RX 3 contained the exact reviewed
+   INFO build. **The earlier `E_COMMAND_001` did not recur**, and is not declared
+   fixed. No new raw RX contained that code.
+3. With no bounded operation or view running, the operator briefly grounded RUN
+   and released it. Two boot banners were retained, with reset-transition NUL
+   bytes also preserved; complete boot markers are at evidence sequences 5/7.
+   Actual bytes include `DMF/1 BOOT OK board=rpi_pico build=basic-v2-20261026-7bc2ec377767\n`.
+4. `dutchmate monitor --seconds 0.5` returned elapsed; no physical RX ownership
+   changed. A saved durable cursor was passed to `dutchmate follow --cursor
+   <cursor>`; `dutchmate send PING --line-ending lf` produced displayed PONG.
+   SIGINT exited follow with code 0. A subsequent standalone
+   `dutchmate send INFO --line-ending lf` was still recorded and cursor-retrieved.
+   `ownership-with-follow.txt` lists only service PID 3451 / FD 3u on the FTDI.
+5. `dutchmate monitor --until 'DMF/1 PONG' --timeout 3` was started, its active
+   status observed, then one audited `dutchmate send PING --line-ending lf`
+   supplied its deterministic literal. Monitor matched with an exact range.
+6. `dutchmate interact PING --line-ending lf --until 'DMF/1 PONG' --timeout 2`
+   matched. Separate PING Interacts with `--seconds .3` and with
+   `--until 'DMF/1 NEVER' --timeout .3` returned elapsed and timeout. Each
+   operation had exactly one durable TX attempt/result; no TX was retried.
+7. `dutchmate send DELAYFAULT --line-ending lf` armed an unrelated future log.
+   A separate PING Interact with `--until 'DMF/1 ERROR ASYNC code=E_ASYNC_001'
+   --timeout 12` retained its PONG plus that asynchronous fault, proving unrelated
+   ambient output was not filtered out of the window.
+8. Dedicated outside-operation test:
+   `dutchmate interact DELAYFAULT --line-ending lf --until 'DMF/1 DELAYFAULT armed delay_ms=10000' --timeout 2`.
+   It matched its ACK, then an 11-second idle interval ran with **no Monitor,
+   Interact, follow or console**. Status before/after showed no active operation;
+   cursor retrieval afterward recovered the later fault from durable evidence.
+9. `dutchmate console --line-ending lf` received stdin `PING\nINFO\n` and EOF.
+   It emitted audit markers for both LF sends; their RX responses were stored
+   and cursor-retrieved. The piped console closed before displaying the later
+   RX. A standalone PING after EOF was recorded, proving acquisition continued.
+10. `GET /sessions/20261026T175336Z-3d1dd5a9` saved pre-release detail; current
+    logs and durable cursor retrieval were successful. Final session listing and
+    comprehensive retrieval were scheduled after handoff and were not reached.
+11. `dutchmate release` persisted intent but did not finish. Acceptance stopped;
+    external ownership/reacquire and unexpected physical reconnect were not run.
+
+### Durable operation and delayed-fault evidence
+
+All ranges below refer to `20261026T175336Z-3d1dd5a9`, with exclusive ends:
+
+| Operation ID | Outcome | Range | TX attempts |
+|---|---|---|---:|
+| `monitor-64a9b0aa-446f-4d72-9bb7-0b84446e8be7` | elapsed | `[8,10)` | 0 |
+| `monitor-da2394af-dee9-47c4-ac64-0ce4d6bcc742` | matched PONG | `[16,21)` | 0 |
+| `interact-247abc75-036f-4ab5-b46d-f4f9c8bc44eb` | matched PONG | `[21,26)` | 1 |
+| `interact-b447e369-5f97-4ed4-b337-776aa1a39796` | elapsed | `[26,30)` | 1 |
+| `interact-5aca4a31-ccee-45a1-8fcc-4936ff29e4c6` | timeout | `[30,34)` | 1 |
+| `interact-11283f98-c977-416d-8590-9f4a7e56a559` | matched unrelated ASYNC | `[37,43)` | 1 |
+| `interact-7d0e3169-ab80-4465-a62d-630fa9e40b5a` | matched DELAYFAULT ACK | `[43,48)` | 1 |
+
+The dedicated test recorded TX attempt/result 44/45, exact ACK RX 46,
+**durable operation terminal 47**, then **fault RX 48** containing
+`DMF/1 ERROR ASYNC code=E_ASYNC_001\n`. The fault is outside its operation's
+range. ACK→fault host timestamps differ by **10,034,749 us** (10.034749 s);
+recorded UTC times are 17:57:49 and 17:57:59. The sequence ordering, not merely
+the delay, establishes completion before the ambient fault. Both synthetic
+fault emissions remain recorded as expected failure-pattern evidence.
+
+### Release failure, reproduction and cleanup
+
+With status connected and no active operations/views, issue the normal
+`dutchmate release` (service endpoint `POST /connection/release`). In this run:
+
+- Request began at `2026-10-26T17:58:26.789445+00:00`; intent
+  `release_requested` was durably sequence **57**. The only other connection
+  event is initial `connected` sequence 0. No `released` marker, intentional gap,
+  successor segment, or reacquire event was generated.
+- CLI ended after **65.161843 s** with
+  `Error: Device Core Service request timed out.` Status initially continued
+  reporting connected, then a guarded status read timed out. The external
+  consumer script aborted before its `serial.Serial` line; it never acquired
+  or opened the FTDI. No concurrent port ownership occurred.
+- OS ownership checks showed the physical FD was closed, but PID 3451 remained
+  running. Read-only source tracing and
+  `rtk proxy sample 3451 1 1 -file /tmp/dutchmate-basic-release-3451.sample.txt`
+  captured diagnostics. The sample reported 11.8G process physical footprint.
+  The exact internal failure mechanism has not been confirmed; no additional
+  runtime, product patch, or physical repeat was attempted after the failure.
+- Public CLI `dutchmate stop` sent SIGTERM and returned, but OS process checks
+  still showed the same service alive. After preserving the session and matching
+  PID/command identity, SIGKILL stopped that process. Final checks confirmed PID
+  absent, no TCP 2040 listener, and no owner of either FTDI cu/tty path.
+- This is an observed DUTchMate release lifecycle failure, distinct from the
+  earlier test-isolation incident or a demonstrated hardware/wiring problem.
+  Metadata remains stale `active` because forced shutdown did not terminalize
+  it; it was preserved as recorded, not manually repaired or counted as live.
+
+### Evidence preservation and criterion results
+
+Authoritative session: `.dutchmate/sessions/20261026T175336Z-3d1dd5a9/`.
+Run artifacts: `.dutchmate/hil/basic-clean-20261026/`, including pre-stop and final
+session copies, full manifests, CLI/HTTP output, process sample, cleanup record,
+and `acceptance-summary.json`. There are **590 raw bytes**, **16 RX records**,
+**13 successful TX attempts/results**, **7 completed operations**, and contiguous
+sequences **0..57**. Concatenated decoded RX matches raw byte-for-byte. Exact
+TX request bytes `PING\n`, `INFO\n`, and `DELAYFAULT\n` are absent from RX raw.
+
+| Artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `188c5e65ef42612bbdb812741a15aa270652993354db7341dd733fcfc4001de1` |
+| `uart_events.jsonl` | `8b60463df35167d19e1da561d2026aeb991f0e3056872c495cee8dc4c29fcdbf` |
+| `operation_events.jsonl` | `a114cf47d1af1df6b242f7369b5f148bfe5ca8ced327b6f30495a3878a82efa1` |
+| `connection_events.jsonl` | `70ef61e350adf993e977fe34e7fc15f31362b1d528b48b7bd2475c0534021402` |
+| `metadata.json` | `d0c6805c734889ecd05d9bc67b721467d6881d0447edb1b75950b324c4763e12` |
+
+| Current Phase 1A criterion | Result |
+|---|---|
+| New real Basic connection / one service RX owner | Passed; no old session resumed |
+| Continuous ambient RX / physical boot and INFO identity | Passed before lifecycle failure; idle boot markers and exact build retained |
+| Follow / continued acquisition after detach | Passed, with durable cursor and post-SIGINT RX |
+| Duration / literal Monitor | Passed, exact ranges above |
+| TX disabled by default / explicitly enabled exact audited bytes | Default policy covered by pre-HIL software gate; enabled physical TX passed with explicit LF; no force bypass |
+| Interact outcomes/ranges / one send / asynchronous RX | Passed for matched, elapsed, timeout and unrelated ambient fault |
+| Delayed fault after operation completion | Passed: terminal 47 < fault 48, outside `[43,48)` |
+| Service-backed line console / post-exit acquisition | TX/audit/RX persistence and post-EOF acquisition passed; interactive RX display was not exercised |
+| Native v2 ambient/operation/action persistence and provenance | Passed for generated evidence; raw/event reconciliation verified |
+| Linked size/segment rollover | Pre-HIL deterministic software gate passed; not physically triggered |
+| Truthful Basic loss / host observation / DTR/RTS provenance | Passed before release; no lossless/electrical readback claim |
+| Release / external same-port owner / reacquire | **Failed at release**; external owner not opened, reacquire not attempted |
+| Explicit released interval / fresh segment | Not established; intent only, no completed boundary or observation-gap record |
+| Unexpected reconnect | Not run after release failure |
+| Session/evidence/log retrieval | Detail/log/cursor retrieval passed before failure; final listing/comprehensive retrieval gate not completed |
+| Shared software tests | Passed before physical startup; no tests/store construction during HIL |
+| Complete Basic Phase 1A | **Incomplete, not accepted** |
+
+No production, fixture, or tracked test code changed. Only this appended report
+and development status/history changed, left uncommitted for review. Final
+`git diff --check` and preservation checks passed. Stage 8, Phase 1B, and Phase 1
+remain incomplete. Enhanced HIL and MCP work were not started. The old failed
+session/report were preserved unchanged, and no firmware was flashed.
