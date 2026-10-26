@@ -6,6 +6,7 @@
 #define DMF_BURST_COUNT 2048U
 #define DMF_SUSTAIN_COUNT 4096U
 #define DMF_SUSTAIN_INTERVAL_MS 2U
+#define DMF_FAULT_DELAY_MS 10000U
 
 static void write_data(
     struct dmf_fixture *fixture,
@@ -109,6 +110,8 @@ void dmf_fixture_init(
     fixture->context = context;
     fixture->build_id = build_id;
     fixture->silent = 0;
+    fixture->fault_pending = 0;
+    fixture->fault_due_ms = 0U;
 }
 
 void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode)
@@ -117,6 +120,7 @@ void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode)
     const char *format;
     int length;
 
+    fixture->fault_pending = 0;
     switch (mode) {
     case DMF_BOOT_SUCCESS:
         fixture->silent = 0;
@@ -139,6 +143,21 @@ void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode)
     length = snprintf((char *)message, sizeof(message), format, fixture->build_id);
     if (length > 0 && (size_t)length < sizeof(message)) {
         fixture->write(fixture->context, message, (size_t)length);
+    }
+}
+
+void dmf_fixture_poll(struct dmf_fixture *fixture, uint64_t now_ms)
+{
+    if (fixture->fault_pending == 0) {
+        return;
+    }
+    if (fixture->fault_due_ms == 0U) {
+        /* Start the delay after the command handler and its ACK have returned. */
+        fixture->fault_due_ms = now_ms + DMF_FAULT_DELAY_MS;
+    }
+    if (now_ms >= fixture->fault_due_ms) {
+        fixture->fault_pending = 0;
+        write_text(fixture, "DMF/1 ERROR ASYNC code=E_ASYNC_001\n");
     }
 }
 
@@ -186,9 +205,14 @@ void dmf_fixture_handle_command(
             DMF_SUSTAIN_COUNT,
             DMF_SUSTAIN_INTERVAL_MS
         );
+    } else if (command_equals(command, length, "DELAYFAULT")) {
+        write_text(fixture, "DMF/1 DELAYFAULT armed delay_ms=10000\n");
+        fixture->fault_pending = 1;
+        fixture->fault_due_ms = 0U;
     } else if (command_equals(command, length, "SILENT")) {
         write_text(fixture, "DMF/1 SILENT armed-until-reset\n");
         fixture->silent = 1;
+        fixture->fault_pending = 0;
     } else {
         write_text(fixture, "DMF/1 ERROR COMMAND code=E_COMMAND_001\n");
     }

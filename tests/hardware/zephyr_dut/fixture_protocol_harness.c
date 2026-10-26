@@ -6,6 +6,7 @@
 
 struct harness_context {
     int trace_io;
+    uint64_t now_ms;
 };
 
 static void write_bytes(void *context, const unsigned char *data, size_t length)
@@ -13,7 +14,9 @@ static void write_bytes(void *context, const unsigned char *data, size_t length)
     const struct harness_context *harness = context;
 
     (void)fwrite(data, 1U, length, stdout);
-    if (harness->trace_io != 0) {
+    if (harness->trace_io == 2) {
+        (void)fprintf(stderr, "T:%llu\n", (unsigned long long)harness->now_ms);
+    } else if (harness->trace_io != 0) {
         (void)fprintf(stderr, "W:%zu\n", length);
     }
 }
@@ -47,6 +50,20 @@ int main(int argc, char **argv)
     } else if (argc == 4 && strcmp(argv[1], "sequence") == 0) {
         dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]));
         dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[3], strlen(argv[3]));
+    } else if (strcmp(argv[1], "timeline") == 0) {
+        int index;
+
+        context.trace_io = 2;
+        for (index = 2; index < argc; index++) {
+            if (argv[index][0] == '@') {
+                context.now_ms = strtoull(argv[index] + 1, NULL, 10);
+                dmf_fixture_poll(&fixture, context.now_ms);
+            } else {
+                dmf_fixture_handle_command(
+                    &fixture, (const unsigned char *)argv[index], strlen(argv[index])
+                );
+            }
+        }
     } else {
         return EXIT_FAILURE;
     }

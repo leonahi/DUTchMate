@@ -109,6 +109,61 @@ def test_info_reports_fixture_identity_and_build(tmp_path: Path) -> None:
     assert result.stdout == b"DMF/1 INFO board=rpi_pico build=test-build protocol=1\n"
 
 
+def test_delayed_fault_acknowledges_without_blocking_or_emitting_fault(tmp_path: Path) -> None:
+    result = _run_command(tmp_path, "DELAYFAULT", trace=True)
+
+    assert result.stdout == b"DMF/1 DELAYFAULT armed delay_ms=10000\n"
+    assert result.stderr == b"W:38\n"
+
+
+def _run_timeline(tmp_path: Path, *steps: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [_build_harness(tmp_path), "timeline", *steps], check=True, capture_output=True
+    )
+
+
+def test_delayed_fault_is_due_after_ack_and_ping_and_fires_only_once(tmp_path: Path) -> None:
+    result = _run_timeline(
+        tmp_path, "@100", "DELAYFAULT", "@101", "PING", "@10100", "@10101", "@50000"
+    )
+
+    assert result.stdout == (
+        b"DMF/1 DELAYFAULT armed delay_ms=10000\n"
+        b"DMF/1 PONG\n"
+        b"DMF/1 ERROR ASYNC code=E_ASYNC_001\n"
+    )
+    assert result.stderr == b"T:100\nT:101\nT:10101\n"
+
+
+def test_delayed_fault_rearm_replaces_the_pending_deadline(tmp_path: Path) -> None:
+    result = _run_timeline(
+        tmp_path, "@100", "DELAYFAULT", "@101", "@200", "DELAYFAULT",
+        "@201", "@10101", "@10200", "@10201", "@50000",
+    )
+
+    assert result.stdout == (
+        b"DMF/1 DELAYFAULT armed delay_ms=10000\n" * 2
+        + b"DMF/1 ERROR ASYNC code=E_ASYNC_001\n"
+    )
+    assert result.stderr == b"T:100\nT:200\nT:10201\n"
+
+
+def test_silent_cancels_pending_fault_and_rejects_rearming(tmp_path: Path) -> None:
+    result = _run_timeline(
+        tmp_path, "DELAYFAULT", "@1", "SILENT", "DELAYFAULT", "PING", "@20000"
+    )
+
+    assert result.stdout == (
+        b"DMF/1 DELAYFAULT armed delay_ms=10000\nDMF/1 SILENT armed-until-reset\n"
+    )
+
+
+def test_poll_without_an_armed_fault_emits_nothing(tmp_path: Path) -> None:
+    result = _run_timeline(tmp_path, "@0", "@10000", "@50000")
+
+    assert result.stdout == b""
+
+
 def test_partial_splits_one_line_across_two_writes(tmp_path: Path) -> None:
     result = _run_command(tmp_path, "PARTIAL", trace=True)
 

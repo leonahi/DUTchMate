@@ -80,11 +80,49 @@ the same stable command error and never echoes the rejected input.
 | `BINARY` | Emits a fixed line containing invalid UTF-8 bytes | Raw-byte preservation |
 | `BURST` | Emits 2,048 numbered lines and a checksum immediately | Loss, overflow, and truncation |
 | `SUSTAIN` | Emits 4,096 numbered lines at 2 ms intervals and a checksum | Sustained-load behaviour |
+| `DELAYFAULT` | Acknowledges immediately, then emits one fault at least 10 s later without another command | Ambient fault after bounded Interact completes |
 | `SILENT` | Acknowledges once and suppresses later output until reset | Capture timeout after command |
 
 The burst checksum is the sum of sequence values `0..2047` (`2096128`). The sustained checksum
 is the sum of `0..4095` (`8386560`). Sequence gaps, a missing end marker, a wrong count, or a
 wrong checksum are objective evidence of missing or altered UART data.
+
+### Delayed fault outside an operation
+
+`DELAYFAULT\n` immediately emits these exact bytes and returns to the UART loop:
+
+```text
+DMF/1 DELAYFAULT armed delay_ms=10000\n
+```
+
+The next UART-loop poll starts a 10,000 ms monotonic deadline, after the ACK has
+been written. The first poll at or after that deadline emits exactly once:
+
+```text
+DMF/1 ERROR ASYNC code=E_ASYNC_001\n
+```
+
+This is a synthetic fault marker; the MCU does not crash or reset. It requires
+no further command. PING/INFO remain usable while the fault is pending. Another
+DELAYFAULT replaces the pending deadline; SILENT or reset cancels it. Existing
+blocking PARTIAL/BURST/SUSTAIN handlers can postpone emission until the UART
+loop runs again, so leave the fixture idle during this acceptance scenario.
+
+For the later Basic HIL run, with TX explicitly enabled and continuous recording
+already connected, use the normal bounded Interact:
+
+```bash
+uv run --package dutchmate dutchmate interact DELAYFAULT \
+  --line-ending lf --until 'DMF/1 DELAYFAULT armed delay_ms=10000' --timeout 2
+```
+
+Require a matched result and durable operation completion before the fault's
+RX record. Leave no Monitor, Interact, follow, or console running during the
+subsequent idle interval, then retrieve the same session's logs/evidence after
+the fault is due. Verify its sequence/time is later than the operation-complete
+record and its bytes are present in durable raw RX. The 10 s delay provides
+headroom; only the recorded ordering proves the operation completed first. A
+slow host that fails this ordering check has not established this criterion.
 
 ## Create a Zephyr 4.4 workspace
 
@@ -123,6 +161,13 @@ build/dutchmate-zephyr-dut/zephyr/zephyr.uf2
 ```
 
 Do not use the default `development` build ID for an acceptance run.
+
+This default `rpi_pico` build is the Basic 115200-baud image; do not pass the
+460800 overlay below. Before flashing, verify UART0 `current-speed = < 0x1c200 >`
+in generated `zephyr.dts`, no `hw-flow-control` on UART0, and the selected build
+ID in `.config`, boot, and INFO strings. Record the source snapshot and SHA-256
+digests of `.config` and `zephyr.uf2`. Building a UF2 does not require flashing
+or opening a serial port.
 
 For the Phase 1B Enhanced and ring-buffer runs, keep the same fixture source and
 select its 460800-baud overlay explicitly:

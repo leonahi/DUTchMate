@@ -2,6 +2,7 @@
 #define DUTCHMATE_FIXTURE_PROTOCOL_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +24,8 @@ struct dmf_fixture {
     void *context;
     const char *build_id;
     int silent;
+    int fault_pending;
+    uint64_t fault_due_ms;
 };
 
 void dmf_fixture_init(
@@ -34,6 +37,9 @@ void dmf_fixture_init(
 );
 
 void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode);
+
+/* Poll from the UART owner loop with monotonic uptime in milliseconds. */
+void dmf_fixture_poll(struct dmf_fixture *fixture, uint64_t now_ms);
 
 void dmf_fixture_handle_command(
     struct dmf_fixture *fixture,

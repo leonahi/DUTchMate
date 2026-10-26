@@ -330,3 +330,142 @@ the digest recorded before flashing exactly, establishing that the regenerated
   reset receive, policy-enabled transmit, deterministic fixture responses,
   native evidence storage, and CLI retrieval with complete provenance. The
   Basic backend correctly made no loss-observability claim.
+
+## Phase 1A v2 Basic preflight attempt — 2026-10-26
+
+Result: **blocked before hardware acceptance; no new acceptance decision**.
+The report above remains historical evidence under its original contract.
+This attempt uses the current specification sections 32–33 and Stage 8 Basic
+HIL criteria, as directed by `docs/developer_guide.md`.
+
+### Observed provenance
+
+| Field | Observation |
+|---|---|
+| Discovery time | `2026-10-26T17:03:49.953709+05:30` (IST) |
+| Branch | `stage8-phase1-acceptance` |
+| HEAD and local upstream tracking ref | Both `e8f9e6186e92d6898f011cf8853e1071d0e62f01`; no fetch performed |
+| Initial working tree | Clean, including index; no pre-existing changes |
+| Host | macOS 26.2, build `25C56`; Darwin `25.2.0`, `arm64` |
+| Generic USB-UART identity/path | Not identifiable; no USB serial device enumerated |
+| Serial discovery | Only `/dev/cu.Bluetooth-Incoming-Port` and `/dev/cu.debug-console`; both description/HWID `n/a`, VID/PID, serial number, manufacturer, product, and location null |
+| Device nodes | Only those two `cu` paths and their corresponding `/dev/tty.*` paths |
+| USB inventory | GenesysLogic USB2.1 Hub `05e3:0610` at `00100000` and USB3.2 Hub `05e3:0625` at `00200000`; no USB-UART or Pico identified |
+| Mounted volumes | Only `Macintosh HD`; no `RPI-RP2` volume observed |
+| Physical DUT/fixture board | Not established; the documented target is Pico 1, not an observed hardware identity |
+| Flashed Zephyr/application/build identity | Not established; no fixture communication, image verification, build, or flash performed |
+| Wiring, logic levels, mode straps | Not verified; no physical inspection or operator confirmation available |
+| Serial ownership | Not tested: no eligible target port to check; no claim that a target port is free |
+| Effective UART/DTR/RTS/profile | None used: service not started and no port opened; documented Basic baseline is 115200 8-N-1 without flow control, not a measured configuration |
+| New schema-v2 session IDs | None |
+
+The absence of a USB identity does not establish whether an unenumerated,
+unpowered, or UART-only fixture is physically on the bench. Historical adapter
+serial `D358SG6A`, DUT build IDs, and image digests were not reused as current
+identities.
+
+### Commands and actions performed
+
+Read `AGENTS.md`, `docs/development_status.md`, specification sections 32–35,
+the Stage 8 HIL section, `docs/developer_guide.md`, the existing Basic/Enhanced
+validation records and relevant Revision A/ring-buffer provenance, and the
+Zephyr fixture README, `main.c`, and `fixture_protocol.{c,h}` before discovery.
+Read-only preflight commands included:
+
+```bash
+rtk proxy git rev-parse HEAD origin/stage8-phase1-acceptance
+rtk proxy git status --short --branch
+rtk proxy git diff --exit-code
+rtk proxy git diff --cached --exit-code
+rtk proxy .venv/bin/python -m serial.tools.list_ports -v
+rtk proxy sw_vers
+rtk proxy uname -srm
+rtk proxy ioreg -p IOUSB -l -w 0
+rtk proxy ioreg -p IOUSB -w 0
+rtk proxy ls /Volumes
+```
+
+These Git/host inventory commands also ran in shell batches. A read-only
+`rtk proxy .venv/bin/python -` script recorded the timestamp with
+`ZoneInfo('Asia/Kolkata')`, host information with `platform`, device nodes with
+`glob('/dev/cu.*')` / `glob('/dev/tty.*')`, and all serial identity fields using
+`serial.tools.list_ports.comports()`. Enumeration did not open serial devices.
+The detailed USB tree output exceeded the tool output budget; the subsequent
+compact tree confirmed that only the two hub devices were enumerated.
+
+No Basic startup, Monitor, follow, send, Interact, console, release/reacquire,
+external serial consumer, or session retrieval was executed. No firmware or
+production source was changed. Enhanced HIL and MCP migration were not started.
+
+### Criterion-by-criterion result
+
+All hardware assertions are **not tested**, rather than failed software tests.
+No existing automated or historical hardware result is promoted to a new pass.
+
+| Phase 1A criterion (specification section 33, in order) | This attempt |
+|---|---|
+| Continuous real Basic RX, including ambient bytes between operations | Not tested — required hardware unavailable |
+| Follow through the durable cursor; detach preserves the single RX owner | Not tested |
+| Duration and literal-condition Monitor, outcomes and exact ranges | Not tested |
+| TX disabled by default; explicitly enabled exact audited TX | Not tested |
+| Single-send Interact, outcomes, asynchronous bytes, durable ranges, no retry | Not tested |
+| Service-backed line console; exit preserves acquisition | Not tested |
+| Native v2 ambient/action/operation evidence and serial/DTR/RTS provenance | Not tested |
+| Linked size/segment rollover without stopping capture | Not rerun; no current result |
+| Basic loss truthfully `not_observable` absent a trusted observer | Not tested |
+| Release/external same-port ownership/reacquire and durable unobserved gap | Not tested |
+| Unexpected reconnect with v2 evidence | Not tested |
+| Shared fake-backend unit/service/CLI tests | Not rerun; prior software validation remains in development history |
+| Real USB-UART + Zephyr fixture HIL, including delayed fault and retrieval | Not tested; no session or evidence range created |
+
+Additional source-inspection limitation: the checked-in fixture implements
+`PING`, `INFO`, `PARTIAL`, `BINARY`, `BURST`, `SUSTAIN`, and `SILENT` only. No
+dedicated delayed-fault command or autonomous fault scheduler was found in the
+inspected protocol/main source. This does not prove a runtime DUTchMate defect;
+the requested delayed-fault scenario has no physical result. Fixture firmware
+was not modified to supply it.
+
+### Decision and documentation verification
+
+Stopped at the required hardware-availability gate. Phase 1A remains
+incomplete, and Stage 8, Phase 1B, and Phase 1 remain incomplete. No software
+failure was observed or diagnosed by this preflight. The exact blocker is the
+absence of an identifiable required generic USB-UART adapter and verified DUT
+fixture on this host; wiring and flashed firmware identity remain unknown.
+
+Only this appended report, a new development-history entry, and current-status
+blocker/validation wording were changed. Changes remain uncommitted for review.
+Documentation verification uses `rtk proxy git diff --check` and an append-only
+comparison against HEAD; no full software acceptance rerun is claimed.
+
+## Adapter attachment and fixture readiness check — 2026-10-26
+
+At `2026-10-26T17:18:42.594713+05:30`, a repeat read-only
+`rtk proxy .venv/bin/python -` inventory using
+`serial.tools.list_ports.comports()` identified:
+
+- FTDI `FT231X USB UART`, VID/PID `0403:6015`, serial `D358SG6A`;
+- port `/dev/cu.usbserial-D358SG6A`, USB location `0-1.4`.
+
+The user requested fixture-flashing guidance before HIL. No serial port was
+opened and no HIL operation, service start, build, or flash was performed.
+Physical DUT identity, wiring, current firmware, and port ownership remain
+unverified. Branch/HEAD remain as recorded in the preceding attempt; its three
+uncommitted documentation changes were preserved.
+
+Read-only build-artifact inspection found only
+`build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2` for the DUT fixture,
+SHA-256 `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6`.
+Its generated configuration identifies `rpi_pico/rp2040`, build
+`phase1-enhanced-460800-001`, Zephyr `4.4.0`, and UART0 speed `0x70800`
+(460800). It is not the documented 115200-baud Basic baseline. No Basic UF2
+was found in the inspected `build/*zephyr-dut*` directories.
+
+The documented Basic source is `hardware/firmware/zephyr_dut`, target
+`rpi_pico`, reference Zephyr `v4.4.0`/SDK `1.0.1`, with no 460800 overlay.
+Its expected success marker is `DMF/1 BOOT OK board=rpi_pico build=<ID>\n`;
+`PING\n` produces `DMF/1 PONG\n` and `INFO\n` identifies the build.
+The delayed-fault source limitation recorded above remains unresolved, so this
+baseline alone cannot substantiate the full requested v2 HIL gate. No firmware
+changes were made. All acceptance decisions remain unchanged; Enhanced HIL
+was not started.

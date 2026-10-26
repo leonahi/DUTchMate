@@ -87,6 +87,7 @@ int main(void)
     for (;;) {
         unsigned char byte;
 
+        dmf_fixture_poll(&fixture, (uint64_t)k_uptime_get());
         if (uart_poll_in(uart, &byte) != 0) {
             k_msleep(1U);
             continue;

@@ -15,6 +15,8 @@ Read this document first whenever development resumes.
 - **Current milestone:** Stage 8 software acceptance has passed review on
   `stage8-phase1-acceptance`. Stage 8 itself
   and Phase 1A/1B/Phase 1 remain **Incomplete** because real v2 HIL is required.
+  The Basic delayed-fault fixture UF2 is built, validated, and reviewed,
+  awaiting external flashing; no HIL has started.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -23,16 +25,18 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** When the required hardware is available, perform Basic
-  USB-UART + Zephyr fixture HIL acceptance first, followed by Enhanced Pico 2 +
-  the same DUT fixture HIL acceptance and closure of the required Revision A
-  physical evidence. MCP migration remains deferred until Phase 1 CLI/HIL
+- **Next step:** Externally flash the reviewed Basic UF2
+  `basic-v2-20261026-7bc2ec377767` to the verified Pico 1/H fixture, then perform
+  Basic HIL with verified wiring/firmware, before Enhanced HIL and required
+  Revision A measurements. MCP migration remains deferred until Phase 1 CLI/HIL
   acceptance.
-- **Open blockers:** At 2026-10-26 09:17:57 IST, macOS serial discovery listed only
-  `/dev/cu.debug-console` and `/dev/cu.Bluetooth-Incoming-Port`, both without USB
-  identity metadata. No generic USB-UART or RP2350 Debug Helper was identifiable;
-  neither Basic nor Enhanced HIL ran. Revision A physical measurements remain
-  incomplete. Debug Agent v2 evidence packaging remains separate Phase 4 work.
+- **Open blockers:** At 2026-10-26 17:18:42 IST, FTDI FT231X `0403:6015`, serial
+  `D358SG6A`, became identifiable at `/dev/cu.usbserial-D358SG6A`. Basic HIL is
+  awaiting verified DUT identity/wiring/firmware; no port has been opened. The
+  115200-baud fixture now supports delayed faults, but its new UF2 has not been
+  flashed or physically validated. Enhanced HIL was not started; its earlier
+  hardware blocker and Revision A physical
+  measurement gaps remain open. Debug Agent v2 packaging remains Phase 4 work.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -74,7 +78,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software complete; HIL blocked | Perform Basic HIL first when hardware is available, then Enhanced HIL and required Revision A physical evidence |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software complete; HIL blocked | Basic delayed-fault UF2 reviewed; external flash and real Basic HIL remain pending, then Enhanced HIL and required Revision A physical evidence |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -100,6 +104,16 @@ progress; it does not redefine either document.
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Basic fixture preparation, 2026-10-26: 17 host fixture tests and all 1,496 pytest
+tests passed (39.83 s); Ruff and configured mypy (103 files) passed. Zephyr
+v4.4.0/SDK 1.0.1 produced the normal `rpi_pico` UF2 with verified 115200 8-N-1,
+no flow control/overlay, delayed-fault poll integration, and exact build ID in
+host-exercised boot/INFO output. UF2 payload/artifact checks and
+`git diff --check` passed. No serial port was opened, hardware flashed, or HIL
+started; no session or acceptance result exists. FTDI discovery evidence is
+preserved in [Basic HIL validation](../hardware/validation/phase1_basic_hil.md).
+Exact commands, source/artifact identities, and limits are in development history.
 
 Stage 8 software validation, 2026-10-26: all 1,491 pytest tests passed (39.58 s),
 including the firmware harness and architecture/dependency checks. The focused

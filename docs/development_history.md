@@ -10,6 +10,131 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Basic Delayed-Fault Fixture Prepared, Not Flashed — 2026-10-26
+
+- Stayed on `stage8-phase1-acceptance`, HEAD
+  `e8f9e6186e92d6898f011cf8853e1071d0e62f01`. Preserved the three existing
+  uncommitted documentation changes and all FTDI discovery/historical evidence.
+  No commit/push, production DUTchMate change, serial open, hardware flash,
+  Basic/Enhanced HIL, MCP migration, or acceptance-status completion occurred.
+- Added fixture command `DELAYFAULT`: exact immediate ACK
+  `DMF/1 DELAYFAULT armed delay_ms=10000\n`; the next main-loop poll starts a
+  10,000 ms monotonic deadline after command completion. The first due poll
+  emits `DMF/1 ERROR ASYNC code=E_ASYNC_001\n` once, without another command.
+  UART polling remains responsive. Rearming replaces the deadline; SILENT/reset
+  cancels it. Existing blocking load commands can postpone the poll, as documented.
+- Extended the portable C harness with deterministic virtual-time scenarios.
+  First observed the missing-command regression fail with `E_COMMAND_001`;
+  after adding the poll API, deadline/rearm tests failed for missing fault output
+  before the deadline implementation. Final fixture suite: 17 passed. Existing
+  boot/PING/INFO, silent/failure, binary/partial, burst/sustained tests still pass.
+- Source snapshot SHA-256:
+  `7bc2ec377767b1b7fa12fe0766ff0a882d42fc2c315bbfe68f503a3ab5c9d1d6`.
+  This hashes sorted fixture file paths relative to the fixture directory, NUL,
+  file bytes, NUL; README is excluded. It includes the unused Enhanced overlay
+  as source inventory only; no overlay was selected for this build.
+- Immutable build ID: `basic-v2-20261026-7bc2ec377767`.
+  Actual Zephyr checkout: clean tag `v4.4.0`, commit
+  `684c9e8f32e4373a21098559f748f06915f950c9`; SDK `1.0.1`, GNU compiler
+  `14.3.0`, west `1.3.0`. Host remains macOS 26.2 arm64.
+
+Successful build command, from repository root:
+
+```bash
+rtk proxy env \
+  ZEPHYR_BASE=/Users/nahitpawar/zephyrproject/zephyr \
+  ZEPHYR_SDK_INSTALL_DIR=/Users/nahitpawar/zephyr-sdk-1.0.1 \
+  CCACHE_DIR=/tmp/dutchmate-basic-ccache \
+  /Users/nahitpawar/zephyrproject/.venv/bin/west build \
+  -b rpi_pico -s hardware/firmware/zephyr_dut \
+  -d build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767 --pristine -- \
+  '-DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID="basic-v2-20261026-7bc2ec377767"' \
+  -DDTC_OVERLAY_FILE= -DEXTRA_DTC_OVERLAY_FILE= \
+  -DUSER_CACHE_DIR=/tmp/dutchmate-basic-zephyr-cache
+```
+
+The initial build attempt used `XDG_CACHE_HOME` instead of `USER_CACHE_DIR`;
+Zephyr still selected its external `.cache` and failed writing compiler capability
+cache files. Retrying with the explicit CMake cache path above succeeded without
+escalation or changing fixture/toolchain source.
+
+| Artifact/check | Result |
+|---|---|
+| UF2 | `build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767/zephyr/zephyr.uf2`, 34,816 bytes |
+| UF2 SHA-256 | `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16` |
+| `.config` SHA-256 | `9bcb30687dd409d62d90fd083c2ebd208e432b54f4007801722a6677c02b714c` |
+| ELF SHA-256 | `aa011e9bb29131acdba6bf9d588b51e4b9f719b48d9c5fed11bee8078317b0c1` |
+| Generated board/UART | `rpi_pico/rp2040`; chosen UART0 `/soc/uart@40034000`, `current-speed=115200`, `hw-flow-control=false`, parity none; PL011 initializer selects 8 data bits/1 stop bit |
+| Overlays | Both CMake overlay settings empty; default board configuration |
+| Linked behavior | Final ELF `main` calls `dmf_fixture_poll`; image contains exact command, ACK, fault, boot/INFO format strings, and build ID |
+| UF2 integrity | Validated block magic/length/count, flash origin `0x10000000`; decoded payload matches `zephyr.bin` |
+| Boot/INFO identity | Host-compiled exact protocol source with generated `autoconf.h` returned exact `basic-v2-20261026-7bc2ec377767` in both markers; not on-device execution |
+| Build resources | BOOT_FLASH 256 B; FLASH 17,072 B; RAM 4,952 B |
+
+Detailed per-source and artifact digests plus identity results are retained locally
+in `build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767/fixture-build-report.json`;
+compiled main disassembly is in that build's `zephyr/main-disassembly.txt`.
+Build outputs are ignored artifacts, not tracked source changes.
+
+Validation commands/results:
+
+| Command | Result |
+|---|---|
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q tests/hardware/zephyr_dut/test_fixture_protocol.py` | 17 passed in 4.65 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,496 passed in 39.83 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 source files |
+| `rtk proxy git diff --check` | Passed |
+
+Fixture README documents the later two-second Interact matching the ACK, idle
+interval, and required durable operation-complete-before-fault evidence ordering.
+That workflow was documented only, not executed. No current v2 HIL session exists.
+The fixture preparation passed review. Graphify/architecture updates were not
+needed for this localized fixture change; no module/layer ownership changed.
+
+
+## Basic Adapter Attachment and Fixture Readiness Check — 2026-10-26
+
+- At `2026-10-26T17:18:42.594713+05:30`, read-only serial enumeration identified
+  FTDI FT231X `0403:6015`, serial `D358SG6A`, at
+  `/dev/cu.usbserial-D358SG6A`, USB location `0-1.4`.
+- The user requested fixture firmware guidance before HIL. Inspected the
+  documented Basic fixture settings and existing local DUT build artifacts;
+  only the 460800-baud Enhanced fixture UF2 was found. Recorded its digest and
+  generated build identity in the Basic HIL report. The existing source lacks
+  the required delayed-fault behavior; no fixture changes were made.
+- No port open, service start, build/flash, or HIL operation occurred; no new
+  session or acceptance result exists. Preserved earlier uncommitted reports.
+  Enhanced HIL and MCP migration were not started.
+
+
+## Basic Phase 1A v2 HIL Preflight Blocked — 2026-10-26
+
+- Scope: Basic HIL only on the pushed `stage8-phase1-acceptance` branch.
+  HEAD and the local upstream tracking ref both named
+  `e8f9e6186e92d6898f011cf8853e1071d0e62f01`; initial working tree/index were
+  clean. No fetch, commit, or push was performed.
+- Read the current normative acceptance criteria, developer guide, existing
+  hardware records, and fixture documentation/protocol source before discovery.
+  At `2026-10-26T17:03:49.953709+05:30`, macOS 26.2 (`25C56`), Darwin 25.2.0
+  arm64 enumerated only Bluetooth/debug-console serial ports without USB
+  metadata. The USB tree showed two GenesysLogic hubs, no identifiable
+  USB-UART or Pico. `/Volumes` contained only `Macintosh HD`.
+- Stopped before any port open, service start, build/flash, or acceptance
+  operation. Adapter/DUT identity, flashed Zephyr/build identity, wiring,
+  effective profile/serial provenance, and target-port ownership were not
+  established. No session IDs or physical acceptance evidence were created.
+- Appended exact discovery commands, observed identities, all section-33
+  criterion dispositions, and fixture-source limitations to
+  [the Basic HIL record](../hardware/validation/phase1_basic_hil.md#phase-1a-v2-basic-preflight-attempt--2026-10-26).
+  All physical criteria are untested; no DUTchMate software defect was diagnosed.
+  Historical reports were preserved, and all acceptance statuses are unchanged.
+- Documentation-only verification: `rtk proxy git diff --check` and comparison
+  against HEAD for preserved historical text passed. Software checks were not
+  rerun. Changes were left uncommitted for review. Enhanced HIL and MCP migration
+  were not started.
+
+
 ## Stage 8 Software Acceptance and Hardware Availability Audit — 2026-10-26
 
 - Work was scoped to Stage 8 in DUTchMate only. Clean `main` and its upstream
