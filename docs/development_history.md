@@ -10,6 +10,89 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Basic Release-Fix HIL Rerun: Handoff Passed, Acceptance Stopped — 2026-10-27
+
+- Used clean `stage8-phase1-acceptance`, HEAD
+  `21991fa403ad39f3100a24259b6f31a4c8ac1756`, containing reviewed release fix
+  `df3ca29`. Independent read-only HTTPS `ls-remote` matched pushed HEAD after
+  SSH authentication failed. No previous failed session was resumed or counted.
+- Completed the full software gate before physical startup: 1,509 pytest tests
+  passed in 36.77 s, Ruff passed, mypy passed (103 files), offline lockfile check
+  passed (66 packages), and `git diff --check` passed. Exact commands used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. Current CLI help was
+  captured. No pytest, second service/runtime or session-store construction ran
+  while the physical service was running.
+- Reconfirmed Pico 1/H and all wiring/straps with the operator; independently
+  enumerated FTDI FT231X `0403:6015`, serial `D358SG6A`, location `0-1.3`, at
+  `/dev/cu.usbserial-D358SG6A`. No serial owner/listener existed. Reviewed UF2
+  hash matched `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`.
+  Exclusive preflight INFO returned the exact build and closed before startup.
+  No hardware was flashed or firmware rebuilt; Zephyr v4.4.0/SDK 1.0.1 inputs
+  remained the reviewed 115200 `rpi_pico` build.
+- Physical service PID 5444 created new schema-v2 session
+  `20261026T185908Z-a2a4fdef` at 18:59:08 UTC October 26 / 00:29:08 IST October
+  27. Effective UART was 115200 8-N-1/no flow control, explicit TX enabled,
+  default ending none, exact-path/external-UART profile, reconnect 5 s, 16 MiB
+  budget and retention disabled. Profile digest remained
+  `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+- Ambient operator RUN reset captured complete boot markers; INFO before and
+  through service reported `basic-v2-20261026-7bc2ec377767`. The old physical
+  `E_COMMAND_001` did not recur and is not declared fixed. Reset NULs and one
+  interrupted banner remain raw evidence. Follow/display/detach, continued RX,
+  duration/literal Monitor, exact audited TX, matched/elapsed/timeout Interact
+  and unrelated async RX passed. Live service console displayed both PONG and
+  INFO before EOF; later standalone RX proved continued acquisition.
+- Dedicated delayed fault: ACK RX 44, durable Interact terminal 45, fault RX 46
+  outside `[41,46)`, with 10,028,466 us ACK-to-fault host delta. No operation or
+  view ran during the 11-second post-completion interval. Eight operations
+  completed; each Interact had exactly one TX attempt/result and no retry.
+- **Release regression did not recur physically:** final PONG RX 58, intent 59,
+  released 60; CLI completed in 0.695716 s. Segment 0 closed, intentional gap
+  counted, status responsive and physical ownership closed. External PID 5608
+  acquired the same port, sent PARTIAL and received the exact response, then
+  held ownership for 6 seconds while service stayed released. External close
+  preceded reacquire 61/segment-open 62/success 63; fresh segment 1 and INFO RX
+  67 passed. External response was correctly absent from service RX. A local
+  driver assertion omitted the valid segment-open boundary; only that untracked
+  assertion was corrected, with no product/test changes or physical retry.
+- **Unexpected reconnect unsuccessful:** operator FTDI USB unplug produced
+  disconnect 69/start 70 at 19:04:31 UTC, then timeout failure 71 at 19:04:36.
+  Operator confirmed physical replug within about 1–2 seconds. Later discovery
+  showed the same adapter/path; OS enumeration/open availability within the
+  deadline was not measured. No automatic successor segment exists. Evidence
+  does not establish a reconnect product defect versus physical availability;
+  deadline was not enlarged and no further acceptance operation followed.
+- **Confirmed product display defect at final retrieval:** CLI session/list
+  show `Integrity: none` / `loss=none`, while the same API/native-v2 session
+  reports `evidence_quality.backend_integrity.loss_status=not_observable`.
+  `apps/cli/src/dutchmate_cli/sessions.py` reads obsolete top-level `integrity`
+  for both displays. Saved actual CLI/API payloads establish the mismatch;
+  logs/status/native evidence remain truthful. Acceptance stopped without a
+  production fix. Session/list/detail/log/cursor retrieval itself succeeded.
+- Preserved 725 raw bytes, 17 RX records, 15 successful TX pairs, eight completed
+  operations, two segments and contiguous sequences 0..71. Decoded RX matches
+  raw exactly. Full provenance, commands, operation ranges, criterion results,
+  limitations and artifact hashes are appended to
+  [Basic HIL validation](../hardware/validation/phase1_basic_hil.md); raw/copy/
+  command evidence is in `.dutchmate/hil/basic-release-rerun-20261027/`.
+- Earlier failed-run reports/copies remain intact. Normal startup recovered
+  stale `20261026T175336Z-3d1dd5a9` metadata to `abandoned/service_restart` and
+  removed its reserve; original metadata/reserve hashes still match the
+  previous preserved copies. Its RX/action/connection evidence and session
+  `20261026T134413Z-e8d17b99` are unchanged; this is not hidden as unchanged live
+  stale metadata.
+- Graceful public CLI stop succeeded without SIGKILL. OS verification at
+  `2026-10-26T19:06:49.366247Z` found PID 5444 absent, no TCP 2040 listener and
+  no FTDI cu/tty owner. No production, test, fixture or configuration change was
+  made. Final documentation diff and append-only preservation checks passed.
+
+Phase 1A, Stage 8, Phase 1B and Phase 1 remain incomplete. No new acceptance was
+declared. Enhanced HIL and MCP work were not started. Only the Basic HIL report
+and development status/history changes remain uncommitted for review.
+
+
 ## Basic Release Terminal/FIFO Race Fixed in Software — 2026-10-26
 
 - Worked from clean `fix/basic-release-lifecycle`, baseline

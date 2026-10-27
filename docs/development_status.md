@@ -3,9 +3,10 @@
 > Active phase: Phase 1 v2 semantic migration — Stage 8 software complete; HIL blocked
 > Stage 8 base: `9a228fcc37d746241c4624469cf3d18b4a7fab4a` (pushed Stage 7)
 > Reviewed fixture baseline: `746121a35633c070f4e7112010ce26b656d8ef1d` (pushed)
-> Basic HIL code baseline: `ad8b63abc3c9330864eaa49cb48aab57cd03f2cd` (clean rerun)
+> Basic HIL code baseline: `21991fa403ad39f3100a24259b6f31a4c8ac1756` (pushed release-fix rerun)
 > Test-isolation fix: `7f30a916a3033289dec6908ebeac17a687c0d806` (merged)
 > Basic release fix branch base: `b4ad4f32c138a42f255110dc222c1258723cc138`
+> Accepted Basic release fix: `df3ca29` (merged into the HIL baseline)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -16,12 +17,12 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Stage 8 software acceptance has passed review on
-  `stage8-phase1-acceptance`. Stage 8 itself
-  and Phase 1A/1B/Phase 1 remain **Incomplete** because real v2 HIL is required.
-  The Basic release hang is deterministically reproduced and fixed on
-  `fix/basic-release-lifecycle`, validated, reviewed and accepted. No new
-  physical acceptance occurred; the failed HIL run remains diagnostic evidence.
+- **Current milestone:** The reviewed Basic release fix is integrated into pushed
+  `stage8-phase1-acceptance`. Fresh Basic HIL session
+  `20261026T185908Z-a2a4fdef` passed release/external ownership/reacquire, but
+  unexpected reconnect timed out and final retrieval exposed a schema-v2 CLI
+  loss-display defect. Acceptance stopped; Stage 8 and Phase 1A/1B/Phase 1
+  remain **Incomplete**.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -30,19 +31,19 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Integrate the reviewed release fix into
-  `stage8-phase1-acceptance` and rerun full Basic HIL from the beginning. Complete all
-  software checks before starting the physical service. Preserve both failed
-  sessions; neither is resumable acceptance. Enhanced HIL, Revision A, and MCP
-  remain deferred.
-- **Open blockers:** Real Basic handoff/reacquire/unexpected-reconnect HIL
-  is still unproven. Root cause was a
-  cached terminal error bypassing a late close wakeup in the Basic FIFO, keeping
-  recorder drain permanently pending. The corrected source drains that FIFO
-  while preserving the original terminal diagnostic. No hardware was accessed
-  in this slice; all failed HIL evidence is unchanged. The earlier physical
-  `E_COMMAND_001` observation is retained for retest; Enhanced/Phase 4 blockers
-  remain unchanged.
+- **Next step:** Correct the schema-v2 session/list loss projection in a separate
+  software slice and establish why unexpected FTDI reconnect missed the 5-second
+  window, measuring OS enumeration/availability before classifying its cause.
+  After review/integration, rerun full Basic HIL from the beginning with all
+  software checks finished before physical startup. Preserve all failed runs.
+  Enhanced HIL, Revision A, and MCP remain deferred.
+- **Open blockers:** CLI session/list displays `Integrity: none` / `loss=none`
+  while the native-v2 API correctly reports `not_observable`. Unexpected reconnect
+  recorded disconnect/start/failure at sequences 69/70/71; the operator confirmed
+  replug within 1–2 seconds, but OS availability before the deadline was not
+  measured. No reconnect product cause is established. The old `E_COMMAND_001`
+  did not recur and remains unexplained. The release hang did not recur; external
+  ownership and fresh segment 1 passed. Enhanced/Phase 4 blockers are unchanged.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -84,7 +85,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Software gate passed; HIL incomplete | Basic release fix reviewed and accepted; integration and complete fresh Basic HIL required before Enhanced HIL |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | HIL incomplete | Release handoff passed; schema-v2 CLI loss display defect and unexpected-reconnect timeout block Basic acceptance |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -105,11 +106,32 @@ progress; it does not redefine either document.
 
 | Gate | Status |
 |---|---|
-| Phase 1A — Basic | Incomplete; software release fix reviewed and accepted; fresh Basic HIL including handoff/reacquire and unexpected reconnect required |
+| Phase 1A — Basic | Incomplete; release/external ownership/reacquire passed; CLI loss projection defect and unsuccessful unexpected reconnect prevent acceptance |
 | Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Basic physical rerun, 2026-10-27 IST (2026-10-26 UTC): clean pushed HEAD
+`21991fa403ad39f3100a24259b6f31a4c8ac1756`; all software checks completed before
+service startup: 1,509 pytest tests passed in 36.77 s, Ruff, mypy (103 files),
+offline lockfile check (66 packages), and diff check passed. No tests or second
+runtime/store ran during HIL. Fresh native-v2 session `20261026T185908Z-a2a4fdef`
+retains 725 raw bytes, 17 RX records, 15 audited TX pairs, eight completed
+operations and contiguous sequences 0..71. Ambient boot/INFO, follow/detach,
+Monitor, all Interact outcomes, live console and post-exit RX passed. Delayed
+ACK 44 → durable terminal 45 → ambient fault 46, 10.028466 s after ACK.
+
+Release returned in 0.696 s; final RX 58, intent 59, released 60, gap/segment
+closure, real external ownership and reacquire 61..63/fresh segment 1 passed.
+Unexpected reconnect instead terminalized at `reconnect_timeout`; CLI session/list
+also reads the obsolete top-level integrity field. API/metadata/log warning
+retain truthful `not_observable`. No fixes were made during HIL. Graceful stop
+removed PID 5444, its listener and serial ownership. Historical reports and
+preserved failed-run copies remain unchanged; normal startup recovered the old
+stale active session to `abandoned/service_restart` without changing its RX/action
+evidence. Detailed provenance, limitations and hashes are in the
+[Basic HIL report](../hardware/validation/phase1_basic_hil.md).
 
 Basic release fix, 2026-10-26: three source regressions failed RED on stranded
 wakeups; the real HTTP/Basic-source/recorder regression failed RED with release
