@@ -10,6 +10,65 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Instrumented Basic Diagnostic: Discard Path Reproduced — 2026-10-27
+
+- Clean latest-pushed `stage8-phase1-acceptance` at
+  `69a0980e1c7ced2cfcf053ebdd95e7b8dcc16df4`, independently verified by HTTPS `ls-remote`.
+  Ran only the bounded physical command-path diagnostic, not full Basic
+  acceptance, Enhanced HIL or MCP. Production/fixture code was not changed.
+- Before service startup: 1,527 pytest tests passed in 39.73 s (including
+  architecture/fixture tests); Ruff, mypy (103 files), offline lock (66 packages)
+  and diff check passed. Commands used prefix
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, `uv lock --check --offline`. Software gate ended
+  `10:02:36.512931Z`; normal CLI start began `10:03:53.632431Z`.
+  No pytest or second runtime/session store ran during the live service.
+- Operator confirmed externally flashed Pico 1/H, normal wiring/power/straps,
+  closed terminals; FTDI FT231X `0403:6015`, serial `D358SG6A`, expected cu path,
+  115200 8-N-1/no flow control, unchanged reconnect timeout 5.0 s. Build
+  `basic-diag-20261027-d406684c5dff`, Zephyr 4.4.0 / SDK 1.0.1;
+  UF2 recomputed SHA-256 `7eeead1fc216035eb4163aae768bdd22838988caa944d9f4bc5d3628575f43f3`.
+  First physical INFO confirmed the exact build. Source inventory matches
+  committed fixture sources; agent did not flash firmware.
+- Fresh schema-v2 session **`20261027T100353Z-1d5cd35f`**, PID 41181. Initial INFO
+  matched at RX 4, terminal 5, range `[1,6)`. One FTDI-only automatic reconnect
+  continued that session: disconnect/start 7/8, fresh segment/success 9/10,
+  durable gap, resumed RX 14; observer start-to-success 3.148789542 s, unchanged
+  5.0 s policy. Operator unplug/replug markers and poll observations preserved.
+- Both INFO operations made one exact `INFO\n` attempt/result, accepted 5 bytes:
+  initial 2/3 and post-reconnect 12/13. Post-reconnect operation
+  `interact-787a3fea-0c73-4516-a7b2-a46b40ff928f`, range `[11,16)`, timed out
+  at terminal 15 after RX 14 emitted exactly:
+  `DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1\n`.
+  Stopped at the first trial out of the maximum five, with no retry, extra UART
+  command, parser reset/workaround, manual reacquire or patch.
+- **Established:** the fixture overlong/discard path was involved in this new
+  recurrence; zero-length handler input is not evidence of an empty ingress
+  line. **Unknown:** discarded values, timing/origin and root cause. Host audit
+  does not prove wire bytes; exact INFO rejection at the handler was not seen.
+  Older uninstrumented errors remain unclassified. Ambient host RX 6 at
+  `10:14:00Z` contains `00` in the opposite direction to command ingress; this
+  byte is preserved without assigning a cause or equating it to parser input.
+- Final read-only service status/detail/tail-cursor snapshot and native files
+  preserved under `.dutchmate/hil/basic-ingress-diagnostic-20261027/`, including
+  operator markers, per-trial samples, stop reason, service log, final native
+  copy and hashes. Native counts: 153 raw RX bytes, 3 RX records, 2 TX pairs,
+  2 terminal operations, 2 segments, 1 gap, contiguous evidence 0..15; decoded
+  RX matches raw bytes. Final state `completed/service_shutdown`; no active or
+  unresolved actions. Raw SHA-256 `a6598a256607dbf1ba3ca0ca8462512994db409942e03353d90602166c124ecd`.
+- Graceful normal CLI stop returned `10:15:35.223675Z`; at
+  `10:15:52.109926Z` PID/PID file absent, no TCP 2040 listener or FTDI cu/tty
+  owner. No SIGKILL or external serial consumer. All 434 earlier session-file
+  hashes and raw configuration bytes unchanged. Only the Basic diagnostic
+  record, current status and this new history entry changed; prior history and
+  acceptance evidence retained. Documentation/evidence checks and
+  `git diff --check` passed. Changes are uncommitted for review.
+- **Phase 1A remains Complete/accepted.** The anomaly remains unresolved and
+  non-blocking, with this recurrence narrowed to the discard path. Stage 8,
+  Phase 1B and overall Phase 1 remain incomplete; Enhanced HIL and MCP deferred.
+
+
 ## Basic Fixture Command-Byte Diagnostics — 2026-10-27
 
 - Started with clean `stage8-phase1-acceptance` at

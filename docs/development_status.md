@@ -10,7 +10,8 @@
 > CLI loss fix branch base: `acffad49ec63765d827f83f2921a61a6a5220bab`
 > Accepted CLI loss fix: `ff8cc51` (merged); reconnect diagnostic HEAD: `7d6cac3764176820f6dc62f79f2d705749735b24`
 > Command anomaly diagnostic HEAD: `04f2ff28e47248bead99e9e3dc67d1af34bb693b`
-> Fixture byte-diagnostic source base: `6c908f79f1a0a4e636a45cbd70576666e2ad5cac` (latest pushed; enhancement uncommitted)
+> Fixture byte-diagnostic source base: `6c908f79f1a0a4e636a45cbd70576666e2ad5cac`
+> Committed fixture / physical diagnostic HEAD: `69a0980e1c7ced2cfcf053ebdd95e7b8dcc16df4` (pushed)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -21,14 +22,14 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Fixture-only `E_COMMAND_001` byte diagnostics validated,
-  uncommitted for review. **Phase 1A remains Complete** after auditing session
-  `20261027T073956Z-7c038da2` against specification §§13.6/33 and the Stage 8
-  Basic exit criteria. Successful post-reconnect INFO is not a normative gate;
-  reconnect, same session, fresh segment, durable gap and resumed RX passed.
-  All other Basic criteria passed. The extra INFO timed out with `E_COMMAND_001`,
-  retained as unresolved, unclassified and non-blocking. Stage 8, Phase 1B and
-  overall Phase 1 remain **Incomplete** pending Enhanced HIL/physical evidence.
+- **Current milestone:** Instrumented physical diagnostic reproduced
+  `E_COMMAND_001` on reconnect trial 1 in `20261027T100353Z-1d5cd35f`:
+  `command_len=0 command_hex= discard=1`. The fixture overflow/discard path is
+  confirmed for this recurrence; discarded bytes and their cause remain unknown.
+  Stopped without retry; documentation is uncommitted for review.
+  **Phase 1A remains Complete/accepted** from `20261027T073956Z-7c038da2`.
+  The anomaly remains unresolved/non-blocking; Stage 8, Phase 1B and overall
+  Phase 1 remain **Incomplete** pending Enhanced HIL/physical evidence.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -37,17 +38,18 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review the fixture diagnostics before committing or scheduling
-  any new physical diagnostic. The instrumentation has not been flashed or used
-  on hardware and does not diagnose/fix the INFO anomaly. Phase 1B Enhanced HIL
+- **Next step:** Review the captured overflow/discard recurrence and diagnostic
+  documentation before selecting further investigation. No extra UART command,
+  parser workaround or firmware/product patch was made. Phase 1B Enhanced HIL
   and remaining physical gates stay pending; MCP migration remains deferred
-  until overall Phase 1 acceptance. No HIL was run in this fixture-only slice.
+  until overall Phase 1 acceptance. No full Basic acceptance rerun was performed.
 - **Open blockers:** No normative Basic acceptance blocker remains. Stage 8,
   Phase 1B and Phase 1 await Enhanced HIL and remaining physical evidence.
-  Exact INFO audit 78/79, `E_COMMAND_001` RX 80 and timeout 81 remain unchanged;
-  this added diagnostic failure is non-blocking for Phase 1A. No wire/Pico-ingress
-  evidence or analyzer is available, and no cause is assigned. Older timeout
-  causes and Enhanced/Phase 4 blockers remain open.
+  Historical INFO audit 78/79, RX 80 and timeout 81 remain unchanged. New audit
+  12/13 accepted exact INFO, RX 14 reports discard=1, terminal 15 is timeout.
+  No discarded ingress bytes or electrical waveform were captured; no root
+  cause is assigned, nor are older anomalies retroactively classified. Older
+  timeout causes and Enhanced/Phase 4 blockers remain open.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -89,7 +91,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; fixture byte diagnostics validated for review, anomaly unresolved/non-blocking |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; diagnostic reproduced fixture discard path, cause unresolved/non-blocking |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -115,6 +117,24 @@ progress; it does not redefine either document.
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Instrumented physical diagnostic, 2026-10-27: clean pushed `69a0980`; full
+software gate finished before service startup (1,527 tests in 39.73 s, Ruff,
+mypy/103 files, lock/66 packages, diff check). No tests or other runtime/store
+ran while the service was live. Operator confirmed externally flashed build
+`basic-diag-20261027-d406684c5dff`; UF2 hash matched and initial INFO confirmed it.
+Session `20261027T100353Z-1d5cd35f`: first INFO matched; one automatic reconnect
+continued the same session with segment 1 and a durable gap, within unchanged
+5.0 s timeout. Its single INFO then returned the complete diagnostic line with
+`command_len=0 command_hex= discard=1` (RX 14); timeout terminal 15, no retry.
+Ambient host RX 6 also contains NUL in the opposite direction to command ingress.
+The observed path is known; discarded byte values/source and root cause are not.
+Stopped for review after 1/5 maximum trials; no new product failure established.
+Graceful stop verified PID 41181 absent, no listener or serial owner; all 434
+earlier session-file hashes and configuration bytes unchanged. Native evidence
+0..15 reconciles 153 raw RX bytes. Phase 1A remains accepted; diagnostic docs
+only changed, uncommitted for review. `git diff --check` passed. Details are in
+the [Basic diagnostic record](../hardware/validation/phase1_basic_hil.md).
 
 Fixture byte diagnostics, 2026-10-27: 10 assertions failed RED on missing fields;
 30 focused fixture tests passed GREEN, including the actual UART loop with host

@@ -1703,3 +1703,164 @@ incomplete; Enhanced HIL and MCP work were not started.
 All earlier session hashes and configuration bytes are unchanged. Only this
 appended report and development status/history changed, left uncommitted for
 review. Final documentation diff/preservation checks are recorded in history.
+
+
+## Instrumented E_COMMAND_001 ingress diagnostic — 2026-10-27
+
+Result: **reproduced on the first reconnect/INFO trial; fixture line-assembler
+overflow/discard path confirmed for this recurrence**. The exact discarded
+bytes, when they arrived and their origin remain unknown. No DUTchMate product
+failure or electrical-wire cause is established. Stopped for review without
+retry, reset, resynchronization, further trial or patch.
+
+**Phase 1A remains Complete/accepted** from its existing fresh acceptance record.
+This was a small diagnostic, not a full Basic acceptance rerun. Stage 8,
+Phase 1B and overall Phase 1 remain incomplete. Enhanced HIL/MCP were not started.
+Earlier uninstrumented anomalies remain unclassified; this result does not
+retroactively establish their cause or parser state.
+
+### Preflight and fixture provenance
+
+- Clean `stage8-phase1-acceptance` at **69a0980e1c7ced2cfcf053ebdd95e7b8dcc16df4**, independently verified as
+  the latest pushed tip by read-only HTTPS `ls-remote`. The fixture diagnostics
+  are committed in that revision; no production or fixture code changed here.
+- Host: macOS 26.2, build `25C56`, arm64. FTDI FT231X USB UART, `0403:6015`,
+  serial `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, USB location `0-1.4`.
+  No service PID file, TCP 2040 listener or FTDI owner before startup.
+- Operator confirmed the new UF2 externally flashed onto Pico 1/Pico H; unchanged
+  GP0/pin 1 → FTDI RX, GP1/pin 2 → FTDI TX, GND/pin 3 → FTDI GND, Pico powered
+  by its own USB, FTDI VCC disconnected, 3.3 V logic, GP2/GP3 open, external
+  terminals closed. The agent did not flash hardware.
+- Build ID **`basic-diag-20261027-d406684c5dff`**, Zephyr `v4.4.0` / SDK `1.0.1`,
+  target `rpi_pico/rp2040`; previously built normal Basic image, no overlay.
+  UF2: `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dutchmate-zephyr-dut-basic-diag-d406684c5dff/zephyr/zephyr.uf2`.
+  Recomputed SHA-256: **`7eeead1fc216035eb4163aae768bdd22838988caa944d9f4bc5d3628575f43f3`**.
+  Committed fixture source inventory matches the built source hash
+  `d406684c5dffd4b505c2d683198719913d4d4b4c630be44037539e865bc6c92b`.
+  The initial physical INFO independently confirmed the exact new build ID.
+- Configuration unchanged: 115200 8-N-1, `rtscts=false`, `xonxoff=false`, TX
+  explicitly enabled, default ending `none`, driver-default DTR/RTS,
+  `reconnect_timeout_s=5.0`, exact-path selector, 16 MiB session budget,
+  retention disabled. Raw config SHA-256 `55811eeb2385961b43e8d9bb05221aa461991ee93415f823616e24024ecd75ba`;
+  resolved profile digest `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+- All software checks completed before physical startup: **1,527 tests passed
+  in 39.73 s**, including fixture and architecture tests; Ruff passed; mypy
+  passed (103 source files); offline lock check passed (66 packages);
+  `git diff --check` passed. Exact commands used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`.
+  No pytest, second runtime/session store or production/fixture patch occurred
+  while the physical service was live.
+
+### Minimal actions and exact evidence
+
+Fresh native-v2 session **`20261027T100353Z-1d5cd35f`**, service PID **41181**.
+Normal start/stop used the existing CLI contract:
+
+```text
+uv run --frozen --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200
+uv run --frozen --package dutchmate dutchmate stop
+```
+
+Exactly two separate bounded `POST /dut/interact` requests were made through
+HTTP-only diagnostic code, with this body each time:
+
+```json
+{"text":"INFO","line_ending":"lf","conditions":[{"pattern":"DMF/1 INFO board=rpi_pico build=basic-diag-20261027-d406684c5dff protocol=1"}],"timeout_s":2.0}
+```
+
+Neither request retries TX. No command, blank line or fixture reset was inserted
+before the first INFO or between reconnection and its INFO. The observer/helper
+accesses HTTP, existing evidence files and port-node presence; it never opens
+serial or constructs a DUTchMate runtime/store. Only the service owns FTDI.
+The trial cap was five, but execution stopped after **one reconnect trial**.
+
+All times below are UTC on October 27 (Asia/Kolkata = UTC+05:30).
+
+| Event | Time / native evidence |
+|---|---|
+| Start CLI invoked / returned | `10:03:53.632431` / `10:03:54.132794` |
+| Initial INFO request / HTTP return | `10:04:10.069639` / `10:04:11.067234`; matched, operation `interact-4d0306cc-36f7-467d-b8dd-522f78458771`, range `[1,6)` |
+| Initial exact TX / response | Attempt/result **2/3**, accepted 5 bytes; RX **4**, exact new-build INFO; terminal **5**, matched |
+| Ambient host RX | RX **6**, `10:14:00Z`, one byte `00`, outside any bounded operation |
+| Operator unplug marker | `10:14:46.251607`; marker just before the physical action |
+| Unexpected disconnect / reconnect start | **7/8**, native `10:14:46Z`; first observer sample `10:14:46.989389` |
+| Operator replug marker | `10:14:49.380900`; marker immediately after action |
+| Fresh segment / reconnect success | **9/10**, segment **1**, native `10:14:50Z`; first observer sample `10:14:50.138189` |
+| Post-reconnect INFO request / return | `10:14:50.156391` / `10:14:52.171828`; operation `interact-787a3fea-0c73-4516-a7b2-a46b40ff928f`, range `[11,16)` |
+| Exact TX / diagnostic / terminal | Attempt/result **12/13**, RX **14**, timeout terminal **15** |
+
+Observer start-to-success delta was **3.148789542 s**. These are poll observations,
+not exact open-syscall timestamps; native event wall times have one-second
+resolution. The service's successful reconnect before its unchanged deadline is
+recorded durably. Same ownership session, fresh segment 1 with source origin
+`14584858017 us`, closed prior segment (`unexpected_disconnect`), and one durable
+observation gap are in metadata. The INFO request began **66.807625 ms** after
+that new source origin. Service remained connected/responsive with no active
+operation after the timeout; RX 14 is resumed acquisition in the fresh segment.
+
+Both attempts audited exactly `INFO\n`, hex **`494e464f0a`**, base64 `SU5GTwo=`,
+byte length 5. Both results record `status=success`, **5 accepted bytes**.
+Attempt IDs are `116eb5d0-421f-4651-b71a-1ef315effd97` (initial) and
+`a981ceb6-f2ec-46c2-9b3b-8bf1e3cd6436` (post-reconnect). No further INFO or other
+UART TX followed the failure. The complete RX 14 response, including empty hex
+value and terminating LF, is:
+
+```text
+DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1\n
+```
+
+### Interpretation and limits
+
+The new diagnostic establishes that the assembler was in its overlong/discard
+state when LF dispatched this command. Under the unchanged fixture semantics,
+the 33rd non-CR/non-LF byte clears the accumulated command and discards through
+LF; the handler therefore received **zero bytes**, not exact `INFO` or a measured
+`XINFO`/NUL-prefixed command. Empty `command_hex` is truthful handler input,
+**not evidence that the ingress line was empty**. Discarded bytes were not saved.
+The capture does not establish when those bytes arrived, their values or source.
+This is not a reproduction of exact `INFO` reaching the handler and being rejected.
+
+The host audit establishes requested/accepted TX, not electrical FTDI TX → Pico
+RX bytes. Likewise, ambient RX 6 (`00`) is in the **Pico TX → FTDI RX → host RX**
+direction; it must not be interpreted as a measured NUL in command ingress or
+as an explanation for overflow. No electrical waveform was captured. The
+fixture response narrows this recurrence to the discard path while the cause
+remains unresolved/unclassified across host/adapter/electrical/firmware ingress.
+No remediation or exoneration of any layer is claimed.
+
+### Preservation and cleanup
+
+Artifacts: **`.dutchmate/hil/basic-ingress-diagnostic-20261027/`** contains the
+clean baseline and prior-session hashes; full pre-start software logs; UF2 and
+actual INFO provenance; exact request/result and audit observations; operator
+markers; passive reconnect samples/result; stop reason and bounded trial count;
+read-only final status/session detail and tail-cursor snapshot; service log,
+final native copy and manifest, diagnostic summary and cleanup verification.
+The tail snapshot was requested without an input cursor and correctly returned
+no historical records; historical evidence is preserved in native files below.
+
+Native session `.dutchmate/sessions/20261027T100353Z-1d5cd35f/` ends normally as
+`completed/service_shutdown`, with **153 raw bytes**, **3 RX records**,
+**2 TX pairs**, **2 terminal operations**, **2 segments**, **1 gap**, contiguous
+sequences **0..15**. Decoded RX reconciles byte-for-byte to `uart_raw.log`.
+No unresolved action or active operation remains. This journal outcome is not
+an INFO match or a diagnosis of the anomaly.
+
+| Final native artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `a6598a256607dbf1ba3ca0ca8462512994db409942e03353d90602166c124ecd` |
+| `uart_events.jsonl` | `b2a52bf29bc70d69dffd45f9d5a418a2bbe8aa60fd7523bb3cb9a4686b8cb9b4` |
+| `operation_events.jsonl` | `e3851160a4f4a5cd8c1210621132decad7007ad4b2c8fd118ce40eb512079b40` |
+| `connection_events.jsonl` | `1814735e7dcd6e97a2fcd59c9f783c74467592b998fcf7b995f0c4a6c572d6e0` |
+| `metadata.json` | `2d6cf751e19d13a3f6ca29fc85078a74ffea4d98ffb03157e908258bd245b42c` |
+
+Graceful public CLI stop returned at **10:15:35.223675 UTC**. At
+**10:15:52.109926 UTC** (15:45:52 IST), PID 41181 and its PID file were absent,
+TCP 2040 had no listener, and both FTDI cu/tty paths were unowned. No SIGKILL or
+external same-port consumer was used. All **434 pre-existing session-file hashes**
+and configuration bytes are unchanged. Only this appended diagnostic record,
+development status and a new history entry changed, uncommitted for review.
+`git diff --check` passed. Phase 1A remains accepted; no further physical run,
+Enhanced HIL or MCP work was started.
