@@ -16,7 +16,7 @@
 > Bounded overflow fixture / physical diagnostic HEAD: `4692444f771f33b6d27994e03f2722c268e3f43a` (pushed)
 > Enhanced HIL code baseline: `887768c2e10da1ba8ae9c323474fad86648a7d34` (failed HIL evidence committed at `90c744f`)
 > Enhanced control fix base: `90c744fe97ed3af2224989a954261bef42797b45`; accepted fix/focused HIL baseline: `6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8`; focused HIL documentation: `df8e7a6` (pushed)
-> Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d` (latest pushed independently fetched); branch `fix/enhanced-terminal-read-cleanup`, uncommitted
+> Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (latest pushed independently fetched on `fix/enhanced-terminal-read-cleanup`)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -27,38 +27,38 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Hardware-free Enhanced terminal-read/cleanup fix on
-  `fix/enhanced-terminal-read-cleanup`, based on latest pushed HIL-doc `df8e7a6`.
-  One concrete Enhanced I/O boundary changed; 14 new installed-transport cases
-  and the full validation gate pass. Everything remains uncommitted for review.
+- **Current milestone:** The current Enhanced unexpected Pico 2 USB reconnect
+  criterion passed on clean, latest pushed `14e6717`. Only startup and automatic
+  USB reconnect were exercised; prior explicit handoff/control remains passed.
+  HIL report/status/history updates are unstaged and uncommitted for review.
   **Phase 1A remains Complete/accepted**; Phase 1B, Stage 8 and Phase 1 incomplete.
-- **Confirmed mechanism:** Asyncio puts the same read error into the reader and
-  close waiter; pyserial-asyncio closes the resource afterward in that callback.
-  Installed streams over test-owned pipes reproduce HIL's cleanup classification
-  failure after physical closure. An exception alone cannot establish certainty.
-- **Fix/invariant:** The exact observed read exception is not treated as a new
-  cleanup failure only when retained serial `is_open` is false and the transport
-  has released its serial reference. Different errors, missing/uninspectable
-  state and incomplete/failed close still block ownership. A successful waiter
-  alone is also insufficient. Primary read error/cause and shared close-task
-  idempotence remain intact; Basic/coordinator/Profile behavior is unchanged.
-- **Deterministic evidence:** Confirmed old-source cleanup allows the existing
-  replacement path through fresh segment → CTRL1/CTRL0 ACKs → reconnect success;
-  uncertain cleanup opens no replacement. Focused 40 tests and broader 925 pass;
-  full pytest 1,569/47.42 s, Ruff, mypy/103, offline lock/66 and diff check pass.
-- **Physical status:** Explicit Enhanced handoff/control remains physically
-  passed at 38 → 40/42 → 43 → 45/47 in `20261027T165848Z-b9a62f0b`.
-  Its USB path remains a preserved failure at 303/304 with no segment 2/reset.
-  This software slice does not certify retrospective closure or a new HIL pass;
-  no hardware, firmware, Revision A or MCP work was performed.
-- **Next step:** Review this uncommitted fix. After acceptance/push, validate the
-  automatic Pico 2 USB lifecycle with unchanged 5.0 s policy; reuse the passed
-  explicit path. Reconcile §34/Revision A gaps separately; acceptance stays open.
-- **Preservation/open gates:** Failed HIL report and all 463 prior session/config
-  hashes, including 303/304 and 739/740, are unchanged. Reuse accepted/current
-  bounded workflows, `accepted_32k` and physical measurements. Parts/continuity/
+- **Exact evidence:** Fresh session `20261027T180121Z-9ea027ae` retained
+  disconnect 100 → reconnect start 101 → segment 1 at 102 → fresh CTRL1 ACK 104
+  → CTRL0 ACK 106 → reconnect success 107 → single immediate reset success 111.
+  No manual GPIO configuration or release/reacquire. Resumed telemetry 108 and
+  normal boot RX 110, 112..116 are durable; status reports fresh accepted controls.
+- **Timing/provenance:** Observed reconnect upper bound 4.579836 s is below the
+  unchanged 5.0 s policy. Reset dispatch followed connected status by 0.379 ms.
+  RP2350 origins 188867368/3001478 us are fresh, segment-local contexts.
+- **Cleanup/error:** Original read-failure description remains at 100 and in
+  public cursor retrieval. Successful old close before replacement follows the
+  reviewed positive serial-closed/transport-released checks; no cleanup fault.
+  Raw exception identity/private flags are not public measurements; the enforced
+  code path and pre-start regressions provide that confirmation boundary.
+- **Validation/shutdown:** Pre-start gate 1,569 tests/47.60 s, Ruff, mypy/103,
+  offline lock/66 and diff/clean checks passed. No tests/second runtime/store
+  during HIL. Native/public retrieval passed; completed/service_shutdown with
+  no application error, PID/file/listener/serial owner absent. Native 0..144:
+  126 RX bytes/13 RX records, six control pairs, two segments/one gap.
+- **Next step:** Review these documentation changes and reconcile remaining
+  §34/Revision A evidence gaps separately. Do not repeat passed host workflows
+  or infer Phase 1B completion from the focused USB result.
+- **Preservation/open gates:** All 463 earlier session/config hashes, including
+  failed 303/304 and 739/740, are unchanged. Reuse prior explicit handoff,
+  bounded workflows, `accepted_32k` and physical evidence. Parts/continuity/
   adopted-correction, analog UART/cable/passive, leakage/transient/isolation/ESD
-  gaps remain open. Basic anomaly stays non-blocking; Phase 4 paused/MCP deferred.
+  gaps remain open. No firmware/design/MCP work; Basic anomaly stays non-blocking,
+  Phase 4 paused and MCP deferred. No product code or timeout changed during HIL.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -100,7 +100,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; explicit Enhanced handoff/control physically passed; terminal-read/cleanup software fix under review, automatic USB physical validation and remaining gaps open |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; explicit Enhanced handoff/control and current automatic USB reconnect physically passed; remaining §34/Revision A evidence requires reconciliation |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -122,10 +122,32 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Explicit handoff/control physically passed; cleanup software correction under review; unexpected USB physical criterion and remaining Revision A evidence stay open |
-| Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
+| Phase 1B — Enhanced | Explicit handoff/control and current unexpected USB reconnect criterion passed; remaining Revision A/§34 evidence stays open |
+| Phase 1 shared done criteria | Software and focused lifecycle gates pass; incomplete until remaining Phase 1B physical requirements are reconciled |
 
 ## Current Validation Requirements
+
+Automatic-only Enhanced USB reconnect HIL, 2026-10-27: clean latest pushed
+`14e6717` verified independently. Fresh gate **1,569 passed in 47.60 s**, Ruff,
+mypy/103 files, offline lock/66 packages, architecture and diff/clean checks
+finished before hardware startup. Sole service PID 5775, fresh native-v2 session
+`20261027T180121Z-9ea027ae`; startup identity/config/telemetry/reset passed.
+Automatic sequence **100 → 101 → 102 → 104 → 106 → 107 → 111** retains original
+read failure, reconnect start, fresh segment/CTRL1+CTRL0 ACKs, success and one
+immediate reset. Observer upper bound 4.579836 s < unchanged 5.0 s policy;
+reset dispatch 0.379 ms after connected status. Positive old cleanup follows
+the reviewed code gate; private flag/raw error-object snapshots are not exposed.
+Fresh status, telemetry and normal boot RX resumed. Public APIs/CLI retrieval
+passed; saved cursor 6..137/132 records matches native data. Clean stop verified
+completed/service_shutdown and no PID/file/listener/serial owner or application
+error. Final native 0..144/145 records, 126 RX bytes/13 RX records, six successful
+control pairs, 115 ambient telemetry records, two segments/one gap; all 463 prior
+session/config hashes preserved. No tests/second runtime/store while active.
+Only startup/automatic path exercised; other accepted evidence reused. Current
+unexpected USB reconnect criterion passed; Phase 1B/Stage 8/Phase 1 remain
+incomplete for §34/Revision A gaps. Only report/status/history changed,
+unstaged/uncommitted; final diff check passed. Full evidence/limits are in the
+[Enhanced HIL report](../hardware/validation/phase1_enhanced_hil.md).
 
 Enhanced terminal-read/cleanup software fix, 2026-10-27: branch
 `fix/enhanced-terminal-read-cleanup` from latest pushed HIL-doc `df8e7a6`.
@@ -141,7 +163,8 @@ GPIO/protocol/service/CLI/architecture gate 925 passed/17.79 s. Full gate:
 **1,569 passed in 47.42 s**; Ruff passed; mypy/103 files passed; offline lock/66
 packages passed; final diff check passed. No hardware or unrelated behavior work.
 Failed physical HIL report/session are unchanged; no physical pass is inferred.
-Software/tests/status/history/reconnect clarification remain uncommitted.
+Software/tests/status/history/reconnect clarification were accepted/pushed at
+`14e6717`; the subsequent automatic USB physical result is recorded above.
 
 Focused Enhanced physical control-generation HIL, 2026-10-27: clean latest
 pushed `6d0c1a8` independently fetched before startup. Fresh software gate:

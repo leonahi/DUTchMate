@@ -9,6 +9,86 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Automatic-Only Enhanced Pico 2 USB Reconnect HIL — 2026-10-27
+
+- Ran from clean `fix/enhanced-terminal-read-cleanup` at
+  `14e6717554e76444a6b9bc21dbf257a0e51d1efe`, verified against its freshly
+  fetched pushed branch. Scope was startup plus one automatic Pico 2 USB
+  reconnect. No product patch, firmware change, manual GPIO configuration,
+  release/reacquire, retry or timeout enlargement occurred during HIL.
+- Same accepted normal helper/460800 DUT reference pair and retained wiring;
+  source UF2 hashes matched the previously identified flashes, without new
+  flash/readback. USB `2E8A:000A`, serial `FA63A4D787572B33`, remained at
+  `/dev/cu.usbmodem1401`. A separate working directory copied the accepted
+  Enhanced config byte-for-byte, kept 5.0 s timeout and Profile digest
+  `941268f4df4522268941b23364cdbf0c0ff6927bfd3efbbb244ad4cad6cbb319`.
+  Original Basic config and all earlier evidence remained untouched.
+- Normal pre-start gate using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen pytest -q --tb=line` **1,569 passed in 47.60 s**, finished
+  18:00:02.239505 UTC; Ruff passed; mypy passed/103 source files; offline lock
+  passed/66 packages; architecture included; diff/clean checks passed. No tests
+  or other DUTchMate runtime/store ran while the physical service was active.
+- One CLI start at 18:01:19.880597–18:01:21.666191 UTC created sole service
+  PID 5775 and session `20261027T180121Z-9ea027ae`. Normal helper identity,
+  CTRL1/CTRL0 configuration **1/3, 4/5**, 32-KiB telemetry and single startup
+  reset **6/8** passed. Exact NUL + 62-byte normal DUT boot persisted at
+  **7, 9..14** before the USB trial; no bounded observation was invoked.
+- After passive HTTP/native observation was armed, the operator confirmed
+  unplugging/replugging only Pico 2 USB, retaining Pico 1 power and all other
+  wiring. Native **100** preserves `unexpected_disconnect`,
+  `error=Enhanced serial read failed`; **101** starts reconnect, `timeout_s=5.0`.
+  Replacement segment 1 **102** precedes CTRL1 **103/104**, CTRL0 **105/106**,
+  then `reconnect_succeeded` **107**. Fresh raw ACKs are **3019850/3032034 us**;
+  status exposes those timestamps, configured controls and fresh 18:02:52 UTC
+  acceptance metadata. Profile and stable helper identity remain unchanged.
+- Resumed telemetry **108** starts at relative timestamp 0. The single immediate
+  reset **109/111** returned success/HTTP 200, raw timestamp **3183925 us**.
+  Dispatch 18:02:52.280368 UTC was **0.379 ms** after the first connected status
+  response. Exact NUL + normal DUT boot resumed at **110, 112..116**.
+  Required ordering is **100 → 101 → 102 → 104 → 106 → 107 → 111**.
+- Fresh RP2350 origins are **188867368/3001478 us**; same session, two segments,
+  one unexpected observation gap. Observer first saw reconnecting/absent node
+  18:02:47.764736 UTC; present node 18:02:49.743969 UTC; segment published by
+  18:02:52.222481 UTC; connected 18:02:52.279988 UTC. Observed reconnect span
+  **4.515240 s**, conservative prior-poll request-to-connected upper bound
+  **4.579836 s < 5.0 s**. These are host observation bounds, not contact timing.
+- Positive old cleanup is established through the reviewed production path:
+  old close must verify retained serial `is_open is False` and released transport
+  serial reference before the coordinator opens replacement. The same read error
+  may reappear in the close waiter only under those checks. No cleanup fault or
+  replacement close symptom occurred; original bounded read-failure evidence
+  remains at 100 and in public retrieval. Raw exception identity/cause and
+  private close flags are not serialized by HIL; their guarantee is the enforced
+  code path plus pre-start installed-transport regressions, recorded explicitly
+  in cleanup confirmation artifacts rather than presented as direct flag samples.
+- Public session/detail, logs/status APIs and CLI session/logs/status retrieval
+  passed. Saved startup cursor retrieved contiguous **6..137 / 132** records in
+  two pages, with native/public record-type and exact RX-base64 correspondence.
+  No second runtime/store was constructed for reconciliation.
+- CLI stop 18:03:20.280053–18:03:20.397463 UTC completed with application
+  shutdown complete, no ERROR/traceback, native **completed/service_shutdown**,
+  ended 18:03:20 UTC. PID/file/listener/serial ownership were verified absent.
+  Final native **0..144 / 145** records reconcile **126 RX bytes / 13 RX records**,
+  six successful control pairs, 115 ambient telemetry records (86/29 by segment),
+  two closed segments/one gap, no UART sends/bounded operations/pending attempts.
+  Raw SHA-256 `9fc5ffce82472defa7adb38f69ed3306894732766fd911956b8541960228fa5d`;
+  reported buffer loss zero/high-water at most 62, scoped to helper RX ring.
+- All 463 earlier session/config hashes, including failed 303/304 and 739/740,
+  remain unchanged. Full local evidence is under
+  `.dutchmate/hil/enhanced-usb-reconnect-20261027T175902Z/`: baseline/preflight,
+  gate, CLI/API/cursor, passive observer/timing, ordering and cleanup proof,
+  service log/shutdown, final native/hash manifest and reconciliation.
+- The current Enhanced unexpected USB reconnect criterion passed. The previous
+  explicit handoff/control pass is reused; Monitor, Interact, follow, console,
+  ring-buffer stress, Revision A measurements, Basic HIL and MCP were not
+  repeated. Prior accepted evidence remains applicable within its limits.
+  Remaining §34/Revision A parts/continuity/adopted-correction, analog UART/
+  cable/passive, leakage/transient/isolation and ESD gaps keep Phase 1B/Stage 8/
+  Phase 1 incomplete; Phase 1A remains accepted. Only Enhanced HIL report,
+  development status and history changed, unstaged/uncommitted; final diff check
+  passed. No prior failed/passing HIL record was rewritten.
+
 ## Enhanced Terminal Read Error Versus Physical Cleanup — 2026-10-27
 
 - Created `fix/enhanced-terminal-read-cleanup` from independently fetched latest
