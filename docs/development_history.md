@@ -10,6 +10,67 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Focused Basic E_COMMAND_001 Diagnosis: Unclassified — 2026-10-27
+
+- Used clean pushed `stage8-phase1-acceptance`, HEAD
+  `04f2ff28e47248bead99e9e3dc67d1af34bb693b`, independently matched by read-only
+  HTTPS `ls-remote`. Inspected the current fixture UART line loop, protocol
+  handler, Basic open/send adapter and installed pySerial 3.5 open code.
+- The fixture retains non-CR bytes until LF, then clears length/discard state.
+  Its 32-byte buffer and overflow-discard path can pass an unrecognized/empty
+  command to the handler; INFO requires an exact length/content match. A prior
+  non-CR prefix could explain a failing first command and successful second,
+  but **no such bytes or live parser state were observed**. The firmware has no
+  ingress echo/parser telemetry, and its protocol harness bypasses the live UART
+  line assembler. Host input-buffer reset does not clear Pico parser state.
+- Discovery identified FTDI FT231X `0403:6015`, serial `D358SG6A`, path
+  `/dev/cu.usbserial-D358SG6A`, location `0-1.4`, on macOS 26.2/25C56, Darwin
+  25.2.0 arm64. No service listener or serial owner existed. No analyzer was
+  visible, and the operator confirmed no logic analyzer was available. Wire
+  bytes, Pico ingress bytes and parser contents remained unobservable.
+- Completed software checks before physical startup: 1,514 tests passed in
+  37.39 s, Ruff passed, mypy passed (103 source files), offline lock check passed
+  (66 packages), and `git diff --check` passed. Commands used prefix
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`, followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. No tests or second
+  runtime/store ran during the physical service.
+- One normal Basic start created session `20261027T071337Z-3be5f126`, PID 32203.
+  Retained all serial/profile settings and reconnect 5.0 s. Made exactly two
+  planned separate INFO Interacts using the existing INFO condition and 2 s
+  bound, regardless of the first outcome; no operation retried TX. Both matched
+  `DMF/1 INFO board=rpi_pico build=basic-v2-20261026-7bc2ec377767 protocol=1`.
+- First request at 07:13:37.231648 UTC was 72.269166 ms after configured Basic
+  source creation. Attempt/result 2/3, RX 4 and terminal 5 formed `[1,6)`.
+  Second request at 07:13:38.188250 followed the first HTTP result by
+  0.575875 ms (monotonic); attempt/result 7/8, RX 9, terminal 10 formed `[6,11)`.
+  Each attempt was exact `494e464f0a` / `SU5GTwo=`, with one successful 5-byte
+  result. Host RX before the first was empty and no earlier TX was audited in
+  this new session; neither fact establishes what the Pico previously received.
+- The new pair did not reproduce `E_COMMAND_001`. Prior errors remain unchanged:
+  in `20261027T064604Z-7239cdfe`, RX 4 and 18 were read 29.128772 s and
+  26.111850 s after their respective source origins. Those are host read times,
+  not measurements of preceding Pico input. No idle-delay or parser workaround
+  was tried. Classification remains **insufficient evidence / unclassified**;
+  no DUTchMate, USB-UART, fixture/parser or electrical cause is assigned.
+- Preserved requests/results, raw bytes, source review, prior-error review,
+  before/after-stop native copies, service logs and hashes under
+  `.dutchmate/hil/basic-command-diagnostic-20261027/`. Final native state is
+  `completed/service_shutdown`; 148 raw bytes, two RX records, two TX pairs,
+  two completed operations, one segment and contiguous evidence 0..10. Decoded
+  RX matches raw byte-for-byte. All pre-existing session hashes and configuration
+  bytes remained unchanged.
+- Graceful public CLI stop completed. At 07:15:15.524773 UTC, PID 32203 was
+  absent, TCP 2040 had no listener and both FTDI cu/tty paths were unowned.
+  Only Basic validation/status/history changed. No production or fixture patch,
+  parser/UART/deadline/acceptance change, firmware flash, USB reconnect or full
+  Basic HIL was performed. Final diff and preservation checks passed.
+
+Phase 1A, Stage 8, Phase 1B and Phase 1 remain incomplete. Enhanced HIL and MCP
+were not started. Historical evidence is preserved; documentation changes remain
+uncommitted for review.
+
+
 ## Focused Basic Unexpected-Reconnect Diagnostic — 2026-10-27
 
 - Started from clean pushed `stage8-phase1-acceptance` HEAD

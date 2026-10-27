@@ -1275,3 +1275,160 @@ absent, TCP 2040 had no listener, and neither FTDI cu/tty path had an owner
 configuration bytes are unchanged. Only this report and development
 status/history were updated, uncommitted for review. Phase 1A, Stage 8,
 Phase 1B and Phase 1 remain incomplete; Enhanced HIL and MCP remain deferred.
+
+## Focused E_COMMAND_001 command-path diagnostic — 2026-10-27
+
+Result: **unclassified; the minimal new pair did not reproduce the anomaly**.
+Both separately requested INFO operations returned the exact reviewed response.
+No passive logic analyzer is available (operator confirmed), and the unchanged
+fixture exposes neither its received command bytes nor its parser state. Host
+audit and fixture responses cannot distinguish host/adapter/electrical effects
+from fixture UART/parser behavior. Earlier error observations are not erased or
+reclassified. No production or fixture patch was made.
+
+### Preflight and observability
+
+- Clean `stage8-phase1-acceptance`, HEAD
+  `04f2ff28e47248bead99e9e3dc67d1af34bb693b`, independently matched to the latest
+  pushed branch by read-only HTTPS `ls-remote`.
+- macOS 26.2 build `25C56`, Darwin 25.2.0 arm64; FTDI FT231X `0403:6015`, serial
+  `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, location `0-1.4`. Only FTDI and USB
+  hubs were visible in USB inventory; no analyzer command was found on PATH. The
+  operator separately confirmed no analyzer was available. No serial owner or
+  service listener existed before startup.
+- Current configuration was retained byte-for-byte: Basic/external UART/exact
+  path; 115200 8-N-1, no flow control; TX explicitly enabled; default ending
+  none; driver-default DTR/RTS; `reconnect_timeout_s=5.0`. Requested/open line
+  provenance is not an electrical waveform measurement.
+- Before physical startup: full pytest **1,514 passed in 37.39 s**, Ruff passed,
+  mypy passed (103 files), offline lock check passed (66 packages), and
+  `git diff --check` passed. Exact software commands used prefix
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. No tests or additional
+  runtime/session store ran while the physical service was running.
+
+### Source findings, distinct from physical evidence
+
+Reviewed `hardware/firmware/zephyr_dut/src/main.c` accumulates non-CR/non-LF
+bytes in a 32-byte command buffer. CR is ignored. LF invokes the command handler
+with the accumulated length (or zero when discarding an overlong line), then
+resets both command length and discard state. There is no idle-time clearing of
+an unterminated prefix. NUL is not filtered by this loop. The protocol handler
+requires a length-exact `INFO` match; unrecognized commands emit `E_COMMAND_001`.
+
+Thus an earlier unexpected non-CR prefix could make a later `INFO\n` fail, with
+the following LF clearing state so a separate INFO succeeds. An overlong line
+could also reach the error branch. These are **hypotheses supported by source
+semantics, not measurements that either occurred on the Pico**. Current protocol
+tests exercise the command handler with supplied arguments; they do not expose
+the physical UART ingress or live line-assembler state.
+
+Basic open code performs no explicit UART handshake/write; its send loop passes
+the requested bytes to the serial write and accounts for accepted writes.
+Installed pySerial 3.5 open code configures the port/control lines and resets the
+host input buffer. That does not inspect or clear the Pico's command buffer, and
+source inspection does not measure wire behavior during USB/open transitions.
+The installed open implementation was preserved in `pyserial-open-source.txt`.
+
+Earlier preserved errors in `20261027T064604Z-7239cdfe` were read at RX 4,
+29.128772 s after segment-0 source origin, and RX 18, 26.111850 s after segment-1
+origin. Those host read times do not reveal when any prefix arrived; idle time
+alone would not clear one under the reviewed parser loop. No stabilization
+delay, parser workaround or timeout change was introduced.
+
+### Minimal physical sequence and timing
+
+Fresh native-v2 session **`20261027T071337Z-3be5f126`**, service PID **32203**.
+All times below are UTC on October 27; local Asia/Kolkata is UTC+05:30.
+
+Normal startup command:
+
+```text
+uv run --frozen --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200
+```
+
+The HTTP-only local driver made exactly two planned, distinct
+`POST /dut/interact` requests, regardless of the first outcome. Each body was:
+
+```json
+{"text":"INFO","line_ending":"lf","conditions":[{"pattern":"DMF/1 INFO board=rpi_pico build=basic-v2-20261026-7bc2ec377767 protocol=1"}],"timeout_s":2.0}
+```
+
+The existing INFO completion condition and two-second bound were retained.
+Neither operation retried its TX. No command, blank-line resynchronization or
+fixture reset was inserted before the first INFO. No USB unplug/reconnect was
+performed in this slice; prior transition cases remain separate evidence.
+
+| Event | UTC / native evidence |
+|---|---|
+| Start CLI invoked / returned | `07:13:36.831689` / `07:13:37.208425` |
+| Configured Basic source origin | Host monotonic `4287918562 us`; created after configured serial open, not an exact open-syscall timestamp |
+| Before first request | No earlier audited TX; host RX file empty. Pico ingress and parser contents **unknown** |
+| First INFO request / HTTP return | `07:13:37.231648` / `07:13:38.187669` |
+| First accepted TX | `07:13:37.237086`, attempt/result **2/3**, exact `494e464f0a` (`SU5GTwo=`), accepted 5 bytes |
+| First response / terminal | RX **4**, exact reviewed INFO; terminal **5**, `matched` |
+| Second INFO request / HTTP return | `07:13:38.188250` / `07:13:39.194046` |
+| Second accepted TX | `07:13:38.197810`, attempt/result **7/8**, same exact bytes, accepted 5 |
+| Second response / terminal | RX **9**, exact reviewed INFO; terminal **10**, `matched` |
+
+First request was **72.269166 ms** after source origin. The second request began
+**0.575875 ms** after the first HTTP result returned, measured using paired host
+monotonic timestamps. This is the inter-request gap, not a wire inter-byte or
+electrical-settling measurement.
+
+| Operation | ID | Outcome / half-open range |
+|---|---|---|
+| First INFO | `interact-362b9f98-c97d-47e1-8181-13d1e37e6fe0` | matched, `[1,6)` |
+| Second INFO | `interact-7796d849-d3fd-48e1-b290-24619da9a50f` | matched, `[6,11)` |
+
+Attempts were `aaa6700b-ca5e-463e-8db3-613b58f62484` and
+`284368ea-3901-46af-ac0d-3bd607318d1f`. Each operation has one attempt/result
+pair, with exactly 5 accepted bytes. Both raw fixture responses were:
+
+```text
+DMF/1 INFO board=rpi_pico build=basic-v2-20261026-7bc2ec377767 protocol=1
+```
+
+### Evidence-based classification
+
+| Question | Supported conclusion |
+|---|---|
+| Authoritative DUTchMate requested/accepted bytes | Exact `INFO\n`, 5 accepted bytes for each operation |
+| Fixture response bytes | Two correct INFO responses; no new `E_COMMAND_001` in this pair |
+| Raw bytes arriving at the Pico, including before INFO | **Not observed**; the firmware has no ingress echo/trace and no analyzer was available |
+| Parser buffer/discard state before earlier failing commands | **Not observed** |
+| Unexpected wire bytes or electrical/open-transition glitches | Neither established nor excluded |
+| Exact wire INFO but faulty fixture parsing | Not established without complete relevant ingress/state evidence |
+| Root-cause classification | **Insufficient evidence; unclassified** |
+
+`uart_raw.log` is **Pico TX → FTDI RX → host RX**, not FTDI TX → Pico RX.
+An empty pre-command host RX file says nothing about what the Pico previously
+received. Accepted-byte audit likewise does not establish physical wire bytes.
+The successful new pair does not invalidate earlier failures or exonerate any
+layer. Further repetition without ingress capture would not close that gap.
+
+### Preservation and cleanup
+
+Artifacts: `.dutchmate/hil/basic-command-diagnostic-20261027/`, including
+software/preflight records, `command_pair.py`, timestamped request/result files,
+raw evidence retrieval, `audit-response-analysis.json`, prior-error review,
+before/after-stop native copies and service logs. No existing evidence was
+modified. Final native state is `completed/service_shutdown`: **148 raw bytes**,
+**2 RX records**, **2 TX pairs**, **2 completed operations**, one segment and
+contiguous sequences **0..10**. Decoded RX matches raw byte-for-byte.
+
+| Final artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `ff1a9d099ed8a655b7ec4f58e8a0b4fcd3f43361eefd0a9f185820dcf78bb616` |
+| `uart_events.jsonl` | `90d561cfbe0acc0cc9de4153e8a0269b23a806a81fc29f11e25bc5e286992e0e` |
+| `operation_events.jsonl` | `830e0aa1506bd7e03fc802052281cd194e1c0f4293af42c2a4509d77367d8f40` |
+| `metadata.json` | `d8d998ce844e685721bd75546a798f7206227e0a66166cff3331809c1ea98c6d` |
+
+Graceful CLI stop succeeded. At **07:15:15.524773 UTC**, PID 32203 was absent,
+TCP 2040 had no listener, and neither FTDI cu/tty path had an owner. Previous
+session hashes and configuration bytes are unchanged. Only this report and
+development status/history changed, uncommitted for review. Production/fixture
+code, parser behavior, UART settings, timeouts and acceptance criteria were not
+changed. No full Basic HIL, Enhanced HIL or MCP work occurred. Phase 1A, Stage 8,
+Phase 1B and Phase 1 remain incomplete.

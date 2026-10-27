@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 1 v2 semantic migration — Stage 8 software complete; HIL blocked
+> Active phase: Phase 1 v2 semantic migration — Stage 8 software complete; HIL pending
 > Stage 8 base: `9a228fcc37d746241c4624469cf3d18b4a7fab4a` (pushed Stage 7)
 > Reviewed fixture baseline: `746121a35633c070f4e7112010ce26b656d8ef1d` (pushed)
 > Basic HIL code baseline: `21991fa403ad39f3100a24259b6f31a4c8ac1756` (pushed release-fix rerun)
@@ -9,6 +9,7 @@
 > Accepted Basic release fix: `df3ca29` (merged into the HIL baseline)
 > CLI loss fix branch base: `acffad49ec63765d827f83f2921a61a6a5220bab`
 > Accepted CLI loss fix: `ff8cc51` (merged); reconnect diagnostic HEAD: `7d6cac3764176820f6dc62f79f2d705749735b24`
+> Command anomaly diagnostic HEAD: `04f2ff28e47248bead99e9e3dc67d1af34bb693b`
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -19,12 +20,13 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** The reviewed CLI loss fix is merged into pushed
-  `stage8-phase1-acceptance`. Focused Basic reconnect diagnostic
-  `20261027T064604Z-7239cdfe` succeeded inside the unchanged 5-second window,
-  continuing the same session in segment 1 with a durable gap and resumed RX.
-  This was not full Basic HIL. Stage 8 and Phase 1A/1B/Phase 1 remain
-  **Incomplete**; prior timeouts are not retroactively classified.
+- **Current milestone:** The focused `E_COMMAND_001` diagnostic on pushed
+  `stage8-phase1-acceptance` is reviewed and accepted; the anomaly remains
+  **unclassified**. Fresh session
+  `20261027T071337Z-3be5f126` recorded two separately requested exact INFO
+  operations; both matched. No logic analyzer is available, and existing firmware
+  exposes neither Pico ingress bytes nor parser state. Stage 8 and Phase
+  1A/1B/Phase 1 remain **Incomplete**; no full Basic HIL was run.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -33,18 +35,18 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review the focused diagnostic and investigate the recurring
-  `E_COMMAND_001` command-path anomaly separately. Rerun full Basic HIL from the
-  beginning with continuous reconnect timing observation and all software checks
-  finished before physical startup. Preserve all failed runs. Enhanced HIL,
-  Revision A, and MCP remain deferred.
-- **Open blockers:** Full Basic acceptance is still outstanding. The measured
-  reconnect succeeded in about 1.545 s; neither a reconnect defect nor the cause
-  of earlier timeouts was established. An initial diagnostic attempt missed host
-  transitions after its observer wait expired and remains unclassified.
-  `E_COMMAND_001` recurred before and after the successful reconnect; separate
-  explicit INFO retests matched. Its cause is unknown, not attributed to product
-  or fixture. Enhanced/Phase 4 blockers remain unchanged.
+- **Next step:** Run a fresh complete Basic Phase 1A HIL procedure from the
+  beginning, with all software checks completed before physical service startup.
+  Watch `E_COMMAND_001` during that run and preserve any recurrence as exact
+  evidence; the anomaly is not independently diagnosed or fixed. Keep settings,
+  timeouts and acceptance criteria unchanged. Preserve all failed runs; Enhanced
+  HIL, Revision A, and MCP remain deferred.
+- **Open blockers:** Full Basic acceptance is outstanding. `E_COMMAND_001` remains
+  an unresolved historical/acceptance anomaly despite the successful minimal
+  pair. No analyzer is available; further repetition without Pico-ingress
+  evidence will not classify its cause. A buffered prefix remains a hypothesis.
+  Focused reconnect previously passed in about 1.545 s; older timeout causes
+  remain unclassified. Enhanced/Phase 4 blockers remain open.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -86,7 +88,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | HIL incomplete | CLI loss fix merged; focused reconnect passed; recurring command anomaly and full Basic acceptance remain open |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | HIL incomplete | Focused diagnostic reviewed and accepted; command anomaly remains unresolved and watched during fresh full Basic HIL |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -107,11 +109,31 @@ progress; it does not redefine either document.
 
 | Gate | Status |
 |---|---|
-| Phase 1A — Basic | Incomplete; focused reconnect passed, prior timeout cause unclassified; recurring E_COMMAND_001 and full Basic HIL remain open |
+| Phase 1A — Basic | Incomplete until a fresh complete Basic HIL run passes; E_COMMAND_001 watched as unresolved, not diagnosed or fixed |
 | Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Focused command diagnostic, 2026-10-27: clean pushed HEAD `04f2ff2`. Before
+physical startup, 1,514 tests passed in 37.39 s; Ruff, mypy (103 files), offline
+lock check (66 packages), and diff check passed. No tests or second runtime/store
+ran during the physical service. Session `20261027T071337Z-3be5f126` contains
+exactly two INFO Interacts, each one audited `494e464f0a` / 5-byte successful
+acceptance. Both matched the reviewed build; first request was 72.269 ms after
+the Basic source origin and the second began 0.576 ms after the first HTTP result.
+No in-operation retry occurred. Native evidence is contiguous 0..10, with 148 raw
+response bytes reconciled to two RX records. No earlier audited TX or host RX
+was present in this fresh session; that does not establish Pico ingress state.
+
+Reviewed fixture code retains non-CR bytes until LF, then clears command state;
+unknown/overflow-discarded lines can emit `E_COMMAND_001`. It provides no ingress
+echo or parser-state telemetry. Operator confirmed no logic analyzer; actual
+wire bytes and earlier Pico RX/parser state remain unknown. Host audit/acceptance
+does not prove wire bytes. No root cause or fix is claimed. Graceful stop released
+PID 32203, listener and FTDI ownership. Configuration, production/fixture code
+and prior sessions are unchanged. Details are in the
+[Basic HIL record](../hardware/validation/phase1_basic_hil.md).
 
 Focused Basic reconnect diagnostic, 2026-10-27: clean pushed HEAD `7d6cac3`.
 All software checks completed before startup: 1,514 tests passed in 36.83 s,
