@@ -233,9 +233,12 @@ def test_unknown_command_has_stable_error(tmp_path: Path) -> None:
     )
 
 
-def _run_uart(tmp_path: Path, ingress: bytes) -> bytes:
+def _run_uart(tmp_path: Path, ingress: bytes, *, count_limit: bool = False) -> bytes:
+    command = [_build_harness(tmp_path, uart=True)]
+    if count_limit:
+        command.append("count-limit")
     result = subprocess.run(
-        [_build_harness(tmp_path, uart=True)], input=ingress, check=True, capture_output=True
+        command, input=ingress, check=True, capture_output=True
     )
     boot = b"DMF/1 BOOT OK board=rpi_pico build=test-build\n"
     assert result.stdout.startswith(boot)
@@ -282,7 +285,9 @@ def test_uart_full_32_byte_command_diagnostic_is_not_truncated(tmp_path: Path) -
 
 def test_uart_overflow_discards_until_lf_then_accepts_next_command(tmp_path: Path) -> None:
     assert _run_uart(tmp_path, b"X" * 33 + b"\rINFO\x00\nINFO\n\n") == (
-        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1\n"
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=38 prefix_hex=" + b"58" * 32
+        + b" overflow_byte=58 discarded_count=6 suffix_hex=58494e464f00\n"
         b"DMF/1 INFO board=rpi_pico build=test-build protocol=1\n"
         b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=0\n"
     )
@@ -295,4 +300,63 @@ def test_uart_unterminated_overflow_emits_nothing(tmp_path: Path) -> None:
 def test_uart_silent_mode_suppresses_even_unknown_diagnostics(tmp_path: Path) -> None:
     assert _run_uart(tmp_path, b"SILENT\nXINFO\n" + b"X" * 33 + b"\n") == (
         b"DMF/1 SILENT armed-until-reset\n"
+    )
+
+
+def test_uart_33_bytes_preserve_binary_prefix_and_first_overflow(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"\x00\xff" * 16 + b"\xff\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=33 prefix_hex=" + b"00ff" * 16
+        + b" overflow_byte=ff discarded_count=1 suffix_hex=ff\n"
+    )
+
+
+def test_uart_long_binary_overrun_reports_last_eight_discarded_bytes(tmp_path: Path) -> None:
+    assert _run_uart(
+        tmp_path, bytes(range(0x80, 0xA0)) + b"\x00\xff\x01\xfe\x02\xfd\x03\xfc\x04\xfb\x05\xfa\n"
+    ) == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=44 prefix_hex=808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f"
+        b" overflow_byte=00 discarded_count=12 suffix_hex=02fd03fc04fb05fa\n"
+    )
+
+
+def test_uart_cr_does_not_enter_overflow_prefix_count_or_suffix(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"X\r" * 32 + b"\x00\r\xff\r\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=34 prefix_hex=" + b"58" * 32
+        + b" overflow_byte=00 discarded_count=2 suffix_hex=00ff\n"
+    )
+
+
+def test_uart_lf_resets_every_overflow_diagnostic_before_next_line(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"A" * 32 + b"\x00\x01\n" + b"B" * 32 + b"\xff\nPING\nXINFO\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=34 prefix_hex=" + b"41" * 32
+        + b" overflow_byte=00 discarded_count=2 suffix_hex=0001\n"
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=33 prefix_hex=" + b"42" * 32
+        + b" overflow_byte=ff discarded_count=1 suffix_hex=ff\n"
+        b"DMF/1 PONG\n"
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=5 command_hex=58494e464f discard=0\n"
+    )
+
+
+def test_uart_large_overrun_counts_without_growing_diagnostic_output(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"\x00" * 100000 + b"\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=100000 prefix_hex=" + b"00" * 32
+        + b" overflow_byte=00 discarded_count=99968 suffix_hex=0000000000000000\n"
+    )
+
+
+def test_uart_count_limit_omits_inexact_counts_instead_of_wrapping(tmp_path: Path) -> None:
+    # The host harness seeds the actual counter near its limit, without billions of input bytes.
+    assert _run_uart(tmp_path, b"", count_limit=True) == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" line_len=4294967295 prefix_hex=" + b"58" * 32
+        + b" overflow_byte=00 discarded_count=4294967263 suffix_hex=\n"
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1"
+        b" counts_overflow=1 prefix_hex=" + b"58" * 32
+        + b" overflow_byte=00 suffix_hex=\n"
     )

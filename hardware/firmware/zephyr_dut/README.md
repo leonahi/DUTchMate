@@ -113,24 +113,47 @@ overlong tails can be unbounded, and a bounded raw buffer could hide input.
 
 `discard=1` means the assembler was discarding an overlong command when LF
 arrived. As before, the 33rd non-CR/non-LF byte clears the command length and
-starts discarding through LF. The handler then receives zero bytes, so the
-truthful response is:
+starts discarding through LF. The handler still receives zero command bytes.
+Overflow errors now append bounded assembler observations:
 
 ```text
-DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1
+DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1 line_len=37 prefix_hex=00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff overflow_byte=00 discarded_count=5 suffix_hex=00494e464f
 ```
 
-This does not mean the overlong input was empty: those discarded bytes are not
-retained or reconstructed. An ordinary empty line instead reports the same
-zero-length fields with `discard=0`. After LF the next command starts normally.
-Silent mode still suppresses all responses, including these diagnostics.
+| Overflow field | Exact meaning |
+|---|---|
+| `line_len` | Total non-CR/non-LF bytes observed for the line, including discarded bytes |
+| `prefix_hex` | First 32 non-CR/non-LF bytes, retained in the existing command buffer |
+| `overflow_byte` | First byte beyond that 32-byte capacity |
+| `discarded_count` | Bytes rejected after the prefix, **including** the first overflow byte; `line_len - 32` |
+| `suffix_hex` | Most recent `min(discarded_count, 8)` discarded bytes, in arrival order |
+
+The example is a 32-byte alternating NUL/`ff` prefix, then NUL and `INFO`, then
+LF. Hex preserves every captured byte, including NUL/high bytes. A short
+discarded tail is reported in full; a longer one exposes its last eight bytes.
+Missing middle bytes are not reconstructed or implied to have been captured.
+
+All added state is fixed-size: a 32-bit count, first overflow byte, eight-byte
+suffix, suffix length and count-overflow flag (16 bytes on the Pico). No extra
+prefix buffer, allocation or line-sized capture is used. Counts are exact up to
+`4294967295` relevant bytes. If a line exceeds that range, numeric `line_len`
+and `discarded_count` are omitted and `counts_overflow=1` is emitted instead;
+the counter never wraps or reports an approximate count. Prefix/overflow/suffix
+remain valid. LF resets all diagnostic state along with the existing assembler
+state; CR never contributes to counts, prefix, overflow byte or suffix.
+
+Zero `command_len` on overflow still does **not** mean the ingress line was
+empty. An ordinary empty line reports `command_len=0 command_hex= discard=0`
+without these overflow-only fields. Existing non-overflow errors and successful
+output remain byte-for-byte unchanged. Silent mode still suppresses errors.
 
 This instrumentation observes bytes delivered to the Pico firmware's UART
 processing/command-parser path. It does **not** prove the electrical waveform
 on FTDI TX → Pico RX, expose UART bytes lost before polling, or recover a
 discarded overlong line. A logic analyzer may still be useful later. The
-historical `E_COMMAND_001` anomaly remains unresolved and unclassified until
-reproduced with useful ingress evidence; this instrumentation is not a fix.
+previous instrumented run confirmed the discard path but not its cause or the
+discarded values. The cause remains unresolved/unclassified; these observations
+are diagnostic instrumentation, not a fix or an electrical-wire measurement.
 Phase 1A remains accepted using its recorded fixture build and evidence.
 
 ### Delayed fault outside an operation

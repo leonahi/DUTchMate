@@ -1864,3 +1864,86 @@ and configuration bytes are unchanged. Only this appended diagnostic record,
 development status and a new history entry changed, uncommitted for review.
 `git diff --check` passed. Phase 1A remains accepted; no further physical run,
 Enhanced HIL or MCP work was started.
+
+
+## Bounded overflow diagnostic preparation — 2026-10-27 (software only)
+
+Prepared on clean latest-pushed `stage8-phase1-acceptance`, source base
+`68ae39714fb5ebfd55ec970e2709d29561c822e9`, independently verified by read-only HTTPS `ls-remote`.
+This adds bounded fixture observations for the previously recorded discard-path
+recurrence. **No new physical reproduction, serial open, service startup or
+flash occurred.** The user's explicit review/commit/push gate precedes hardware;
+implementation and documentation remain uncommitted for review. There is no new
+physical session ID or response to report. Existing physical evidence above,
+including `20261027T100353Z-1d5cd35f`, is unchanged.
+
+### Instrumentation semantics and limits
+
+Unknown overlong lines preserve the existing
+`command_len=0 command_hex= discard=1` fields on a single LF-terminated DMF response.
+Overflow-only additions are `line_len`, `prefix_hex`, `overflow_byte`,
+`discarded_count`, and `suffix_hex`; exact formats/examples are in the
+[fixture README](../firmware/zephyr_dut/README.md#unknown-command-byte-diagnostics).
+
+- `line_len` counts every non-CR/non-LF byte assembled or discarded.
+- `prefix_hex` is the exact first 32 relevant bytes, preserved in the existing
+  command buffer; `overflow_byte` is the first byte beyond its capacity.
+- `discarded_count = line_len - 32`, including the first overflow byte.
+- `suffix_hex` contains the last up to eight discarded bytes in arrival order.
+  It does not claim to expose the uncaptured middle of a longer overrun.
+- Added state is exactly **16 bytes** on the ARM target: fixed 32-bit count,
+  overflow byte, eight-byte suffix, suffix length and count-overflow flag. No
+  allocation or extra prefix buffer. Beyond `4294967295` relevant bytes, counts
+  are omitted and `counts_overflow=1` is emitted; values never wrap or approximate.
+- CR/LF/NUL handling, idle prefix retention, discard-through-LF and valid command
+  semantics are unchanged. LF resets the diagnostic state. Successful command
+  output and non-overflow error responses remain byte-for-byte unchanged.
+
+This captures firmware/UART-processing observations, **not the electrical
+FTDI TX → Pico RX waveform**, and cannot recover bytes lost before polling or
+the uncaptured middle of an overrun. The earlier discard-path result is not a
+root-cause diagnosis; no new cause is assigned and no remediation was attempted.
+**Phase 1A remains Complete/accepted**. Stage 8, Phase 1B and overall Phase 1
+remain incomplete; Enhanced HIL and MCP were not started.
+
+### Software and cross-build evidence
+
+TDD: before implementation, **7 tests failed / 29 passed** because overflow
+fields were absent, with both host C harnesses compiling. After implementation,
+**36 focused tests passed in 9.73 s**. Coverage includes exact 32 bytes, first
+33rd byte with binary prefix, longer varied overrun, NUL/`ff`, ignored CRs,
+LF/state reset, next valid command, existing non-overflow errors, no successful
+command diagnostics, a 100,000-byte line with bounded output, and seeded counter
+exhaustion using the actual firmware count helper. No test-only hook was added
+to firmware.
+
+Full gate: **1,533 pytest tests passed in 43.29 s** (including architecture), Ruff
+passed, mypy passed (103 source files), offline lock check passed (66 packages),
+and `git diff --check` passed. Focused command:
+`rtk proxy .venv/bin/python -m pytest tests/hardware/zephyr_dut/test_fixture_protocol.py -q --tb=short`.
+Full commands used `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`
+followed by `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+`uv run --frozen mypy`, and `uv lock --check --offline`.
+
+Cross-build used unchanged default Basic configuration, Zephyr `v4.4.0` / SDK
+`1.0.1`, GNU `14.3.0`, west `1.3.0`. The review image is uniquely identified:
+
+| Review-build field | Value |
+|---|---|
+| Build ID | `basic-ovf-20261027-3cbe8d2ee291` |
+| Board | `rpi_pico/rp2040` |
+| UART | 115200 8-N-1, no flow control, no overlay |
+| UF2 | `build/dutchmate-zephyr-dut-basic-ovf-3cbe8d2ee291/zephyr/zephyr.uf2` (36,352 bytes) |
+| UF2 SHA-256 | `c1f0067c910ccf8ae0108eed5362da957dc50e4a9a801a4afce69c0ce4407409` |
+| `.config` SHA-256 | `8a4649450bb737da6289b6e358001626712f61db44c499220ef88bfeb547ceec` |
+| Fixture source inventory SHA-256 | `3cbe8d2ee291b49c8185d6f1ff45996e371d82d63f3c142a57e94fe830e712b1` |
+
+The source hash uses sorted relative fixture paths/NUL/content/NUL, excluding
+README, as in earlier builds. Generated board/UART settings and empty overlay
+settings were checked; the binary contains the new diagnostic fields and exact
+build ID. UF2 magic/block indices/address layout were validated and decoded
+payload matches `zephyr.bin`. A separate ARM compilation asserts the new
+observation struct occupies 16 bytes. The UF2 has **not** been flashed and has
+no physical validation yet; a host cross-build does not establish on-device RX.
+All 996 existing `.dutchmate` file hashes and all
+14 earlier UF2 hashes remain unchanged.

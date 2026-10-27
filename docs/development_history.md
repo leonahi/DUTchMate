@@ -10,6 +10,75 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Bounded Basic Fixture Overflow Diagnostics Prepared — 2026-10-27
+
+- Started clean on latest-pushed `stage8-phase1-acceptance`,
+  `68ae39714fb5ebfd55ec970e2709d29561c822e9` (HTTPS `ls-remote` confirmed).
+  Fixture-only enhancement remains uncommitted for review. The requested
+  physical reproduction has not started because the user explicitly requires
+  review, commit and push before any hardware run. No new physical session,
+  serial open, service startup or flash occurred.
+- Overlong error lines append exact `line_len`, first-32-byte `prefix_hex`, first
+  `overflow_byte`, `discarded_count` including that first overflow byte, and
+  chronological last-eight-byte `suffix_hex`. Existing command interpretation
+  and error fields are retained; new fields appear only for discard=1.
+  Non-overflow errors and successful output remain byte-for-byte compatible.
+- Reused the existing command buffer for the prefix and added a fixed 16-byte
+  observation struct. No allocation or unbounded capture. LF clears state;
+  ignored CR never enters counts/captured bytes; NUL and high bytes stay exact.
+  A 32-bit count saturates internally without wrapping: after its representable
+  range, numeric counts are omitted with `counts_overflow=1`, while bounded
+  byte observations remain valid. No timeout/reset/resynchronization added.
+- RED: 7 missing-diagnostic assertions failed, 29 existing cases passed; both
+  real C harnesses compiled. GREEN: 36 focused tests passed in 9.73 s. Tests
+  exercise the actual UART loop at 32/33 bytes, varied binary overruns, NUL/ff,
+  CR handling, LF reset/recovery, 100,000-byte input, unchanged existing errors/
+  valid output and seeded count exhaustion through the real private helper.
+
+| Validation | Result |
+|---|---|
+| `rtk proxy .venv/bin/python -m pytest tests/hardware/zephyr_dut/test_fixture_protocol.py -q --tb=short` | 36 passed in 9.73 s |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q --tb=short` | 1,533 passed in 43.29 s, including architecture checks |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed, 103 source files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed, 66 packages; lock unchanged |
+| `git diff --check` | Passed |
+
+Cross-build passed with Zephyr `v4.4.0` / SDK `1.0.1`, GNU `14.3.0`, west `1.3.0`:
+
+```bash
+rtk proxy env \
+  ZEPHYR_BASE=/Users/nahitpawar/zephyrproject/zephyr \
+  ZEPHYR_SDK_INSTALL_DIR=/Users/nahitpawar/zephyr-sdk-1.0.1 \
+  CCACHE_DIR=/tmp/dutchmate-basic-ccache \
+  /Users/nahitpawar/zephyrproject/.venv/bin/west build \
+  -b rpi_pico -s hardware/firmware/zephyr_dut \
+  -d build/dutchmate-zephyr-dut-basic-ovf-3cbe8d2ee291 --pristine -- \
+  '-DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID="basic-ovf-20261027-3cbe8d2ee291"' \
+  -DDTC_OVERLAY_FILE= -DEXTRA_DTC_OVERLAY_FILE= \
+  -DUSER_CACHE_DIR=/tmp/dutchmate-basic-zephyr-cache
+```
+
+- Review build ID `basic-ovf-20261027-3cbe8d2ee291`; source inventory SHA-256
+  `3cbe8d2ee291b49c8185d6f1ff45996e371d82d63f3c142a57e94fe830e712b1` (sorted relative path/NUL/content/NUL, README excluded).
+  UF2 `build/dutchmate-zephyr-dut-basic-ovf-3cbe8d2ee291/zephyr/zephyr.uf2`, 36,352 bytes; SHA-256
+  `c1f0067c910ccf8ae0108eed5362da957dc50e4a9a801a4afce69c0ce4407409`. Config SHA-256
+  `8a4649450bb737da6289b6e358001626712f61db44c499220ef88bfeb547ceec`. It has not been flashed or physically validated.
+- Verified `rpi_pico/rp2040`, UART0 115200/no flow control, both overlay settings
+  empty, build ID and new diagnostic formats linked. UF2 block structure and
+  decoded binary payload validated. ARM compile-time assertion confirms 16-byte
+  added state. No UART/Basic configuration or reconnect timeout changed.
+- Updated fixture README, the software-only preparation record, status and this
+  newest history entry. All 996 existing `.dutchmate`
+  file hashes and 14 earlier UF2 hashes unchanged; prior
+  history/physical reports preserved. No DUTchMate production behavior, API,
+  persistence, acceptance criterion, hardware code outside this fixture or
+  normative status changed. The added fields do not prove electrical waveform
+  or root cause. **Phase 1A remains Complete/accepted**; Stage 8, Phase 1B and
+  overall Phase 1 incomplete; Enhanced HIL/MCP deferred. Review stops before
+  the separately gated focused physical run (at most three reconnect/INFO trials).
+
+
 ## Instrumented Basic Diagnostic: Discard Path Reproduced — 2026-10-27
 
 - Clean latest-pushed `stage8-phase1-acceptance` at

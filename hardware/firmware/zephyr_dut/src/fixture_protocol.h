@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define DMF_COMMAND_CAPACITY 32U
+#define DMF_DISCARD_SUFFIX_CAPACITY 8U
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +31,15 @@ struct dmf_fixture {
     uint64_t fault_due_ms;
 };
 
+/* Fixed-size observation state; the prefix remains in the command buffer. */
+struct dmf_line_diagnostics {
+    uint32_t line_len;
+    unsigned char overflow_byte;
+    unsigned char suffix[DMF_DISCARD_SUFFIX_CAPACITY];
+    unsigned char suffix_len;
+    unsigned char counts_overflow;
+};
+
 void dmf_fixture_init(
     struct dmf_fixture *fixture,
     dmf_write_fn write,
@@ -41,12 +53,17 @@ void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode)
 /* Poll from the UART owner loop with monotonic uptime in milliseconds. */
 void dmf_fixture_poll(struct dmf_fixture *fixture, uint64_t now_ms);
 
-/* Discard state is observed only in unknown-command diagnostics. */
+/*
+ * Discard state and line snapshot affect only unknown-command diagnostics.
+ * For a discarded line with a snapshot, command still holds the first
+ * DMF_COMMAND_CAPACITY bytes, even though the interpreted length is zero.
+ */
 void dmf_fixture_handle_command(
     struct dmf_fixture *fixture,
     const unsigned char *command,
     size_t length,
-    int discarding
+    int discarding,
+    const struct dmf_line_diagnostics *line
 );
 
 #ifdef __cplusplus

@@ -43,13 +43,13 @@ int main(int argc, char **argv)
     if (argc == 3 && strcmp(argv[1], "boot") == 0) {
         dmf_fixture_emit_boot(&fixture, (enum dmf_boot_mode)atoi(argv[2]));
     } else if (argc == 3 && strcmp(argv[1], "command") == 0) {
-        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0);
+        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0, NULL);
     } else if (argc == 3 && strcmp(argv[1], "trace-command") == 0) {
         context.trace_io = 1;
-        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0);
+        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0, NULL);
     } else if (argc == 4 && strcmp(argv[1], "sequence") == 0) {
-        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0);
-        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[3], strlen(argv[3]), 0);
+        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[2], strlen(argv[2]), 0, NULL);
+        dmf_fixture_handle_command(&fixture, (const unsigned char *)argv[3], strlen(argv[3]), 0, NULL);
     } else if (strcmp(argv[1], "timeline") == 0) {
         int index;
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv)
                 dmf_fixture_poll(&fixture, context.now_ms);
             } else {
                 dmf_fixture_handle_command(
-                    &fixture, (const unsigned char *)argv[index], strlen(argv[index]), 0
+                    &fixture, (const unsigned char *)argv[index], strlen(argv[index]), 0, NULL
                 );
             }
         }

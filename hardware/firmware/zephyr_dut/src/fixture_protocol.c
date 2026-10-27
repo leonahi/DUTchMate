@@ -22,6 +22,21 @@ static void write_text(struct dmf_fixture *fixture, const char *text)
     write_data(fixture, (const unsigned char *)text, strlen(text));
 }
 
+static void write_hex(struct dmf_fixture *fixture, const unsigned char *data, size_t length)
+{
+    static const unsigned char hex[] = "0123456789abcdef";
+    size_t index;
+
+    for (index = 0U; index < length; index++) {
+        const unsigned char encoded[] = {
+            hex[data[index] >> 4U],
+            hex[data[index] & 0x0fU],
+        };
+
+        write_data(fixture, encoded, sizeof(encoded));
+    }
+}
+
 static int command_equals(
     const unsigned char *command,
     size_t length,
@@ -165,7 +180,8 @@ void dmf_fixture_handle_command(
     struct dmf_fixture *fixture,
     const unsigned char *command,
     size_t length,
-    int discarding
+    int discarding,
+    const struct dmf_line_diagnostics *line
 )
 {
     static const unsigned char binary_payload[] = {
@@ -215,9 +231,6 @@ void dmf_fixture_handle_command(
         fixture->silent = 1;
         fixture->fault_pending = 0;
     } else {
-        static const unsigned char hex[] = "0123456789abcdef";
-        size_t index;
-
         message_length = snprintf(
             (char *)message,
             sizeof(message),
@@ -228,14 +241,35 @@ void dmf_fixture_handle_command(
             write_data(fixture, message, (size_t)message_length);
         }
         /* Encode the explicit length, including NULs; never use a string view. */
-        for (index = 0U; index < length; index++) {
-            const unsigned char encoded[] = {
-                hex[command[index] >> 4U],
-                hex[command[index] & 0x0fU],
-            };
-
-            write_data(fixture, encoded, sizeof(encoded));
+        write_hex(fixture, command, length);
+        write_text(fixture, discarding != 0 ? " discard=1" : " discard=0");
+        if (discarding != 0 && line != NULL) {
+            if (line->counts_overflow != 0U) {
+                write_text(fixture, " counts_overflow=1 prefix_hex=");
+            } else {
+                message_length = snprintf(
+                    (char *)message, sizeof(message), " line_len=%lu prefix_hex=",
+                    (unsigned long)line->line_len
+                );
+                if (message_length > 0 && (size_t)message_length < sizeof(message)) {
+                    write_data(fixture, message, (size_t)message_length);
+                }
+            }
+            write_hex(fixture, command, DMF_COMMAND_CAPACITY);
+            write_text(fixture, " overflow_byte=");
+            write_hex(fixture, &line->overflow_byte, 1U);
+            if (line->counts_overflow == 0U) {
+                message_length = snprintf(
+                    (char *)message, sizeof(message), " discarded_count=%lu",
+                    (unsigned long)(line->line_len - DMF_COMMAND_CAPACITY)
+                );
+                if (message_length > 0 && (size_t)message_length < sizeof(message)) {
+                    write_data(fixture, message, (size_t)message_length);
+                }
+            }
+            write_text(fixture, " suffix_hex=");
+            write_hex(fixture, line->suffix, line->suffix_len);
         }
-        write_text(fixture, discarding != 0 ? " discard=1\n" : " discard=0\n");
+        write_text(fixture, "\n");
     }
 }

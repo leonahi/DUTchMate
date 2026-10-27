@@ -1,6 +1,7 @@
 #include "fixture_protocol.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -8,7 +9,6 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 
-#define COMMAND_CAPACITY 32U
 #define FIXTURE_UART_NODE DT_CHOSEN(zephyr_console)
 #define FIXTURE_GPIO_NODE DT_NODELABEL(gpio0)
 
@@ -61,13 +61,33 @@ static enum dmf_boot_mode read_boot_mode(const struct device *gpio)
     return (enum dmf_boot_mode)(((unsigned int)mode1 << 1U) | (unsigned int)mode0);
 }
 
+static void count_line_byte(struct dmf_line_diagnostics *line)
+{
+    if (line->line_len == UINT32_MAX) {
+        line->counts_overflow = 1U;
+    } else {
+        line->line_len++;
+    }
+}
+
+static void remember_discarded_byte(struct dmf_line_diagnostics *line, unsigned char byte)
+{
+    if (line->suffix_len == sizeof(line->suffix)) {
+        memmove(line->suffix, line->suffix + 1U, sizeof(line->suffix) - 1U);
+        line->suffix_len--;
+    }
+    line->suffix[line->suffix_len] = byte;
+    line->suffix_len++;
+}
+
 int main(void)
 {
     const struct device *const uart = DEVICE_DT_GET(FIXTURE_UART_NODE);
     const struct device *const gpio = DEVICE_DT_GET(FIXTURE_GPIO_NODE);
     struct zephyr_fixture_context context = {.uart = uart};
     struct dmf_fixture fixture;
-    unsigned char command[COMMAND_CAPACITY];
+    unsigned char command[DMF_COMMAND_CAPACITY];
+    struct dmf_line_diagnostics line = {0};
     size_t command_length = 0U;
     int discarding = 0;
 
@@ -98,18 +118,23 @@ int main(void)
         }
         if (byte == '\n') {
             if (discarding != 0) {
-                dmf_fixture_handle_command(&fixture, command, 0U, discarding);
+                dmf_fixture_handle_command(&fixture, command, 0U, discarding, &line);
             } else {
-                dmf_fixture_handle_command(&fixture, command, command_length, discarding);
+                dmf_fixture_handle_command(&fixture, command, command_length, discarding, &line);
             }
             command_length = 0U;
             discarding = 0;
+            line = (struct dmf_line_diagnostics){0};
             continue;
         }
+        count_line_byte(&line);
         if (discarding != 0) {
+            remember_discarded_byte(&line, byte);
             continue;
         }
         if (command_length == sizeof(command)) {
+            line.overflow_byte = byte;
+            remember_discarded_byte(&line, byte);
             command_length = 0U;
             discarding = 1;
             continue;
