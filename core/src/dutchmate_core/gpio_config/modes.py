@@ -104,6 +104,13 @@ class GpioModeRegistry:
 
         return dict(self._states)
 
+    def invalidate(self) -> None:
+        """A previous helper epoch's acknowledgements are not physical acceptance."""
+        self._states = {
+            channel: GpioControlChannelState(channel=channel, state="unconfigured")
+            for channel in ALL_CONTROL_CHANNELS
+        }
+
     def find_by_role(self, role: str) -> GpioControlChannelState | None:
         """Return the configured channel state for a role, if one exists."""
 

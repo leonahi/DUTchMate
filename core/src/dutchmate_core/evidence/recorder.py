@@ -312,6 +312,9 @@ class ContinuousEvidenceRecorder:
         self._close_complete = Event()
         self._close_error: BaseException | None = None
         self._source_close_complete = False
+        self._connection_initializer: (
+            Callable[[BackendSnapshot, Callable[[], None] | None], None] | None
+        ) = None
 
         handle = session_store.create_v2_session(
             profile=profile,
@@ -356,6 +359,13 @@ class ContinuousEvidenceRecorder:
     def active_session_id(self) -> str:
         with self._condition:
             return self._handle.session_id
+
+    def set_connection_initializer(
+        self,
+        initialize: Callable[[BackendSnapshot, Callable[[], None] | None], None],
+    ) -> None:
+        """Install required epoch initialization before reconnect supervision starts."""
+        self._connection_initializer = initialize
 
     @property
     def state(self) -> RecorderState:
@@ -822,11 +832,14 @@ class ContinuousEvidenceRecorder:
         replacement: CaptureEventSource,
         *,
         backend_snapshot: BackendSnapshot,
+        before_connected: Callable[[], None] | None = None,
     ) -> None:
-        with self._admission_lock:
-            self._replace_source_admitted(
-                replacement, backend_snapshot=backend_snapshot, manual=True
-            )
+        self._replace_source_admitted(
+            replacement,
+            backend_snapshot=backend_snapshot,
+            manual=True,
+            before_connected=before_connected,
+        )
 
     def _finish_release_drain(self, source: CaptureEventSource) -> bool:
         with self._condition:
@@ -847,14 +860,15 @@ class ContinuousEvidenceRecorder:
         replacement: CaptureEventSource,
         *,
         backend_snapshot: BackendSnapshot | None = None,
+        before_connected: Callable[[], None] | None = None,
     ) -> None:
         """Durably publish a replacement segment before resuming receive."""
 
-        with self._admission_lock:
-            self._replace_source_admitted(
-                replacement,
-                backend_snapshot=backend_snapshot,
-            )
+        self._replace_source_admitted(
+            replacement,
+            backend_snapshot=backend_snapshot,
+            before_connected=before_connected,
+        )
 
     def _replace_source_admitted(
         self,
@@ -862,15 +876,12 @@ class ContinuousEvidenceRecorder:
         *,
         backend_snapshot: BackendSnapshot | None,
         manual: bool = False,
+        before_connected: Callable[[], None] | None = None,
     ) -> None:
         if backend_snapshot is None or backend_snapshot.segment is None:
-            with suppress(BaseException):
-                _close_source(replacement)
             raise ValueError("replacement backend snapshot requires segment provenance")
         physical_segment = _source_segment(replacement)
         if physical_segment != backend_snapshot.segment:
-            with suppress(BaseException):
-                _close_source(replacement)
             raise ValueError("replacement source segment must match its backend snapshot")
         with self._condition:
             if (
@@ -879,92 +890,130 @@ class ContinuousEvidenceRecorder:
                 or self._source is not None
                 or self._closing
             ):
-                with suppress(BaseException):
-                    _close_source(replacement)
                 raise RuntimeError("evidence recorder cannot accept replacement")
             handle = self._handle
+            previous_session_id = handle.session_id
             next_segment_id = self._stored_segment_id + 1
         normalized_segment = replace(physical_segment, segment_id=next_segment_id)
         normalized_snapshot = replace(backend_snapshot, segment=normalized_segment)
         try:
-            metadata = self._session_store.load_metadata(handle.session_id)
-            new_ownership_session = manual and metadata.get("state") != "active"
-            if new_ownership_session:
-                normalized_snapshot = replace(
-                    normalized_snapshot, segment=replace(normalized_segment, segment_id=0)
-                )
-                handle = self._session_store.create_v2_session(
-                    profile=self._profile, backend_snapshot=normalized_snapshot
-                )
-                self._handle = handle
-                self._stored_segment_id = 0
-                self._connection_event("reacquire_started")
-            else:
-                handle = self._session_store.append_v2_segment(
-                    handle, backend_snapshot=normalized_snapshot
-                )
-            metadata = self._session_store.load_metadata(handle.session_id)
-            segments = metadata.get("segments")
-            if not isinstance(segments, list) or not segments:
-                raise ValueError("replacement session has no published segment")
-            stored_segment_id = len(segments) - 1
-            connected = self._session_store.append_v2_connection_event(
-                handle,
-                event_type="reacquire_succeeded" if manual else "reconnect_succeeded",
-                segment_id=stored_segment_id,
-                detail={"connection_generation": self._connection_generation + 1},
-            )
-            metadata = self._session_store.load_metadata(connected.handle.session_id)
-            segments = metadata.get("segments")
-            if not isinstance(segments, list) or not segments:
-                raise ValueError("replacement session has no published segment")
-            stored_segment_id = len(segments) - 1
+            with self._admission_lock:
+                metadata = self._session_store.load_metadata(handle.session_id)
+                new_ownership_session = manual and metadata.get("state") != "active"
+                if new_ownership_session:
+                    normalized_snapshot = replace(
+                        normalized_snapshot, segment=replace(normalized_segment, segment_id=0)
+                    )
+                    handle = self._session_store.create_v2_session(
+                        profile=self._profile, backend_snapshot=normalized_snapshot
+                    )
+                    self._handle = handle
+                    self._stored_segment_id = 0
+                    self._connection_event("reacquire_started")
+                else:
+                    handle = self._session_store.append_v2_segment(
+                        handle, backend_snapshot=normalized_snapshot
+                    )
+                metadata = self._session_store.load_metadata(handle.session_id)
+                segments = metadata.get("segments")
+                if not isinstance(segments, list) or not segments:
+                    raise ValueError("replacement session has no published segment")
+                stored_segment_id = len(segments) - 1
+                next_sequence = metadata.get("next_evidence_seq")
+                if not isinstance(next_sequence, int):
+                    raise ValueError("replacement session has no evidence sequence")
+                # Configuration attempts must belong to the new persisted segment,
+                # while clients still see reacquiring/reconnecting rather than success.
+                with self._condition:
+                    self._handle = handle
+                    self._stored_segment_id = stored_segment_id
+                    self._segment = replace(physical_segment, segment_id=stored_segment_id)
+                    self._tail = DurableEvidenceTail(handle.session_id, next_sequence)
+                    self._processor = UartCaptureProcessor()
+            try:
+                if self._connection_initializer is not None:
+                    self._connection_initializer(normalized_snapshot, before_connected)
+                with self._admission_lock:
+                    if before_connected is not None:
+                        before_connected()
+                    with self._condition:
+                        if self._closing or self._fault is not None:
+                            raise ConnectionLifecycleError(
+                                "invalid_connection_state", "Evidence ownership is unavailable"
+                            )
+                    connected = self._session_store.append_v2_connection_event(
+                        self._handle,
+                        event_type="reacquire_succeeded" if manual else "reconnect_succeeded",
+                        segment_id=self._stored_segment_id,
+                        detail={"connection_generation": self._connection_generation + 1},
+                    )
+                    metadata = self._session_store.load_metadata(connected.handle.session_id)
+                    segments = metadata.get("segments")
+                    if not isinstance(segments, list) or not segments:
+                        raise ValueError("replacement session has no published segment")
+                    stored_segment_id = len(segments) - 1
+                    with self._condition:
+                        if self._closing:
+                            reject = True
+                        else:
+                            reject = False
+                            rolled_over = (
+                                new_ownership_session
+                                or connected.handle.session_id != previous_session_id
+                            )
+                            self._connection_generation += 1
+                            self._handle = connected.handle
+                            self._source = replacement
+                            self._source_segment_id = physical_segment.segment_id
+                            self._stored_segment_id = stored_segment_id
+                            self._segment = replace(physical_segment, segment_id=stored_segment_id)
+                            self._processor = UartCaptureProcessor()
+                            self._status_baseline = None
+                            if rolled_over:
+                                self._reset_integrity_after_rollover(
+                                    backend_snapshot.integrity,
+                                )
+                            self._connection_start_dropped_bytes = self._session_dropped_bytes
+                            self._explicit_overflow_bytes = 0
+                            prior_integrity = (
+                                None if new_ownership_session else self._health.integrity
+                            )
+                            self._health = CaptureSourceHealth(
+                                connected=True,
+                                integrity=prior_integrity or backend_snapshot.integrity,
+                                backend_snapshot=replace(
+                                    backend_snapshot,
+                                    segment=self._segment,
+                                ),
+                                connection_generation=self._connection_generation,
+                            )
+                            self._tail = DurableEvidenceTail(
+                                connected.handle.session_id,
+                                _next_sequence(connected),
+                            )
+                            self._state = "connected"
+                            self._replacement_allowed = False
+                            self._condition.notify_all()
+            except ConnectionLifecycleError as exc:
+                with self._admission_lock:
+                    failed = self._session_store.append_v2_connection_event(
+                        self._handle,
+                        event_type="reacquire_failed" if manual else "reconnect_failed",
+                        segment_id=self._stored_segment_id,
+                        detail={"error": exc.error, "detail": str(exc), **exc.context},
+                    )
+                    self._publish_admission(failed)
+                    self._record_fatal(exc, end_reason="backend_input_error")
+                    raise
+        except ConnectionLifecycleError:
+            # The coordinator still owns this unpublished candidate and closes it.
+            raise
         except BaseException as exc:
-            with suppress(BaseException):
-                _close_source(replacement)
+            # Ownership transfers only on success; candidate cleanup stays with
+            # the coordinator for validation, initialization and persistence faults.
             self._record_fatal(exc, end_reason="persistence_error")
             raise
-        with self._condition:
-            if self._closing:
-                reject = True
-            else:
-                reject = False
-                rolled_over = (
-                    new_ownership_session or connected.handle.session_id != self._handle.session_id
-                )
-                self._connection_generation += 1
-                self._handle = connected.handle
-                self._source = replacement
-                self._source_segment_id = physical_segment.segment_id
-                self._stored_segment_id = stored_segment_id
-                self._segment = replace(physical_segment, segment_id=stored_segment_id)
-                self._processor = UartCaptureProcessor()
-                self._status_baseline = None
-                if rolled_over:
-                    self._reset_integrity_after_rollover(
-                        backend_snapshot.integrity,
-                    )
-                self._connection_start_dropped_bytes = self._session_dropped_bytes
-                self._explicit_overflow_bytes = 0
-                prior_integrity = None if new_ownership_session else self._health.integrity
-                self._health = CaptureSourceHealth(
-                    connected=True,
-                    integrity=prior_integrity or backend_snapshot.integrity,
-                    backend_snapshot=replace(
-                        backend_snapshot,
-                        segment=self._segment,
-                    ),
-                    connection_generation=self._connection_generation,
-                )
-                self._tail = DurableEvidenceTail(
-                    connected.handle.session_id,
-                    _next_sequence(connected),
-                )
-                self._state = "connected"
-                self._replacement_allowed = False
-                self._condition.notify_all()
         if reject:
-            _close_source(replacement)
             raise RuntimeError("evidence recorder is closing")
 
     def reconnect_selection_failed(self, reason: str) -> None:

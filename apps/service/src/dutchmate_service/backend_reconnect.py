@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import replace
 from threading import Condition, Event, RLock, Thread, current_thread
 from typing import Protocol, cast
@@ -64,6 +64,7 @@ class ReplaceableCaptureSource(CaptureEventSource, Protocol):
         replacement: CaptureEventSource,
         *,
         backend_snapshot: BackendSnapshot | None = None,
+        before_connected: Callable[[], None] | None = None,
     ) -> None:
         """Accept ownership of one validated concrete replacement."""
 
@@ -126,7 +127,11 @@ class ManualSourceOwner(Protocol):
     def begin_reacquire(self) -> None: ...
     def reacquire_failed(self, *, cleanup_unknown: bool = False) -> None: ...
     def accept_reacquired_source(
-        self, source: CaptureEventSource, *, backend_snapshot: BackendSnapshot
+        self,
+        source: CaptureEventSource,
+        *,
+        backend_snapshot: BackendSnapshot,
+        before_connected: Callable[[], None] | None = None,
     ) -> None: ...
 
 
@@ -278,10 +283,13 @@ class BackendReconnectCoordinator:
                         )
                     if replacement.backend_snapshot is None:
                         raise ValueError("Reacquire requires segment provenance")
-                    owner.accept_reacquired_source(
-                        replacement.source, backend_snapshot=replacement.backend_snapshot
-                    )
-                    replacement = None
+                owner.accept_reacquired_source(
+                    replacement.source,
+                    backend_snapshot=replacement.backend_snapshot,
+                    before_connected=lambda: self._check_replacement_ready(deadline),
+                )
+                replacement = None
+                with self._condition:
                     self._suspended = False
                     self._failure = None
                     self._condition.notify_all()
@@ -344,7 +352,6 @@ class BackendReconnectCoordinator:
             except BaseException:
                 self._worker = None
                 raise
-
 
     def close(self) -> None:
         """Stop reconnect activity and join the idle worker exactly once."""
@@ -438,7 +445,6 @@ class BackendReconnectCoordinator:
         except BaseException as exc:
             self._retain_close_error(exc)
 
-
     def _retry_idle(self, *, deadline: float) -> bool:
         retry_delay_s = self._idle_initial_retry_s
         while not self._stop_requested.is_set() and self._clock() < deadline:
@@ -471,45 +477,69 @@ class BackendReconnectCoordinator:
             if self._stop_requested.is_set() or self._clock() >= deadline:
                 self._close_rejected(replacement)
                 return False
-            self._publish(replacement)
-            return True
+            try:
+                published = self._publish(replacement, deadline=deadline)
+            except (ConnectionLifecycleError, SessionPersistenceError) as exc:
+                if self._close_error is None:
+                    self._failure = (
+                        exc
+                        if isinstance(exc, ConnectionLifecycleError)
+                        else ConnectionLifecycleError(
+                            "persistence_fault", str(exc), reason="persistence_fault"
+                        )
+                    )
+                self.cancel_pending()
+                return False
+            return published is not None
         return False
 
+    def _check_replacement_ready(self, deadline: float) -> None:
+        with self._condition:
+            if self._closing or self._closed or self._stop_requested.is_set():
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state", "Connection ownership is shutting down"
+                )
+            if self._clock() >= deadline:
+                raise ConnectionLifecycleError(
+                    "service_unavailable",
+                    "Connection initialization deadline expired",
+                    reason="open_timeout",
+                )
 
     def _publish(
         self,
         replacement: ReconnectedCaptureSource,
+        *,
+        deadline: float,
     ) -> ReconnectedCaptureSource | None:
-        callback_error: BaseException | None = None
         with self._condition:
             if self._closing or self._closed or self._suspended or self._stop_requested.is_set():
-                publish = False
+                reject = True
             else:
-                publish = True
-                try:
-                    if self._on_connected is not None:
-                        self._on_connected(replacement)
-                except BaseException as exc:
-                    callback_error = exc
-                else:
-                    if self._closing or self._closed or self._stop_requested.is_set():
-                        publish = False
-                    else:
-                        self._failure = None
-                        self._source_owner.replace_source(
-                            replacement.source,
-                            backend_snapshot=replacement.backend_snapshot,
-                        )
-                        return ReconnectedCaptureSource(
-                            source=self._source_owner,
-                            backend_snapshot=replacement.backend_snapshot,
-                        )
-
-        if not publish or callback_error is not None:
+                reject = False
+        if reject:
             self._close_rejected(replacement)
-        if callback_error is not None:
-            raise callback_error
-        return None
+            return None
+        try:
+            if self._on_connected is not None:
+                self._on_connected(replacement)
+            self._check_replacement_ready(deadline)
+            self._source_owner.replace_source(
+                replacement.source,
+                backend_snapshot=replacement.backend_snapshot,
+                before_connected=lambda: self._check_replacement_ready(deadline),
+            )
+        except BaseException:
+            # _close_rejected retains cleanup uncertainty separately. It must
+            # not replace the publication/initialization failure being raised.
+            with suppress(BaseException):
+                self._close_rejected(replacement)
+            raise
+        self._failure = None
+        return ReconnectedCaptureSource(
+            source=self._source_owner,
+            backend_snapshot=replacement.backend_snapshot,
+        )
 
     def _close_rejected(self, replacement: ReconnectedCaptureSource) -> None:
         first_error: BaseException | None = None

@@ -54,6 +54,33 @@ before publication. The recorder then admits the new segment and reconnect
 result before receiving from the replacement. Exactly one physical reader owns
 each connection; operations cannot initiate their own reconnect attempts.
 
+For a new Enhanced helper epoch, the persisted segment precedes required Profile
+GPIO initialization, and `reconnect_succeeded` / `reacquire_succeeded` follows
+its acknowledgements. The runtime invalidates previous physical acceptance and
+uses the same validated, audited `GpioConfigurator` path as startup. Each new
+acknowledgement supplies fresh host/device acceptance metadata. The immutable
+Profile remains the desired source; runtime overrides do not carry old physical
+acceptance into another helper epoch. No role or DUT-signal metadata is sent on
+the wire. Basic has no additional initialization.
+
+While initializing, public state remains `reconnecting` or `reacquiring` and
+does not advertise prior accepted controls as configured. The candidate's
+existing Enhanced owner buffers normalized input until recorder handoff; input
+buffered by successful initialization is then durably admitted in the new
+segment. No additional physical reader is created. GPIO initialization waits
+for submitted mutations without holding the recorder's admission lock. An
+Interact retains its exclusive operation lease while observing, but holds the
+mutation lock only for TX, so initialization can proceed without resending TX.
+
+Deadline/cancellation checks run while waiting for mutation ownership, before
+each configuration command and before final success publication. Required
+configuration rejection/timeout faults the new ownership attempt, preserves the
+actual control result and lifecycle failure, and does not publish success.
+The service coordinator closes the unpublished candidate. Failed close retains
+an explicit cleanup-unconfirmed ownership fault; known initialization failures
+are not misreported as successful reconnects or silently retried as fresh
+configuration attempts. No reconnect deadline is extended.
+
 Exact-path selection remains the default. Native USB may follow a changed path
 only with a unique configured VID/PID/serial-number match. Ambiguity never selects
 a candidate. Unknown cleanup retains a blocking ownership fault; it cannot report

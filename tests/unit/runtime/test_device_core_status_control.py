@@ -331,7 +331,7 @@ def test_reset_uses_shared_gpio_state_and_transport(tmp_path: Path) -> None:
     ]
 
 
-def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Path) -> None:
+def test_disconnect_does_not_advertise_previous_physical_gpio_acceptance(tmp_path: Path) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
     runtime = _recording_runtime(
         device_control=control,
@@ -353,7 +353,9 @@ def test_disconnect_clears_connection_metadata_but_keeps_gpio_state(tmp_path: Pa
     assert status.port == "/dev/ttyACM0"
     assert status.firmware is None
     assert status.integrity is None
-    assert status.control_channels["CTRL0"].state == "configured"
+    assert status.control_channels["CTRL0"].state == "unconfigured"
+    assert status.control_channels["CTRL0"].configured_at is None
+    assert status.control_channels["CTRL0"].device_timestamp_us is None
 
 
 _RECORDING_RUNTIMES = []

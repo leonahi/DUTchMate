@@ -110,7 +110,10 @@ Debug Helper.
 
 Rules:
 
-- Runtime configuration overrides config-file configuration for the current service process.
+- Runtime configuration overrides config-file configuration for the current
+  physical helper connection generation. A new Enhanced connection re-establishes
+  the immutable Profile mappings and requires fresh acknowledgements; previous
+  runtime overrides are not physical acceptance on the replacement helper.
 - Runtime overrides do not edit `.dutchmate/config.toml`.
 - A successful runtime override updates the channel state to `configured` with `source: "runtime"`.
 - A rejected runtime override must not change the previous accepted mode or `configured` state.

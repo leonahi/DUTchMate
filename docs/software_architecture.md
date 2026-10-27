@@ -192,6 +192,17 @@ contract. Bounded operations observe published durable tails and read stable UAR
 records through operation-local seek cursors; they never call the physical
 backend source or rescan accumulated UART history under the store mutation lock.
 
+For replacement Enhanced connections, the runtime installs a required
+initialization callback on the recorder. The recorder persists the replacement
+segment, the runtime reuses canonical audited GPIO configuration from the
+immutable Profile, and only then does the recorder publish lifecycle success
+and transfer authoritative receive ownership. Service reconnect coordination
+still owns candidate opening/identity/cleanup and supplies final readiness
+checks. Physical commands and mutation-lock waits do not hold evidence admission
+or the coordinator's status lock. Interact's operation lease excludes competing
+user mutations while observation leaves the mutation lock available for this
+internal connection initialization. No delivery dependency enters core.
+
 ## Supported Core Facades
 
 The intentionally small package facades are:

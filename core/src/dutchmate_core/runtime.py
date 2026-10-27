@@ -77,6 +77,7 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.validation import (
     UartTxPayload,
+    ValidatedGpioConfiguration,
     prepare_uart_tx_payload,
     validate_boot_mode,
     validate_capture_duration,
@@ -272,6 +273,12 @@ class DeviceCoreRuntime:
         self._closed = False
         self._close_complete = Event()
         self._close_error: BaseException | None = None
+        if (
+            evidence_recorder is not None
+            and profile is not None
+            and profile.backend_mode == "enhanced"
+        ):
+            evidence_recorder.set_connection_initializer(self._initialize_profile_controls)
 
     @property
     def _connected(self) -> bool:
@@ -325,6 +332,8 @@ class DeviceCoreRuntime:
                     "invalid_connection_state", "Release requires connected ownership"
                 )
             self._connection_owner.release()
+            if self._backend_mode == "enhanced":
+                self._gpio_registry.invalidate()
             with self._operation_lock:
                 monitors = tuple(self._active_monitors.values())
             for monitor in monitors:
@@ -586,7 +595,14 @@ class DeviceCoreRuntime:
                     )
                 ),
                 active_session_id=self._active_session_id,
-                control_channels=self._gpio_registry.snapshot(),
+                control_channels=(
+                    self._gpio_registry.snapshot()
+                    if self._backend_mode != "enhanced" or self._connected
+                    else {
+                        channel: GpioControlChannelState(channel=channel, state="unconfigured")
+                        for channel in self._gpio_registry.snapshot()
+                    }
+                ),
                 commanded_boot_mode=self._commanded_boot_mode,
                 backend_mode=self._backend_mode,
                 backend_capabilities=tuple(sorted(self._backend_capabilities)),
@@ -675,57 +691,141 @@ class DeviceCoreRuntime:
                 )
             self._require_control_capability("configure_gpio_mode")
             recorder = self._require_action_recorder()
-            attempt_id = str(uuid4())
-            recorder.audit_control_attempt(
-                attempt_id=attempt_id,
-                role=request.role,
-                parameters={
-                    "action": "configure_gpio_mode",
-                    "channel": request.channel,
-                    "dut_signal": request.dut_signal,
-                    "mode": request.mode,
-                    "active_level": request.active_level,
-                    "idle_level": request.idle_level,
-                    "source": source_name,
-                },
-            )
-            boot_mapping = self._gpio_registry.find_by_role("boot")
-            affects_boot_state = request.role == "boot" or (
-                boot_mapping is not None and boot_mapping.channel == request.channel
-            )
-            try:
-                state = self._gpio_configurator.configure_mode(
-                    role=request.role,
-                    channel=request.channel,
-                    dut_signal=request.dut_signal,
-                    mode=request.mode,
-                    active_level=request.active_level,
-                    idle_level=request.idle_level,
-                    source=source_name,
+            return self._configure_gpio_mode(request, source_name, recorder)
+
+    def _initialize_profile_controls(
+        self,
+        snapshot: BackendSnapshot,
+        check_ready: Callable[[], None] | None = None,
+    ) -> None:
+        """Let submitted actions finish before invalidating their physical acknowledgements."""
+        while not self._mutation_lock.acquire(timeout=0.05):
+            if check_ready is not None:
+                check_ready()
+            if self._closing or self._closed:
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state", "Runtime is shutting down"
                 )
-            except GpioConfigurationError:
-                self._control_result(recorder, attempt_id=attempt_id, status="backend_input_error")
-                if affects_boot_state:
-                    self._commanded_boot_mode = None
-                raise
-            self._control_result(
-                recorder,
-                attempt_id=attempt_id,
-                status=state.last_rejected.error if state.last_rejected else "success",
-                device_timestamp_us=state.device_timestamp_us if not state.last_rejected else None,
+        try:
+            if self._closing or self._closed:
+                raise ConnectionLifecycleError(
+                    "invalid_connection_state", "Runtime is shutting down"
+                )
+            self._apply_profile_controls(snapshot, check_ready)
+        finally:
+            self._mutation_lock.release()
+
+    def _apply_profile_controls(
+        self,
+        snapshot: BackendSnapshot,
+        check_ready: Callable[[], None] | None,
+    ) -> None:
+        """Acknowledge desired modes for a staged helper epoch before lifecycle success."""
+        self._invalidate_connection_controls()
+        profile = self._profile
+        recorder = self._evidence_recorder
+        assert profile is not None and recorder is not None
+        if profile.controls and "gpio_control" not in snapshot.capabilities:
+            raise ConnectionLifecycleError(
+                "unsupported_capability",
+                "Profile controls require gpio_control",
+                reason="control_initialization_failed",
             )
-            if state.last_rejected is not None:
-                if affects_boot_state and state.last_rejected.error in {
-                    "hardware_fault",
-                    "timeout",
-                }:
-                    self._commanded_boot_mode = None
-            elif state.state == "configured":
-                if request.role == "boot":
-                    self._commanded_boot_mode = "normal"
-                elif self._gpio_registry.find_by_role("boot") is None:
-                    self._commanded_boot_mode = None
-            return state
+        try:
+            for mapping in profile.controls:
+                if check_ready is not None:
+                    check_ready()
+                request = validate_gpio_configuration(
+                    role=mapping.role,
+                    channel=mapping.channel,
+                    dut_signal=mapping.dut_signal,
+                    mode=mapping.mode,
+                    active_level=mapping.active_level,
+                    idle_level=mapping.idle_level,
+                )
+                state = self._configure_gpio_mode(request, "config", recorder)
+                if state.last_rejected is not None:
+                    rejection = state.last_rejected
+                    raise ConnectionLifecycleError(
+                        rejection.error,
+                        rejection.detail,
+                        reason="control_initialization_failed",
+                    )
+            if check_ready is not None:
+                check_ready()
+        except GpioConfigurationError as exc:
+            self._invalidate_connection_controls()
+            raise ConnectionLifecycleError(
+                "backend_input_error",
+                str(exc),
+                reason="control_initialization_failed",
+            ) from exc
+        except BaseException:
+            self._invalidate_connection_controls()
+            raise
+
+    def _invalidate_connection_controls(self) -> None:
+        self._gpio_registry.invalidate()
+        self._commanded_boot_mode = None
+
+    def _configure_gpio_mode(
+        self,
+        request: ValidatedGpioConfiguration,
+        source_name: GpioModeRequestSource,
+        recorder: ContinuousEvidenceRecorder,
+    ) -> GpioControlChannelState:
+        """Canonical audited configuration, shared by public actions and epoch initialization."""
+        attempt_id = str(uuid4())
+        recorder.audit_control_attempt(
+            attempt_id=attempt_id,
+            role=request.role,
+            parameters={
+                "action": "configure_gpio_mode",
+                "channel": request.channel,
+                "dut_signal": request.dut_signal,
+                "mode": request.mode,
+                "active_level": request.active_level,
+                "idle_level": request.idle_level,
+                "source": source_name,
+            },
+        )
+        boot_mapping = self._gpio_registry.find_by_role("boot")
+        affects_boot_state = request.role == "boot" or (
+            boot_mapping is not None and boot_mapping.channel == request.channel
+        )
+        try:
+            state = self._gpio_configurator.configure_mode(
+                role=request.role,
+                channel=request.channel,
+                dut_signal=request.dut_signal,
+                mode=request.mode,
+                active_level=request.active_level,
+                idle_level=request.idle_level,
+                source=source_name,
+            )
+        except GpioConfigurationError:
+            self._control_result(recorder, attempt_id=attempt_id, status="backend_input_error")
+            if affects_boot_state:
+                self._commanded_boot_mode = None
+            raise
+        self._control_result(
+            recorder,
+            attempt_id=attempt_id,
+            status=state.last_rejected.error if state.last_rejected else "success",
+            device_timestamp_us=state.device_timestamp_us if not state.last_rejected else None,
+        )
+        if state.last_rejected is not None:
+            if affects_boot_state and state.last_rejected.error in {
+                "hardware_fault",
+                "timeout",
+            }:
+                self._commanded_boot_mode = None
+        elif state.state == "configured":
+            if request.role == "boot":
+                self._commanded_boot_mode = "normal"
+            elif self._gpio_registry.find_by_role("boot") is None:
+                self._commanded_boot_mode = None
+        return state
 
     @staticmethod
     def _control_result(
@@ -1182,49 +1282,50 @@ class DeviceCoreRuntime:
             owner = f"interact-{uuid4()}"
             with self._operation_lock:
                 self._interact_owner = owner
-            tx: UartSendResult | None = None
-            tx_error: dict[str, object] | None = None
+        tx: UartSendResult | None = None
+        tx_error: dict[str, object] | None = None
 
-            def send(operation_id: str) -> None:
-                nonlocal tx, tx_error
-                try:
-                    tx = self._send_payload(payload, operation_id=operation_id)
-                except UartSendError as exc:
-                    tx_error = {"code": exc.error, "detail": exc.detail, "context": exc.context}
-                    if (
-                        self._evidence_recorder is not None
-                        and self._evidence_recorder.state == "disconnected"
-                    ):
-                        return
-                    if (
-                        exc.error in {"persistence_fault", "backend_input_error"}
-                        or not exc.context
-                        or exc.context.get("connection_interrupted") is not True
-                    ):
-                        raise
-
+        def send(operation_id: str) -> None:
+            nonlocal tx, tx_error
             try:
-                result = self._run_bounded_operation(
-                    request=request,
-                    cancellation=cancellation,
-                    operation_type="interact",
-                    operation_id=owner,
-                    start_action=send,
-                    action_parameters={
-                        "data_b64": payload.data_b64,
-                        "transformation": payload.transformation(),
-                    },
-                )
-                return InteractResult(
-                    **{field: getattr(result, field) for field in result.__dataclass_fields__},
-                    data_b64=payload.data_b64,
-                    transformation=payload.transformation(),
-                    tx=tx,
-                    tx_error=tx_error,
-                )
-            finally:
-                with self._operation_lock:
-                    self._interact_owner = None
+                with self._mutation(owner=owner):
+                    tx = self._send_payload(payload, operation_id=operation_id)
+            except UartSendError as exc:
+                tx_error = {"code": exc.error, "detail": exc.detail, "context": exc.context}
+                if (
+                    self._evidence_recorder is not None
+                    and self._evidence_recorder.state == "disconnected"
+                ):
+                    return
+                if (
+                    exc.error in {"persistence_fault", "backend_input_error"}
+                    or not exc.context
+                    or exc.context.get("connection_interrupted") is not True
+                ):
+                    raise
+
+        try:
+            result = self._run_bounded_operation(
+                request=request,
+                cancellation=cancellation,
+                operation_type="interact",
+                operation_id=owner,
+                start_action=send,
+                action_parameters={
+                    "data_b64": payload.data_b64,
+                    "transformation": payload.transformation(),
+                },
+            )
+            return InteractResult(
+                **{field: getattr(result, field) for field in result.__dataclass_fields__},
+                data_b64=payload.data_b64,
+                transformation=payload.transformation(),
+                tx=tx,
+                tx_error=tx_error,
+            )
+        finally:
+            with self._operation_lock:
+                self._interact_owner = None
 
     def _mark_backend_disconnected(self) -> None:
         with self._operation_lock:

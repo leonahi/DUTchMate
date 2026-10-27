@@ -9,6 +9,146 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Enhanced Control Generation Review Corrections — 2026-10-27
+
+- Continued the existing unstaged, uncommitted
+  `fix/enhanced-reacquire-control-config` branch at base `90c744f`. Limited this
+  correction to runtime rollback, rejected-candidate cleanup and regressions.
+  No hardware access, firmware, Revision A, MCP or acceptance-criteria changes.
+- Profile initialization now uses a private cleanup helper to invalidate GPIO
+  acceptance and clear `_commanded_boot_mode` together. Both the known
+  `GpioConfigurationError` branch and all other initialization exceptions use
+  it before propagating the original failure. A final readiness check after
+  the last acknowledged mapping is inside the same rollback boundary.
+- Added deterministic boot/CTRL1-success then reset/CTRL0-failure cases for a
+  normal helper refusal and an unexpected response, exercising both exception
+  branches. They verify raw runtime state, unconfigured GPIO status, retained
+  error/detail and control evidence, no lifecycle success and one candidate
+  close. Final-ACK deadline expiry separately verifies full rollback even when
+  both configuration acknowledgements were successful.
+- The coordinator is the sole cleanup owner of a candidate until successful
+  handoff. Recorder provenance/state rejection, generic publication failure and
+  late closing rejection no longer independently close an unpublished source.
+  Automatic publication preserves its primary exception even when cleanup
+  fails; the existing cleanup error remains separately retained and blocking.
+  Automatic persistence failure stops without retry and retains
+  `persistence_fault` when cleanup is confirmed, rather than misclassifying the
+  persistence exception itself as uncertain physical cleanup.
+- Added four persistence-publication regressions: manual and automatic paths,
+  each with successful and failed candidate cleanup. Their invocation counter
+  counts every `close()` call, including calls hidden by the fake's idempotent
+  close implementation. All assert exactly one call through runtime shutdown,
+  original failure identity, no authoritative replacement/no lifecycle success,
+  and blocked subsequent reacquire. Failed cleanup retains
+  `cleanup_unconfirmed` and its shutdown error. Existing initialization rejection
+  cleanup coverage also now checks exact invocation count through shutdown.
+- Initial focused RED: **7 failed, 3 teardown errors in 1.98 s**. Both partial
+  initialization cases retained `"normal"`; final-ACK expiry retained accepted
+  GPIO state; all four publication cases invoked candidate close twice. The
+  teardown errors exposed the original cleanup-error retention/classification
+  defects. Strengthened the automatic error-identity check and verified it
+  failed separately when primary-error preservation was temporarily removed:
+  **1 failed in 0.25 s**, cleanup error replacing the persistence exception.
+- Focused GREEN: the seven new cases passed in **2.28 s**; final lifecycle file,
+  including the original fifteen cases, **22 passed in 4.94 s**. Broader
+  ownership/runtime/recorder/Enhanced/protocol/GPIO/service/CLI/architecture gate:
+  **911 passed in 18.33 s**.
+- Final validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen pytest -q --tb=line` **1,555 passed in 46.89 s**;
+  `uv run --frozen ruff check .` passed; `uv run --frozen mypy` passed/103 files;
+  `uv lock --check --offline` passed/66 packages; `git diff --check` passed.
+  Line tracebacks avoid slow source introspection observed while formatting
+  the initial failing tests. No test scope or assertions were suppressed.
+- Existing reconnect/architecture/GPIO semantics already specify coordinator
+  cleanup and truthful acceptance, so these corrections required no further
+  edits there. The change is localized; no interfaces, layers or module
+  ownership changed and no additional Graphify refresh was needed. Failed
+  Enhanced HIL report and native evidence, including 739/740, remain unchanged.
+  Phase 1A remains accepted; Phase 1B/Stage 8/Phase 1 remain incomplete. All work
+  remains unstaged and uncommitted for another review.
+
+## Enhanced Control Acceptance Across Connection Generations — 2026-10-27
+
+- Created `fix/enhanced-reacquire-control-config` from independently fetched
+  latest pushed `stage8-phase1-acceptance`,
+  `90c744fe97ed3af2224989a954261bef42797b45`. Work is uncommitted for review.
+  No physical serial access, service HIL, firmware, Revision A or MCP work was
+  performed. The failed Enhanced HIL report and session were not modified.
+- Confirmed source cause: `create_app` applies Profile hardware configuration
+  through startup/runtime once; `GpioConfigurator` records accepted modes in a
+  process-lived registry. The shared Enhanced reopen path only replaced control
+  and sender targets, while the recorder published a new segment/success. It
+  neither invalidated nor re-established physical GPIO acceptance. Firmware's
+  new epoch correctly starts unconfigured; no firmware defect is asserted.
+- Added an epoch-scoped helper surrogate beneath real service/runtime/recorder
+  composition. Startup configures both Profile channels; reset works; release
+  forgets physical configuration; reacquire opens a fresh helper. First RED
+  reproduces the exact HIL result: immediate reset is HTTP 409 `not_configured`,
+  detail `CTRL0 is not configured`, despite successful reacquire. The expanded
+  initial regression run was **7 failed / 1 passed** with matching stale-status,
+  false-success and automatic-reconnect failures before implementation.
+- The recorder now stages the durable replacement segment while state stays
+  reacquiring/reconnecting. A runtime-installed initializer waits for submitted
+  mutations, invalidates old physical acceptance, and replays immutable Profile
+  mappings through the same validated/audited configuration method as startup.
+  Control attempts belong to the staged segment; acknowledgements alone update
+  accepted state with fresh host/device timestamps. Final readiness is checked
+  before success is persisted and the source is handed to authoritative RX.
+  Candidate input stays buffered in the existing Enhanced owner until successful
+  handoff; the early-UART regression verifies durable retention afterward.
+- Ordinary actions in a generation do not resend modes. All CTRL0–CTRL3 can
+  be driven by Profile mappings; runtime overrides do not become the desired
+  source for a replacement epoch. Disconnected/released/reinitializing status
+  does not advertise previous-generation configured acceptance. Role and
+  DUT-signal metadata remain host-only; protocol and firmware are unchanged.
+- Required initialization rejection/timeout preserves the actual control result
+  and lifecycle failure, faults the journal/ownership through the existing
+  backend-fault path, and publishes no reacquire/reconnect success. The service
+  coordinator closes the unpublished candidate. Known rejection retains its
+  actual error; close failure retains `cleanup_unconfirmed` and blocks ownership.
+  Automatic initialization rejection is not silently retried as another success
+  attempt. Startup's existing canonical validation/rejection semantics remain.
+- Deadline/cancellation checks run during mutation-lock waits, before each mode
+  command and before final success. A separate RED case caught dispatch of the
+  next mode after simulated deadline expiry; GREEN stops before that command.
+  No reconnect deadline was enlarged. Shutdown while initialization is blocked
+  closes the candidate and cannot publish a late lifecycle success.
+- A deterministic late-ACK regression reproduced prior-epoch runtime acceptance
+  overwriting new state. Initialization now serializes against submitted
+  mutations before invalidation, without holding evidence admission while
+  waiting/dispatching. Interact's existing exclusive lease remains active during
+  observation; its mutation lock now covers actual TX rather than the entire
+  observation window. This preserves reconnect continuation and exact single TX.
+  The configured-profile Interact regression failed `disconnected` before that
+  adjustment and passes `matched` afterward; existing unknown-TX/no-retry cases
+  also remain green.
+- Focused GREEN: **15 new lifecycle cases passed in 3.02 s**. Targeted
+  ownership/runtime/Enhanced/GPIO/protocol/service/CLI/architecture suites:
+  **887 passed in 15.34 s**, followed by the final added four-channel case in the
+  new-file run. Basic release/reacquire, validation, safe-state, role-resolution
+  and exact no-role-metadata wire regressions are included in the gate.
+- Full final gate, using `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen pytest -q --tb=short` **1,548 passed in 46.37 s**;
+  `uv run --frozen ruff check .` passed; `uv run --frozen mypy` passed/103 files;
+  `uv lock --check --offline` passed/66 packages; architecture checks are included
+  in pytest. Final `git diff --check` passed. No required check remains failing.
+- Updated reconnect and GPIO semantics to distinguish immutable desire from
+  current physical acceptance, and architecture documentation for the shared
+  segment/initialization/success boundary. No public schema field or persistence
+  migration was introduced. A focused Graphify explanation was checked against
+  source; `graphify update .` ran once: 5,887 nodes, 15,076 edges, 310 communities,
+  with an aggregated visualization. It warned that unchanged
+  `hardware/firmware/zephyr_dut/src/fixture_protocol.h` line 69 was only partially
+  parsed/no symbols extracted; code relationships used for this fix were checked
+  against source/tests. This is a graph extraction limitation, not a hardware
+  validation or test failure. Generated graph artifacts remain outside the diff.
+- Phase 1A stays accepted. Phase 1B, Stage 8 and overall Phase 1 remain incomplete
+  pending fresh physical lifecycle acceptance after this fix and the existing
+  normative evidence gaps. Preserved failure 739/740 is not reclassified as a
+  success. Only software/tests and authoritative documentation changed; nothing
+  is committed or pushed by this slice.
+
 ## Enhanced v2 HIL: Stopped on Reacquire/Control Mismatch — 2026-10-27
 
 - Ran from clean `stage8-phase1-acceptance` at latest pushed

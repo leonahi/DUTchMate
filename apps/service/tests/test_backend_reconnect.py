@@ -139,7 +139,10 @@ class FakeSourceOwner:
         replacement: CaptureEventSource,
         *,
         backend_snapshot: BackendSnapshot | None = None,
+        before_connected: Callable[[], None] | None = None,
     ) -> None:
+        if before_connected is not None:
+            before_connected()
         with self._condition:
             self.replacements.append(replacement)
             self.replacement_snapshots.append(backend_snapshot)
