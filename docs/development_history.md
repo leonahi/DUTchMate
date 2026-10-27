@@ -10,6 +10,64 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Bounded Overflow Physical Diagnostic: NUL/ff Prefix and INFO Tail — 2026-10-27
+
+- Ran only the requested focused diagnostic on clean `stage8-phase1-acceptance`
+  at `4692444f771f33b6d27994e03f2722c268e3f43a`. Initially the local reviewed commit was ahead of the remote;
+  waited for the operator's push and independently verified that exact remote
+  SHA before physical startup. No code/fixture/configuration changes occurred.
+- All software validation finished first: 1,533 pytest tests in 42.52 s, Ruff,
+  mypy (103 source files), offline lock (66 packages), diff check. Exact commands
+  used `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, `uv lock --check --offline`. Gate ended
+  16:20:25.507066 IST; normal CLI start began 16:22:45.444537 IST. No pytest or
+  second DUTchMate runtime/session store ran while the service was live.
+- FTDI FT231X `0403:6015`, serial `D358SG6A`, expected cu path/USB location,
+  no pre-existing owner/listener/PID file. Basic profile unchanged: 115200 8-N-1,
+  no flow control, TX explicitly enabled, reconnect timeout 5.0 s, driver-default
+  DTR/RTS. User confirmed externally flashed Pico 1/H build
+  `basic-ovf-20261027-3cbe8d2ee291`, reviewed Zephyr 4.4.0 / SDK 1.0.1 image.
+  UF2 recomputed SHA-256 `c1f0067c910ccf8ae0108eed5362da957dc50e4a9a801a4afce69c0ce4407409`; source snapshot matched the build.
+  First exact INFO matched the complete build literal. Agent did not flash it.
+- Fresh schema-v2 session **`20261027T105245Z-a78a6741`**, PID 44442. Exactly two INFO Interacts:
+  initial matched `[1,6)` (audit 2/3, RX 4, terminal 5), and one following the
+  single automatic reconnect `[10,15)` (audit 11/12, RX 13, timeout terminal 14).
+  Each audited exact `494e464f0a`/`INFO\n`, one attempt/result, accepted 5 bytes.
+  No other UART command, parser clearing, reset, manual reacquire or retry.
+- Trial 1 out of maximum three reproduced and stopped. Passive USB/node/status/
+  native-connection observers and operator timestamp markers were preserved;
+  no serial open probes. Disconnect/start 6/7, fresh segment/success 8/9;
+  same ownership session, one durable gap, resumed RX and responsive service.
+  First-observed reconnect delta 3.124234834 s, unchanged 5.0 s policy.
+- Complete response preserved exactly:
+  `DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1 line_len=90 prefix_hex=0000000000000000000000000000ff0000000000000000ff000000ff00000000 overflow_byte=00 discarded_count=58 suffix_hex=000000ff494e464f\n`.
+  `line_len=90`, first overflow `00`, discarded_count=58, counts_overflow absent.
+  Prefix is exactly 29 `00` / three `ff`; ff at one-based 15/24/28. All 32 bytes
+  and complete hex are recorded in the Basic report. Suffix
+  `000000ff494e464f` ends with `494e464f` (**INFO**), showing INFO arrived while
+  the assembler was already handling an overlong line. Relevant byte values at
+  positions 34–82 are not captured or inferred. This does not show electrical
+  waveform or establish a root cause in any host/adapter/wiring/UART/Zephyr/
+  fixture layer. No remediation or exoneration is claimed.
+- Native final state `completed/service_shutdown`, 303 raw RX bytes, 2 RX
+  records, 2 TX pairs, 2 terminal operations, 2 segments, 1 gap, sequences 0..14
+  contiguous; decoded RX matches raw. Saved-cursor service retrieval preserves
+  6..14, including all reconnect/second-INFO evidence. Native copies, hashes,
+  service log, complete decode and cleanup are under
+  `.dutchmate/hil/basic-overflow-physical-20261027/`.
+  Raw SHA-256 `4c908fc39eaedd8e6a008546d04de3bc27a00dd32d3a6fdf78ddf0f9ec05c948`.
+- Graceful CLI stop returned 16:27:52.676969 IST; at
+  16:27:54.550083 IST PID/PID file absent, no TCP 2040 listener or FTDI
+  cu/tty owner. All 441 earlier session-file hashes and raw config unchanged;
+  no SIGKILL, patch, new flash or further diagnostic. Only Basic report/current
+  status/this newest history entry changed; older history and reports preserved.
+  `git diff --check` passed; documentation remains uncommitted for review.
+- **Phase 1A remains Complete/accepted**; this diagnostic is not a full Basic
+  acceptance rerun. Stage 8, Phase 1B and overall Phase 1 remain incomplete;
+  Enhanced HIL and MCP remain deferred. The anomaly's source remains unresolved.
+
+
 ## Bounded Basic Fixture Overflow Diagnostics Prepared — 2026-10-27
 
 - Started clean on latest-pushed `stage8-phase1-acceptance`,

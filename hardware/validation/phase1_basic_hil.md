@@ -1947,3 +1947,194 @@ observation struct occupies 16 bytes. The UF2 has **not** been flashed and has
 no physical validation yet; a host cross-build does not establish on-device RX.
 All 996 existing `.dutchmate` file hashes and all
 14 earlier UF2 hashes remain unchanged.
+
+
+## Bounded overflow physical diagnostic — 2026-10-27
+
+Result: **reproduced on reconnect trial 1; stopped immediately without retry**.
+The fixture reports 90 relevant bytes, a first-32-byte NUL/`ff` prefix, first
+excess byte `00`, 58 discarded bytes and a suffix ending in `INFO`. This is
+firmware line-assembly evidence; **no electrical waveform or root cause is
+established**. No code, firmware, parser state, UART configuration, reconnect
+policy or acceptance criterion was changed during the run.
+
+**Phase 1A remains Complete/accepted** from the existing acceptance session.
+This was not a full Basic acceptance rerun. Stage 8, Phase 1B and overall Phase 1
+remain incomplete; Enhanced HIL and MCP were not started. Older diagnostic and
+acceptance records remain unchanged and are not retroactively assigned a cause.
+
+### Preflight and provenance
+
+- Clean `stage8-phase1-acceptance`, exact HEAD **`4692444f771f33b6d27994e03f2722c268e3f43a`**.
+  Initial HTTPS remote lookup still showed `68ae397`; physical startup waited
+  for the operator's push. A second independent lookup confirmed the exact
+  tested HEAD above was pushed before any serial open. No branch/code change
+  occurred between the software gate and physical startup.
+- Host macOS 26.2 build `25C56`, arm64. FTDI FT231X `0403:6015`, serial
+  `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, location `0-1.4`. No listener,
+  service PID file or FTDI cu/tty owner before startup; checked again immediately
+  before starting. Passive USB matching used the same VID/PID/serial.
+- User confirmed the reviewed image already externally flashed on Pico 1/Pico H:
+  **`basic-ovf-20261027-3cbe8d2ee291`**, UF2 SHA-256 independently recomputed as
+  **`c1f0067c910ccf8ae0108eed5362da957dc50e4a9a801a4afce69c0ce4407409`** from `/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dutchmate-zephyr-dut-basic-ovf-3cbe8d2ee291/zephyr/zephyr.uf2`.
+  Fixture source inventory SHA-256 `3cbe8d2ee291b49c8185d6f1ff45996e371d82d63f3c142a57e94fe830e712b1` matches the
+  committed source. This is the previously reviewed Zephyr 4.4.0 / SDK 1.0.1
+  Basic build; no rebuild or agent flashing occurred here. Actual initial INFO
+  confirmed the complete expected build literal before any reconnect.
+- Existing wiring/power arrangement retained: GP0/pin 1 → FTDI RX,
+  GP1/pin 2 → FTDI TX, GND/pin 3 → FTDI GND, Pico powered by its own USB,
+  FTDI VCC disconnected, 3.3 V logic, GP2/GP3 open. Only FTDI USB was unplugged;
+  no Pico reset, parser resynchronization or external serial consumer was used.
+- Raw configuration unchanged, SHA-256 `55811eeb2385961b43e8d9bb05221aa461991ee93415f823616e24024ecd75ba`; resolved profile
+  digest `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+  Effective Basic profile: exact-path/external UART, 115200 8-N-1,
+  `rtscts=false`, `xonxoff=false`, explicit TX enabled, default ending `none`,
+  driver-default DTR/RTS, **`reconnect_timeout_s=5.0`**, 16 MiB budget,
+  retention disabled. Initial/final service snapshots and native metadata agree.
+- Pre-start software gate: **1,533 pytest tests passed in 42.52 s**, including
+  fixture/architecture checks; Ruff passed; mypy passed (103 source files);
+  offline lock check passed (66 packages); `git diff --check` passed. All tests
+  finished at **16:20:25.507066 IST**, before CLI startup at
+  **16:22:45.444537 IST**. Commands used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. Current CLI start/
+  Interact help was captured. No pytest or additional runtime/session store
+  ran while the physical service was live.
+
+### Exactly one reconnect/INFO trial
+
+Fresh native-v2 session **`20261027T105245Z-a78a6741`**, service PID **44442**.
+Normal CLI lifecycle commands:
+
+```text
+uv run --frozen --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200
+uv run --frozen --package dutchmate dutchmate stop
+```
+
+Exactly **two** bounded HTTP `POST /dut/interact` requests were made: one initial
+INFO, required to match, and one INFO following automatic reconnect. Each body:
+
+```json
+{"text":"INFO","line_ending":"lf","conditions":[{"pattern":"DMF/1 INFO board=rpi_pico build=basic-ovf-20261027-3cbe8d2ee291 protocol=1"}],"timeout_s":2.0}
+```
+
+Each request has exactly one TX attempt/result pair for hex **`494e464f0a`**,
+base64 `SU5GTwo=`, byte length **5**, result `status=success`, accepted bytes **5**.
+No other UART command, blank line, reset, manual reacquire or parser alteration
+was performed. Existing passive USB/node/status/native-connection observers were
+armed before the helper prompted unplug. They neither opened serial nor created
+another DUTchMate runtime/store. No external open probe competed with reconnect.
+All observer threads stopped after the result. The maximum was three reconnect
+trials; **only trial 1 was performed** because it reproduced the diagnostic.
+
+Times below are **IST (UTC+05:30), October 27**. Artifacts also preserve UTC and
+host-monotonic timestamps. Operator markers bound human actions, not exact
+physical/electrical transitions; observer sample start/end times are retained.
+
+| Event | IST time / evidence |
+|---|---|
+| Initial INFO request / return | `16:22:50.459017` / `16:22:50.807980`; matched |
+| Initial TX / response / terminal | Attempt/result **2/3**, RX **4**, matched terminal **5**, range `[1,6)` |
+| Operator unplug-imminent marker | `16:27:15.009147` |
+| Unexpected disconnect / reconnect start | **6/7**, native `10:57:15Z`; first observed `16:27:15.798268` |
+| Serial node again observed | `16:27:17.824305` |
+| USB identity again observed | `16:27:17.842911` (sample began `16:27:17.805580`) |
+| Operator replug-completed marker | `16:27:18.053180` |
+| Fresh segment / reconnect success | **8/9**, segment **1**, native `10:57:18Z`; first observed `16:27:18.922512` |
+| Post-reconnect INFO request / return | `16:27:19.023046` / `16:27:21.028144` |
+| Exact TX / response / terminal | Attempt/result **11/12**, RX **13**, timeout terminal **14**, range `[10,15)` |
+
+The same ownership session continued across the durable observation gap into
+fresh segment 1. The old segment ended as `unexpected_disconnect`. New segment
+host-monotonic source origin is `17133673000 us`; the request began
+**112.610083 ms** later. First-observed reconnect-start → success delta was
+**3.124234834 s**, within the unchanged 5.0 s policy. These are polling
+observations, not exact open-syscall times. RX 13 proves resumed acquisition;
+service remained connected/responsive with no active operations afterward.
+
+Initial operation: `interact-e13759b8-c6f8-47fb-bf6f-493916c3fea0`, attempt
+`a1fcb04c-04a4-4b5d-95c9-cc1075c36593`. Post-reconnect operation:
+`interact-50ec32a1-b647-4188-8b8e-897d2f0feb98`, attempt
+`4b105c6c-f5f0-47bc-9ad8-86def134ec1c`. The later Interact truthfully timed out
+because the requested INFO literal did not match. It was not retried.
+
+### Complete fixture diagnostic and explicit decode
+
+Exact RX 13, with the terminating LF represented by `\n`:
+
+```text
+DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1 line_len=90 prefix_hex=0000000000000000000000000000ff0000000000000000ff000000ff00000000 overflow_byte=00 discarded_count=58 suffix_hex=000000ff494e464f\n
+```
+
+| Field | Observed value / meaning |
+|---|---|
+| `command_len` / `command_hex` / `discard` | `0` / empty / `1`; handler received zero command bytes from the discard path |
+| `line_len` | **90** non-CR/non-LF bytes observed by the assembler |
+| `prefix_hex` | `0000000000000000000000000000ff0000000000000000ff000000ff00000000`; all 32 bytes decoded below |
+| `overflow_byte` | **`00`**, the first relevant byte beyond capacity (position 33) |
+| `discarded_count` | **58**, including that first excess byte |
+| `suffix_hex` | **`000000ff494e464f`** = `00 00 00 ff 49 4e 46 4f` |
+| Suffix ends in `494e464f` (`INFO`) | **Yes** |
+| `counts_overflow` | **Absent**; no count-overflow flag was reported |
+
+All 32 prefix bytes, in order (positions 1–16, then 17–32):
+
+```text
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff 00
+00 00 00 00 00 00 00 ff 00 00 00 ff 00 00 00 00
+```
+
+That prefix contains **29 `00` bytes** and **three `ff` bytes**. The `ff` bytes
+are at one-based positions **15, 24 and 28**; all other prefix positions are `00`.
+This reports the observed pattern exactly, without assigning its source.
+
+Because the eight-byte suffix ends in `INFO`, the explicit INFO bytes reached
+the firmware assembler while it was already processing an **overlong line**;
+they were discarded with that line rather than passed alone to the command
+handler. This is not exact `INFO` reaching the handler and being rejected.
+The bytes at relevant positions **34–82 were not captured**. Their values must
+not be filled in from the observed prefix/suffix. `line_len` excludes ignored
+CR and terminating LF and does not establish a raw electrical byte count.
+
+This instrumentation observes what the Pico firmware delivered to its UART
+line-assembly path, **not the FTDI TX → Pico RX electrical waveform**. Host TX
+requested/accepted bytes likewise do not establish the waveform. The source of
+the extra bytes and their exact arrival times remain unknown. No root cause is
+assigned to DUTchMate, FTDI, wiring, RP2040 UART, Zephyr or the fixture. No patch,
+workaround or remediation was attempted during the run.
+
+### Preservation and cleanup
+
+Artifacts under **`.dutchmate/hil/basic-overflow-physical-20261027/`** include
+preflight/remote verification, UF2/source/config hashes, pre-start software logs,
+CLI help, exact request/result and TX audits, initial matched build identity,
+operator markers, passive USB/node/status/connection samples, trial result,
+complete diagnostic decode/stop reason, final status/session detail, durable
+cursor retrieval, service log, final native copy, hash manifest and cleanup.
+Saved-cursor retrieval returned **nine records, 6..14**, including reconnect,
+post-reconnect TX, full response and terminal, without omission. Initial records
+0..5 are preserved in the same native session. No historical session was reused.
+
+Final native state **`completed/service_shutdown`**: **303 raw RX bytes**,
+**2 RX records**, **2 TX pairs**, **2 terminal operations**, **2 segments**,
+**1 observation gap**, contiguous evidence **0..14**. Decoded RX exactly matches
+raw bytes. There was no other host RX in this fresh session; that does not
+establish absence of earlier Pico ingress. Basic loss remains `not_observable`.
+
+| Native artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `4c908fc39eaedd8e6a008546d04de3bc27a00dd32d3a6fdf78ddf0f9ec05c948` |
+| `uart_events.jsonl` | `4a734c184a5954d4d88e63ea759e065ea9fdbab950921a61a7c9b5a036cfe0e9` |
+| `operation_events.jsonl` | `8c5e5a83baecbc58d05a98c7a3393e4a38cb9ef8a8167f7c0e8c8e547862e389` |
+| `connection_events.jsonl` | `72f62a1f123548d420d39805ead6c54126b1627746b6ed24ed2e21ffd4df3f70` |
+| `metadata.json` | `209289681794d37f1335a9a596f636c4901e5c64f174cd679060c2f82f9aaa29` |
+
+Graceful CLI stop returned **16:27:52.676969 IST**. At
+**16:27:54.550083 IST** (`2026-10-27T10:57:54.550083+00:00`), PID 44442 and its PID file
+were absent, TCP 2040 had no listener and both FTDI cu/tty paths were unowned.
+No SIGKILL, hardware flash or external serial consumer was used. All **441
+prior session-file hashes** and configuration bytes are unchanged. Only this
+appended Basic diagnostic record, current status and a new history entry changed;
+changes are uncommitted for review and `git diff --check` passed. Phase 1A remains
+accepted; no full Basic acceptance, Enhanced HIL or MCP work was started.

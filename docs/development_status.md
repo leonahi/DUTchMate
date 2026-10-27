@@ -13,6 +13,7 @@
 > Fixture byte-diagnostic source base: `6c908f79f1a0a4e636a45cbd70576666e2ad5cac`
 > Committed fixture / physical diagnostic HEAD: `69a0980e1c7ced2cfcf053ebdd95e7b8dcc16df4` (pushed)
 > Bounded overflow enhancement source base: `68ae39714fb5ebfd55ec970e2709d29561c822e9` (pushed)
+> Bounded overflow fixture / physical diagnostic HEAD: `4692444f771f33b6d27994e03f2722c268e3f43a` (pushed)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -23,11 +24,12 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Bounded fixture overflow diagnostics validated,
-  uncommitted for review: exact first 32 bytes, first overflow byte, counts and
-  last eight discarded bytes. No hardware run has used this enhancement.
-  Earlier `20261027T100353Z-1d5cd35f` confirmed discard=1 but not discarded values
-  or cause; its evidence remains unchanged.
+- **Current milestone:** Bounded physical diagnostic reproduced `E_COMMAND_001`
+  on trial 1 in `20261027T105245Z-a78a6741`: line_len=90, discarded_count=58,
+  first overflow=00, prefix 29 NUL/3 ff bytes, suffix `000000ff494e464f`.
+  INFO reached an already-overlong line. Uncaptured middle values and root cause
+  remain unknown; stopped without retry. Diagnostic docs are uncommitted for
+  review. Earlier diagnostic and acceptance evidence remain unchanged.
   **Phase 1A remains Complete/accepted** from `20261027T073956Z-7c038da2`.
   The anomaly remains unresolved/non-blocking; Stage 8, Phase 1B and overall
   Phase 1 remain **Incomplete** pending Enhanced HIL/physical evidence.
@@ -39,18 +41,17 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review the uncommitted fixture enhancement. After it is reviewed,
-  committed and pushed, build/flash an identified Basic image and perform the
-  requested fresh initial-INFO/reconnect/single-INFO diagnostic (maximum three
-  reconnect trials, stop on the first anomaly, no retry). No physical run is
-  authorized before that review gate. Enhanced HIL/remaining gates stay pending;
-  MCP remains deferred until overall Phase 1 acceptance.
+- **Next step:** Review the bounded ingress evidence and diagnostic documentation
+  before selecting a separate investigation. No cause is assigned to host,
+  adapter, wiring, UART, Zephyr or fixture, and no fix was attempted. Enhanced
+  HIL/remaining physical gates stay pending; MCP remains deferred until overall
+  Phase 1 acceptance. No further physical diagnostic was started.
 - **Open blockers:** No normative Basic acceptance blocker remains. Stage 8,
   Phase 1B and Phase 1 await Enhanced HIL and remaining physical evidence.
-  Historical INFO audit 78/79, RX 80 and timeout 81 remain unchanged. New audit
-  12/13 accepted exact INFO, RX 14 reports discard=1, terminal 15 is timeout.
-  No discarded ingress bytes or electrical waveform were captured; no root
-  cause is assigned, nor are older anomalies retroactively classified. Older
+  Current audit 11/12 accepted exact INFO, RX 13 reports the 90-byte overlong
+  line, terminal 14 is timeout. Only prefix/first overflow/last eight bytes are
+  exposed; positions 34–82 remain unknown. No electrical waveform was captured
+  or cause assigned; older anomalies are not retroactively classified. Older
   timeout causes and Enhanced/Phase 4 blockers remain open.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -93,7 +94,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; bounded overflow instrumentation validated for review, physical reproduction pending |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; bounded diagnostic reproduced NUL/ff prefix plus INFO suffix, cause unresolved/non-blocking |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -120,7 +121,26 @@ progress; it does not redefine either document.
 
 ## Current Validation Requirements
 
-Bounded overflow fixture enhancement, 2026-10-27: RED 7 failed/29 passed on
+Bounded overflow physical diagnostic, 2026-10-27: clean `4692444`, independently
+verified pushed before startup. Full software gate completed first: 1,533 tests
+in 42.52 s, Ruff, mypy/103 files, lock/66 packages, diff check. No pytest or second
+runtime/store ran during the service. FTDI identity/ownership/settings verified;
+UF2 hash matched; first INFO confirmed `basic-ovf-20261027-3cbe8d2ee291`.
+Fresh `20261027T105245Z-a78a6741`: initial INFO matched; one automatic reconnect
+continued that session with segment 1/gap 1 within unchanged 5.0 s timeout.
+Single post-reconnect INFO audit 11/12 accepted 5 bytes; RX 13 reported
+line_len=90, prefix 29 `00`/3 `ff`, overflow=00, discarded_count=58,
+suffix=`000000ff494e464f` ending in INFO; counts_overflow absent. Complete fields
+and all 32 prefix bytes are in the Basic report. Terminal 14 timed out; no retry.
+Stopped at trial 1/3 maximum, with no new product failure established or fix.
+Graceful stop verified PID 44442 absent, no listener/serial owner; all 441 prior
+session-file hashes/configuration unchanged. Native 0..14 reconciles 303 raw RX
+bytes; saved-cursor retrieval preserved 6..14. Only diagnostic report/status/
+history changed, uncommitted for review; `git diff --check` passed. Phase 1A
+remains accepted; root cause and uncaptured middle bytes remain unknown.
+
+Bounded overflow fixture preparation (before this physical run), 2026-10-27:
+RED 7 failed/29 passed on
 missing diagnostics; GREEN 36 focused cases passed in 9.73 s. Full pytest:
 1,533 passed in 43.29 s, including architecture checks. Ruff, mypy (103 files),
 offline lock check (66 packages) and `git diff --check` passed. Zephyr 4.4.0 /
@@ -129,7 +149,7 @@ SDK 1.0.1 cross-build `basic-ovf-20261027-3cbe8d2ee291` passed for `rpi_pico`,
 UF2 structure/payload validated. New fields are overflow-only; valid and existing
 non-overflow output is unchanged. Counts never wrap; inexact counts are omitted
 with an explicit flag. No hardware, flash, service or new physical session was
-used. The requested reproduction awaits review/commit/push; this is not a
+used. At that stage reproduction awaited review/commit/push; this was not a
 physical result or anomaly fix. Phase 1A remains accepted. Details/hashes are in
 development history and the [Basic diagnostic record](../hardware/validation/phase1_basic_hil.md).
 
