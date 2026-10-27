@@ -72,14 +72,22 @@ class _OwnedStreamReader:
         writer: _StreamWriter,
         *,
         serial_port: _DtrControl | None = None,
+        serial_resource: object | None = None,
     ) -> None:
         self._reader = reader
         self._writer = writer
         self._serial_port = serial_port
+        self._serial_resource = serial_resource
+        self._read_error: Exception | None = None
         self._close_task: asyncio.Task[None] | None = None
 
     async def read(self, size: int) -> bytes:
-        return await self._reader.read(size)
+        try:
+            return await self._reader.read(size)
+        except Exception as exc:
+            if self._read_error is None:
+                self._read_error = exc
+            raise
 
     async def close(self) -> None:
         task = self._close_task
@@ -97,7 +105,29 @@ class _OwnedStreamReader:
             else:
                 await asyncio.sleep(USB_CDC_DTR_RESET_SECONDS)
         self._writer.close()
-        await self._writer.wait_closed()
+        try:
+            await self._writer.wait_closed()
+        except Exception as exc:
+            # StreamReaderProtocol puts connection_lost(exc) into both read()
+            # and wait_closed(). It is not a new cleanup failure when that exact
+            # read error was already observed AND physical closure is confirmed.
+            if exc is not self._read_error or not self._physical_close_confirmed():
+                raise
+        else:
+            # pyserial-asyncio notifies the protocol before closing the resource;
+            # even a successful waiter alone cannot prove physical cleanup.
+            if not self._physical_close_confirmed():
+                raise RuntimeError("Enhanced serial transport closure is unconfirmed")
+
+    def _physical_close_confirmed(self) -> bool:
+        try:
+            return (
+                self._serial_resource is not None
+                and getattr(self._serial_resource, "is_open", None) is False
+                and self._writer.transport.get_extra_info("serial") is None
+            )
+        except Exception:
+            return False
 
 
 class _ThreadedSerialFrameWriter:
@@ -206,6 +236,7 @@ async def open_async_enhanced_serial_adapter(
         serial_resource = stream_writer.transport.get_extra_info("serial")
         if serial_resource is None:
             raise RuntimeError("pyserial-asyncio transport omitted serial resource")
+        owned_reader._serial_resource = serial_resource
         if open_connection is None:
             owned_reader._serial_port = cast(_DtrControl, serial_resource)
         writer = _ThreadedSerialFrameWriter(cast(SerialFrameSink, serial_resource))

@@ -172,7 +172,8 @@ async def test_enhanced_failed_open_keeps_primary_error_and_cleanup_certainty(cl
             segment_id=0,
             open_connection=RecordingOpener(FakeStreamReader(), writer),
         )
-    assert raised.value.cleanup_confirmed is (not cleanup_fails)
+    # A completed protocol waiter cannot confirm an unknown serial resource.
+    assert raised.value.cleanup_confirmed is False
     assert writer.close_count == 1
 
 
@@ -191,17 +192,22 @@ async def test_enhanced_explicit_close_retains_unconfirmed_resource_cleanup():
     assert reader.close_count == 1
 
 
-async def test_enhanced_transport_inspection_failure_still_confirms_cleanup():
-    from test_enhanced_serial_io import FakeStreamReader, FakeStreamWriter, RecordingOpener
+async def test_enhanced_transport_inspection_failure_preserves_primary_and_uncertainty():
+    from test_enhanced_serial_io import (
+        FakeStreamReader,
+        FakeStreamTransport,
+        FakeStreamWriter,
+        RecordingOpener,
+    )
 
     from dutchmate_core.backends.enhanced_serial_io import open_async_enhanced_serial_adapter
 
-    class Transport:
+    class Transport(FakeStreamTransport):
         def get_extra_info(self, name):
             raise RuntimeError("inspection failed")
 
     writer = FakeStreamWriter(None)
-    writer.transport = Transport()
+    writer.transport = Transport(None)
     with pytest.raises(RuntimeError, match="inspection failed") as raised:
         await open_async_enhanced_serial_adapter(
             port="/dev/old",
@@ -209,4 +215,4 @@ async def test_enhanced_transport_inspection_failure_still_confirms_cleanup():
             open_connection=RecordingOpener(FakeStreamReader(), writer),
         )
     assert writer.close_count == 1
-    assert raised.value.cleanup_confirmed is True
+    assert raised.value.cleanup_confirmed is False

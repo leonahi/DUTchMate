@@ -81,6 +81,17 @@ an explicit cleanup-unconfirmed ownership fault; known initialization failures
 are not misreported as successful reconnects or silently retried as fresh
 configuration attempts. No reconnect deadline is extended.
 
+Enhanced stream cleanup confirms both that the retained serial resource reports
+`is_open == False` and that the transport has released its serial reference.
+`is_closing()` or completion of the protocol close waiter alone is insufficient.
+Asyncio may deliver the same terminal read exception again through
+`wait_closed()`: that exact, previously observed exception does not represent
+cleanup uncertainty when both physical-closure checks pass. The original backend
+read error and its cause remain authoritative. A different close exception,
+missing/uninspectable resource, still-owned transport or incomplete close retains
+blocking cleanup uncertainty, including failed-open cleanup. The existing shared
+close task prevents repeated callers from closing the resource again.
+
 Exact-path selection remains the default. Native USB may follow a changed path
 only with a unique configured VID/PID/serial-number match. Ambiguity never selects
 a candidate. Unknown cleanup retains a blocking ownership fault; it cannot report

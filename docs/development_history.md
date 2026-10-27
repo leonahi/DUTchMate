@@ -9,6 +9,85 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Enhanced Terminal Read Error Versus Physical Cleanup — 2026-10-27
+
+- Created `fix/enhanced-terminal-read-cleanup` from independently fetched latest
+  pushed `fix/enhanced-reacquire-control-config` at HIL-documentation commit
+  `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`. The working tree was clean.
+  All work remains unstaged/uncommitted. No hardware access, firmware, Revision A
+  or MCP work occurred; the physically passed explicit handoff fix was not edited.
+- Traced recorder `close_current_source_for_reconnect`, `EnhancedAsyncHost.close`,
+  adapter close/drain and concrete `_OwnedStreamReader` into installed Python
+  3.10.19 asyncio, pyserial 3.5 and pyserial-asyncio 0.6. A focused Graphify
+  `_OwnedStreamReader` explanation was verified against actual source/callers.
+  No public port, cross-layer ownership or module responsibility changed, so no
+  structural graph refresh or architecture rewrite was needed.
+- Installed `SerialTransport._read_ready` passes a serial read exception into
+  `_close`; `_call_connection_lost` calls `StreamReaderProtocol.connection_lost`
+  before closing its serial resource and clearing the serial reference. Asyncio
+  puts that same exception object into both reader state and the close waiter.
+  Thus `wait_closed()` raises the already-known read failure even after the
+  physical close succeeded. Conversely, protocol waiter success happens before
+  resource close and cannot alone establish cleanup certainty if that close
+  subsequently fails. `is_closing()` means closing or closed, not confirmed close.
+- The preserved HIL log has the read-error/close-waiter traceback and no separate
+  connection-lost callback exception. It did not record in-run serial-open or
+  released-reference observations, so no retrospective physical-close certainty
+  is asserted for that failed run. The installed behavior and hardware-free
+  reproduction establish the misclassification mechanism; future closes now
+  require positive observations rather than assuming a result from that trace.
+- Changed only the concrete Enhanced stream production boundary: retain its
+  original serial resource and first observed read exception. A failing close
+  waiter is accepted as completed cleanup only when its exception is that exact
+  read object, serial `is_open` is precisely false, and transport serial info is
+  None. Normal waiter success also requires physical confirmation. A distinct
+  exception, open/unknown resource, retained transport reference or failed
+  inspection remains a close failure. Existing adapter/host/coordinator paths
+  retain `cleanup_unconfirmed`, stop replacement opening and block ownership.
+- Original backend terminal error and raw cause are retained; no exception-class
+  or message-based suppression was added. The existing shielded shared close
+  task remains the sole close operation across concurrent/repeated close calls.
+  No reconnect timeout, Basic behavior, Profile reapplication or recorder/
+  coordinator arbitration code changed. Reconnect semantics now document the
+  concrete confirmation rule and the distinction from primary transport error.
+- Added a shared test-only pipe-backed serial resource beneath real installed
+  `SerialTransport`, `StreamReaderProtocol` and `StreamWriter`, production adapter,
+  service host, runtime, recorder and persistent journal. No fake serial device
+  path is opened. Initial RED: **5 failed / 7 passed in 0.40 s**; confirmed
+  physical closure still yielded HIL-matching `cleanup_unconfirmed`, while three
+  normal-waiter/incomplete-close cases incorrectly returned success.
+- Four service cases cover confirmed, genuinely failed, incomplete and unknown
+  cleanup. Confirmed cleanup alone permits fresh segment → immutable Profile
+  CTRL1/CTRL0 attempts/ACKs → `reconnect_succeeded`, with raw ACKs 2001/2002 and
+  a successful reset. The other cases open no replacement, retain the original
+  read error/cause, expose `cleanup_unconfirmed`, and retain shutdown failure.
+  Repeated runtime shutdown/adapter close executes each serial close once.
+- Ten concrete-boundary cases include the same modes, normal-waiter failure,
+  same-class/same-message but distinct secondary exception, still-owned transport
+  and inspection failure. Guard mutation checks failed as expected: removing
+  transport-release proof produced **2 failures/0.06 s**; removing exact error
+  identity produced **1 failure/0.05 s**. Both guards were restored.
+- Existing stream fakes now model resource closure/release. A broader run exposed
+  the old `test_enhanced_failed_open_keeps_primary_error_and_cleanup_certainty`
+  and `test_enhanced_transport_inspection_failure_still_confirms_cleanup`
+  expectations that protocol waiter success alone confirmed a missing or
+  uninspectable resource. Those tests now preserve the primary open error and
+  require cleanup uncertainty; the latter was renamed accordingly. This is
+  stricter fail-closed behavior; existing Basic expectations were not changed.
+- Focused GREEN: **40 passed in 0.49 s**, including all 14 new cases and concrete
+  I/O/failed-open regressions. Relevant Enhanced/backends/reconnect/ownership/
+  runtime/recorder/GPIO/protocol/service/CLI/architecture gate:
+  **925 passed in 17.79 s**. Full final gate using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen pytest -q --tb=line` **1,569 passed in 47.42 s**;
+  Ruff passed; mypy passed/103 source files; offline lock passed/66 packages;
+  final `git diff --check` passed. No required check remains failing.
+- Failed HIL report and all 463 existing session/config file hashes, including
+  `20261027T165848Z-b9a62f0b` 303/304 and earlier failed 739/740, remain unchanged.
+  Explicit Enhanced handoff/control remains physically passed. The automatic
+  USB criterion is still physically unvalidated after this software correction;
+  Phase 1A remains accepted and Phase 1B/Stage 8/Phase 1 remain incomplete.
+
 ## Focused Enhanced Physical HIL: Explicit Pass, Automatic Cleanup Fault — 2026-10-27
 
 - Worked from clean `fix/enhanced-reacquire-control-config` at

@@ -49,10 +49,14 @@ class BlockingCloseStreamWriter:
         self.release_close = asyncio.Event()
         self.close_completed = asyncio.Event()
         self.wait_closed_failure: Exception | None = None
+        self.transport = FakeStreamTransport(SimpleNamespace(is_open=True))
 
     def close(self) -> None:
         self.close_count += 1
         self.close_started.set()
+        if self.transport.serial_port is not None:
+            self.transport.serial_port.is_open = False
+            self.transport.serial_port = None
 
     async def wait_closed(self) -> None:
         await self.release_close.wait()
@@ -269,7 +273,7 @@ async def test_owned_stream_reader_delegates_reads_and_shares_close_completion()
     reader = FakeStreamReader()
     writer = BlockingCloseStreamWriter()
     reader.chunks.put_nowait(b"abc")
-    owned = _OwnedStreamReader(reader, writer)
+    owned = _OwnedStreamReader(reader, writer, serial_resource=writer.transport.serial_port)
 
     assert await owned.read(17) == b"abc"
     assert reader.read_sizes == [17]
@@ -294,6 +298,7 @@ async def test_owned_stream_reader_holds_dtr_low_before_closing(
     events: list[object] = []
     serial_port = DtrControlledSerial(events)
     writer = OrderedCloseStreamWriter(events)
+    writer.transport = FakeStreamTransport(serial_port)
 
     async def record_sleep(delay: float) -> None:
         events.append(("sleep", delay))
@@ -303,6 +308,7 @@ async def test_owned_stream_reader_holds_dtr_low_before_closing(
         FakeStreamReader(),
         writer,
         serial_port=serial_port,
+        serial_resource=serial_port,
     )
 
     await owned.close()
