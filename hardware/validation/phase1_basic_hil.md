@@ -1432,3 +1432,274 @@ development status/history changed, uncommitted for review. Production/fixture
 code, parser behavior, UART settings, timeouts and acceptance criteria were not
 changed. No full Basic HIL, Enhanced HIL or MCP work occurred. Phase 1A, Stage 8,
 Phase 1B and Phase 1 remain incomplete.
+
+## Fresh complete Basic Phase 1A acceptance attempt — 2026-10-27
+
+Result after normative contract audit: **Phase 1A Complete — accepted**. This
+fresh run satisfies the current Basic exit criteria, including real handoff and
+automatic reconnect with native-v2 evidence and resumed acquisition. Successful
+INFO after unexpected reconnect is an added procedure/diagnostic check, not an
+explicit requirement of the normative Phase 1A contract or Stage 8 plan.
+
+That additional INFO still returned
+`DMF/1 ERROR COMMAND code=E_COMMAND_001\n` and its Interact timed out. This is
+preserved as an **unresolved, unclassified, non-blocking command-path anomaly**;
+it was not retried, diagnosed or fixed. No production/fixture code was patched.
+
+No prior failed or diagnostic session was resumed or counted as acceptance.
+The native journal closed normally. Acceptance follows the criterion mapping
+and contract audit below, not journal completion alone. Stage 8, Phase 1B and
+overall Phase 1 remain incomplete pending Enhanced HIL and remaining physical
+evidence. Enhanced HIL and MCP work were not started.
+
+### Normative acceptance audit — 2026-10-27
+
+Authority is the [Phase 1 implementation specification](../../docs/phase1_implementation_spec.md)
+and the [Stage 8 plan](../../docs/dutchmate_phase1_v2_coding_agent_plan.md), whose
+authority statement says it must not redefine the normative contracts.
+
+- Specification **§13.6**, unexpected disconnect/reconnect, requires the durable
+  boundary, reconnect state/deadline, continued active session and a safely
+  opened new segment before the deadline. It does not require INFO or any
+  particular DUT command/response after reconnect.
+- Specification **§33**, Phase 1A Done, requires that "unexpected reconnect works
+  through the same v2 evidence model." Its real Basic HIL list covers continuous
+  capture, follow, Monitor, TX/Interact, delayed fault, retrieval and handoff.
+  It does not add a successful post-reconnect INFO gate.
+- Specification **§14.2** requires received evidence to remain recorded after
+  backend reconnection; **§21.5** permits a condition Interact to return timeout
+  when its requested literal does not match. Persisting the actual error and
+  truthful timeout meets those service contracts; the extra INFO application
+  assertion itself remains unsuccessful.
+- **Stage 8 → HIL acceptance → Basic** lists continuous recording, follow,
+  Monitor, exact TX/Interact, delayed fault, handoff and retrieval/provenance.
+  **Stage 8 → Exit criterion** references the specification's Phase 1A/1B done
+  criteria. Neither requires a successful INFO after unexpected reconnect.
+
+The earlier incomplete decision incorrectly promoted the added post-reconnect
+INFO assertion into a normative gate. The original evidence instead establishes
+in-window success 76, the same ownership session, fresh segment 2, the durable
+gap, resumed RX 80 and responsive status. The captured response is valid RX
+evidence even though its application content is an error. All other §33 gates
+are supported by the fresh run and its recorded pre-start software gate.
+
+Default-disabled TX and bounded size/segment rollover are covered by that
+1,514-test gate, including `test_basic_send_rejects_disabled_tx_without_writing`,
+`test_v2_size_rollover_admits_next_whole_uart_unit_in_linked_successor` and
+`test_reacquire_rolls_over_segment_bound_and_preserves_public_cursor`.
+The 16 MiB/32-segment physical limits were not forced; §33 and the Stage 8 Basic
+HIL list do not require those limits to be physically forced. No earlier failed
+run is substituted for any required physical workflow in this accepted session.
+
+This audit changed documentation/acceptance interpretation only. No tests,
+service or hardware were run, no normative criteria were edited, and no native
+evidence or run artifacts were changed. Pre-audit `acceptance-summary.json` and
+`45-acceptance-stop.json` retain the original conservative classification; this
+contract audit supersedes that classification without altering their records.
+
+### Preflight and provenance
+
+| Field | Actual evidence |
+|---|---|
+| Branch / HEAD | Clean `stage8-phase1-acceptance`, `31b14a4de28c3713fbb8451f31520600917616dc`; local HEAD/upstream and independent HTTPS `ls-remote` matched |
+| Host | macOS 26.2 build `25C56`, Darwin 25.2.0 arm64; local Asia/Kolkata |
+| FTDI | FT231X USB UART, VID/PID `0403:6015`, serial `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, location `0-1.4` |
+| Physical DUT / wiring | Operator reconfirmed Pico 1/Pico H, RP2040; GP0/pin 1→FTDI RX, GP1/pin 2→FTDI TX, GND/pin 3→FTDI GND; own Pico USB power, FTDI VCC disconnected, 3.3 V logic, GP2/GP3 open, external terminal closed |
+| Fixture | Existing reviewed `basic-v2-20261026-7bc2ec377767`; preflight operator confirmation plus immutable artifact; actual fresh-session boot/INFO verified after startup; no unique Pico chip serial or image readback obtained |
+| Build inputs | Reviewed Zephyr v4.4.0 (`684c9e8f32e4373a21098559f748f06915f950c9`), SDK 1.0.1; `rpi_pico/rp2040`, 115200, no Enhanced overlay |
+| UF2 / config | Freshly hashed `build/dutchmate-zephyr-dut-basic-v2-7bc2ec377767/zephyr/zephyr.uf2`: `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`; `.config`: `9bcb30687dd409d62d90fd083c2ebd208e432b54f4007801722a6677c02b714c` |
+| Artifact configuration | CMake board `rpi_pico`, overlay override empty, SDK path `zephyr-sdk-1.0.1`; generated UART0 speed `0x1c200` (115200), no hardware flow-control property |
+| Ownership preflight | No service listener or FTDI cu/tty owner; serial/USB identity inspection only, no external preflight command or port open |
+| Fresh session / process | `20261027T073956Z-7c038da2`, native schema v2; PID 33018, `127.0.0.1:2040`, start `2026-10-27T07:39:56Z` / 13:09:56 IST |
+| Effective profile | Unnamed, digest `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`; Basic/external UART/exact path; reconnect **5.0 s unchanged** |
+| UART / storage | 115200 8-N-1; `rtscts=false`, `xonxoff=false`; TX explicitly enabled, default ending none; explicit LF on all sends; 16 MiB budget, retention disabled |
+| DTR/RTS / timestamps | Both requested `driver_default`, open `driver_managed`, RTS owner `driver`, no electrical readback/glitch-free claim; host monotonic microseconds, segment-relative `host_serial_read/serial_read_chunk` |
+| Loss / local recording | Basic `not_observable`, null observer/drop count; local recording `complete` |
+
+All software checks finished before physical startup. Commands used prefix
+`rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+| Command | Result |
+|---|---|
+| `uv run --frozen pytest -q --tb=short` | 1,514 passed in 36.18 s, including fixture, architecture, backend/lifecycle/recorder/service/CLI and rollover checks |
+| `uv run --frozen ruff check .` | Passed |
+| `uv run --frozen mypy` | Passed, 103 source files |
+| `uv lock --check --offline` | Passed, 66 packages; lockfile unchanged |
+
+Preflight `git diff --check` passed; current CLI help and local client-script
+syntax checks finished before startup. No pytest, extra DUTchMate runtime/session
+store, firmware flash or production/fixture patch occurred while the service
+was running. Client wrappers used only CLI/HTTP and read-only native evidence.
+The external serial consumer ran only during explicit released ownership.
+
+### Executed sequence
+
+Run artifacts: `.dutchmate/hil/basic-acceptance-fresh-20261027/`. Gate/preflight
+records, CLI help, `commands.jsonl`, `scenario-actions.jsonl`, saved cursors,
+local scripts and numbered action results retain exact arguments, UTC times,
+HTTP bodies, stdout/stderr, ownership checks and native evidence. All following
+wall times are UTC on October 27 (IST = UTC+05:30).
+
+1. Started normally with
+   `uv run --frozen --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200`.
+   `GET /status` confirmed the new session/configuration and no active operation.
+   Saved the evidence tail before any TX; no command was sent in preflight.
+2. With no Monitor, Interact, follow or console active, operator grounded/released
+   RUN. Continuous acquisition preserved three complete exact reviewed boot
+   banners at RX 2/3/4, plus reset-transition NUL bytes. Then one
+   `dutchmate interact INFO --line-ending lf --until '<exact reviewed INFO>' --timeout 2`
+   matched, proving physical boot and INFO identity through the fresh path.
+3. `dutchmate monitor --seconds 0.5` elapsed. Attached
+   `dutchmate follow --cursor <saved-cursor>`, sent LF PING, observed displayed
+   PONG, then detached by SIGINT with exit 0. A later standalone LF INFO remained
+   durably recorded. Only PID 33018 owned the FTDI during follow.
+4. `dutchmate monitor --until 'DMF/1 PONG' --timeout 3` was observed active, then
+   one `dutchmate send PING --line-ending lf` supplied its literal; matched.
+5. Single-send PING Interacts, each with explicit LF, respectively used
+   `--until 'DMF/1 PONG' --timeout 2`, `--seconds .3`, and
+   `--until 'DMF/1 NEVER' --timeout .3`. They returned matched, elapsed and timeout.
+6. Sent DELAYFAULT once, then ran PING Interact with
+   `--until 'DMF/1 ERROR ASYNC code=E_ASYNC_001' --timeout 12`. Its window retained
+   the unrelated asynchronous output and PONG; matched the ASYNC marker.
+7. Dedicated test:
+   `dutchmate interact DELAYFAULT --line-ending lf --until 'DMF/1 DELAYFAULT armed delay_ms=10000' --timeout 2`.
+   It matched its ACK, followed by an 11-second interval with no Monitor,
+   Interact, follow or console. Status before/after showed no active operation;
+   later cursor retrieval recovered the fault outside the completed range.
+8. `dutchmate console --line-ending lf` kept stdin open while separately sending
+   PING and INFO; live RX displayed both PONG and the exact reviewed INFO. EOF
+   exited 0. A later standalone LF PING remained recorded. Only the service owned
+   serial during console; no external terminal was opened concurrently.
+9. Sent/retrieved a final LF PING/PONG, then `dutchmate release`. Verified durable
+   intent, final RX, segment closure, intentional gap, prompt released status
+   and absence of a serial owner before the external consumer opened.
+10. Real external consumer opened the same port, sent exactly `PARTIAL\n` once,
+    received exactly `DMF/1 PARTIAL complete\n`, and held ownership for 6 seconds
+    while the service remained released. It closed before `dutchmate reacquire`.
+    Reacquire continued the same session in fresh segment 1; its first exact INFO
+    Interact matched. External PARTIAL output is absent from service raw RX.
+11. Armed passive USB/node/status/descriptor/connection-evidence observers with
+    no operator-wait expiry. The operator used `mark_actions.py` to mark FTDI-only
+    USB unplug/replug in the same socket, leaving Pico USB/UART wiring intact.
+    Automatic reconnect succeeded in segment 2 with the same ownership session.
+12. Ran the **additional first post-reconnect INFO exactly once** with the same
+    reviewed INFO condition and two-second bound. It returned `E_COMMAND_001`
+    and timed out. Further UART actions stopped; no second INFO, manual reacquire,
+    reset, blank-line resynchronization or other UART command followed this
+    diagnostic failure. The contract audit above corrects its original treatment
+    as an acceptance blocker.
+13. Completed read-only final `status`, `sessions`, `session <id>`,
+    `logs --session <id> --last 100`, `GET /sessions/<id>` and cursor evidence
+    retrieval. CLI list/detail/log and API all reported `not_observable`.
+    Preserved native evidence/logs, then stopped normally and verified release.
+
+### Durable ranges and ordering
+
+All ranges below are half-open in `20261027T073956Z-7c038da2`:
+
+| Operation ID | Result | Range | TX attempts |
+|---|---|---|---:|
+| `interact-cb8cbebe-0258-467f-a3e6-3108031de846` | matched initial INFO | `[5,10)` | 1 |
+| `monitor-28c57706-2c05-48ad-9af2-f23e42d9760d` | elapsed | `[10,12)` | 0 |
+| `monitor-ae6a966f-a4bf-4579-b42d-2c499d1f6cfa` | matched PONG | `[18,23)` | 0 |
+| `interact-a66095e4-6125-4aa3-b1cb-839d07783ffe` | matched PONG | `[23,28)` | 1 |
+| `interact-afafc13e-f7e0-4546-bbf2-05021c3b8ee7` | elapsed | `[28,32)` | 1 |
+| `interact-b72ea554-2d41-4c5e-9afb-d6d5d7211145` | intended timeout | `[32,36)` | 1 |
+| `interact-fe0b8daa-3ef1-4bd4-a9b4-97c6b1e57389` | matched unrelated ASYNC | `[39,45)` | 1 |
+| `interact-accc4efb-5797-4b5e-a9ae-335f9389e51a` | matched DELAYFAULT ACK | `[45,50)` | 1 |
+| `interact-5278f211-f102-4569-a450-c79e5f5acd90` | matched reacquired INFO | `[68,73)` | 1 |
+| `interact-f1864e18-1d4a-46b0-b666-de286db8e5ca` | additional INFO: timeout; anomaly retained | `[77,82)` | 1 |
+
+Dedicated delayed fault: ACK RX **48**, durable operation terminal **49**, fault
+RX **50**. The fault is outside `[45,50)`; host ACK→fault delta is
+**10,040,059 us** (10.040059 s). Sequence order establishes completion before
+the later ambient fault independently of elapsed timing. Both intentionally
+generated ASYNC ERROR markers remain expected failure-pattern evidence.
+
+Release completed in **0.673635 s**: final PONG RX **62**, intent **63**,
+`released` **64** at 07:45:27. Segment 0 closed and gap count became 1. External
+ownership/response/6-second hold passed with the service responsive and released.
+Reacquire at 07:46:36 persisted start **65**, segment-open **66**, success **67**;
+INFO RX **71** confirmed the new segment. No serial owner overlapped the handoff.
+
+Unexpected disconnect/start **73/74** were first observed at **07:48:06.309105**;
+USB reappeared at **07:48:08.782975**, node at **07:48:08.791297**, and new
+segment/success **75/76** at **07:48:09.447608**. Observed start→success delta:
+**3.138501291 s**, inside the unchanged five-second window. Segment 1 closed
+as unexpected disconnect; segment 2 has `start_reason=reconnect` and a fresh
+host origin. Gap count became 2. Mechanical action markers and host polling
+bounds are retained; existing logs do not expose individual failed open attempts.
+No external probe competed with automatic reconnect.
+
+### Additional INFO timeout and non-blocking anomaly
+
+At 07:48:42, attempt **78**, ID `8b2c5a03-f79b-4ce2-ab58-39a78a1f3961`,
+audited exact `INFO\n` (`494e464f0a`, `SU5GTwo=`). Result **79** records success,
+accepted **5** bytes. RX **80** instead preserves exact
+`DMF/1 ERROR COMMAND code=E_COMMAND_001\n` in segment 2. Terminal **81**, at
+07:48:43, records timeout of the reviewed INFO literal condition. CLI exit 0
+describes completion of the bounded operation; the response remains unmatched.
+Overall acceptance is determined by the normative mapping above. Only one
+attempt/result exists for this operation.
+
+This recurrence caused the added application-response check to fail. The
+normative reconnect criterion passed: the
+error response itself was captured in the new segment, status stayed responsive,
+and the same session remained active. It is **not a demonstrated reconnect
+transport defect**. Actual FTDI→Pico wire bytes and Pico parser state were not
+captured, so no DUTchMate/adapter/fixture/electrical cause is established.
+The historical anomaly remains unresolved, unclassified and non-blocking for
+Phase 1A. It is neither diagnosed nor fixed. No retry was used to replace the
+failed INFO assertion with a passing response.
+
+### Criterion-by-criterion result
+
+| Current Basic Phase 1A criterion | Result in this fresh run |
+|---|---|
+| Continuous real ambient RX, physical boot/INFO | Passed; exact reviewed build before bounded workflows |
+| Follow live display/detach and continued acquisition | Passed; only service serial owner |
+| Duration and literal-condition Monitor | Passed, durable outcomes/ranges |
+| Default-disabled / explicitly enabled exact audited TX | Default/denial passed fresh software gate; 16 exact physical audit pairs passed under enabled policy |
+| Matched/elapsed/timeout Interact, one TX each | Passed; extra INFO timeout and its RX evidence also preserved truthfully |
+| Unrelated asynchronous RX inside Interact | Passed, PONG and ASYNC retained without filtering |
+| Delayed fault after durable operation completion | Passed, terminal 49 < fault 50, outside range, 10.040059 s after ACK |
+| Service console live RX and continued recording after EOF | Passed, PONG/INFO displayed and later PONG persisted |
+| Native-v2 persistence, serial/DTR/RTS/host timestamp provenance | Passed in all three segments; no electrical readback claim |
+| Linked size/segment rollover | Fresh deterministic software gate passed; 16 MiB/32-segment physical limits were not forced |
+| Real release/external ownership/reacquire | Passed, exact external PARTIAL, 6-second hold, first reacquired INFO matched |
+| Explicit observation gaps and fresh segments | Passed, two gaps, segments 0/1/2 with distinct origins |
+| Unexpected reconnect / resumed RX | Passed; in-window success, same session, fresh segment 2, durable gap, resumed RX 80 and responsive service |
+| Final list/detail/evidence/log retrieval | Passed; saved cursor returned 81 records from 1..81 to tail, plus native initial connected record 0 |
+| CLI Basic loss display | Passed, `loss=not_observable`, `Integrity: not_observable`, matching status/API/log warning |
+| Additional diagnostic: E_COMMAND_001 watch / no retry | Recurrence at RX 80 remains unresolved/unclassified/non-blocking; no subsequent UART command |
+| Complete Phase 1A | **Complete; accepted after normative contract audit** |
+
+### Preservation and shutdown
+
+Native session `.dutchmate/sessions/20261027T073956Z-7c038da2/` and run artifacts
+retain all evidence. `acceptance-summary.json`, `45-acceptance-stop.json`,
+timing/ownership records, exact command outputs, raw service logs, before/after
+copies and full manifests are under the run directory. Final counts:
+**781 raw bytes**, **20 RX records**, **16 TX pairs**, **10 terminal operations**,
+**3 segments**, **2 gaps**, contiguous sequences **0..81**. Decoded RX reconciles
+raw byte-for-byte; exact TX command bytes and external PARTIAL output are absent
+from raw RX. TX records reside in native-v2 `operation_events.jsonl`.
+
+| Final artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `88b1362251776ae02879e2d1a643c25d9dd7ccb17c47edcebf44c490aad0b345` |
+| `uart_events.jsonl` | `670221eb073157b0523ce5ffc33bf50ac35b5b4fc29da2ab8b5c62bf2ffc680d` |
+| `operation_events.jsonl` | `e344440ac6f99a9f7860980e38b8c56caee8fbd450552e206760eb32fbbe3d0f` |
+| `connection_events.jsonl` | `87cd3be057876318ca558105f5f59b239b0eef95f1952a90e171f1dd70009070` |
+| `metadata.json` | `a337ff5410cbc98250ef2c749dbbf8161b0c08038b6ff28d5170e06cbe5b000c` |
+
+Graceful public CLI stop succeeded without SIGKILL. At **07:50:22.320058 UTC**
+(13:20:22 IST), PID 33018 was absent, TCP 2040 had no listener, and both FTDI
+cu/tty paths were unowned. Final journal state is `completed/service_shutdown`,
+which truthfully records clean service shutdown. The contract audit and evidence
+mapping establish Phase 1A acceptance while retaining the unsuccessful extra
+INFO check as a non-blocking anomaly. Stage 8, Phase 1B and overall Phase 1 remain
+incomplete; Enhanced HIL and MCP work were not started.
+All earlier session hashes and configuration bytes are unchanged. Only this
+appended report and development status/history changed, left uncommitted for
+review. Final documentation diff/preservation checks are recorded in history.

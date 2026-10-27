@@ -10,6 +10,134 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Phase 1A Accepted After Normative Contract Audit — 2026-10-27
+
+- Audited the fresh run `20261027T073956Z-7c038da2` at code baseline
+  `31b14a4de28c3713fbb8451f31520600917616dc` against the current
+  [Phase 1 specification](phase1_implementation_spec.md), the
+  [Stage 8 plan](dutchmate_phase1_v2_coding_agent_plan.md), and the product
+  context. This was documentation/evidence review only: no code change, new
+  code-test run, service startup, serial open or hardware action occurred.
+- **Authority finding:** specification §13.6 defines unexpected reconnect as a
+  durable boundary, reconnect deadline, continued ownership session and safely
+  opened new segment before the deadline. Section 33 requires that "unexpected
+  reconnect works through the same v2 evidence model." Neither clause requires
+  a successful deterministic INFO after reconnect. The Stage 8 Basic HIL list
+  also has no such requirement; its exit criterion defers to the specification's
+  Phase 1A/1B done criteria, and the plan must not redefine the normative contract.
+- The previous acceptance interpretation incorrectly promoted an added HIL
+  INFO diagnostic into a normative gate. That interpretation is superseded by
+  this audit. The earlier history entry remains unchanged as a record of the
+  initial decision and the actual unsuccessful INFO operation.
+- Stored evidence confirms success 76 within 3.138501291 s of observed reconnect
+  start, timeout configured at 5.0 s, the same active native-v2 session, fresh
+  segment 2, the durable observation gap, resumed RX 80 and responsive status.
+  Thus the actual unexpected-reconnect criterion passed. Under §14.2 the error
+  response is real RX evidence; under §21.5 the unmatched condition correctly
+  returned timeout with its durable range.
+- All other §33 gates were satisfied by this same fresh physical run and its
+  recorded pre-start software gate: ambient boot/INFO, follow/detach, duration/
+  literal Monitor, enabled exact TX, matched/elapsed/timeout Interact, unrelated
+  async RX, delayed fault after terminal 49 at RX 50, live console/post-exit
+  recording, native-v2 provenance/retrieval/loss display, and real external
+  handoff/reacquire. Default TX denial and linked size/segment rollover were
+  covered by the recorded 1,514-test suite; physical 16 MiB/32-segment forcing
+  was not performed and is not a required minimum Basic physical HIL scenario.
+- **Phase 1A marked Complete.** Stage 8, Phase 1B and overall Phase 1 remain
+  incomplete pending Enhanced HIL and remaining physical evidence. No Enhanced
+  HIL or MCP work was started by this audit.
+- **Anomaly preserved:** exact INFO audit 78/79 accepted five bytes, RX 80 is
+  `DMF/1 ERROR COMMAND code=E_COMMAND_001\n`, and terminal 81 remains timeout
+  for operation `interact-f1864e18-1d4a-46b0-b666-de286db8e5ca`, range `[77,82)`.
+  No retry occurred. The added diagnostic check remains unsuccessful; the
+  command-path anomaly remains unresolved, unclassified and non-blocking for
+  Phase 1A. No host, adapter, fixture/parser or electrical cause or fix is claimed.
+- Updated only current status, the latest Basic run's acceptance interpretation
+  and this appended history entry. Raw native sessions, run artifacts, hashes,
+  configuration, normative documents and prior history entries remain unchanged.
+  In particular, the pre-audit run-summary/stop records retain their original
+  conservative decision; the corrected report explicitly supersedes only that
+  decision. Documentation consistency, evidence preservation and
+  `git diff --check` passed. Changes remain uncommitted for review.
+
+
+## Fresh Basic Phase 1A Acceptance: Post-Reconnect INFO Failure — 2026-10-27
+
+- Used clean pushed `stage8-phase1-acceptance` HEAD
+  `31b14a4de28c3713fbb8451f31520600917616dc`, independently matched by HTTPS
+  `ls-remote`. Read the current specification, CLI guide, Stage 8 procedure and
+  Basic HIL record. No old failed/diagnostic session was resumed or counted.
+- Completed all software checks before physical startup: 1,514 tests passed in
+  36.18 s, Ruff passed, mypy passed (103 files), offline lock check passed (66
+  packages), and `git diff --check` passed. Commands used prefix
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. CLI help and client
+  script syntax checks also finished before service startup. No pytest, extra
+  runtime/session store or production/fixture patch ran during physical HIL.
+- Reverified FTDI FT231X `0403:6015`, serial `D358SG6A`, location `0-1.4`, at
+  `/dev/cu.usbserial-D358SG6A`; no serial owner or service listener existed.
+  Operator reconfirmed Pico 1/H, reviewed build and all required wiring/straps.
+  UF2 SHA-256 matched
+  `f0e7c42aa8ee770634686e00e263c3d28a9199151d04da5ec0f6a1ddadb88c16`;
+  normal rpi_pico/115200/no-flow-control build and SDK 1.0.1 cache were verified.
+  Preflight did not open the port; physical boot/INFO were verified through the
+  fresh service.
+- Normal Basic startup created fresh native-v2 session
+  `20261027T073956Z-7c038da2`, PID 33018, at 07:39:56 UTC / 13:09:56 IST.
+  Configuration stayed unchanged: 115200 8-N-1, no flow control, explicit TX,
+  default ending none, exact-path/external UART, reconnect **5.0 s**, 16 MiB
+  budget, retention disabled, driver-default DTR/RTS. Actual ambient RUN reset
+  captured reviewed boot banners; the first INFO Interact matched the exact
+  `basic-v2-20261026-7bc2ec377767` build. Reset NUL bytes were preserved.
+- Follow displayed PONG and detached with exit 0; post-detach INFO remained
+  recorded. Duration and literal Monitor, exact audited TX, matched/elapsed/
+  timeout Interact, unrelated async RX, and live console PONG/INFO plus continued
+  acquisition after EOF passed. Only the service owned serial during views.
+- Dedicated delayed fault passed: ACK RX 48, durable Interact terminal 49,
+  fault RX 50 outside `[45,50)`, host delta 10,040,059 us. No bounded operation,
+  follow or console ran during the 11-second post-completion interval.
+- Release passed in 0.673635 s: final RX 62, intent 63, released 64, segment
+  closure and gap count 1. The real external same-port consumer received exact
+  PARTIAL output, held ownership for 6 seconds with service released, and closed
+  before reacquire. Start/segment-open/success 65..67 created fresh segment 1;
+  first reacquired INFO matched. External RX was excluded from the service log.
+- Automatic unexpected reconnect passed: disconnect/start 73/74 observed at
+  07:48:06.309105 UTC, USB back 07:48:08.782975, node back 07:48:08.791297,
+  segment-open/success 75/76 at 07:48:09.447608. Observed elapsed 3.138501291 s,
+  inside the unchanged five-second window. Same session, fresh segment 2,
+  distinct origin and second durable gap were verified. Passive observation had
+  no operator-wait expiry and made no competing external open probe.
+- **Required first post-reconnect INFO failed:** operation
+  `interact-f1864e18-1d4a-46b0-b666-de286db8e5ca`, range `[77,82)`, attempted
+  exact `INFO\n` at 78, successful 5-byte acceptance at 79, then fixture
+  `E_COMMAND_001` RX 80 and INFO-condition timeout terminal 81. Acceptance
+  stopped. No retry, second INFO, manual reacquire, reset or resynchronization
+  followed. The error response proves resumed transport RX, but does not satisfy
+  the required deterministic INFO match. Cause remains unclassified; no
+  reconnect/software defect, wire corruption or fixture/parser cause is claimed.
+- Read-only final status/list/detail/evidence/log retrieval passed. Real CLI
+  `loss=not_observable` and `Integrity: not_observable` agreed with API/native
+  quality and log warning. Saved cursor retrieved 81 records from 1..81 to tail;
+  initial connection 0 remains in native evidence. Final journal has 781 raw
+  bytes, 20 RX records, 16 TX pairs, 10 terminal operations, three segments,
+  two gaps and contiguous sequences 0..81; decoded RX matches raw exactly.
+- Preserved full session/log copies, failure record, exact commands, timing,
+  ownership, manifests and criterion results under
+  `.dutchmate/hil/basic-acceptance-fresh-20261027/`; detailed report is appended
+  to [Basic HIL validation](../hardware/validation/phase1_basic_hil.md).
+  Normal stop required no SIGKILL. At 07:50:22.320058 UTC / 13:20:22 IST,
+  PID 33018 was absent, no TCP 2040 listener remained and both FTDI paths were
+  unowned. Journal state is `completed/service_shutdown`, not an acceptance pass.
+  Earlier session hashes/configuration are unchanged. Only Basic report and
+  status/history changed; final diff and preservation checks passed.
+
+Phase 1A is incomplete because the required post-reconnect INFO failed; no
+diagnosis or fix of the historical anomaly is claimed. Stage 8, Phase 1B and
+overall Phase 1 remain incomplete. Enhanced HIL and MCP were not started.
+Documentation changes remain uncommitted for review.
+
+
 ## Focused Basic E_COMMAND_001 Diagnosis: Unclassified — 2026-10-27
 
 - Used clean pushed `stage8-phase1-acceptance`, HEAD
