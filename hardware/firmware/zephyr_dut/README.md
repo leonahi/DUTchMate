@@ -70,7 +70,8 @@ identifier. Silent boot intentionally emits no banner, Zephyr prefix, or acknowl
 
 Commands are uppercase ASCII terminated by LF. CRLF is accepted because CR bytes are ignored.
 The input line is bounded to 32 bytes. An empty, oversized, lowercase, or unknown command gets
-the same stable command error and never echoes the rejected input.
+the same stable command-error code, with the interpreted bytes encoded in hex as described
+below. Successful commands emit no command-byte diagnostics.
 
 | Command | Deterministic behaviour | Validation purpose |
 |---|---|---|
@@ -86,6 +87,51 @@ the same stable command error and never echoes the rejected input.
 The burst checksum is the sum of sequence values `0..2047` (`2096128`). The sustained checksum
 is the sum of `0..4095` (`8386560`). Sequence gaps, a missing end marker, a wrong count, or a
 wrong checksum are objective evidence of missing or altered UART data.
+
+### Unknown-command byte diagnostics
+
+Every `E_COMMAND_001` response remains a single LF-terminated DMF line, now with
+these fields (shown for `XINFO\n`):
+
+```text
+DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=5 command_hex=58494e464f discard=0
+```
+
+`command_len` is the explicit byte length passed to the command handler.
+`command_hex` encodes every one of those bytes, two lowercase hex digits per
+byte, without truncation or C-string interpretation. For example, leading NUL
+followed by `INFO\n` reports `command_len=5 command_hex=00494e464f discard=0`.
+Embedded/trailing NULs and other non-printable bytes are preserved in hex too.
+Exactly 32 command bytes are allowed and fully reported if unknown.
+
+The existing line-assembly semantics are unchanged: CR bytes are ignored,
+non-CR bytes accumulate across idle periods until LF, and LF dispatches the
+command. No timeout or automatic resynchronization was added. Consequently,
+`command_hex` excludes ignored CRs and terminating LF; it is **not raw-line
+capture**. Raw `rx_len`/`rx_hex` fields are intentionally omitted: ignored CRs and
+overlong tails can be unbounded, and a bounded raw buffer could hide input.
+
+`discard=1` means the assembler was discarding an overlong command when LF
+arrived. As before, the 33rd non-CR/non-LF byte clears the command length and
+starts discarding through LF. The handler then receives zero bytes, so the
+truthful response is:
+
+```text
+DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1
+```
+
+This does not mean the overlong input was empty: those discarded bytes are not
+retained or reconstructed. An ordinary empty line instead reports the same
+zero-length fields with `discard=0`. After LF the next command starts normally.
+Silent mode still suppresses all responses, including these diagnostics.
+
+This instrumentation observes bytes delivered to the Pico firmware's UART
+processing/command-parser path. It does **not** prove the electrical waveform
+on FTDI TX → Pico RX, expose UART bytes lost before polling, or recover a
+discarded overlong line. A logic analyzer may still be useful later. The
+historical `E_COMMAND_001` anomaly remains unresolved and unclassified until
+reproduced with useful ingress evidence; this instrumentation is not a fix.
+Phase 1A remains accepted using its recorded fixture build and evidence.
 
 ### Delayed fault outside an operation
 
@@ -210,7 +256,9 @@ uv run pytest tests/hardware/zephyr_dut/test_fixture_protocol.py -q
 ```
 
 This verifies exact boot markers, command responses, raw invalid UTF-8 bytes, partial writes,
-sequence counts, pacing requests, checksums, silence, and bounded error behaviour. It does not
+sequence counts, pacing requests, checksums, silence, and bounded error behaviour. Host I/O
+stubs also exercise the actual `main.c` UART loop with NUL/high bytes, CR handling,
+unterminated prefixes, the 32-byte boundary, discard-through-LF and recovery. It does not
 replace a Zephyr cross-build or a real adapter/Pico HIL run.
 
 ## HIL provenance

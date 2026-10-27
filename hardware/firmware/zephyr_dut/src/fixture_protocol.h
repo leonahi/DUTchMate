@@ -41,10 +41,12 @@ void dmf_fixture_emit_boot(struct dmf_fixture *fixture, enum dmf_boot_mode mode)
 /* Poll from the UART owner loop with monotonic uptime in milliseconds. */
 void dmf_fixture_poll(struct dmf_fixture *fixture, uint64_t now_ms);
 
+/* Discard state is observed only in unknown-command diagnostics. */
 void dmf_fixture_handle_command(
     struct dmf_fixture *fixture,
     const unsigned char *command,
-    size_t length
+    size_t length,
+    int discarding
 );
 
 #ifdef __cplusplus

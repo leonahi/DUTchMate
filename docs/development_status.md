@@ -10,6 +10,7 @@
 > CLI loss fix branch base: `acffad49ec63765d827f83f2921a61a6a5220bab`
 > Accepted CLI loss fix: `ff8cc51` (merged); reconnect diagnostic HEAD: `7d6cac3764176820f6dc62f79f2d705749735b24`
 > Command anomaly diagnostic HEAD: `04f2ff28e47248bead99e9e3dc67d1af34bb693b`
+> Fixture byte-diagnostic source base: `6c908f79f1a0a4e636a45cbd70576666e2ad5cac` (latest pushed; enhancement uncommitted)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -20,7 +21,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** **Phase 1A Complete** after auditing fresh session
+- **Current milestone:** Fixture-only `E_COMMAND_001` byte diagnostics validated,
+  uncommitted for review. **Phase 1A remains Complete** after auditing session
   `20261027T073956Z-7c038da2` against specification §§13.6/33 and the Stage 8
   Basic exit criteria. Successful post-reconnect INFO is not a normative gate;
   reconnect, same session, fresh segment, durable gap and resumed RX passed.
@@ -35,11 +37,11 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review/commit the contract-audited Basic acceptance record, then
-  prepare Phase 1B Enhanced HIL and remaining physical gates. Preserve the INFO
-  anomaly for separate investigation when additional evidence is available;
-  Basic acceptance does not claim it diagnosed or fixed. Keep MCP migration
-  deferred until overall Phase 1 acceptance. No new HIL was run during this audit.
+- **Next step:** Review the fixture diagnostics before committing or scheduling
+  any new physical diagnostic. The instrumentation has not been flashed or used
+  on hardware and does not diagnose/fix the INFO anomaly. Phase 1B Enhanced HIL
+  and remaining physical gates stay pending; MCP migration remains deferred
+  until overall Phase 1 acceptance. No HIL was run in this fixture-only slice.
 - **Open blockers:** No normative Basic acceptance blocker remains. Stage 8,
   Phase 1B and Phase 1 await Enhanced HIL and remaining physical evidence.
   Exact INFO audit 78/79, `E_COMMAND_001` RX 80 and timeout 81 remain unchanged;
@@ -87,7 +89,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL and remaining physical gates required; INFO anomaly retained as non-blocking |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; fixture byte diagnostics validated for review, anomaly unresolved/non-blocking |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -113,6 +115,17 @@ progress; it does not redefine either document.
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Fixture byte diagnostics, 2026-10-27: 10 assertions failed RED on missing fields;
+30 focused fixture tests passed GREEN, including the actual UART loop with host
+I/O stubs. Full pytest: 1,527 passed in 42.33 s; Ruff, mypy (103 files), offline
+lock check (66 packages) and `git diff --check` passed. Zephyr 4.4.0 / SDK 1.0.1
+cross-build `basic-diag-20261027-d406684c5dff` passed for `rpi_pico`, 115200 baud,
+no flow control/overlay. Unknown commands now report full handler bytes in hex
+and assembler discard state; valid output and parsing semantics are unchanged.
+No raw-line capture, hardware access, flash or new HIL occurred. The anomaly
+remains unresolved/unclassified/non-blocking and Phase 1A remains accepted.
+Detailed checks, artifact hashes and limits are in development history.
 
 Acceptance contract audit, 2026-10-27: specification §§13.6, 14.2, 21.5 and 33
 and the Stage 8 Basic HIL/exit criteria require successful reconnect and v2
@@ -165,11 +178,11 @@ No in-operation retry occurred. Native evidence is contiguous 0..10, with 148 ra
 response bytes reconciled to two RX records. No earlier audited TX or host RX
 was present in this fresh session; that does not establish Pico ingress state.
 
-Reviewed fixture code retains non-CR bytes until LF, then clears command state;
-unknown/overflow-discarded lines can emit `E_COMMAND_001`. It provides no ingress
-echo or parser-state telemetry. Operator confirmed no logic analyzer; actual
-wire bytes and earlier Pico RX/parser state remain unknown. Host audit/acceptance
-does not prove wire bytes. No root cause or fix is claimed. Graceful stop released
+At that diagnostic, reviewed fixture code retained non-CR bytes until LF, then
+cleared command state; unknown/overflow-discarded lines could emit `E_COMMAND_001`.
+It provided no ingress echo or parser-state telemetry. Operator confirmed no
+logic analyzer; actual wire bytes and earlier Pico RX/parser state remain unknown.
+Host audit/acceptance does not prove wire bytes. No root cause or fix is claimed. Graceful stop released
 PID 32203, listener and FTDI ownership. Configuration, production/fixture code
 and prior sessions are unchanged. Details are in the
 [Basic HIL record](../hardware/validation/phase1_basic_hil.md).

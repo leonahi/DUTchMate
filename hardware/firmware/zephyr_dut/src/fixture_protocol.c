@@ -164,7 +164,8 @@ void dmf_fixture_poll(struct dmf_fixture *fixture, uint64_t now_ms)
 void dmf_fixture_handle_command(
     struct dmf_fixture *fixture,
     const unsigned char *command,
-    size_t length
+    size_t length,
+    int discarding
 )
 {
     static const unsigned char binary_payload[] = {
@@ -214,6 +215,27 @@ void dmf_fixture_handle_command(
         fixture->silent = 1;
         fixture->fault_pending = 0;
     } else {
-        write_text(fixture, "DMF/1 ERROR COMMAND code=E_COMMAND_001\n");
+        static const unsigned char hex[] = "0123456789abcdef";
+        size_t index;
+
+        message_length = snprintf(
+            (char *)message,
+            sizeof(message),
+            "DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=%zu command_hex=",
+            length
+        );
+        if (message_length > 0 && (size_t)message_length < sizeof(message)) {
+            write_data(fixture, message, (size_t)message_length);
+        }
+        /* Encode the explicit length, including NULs; never use a string view. */
+        for (index = 0U; index < length; index++) {
+            const unsigned char encoded[] = {
+                hex[command[index] >> 4U],
+                hex[command[index] & 0x0fU],
+            };
+
+            write_data(fixture, encoded, sizeof(encoded));
+        }
+        write_text(fixture, discarding != 0 ? " discard=1\n" : " discard=0\n");
     }
 }

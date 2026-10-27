@@ -10,6 +10,89 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Basic Fixture Command-Byte Diagnostics — 2026-10-27
+
+- Started with clean `stage8-phase1-acceptance` at
+  `6c908f79f1a0a4e636a45cbd70576666e2ad5cac`. SSH fetch failed authentication;
+  a read-only HTTPS `ls-remote` independently confirmed that exact pushed branch
+  tip. Changes are fixture/test/documentation only and uncommitted for review.
+- Unknown-command responses retain the single-line DMF prefix and
+  `E_COMMAND_001` meaning, appending
+  `command_len=<decimal> command_hex=<lowercase hex> discard=<0|1>`.
+  Hex encoding uses the handler's explicit length, including leading/embedded/
+  trailing NUL and high bytes; it does not use a C-string view or truncate the
+  command. Encoding streams through the existing writer without allocation.
+- The UART assembler is unchanged except for passing its current discard flag
+  to the handler. CR remains ignored, LF dispatches, idle retains the prefix,
+  exactly 32 bytes fit, and a 33rd non-CR/non-LF byte clears length and discards
+  through LF. Overflow therefore reports `command_len=0 command_hex= discard=1`,
+  faithfully describing the existing empty handler input rather than inventing
+  discarded bytes. Ordinary empty lines report `discard=0`; SILENT still mutes
+  errors. Successful commands and boot output remain byte-for-byte compatible.
+- Raw-line `rx_len`/`rx_hex` capture was not added: ignored CRs/overlong tails can
+  be unbounded, and exact raw retention would need complexity or truncation.
+  README distinguishes full interpreted command bytes from raw ingress and
+  electrical wire evidence. This observes the Pico firmware/UART processing
+  path, not the FTDI TX → Pico RX waveform or bytes lost before polling. A logic
+  analyzer may still help later; `E_COMMAND_001` remains unresolved/unclassified
+  until reproduced with useful ingress evidence. No cause or fix is claimed.
+- Added a host harness around the actual firmware `main.c` using stdin/stdout
+  UART and deterministic GPIO/clock stubs; the parser itself is not mocked or
+  copied. Tests cover unknown ASCII, leading/embedded/trailing NUL, high bytes,
+  `XINFO`, ignored CRs, no output before LF, all 32 command bytes, overlong
+  discard/no early error, recovery after LF, silence and no success diagnostics.
+  Existing portable protocol/boot/delay/partial/binary/burst/sustain tests remain.
+- **RED:** before firmware changes, the focused run produced 10 failed assertions
+  for missing diagnostics and 20 passing cases; both C harnesses compiled and
+  failures showed the old error line rather than test setup errors.
+  **GREEN:** all 30 focused cases passed in 6.63 s after instrumentation.
+
+| Validation command | Result |
+|---|---|
+| `rtk proxy .venv/bin/python -m pytest tests/hardware/zephyr_dut/test_fixture_protocol.py -q` | 30 passed; both harnesses compiled with C11, `-Wall -Wextra -Werror` |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen pytest -q` | 1,527 passed in 42.33 s, including architecture checks |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen ruff check .` | Passed |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen mypy` | Passed; 103 source files |
+| `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv lock --check --offline` | Passed; 66 packages, lockfile unchanged |
+| `git diff --check` | Passed |
+
+Cross-build validation used Zephyr `v4.4.0` / SDK `1.0.1`, GNU `14.3.0`, west
+`1.3.0`, the existing default board/UART configuration and a separate build ID.
+This did not replace or flash the previously accepted Basic image.
+
+```bash
+rtk proxy env \
+  ZEPHYR_BASE=/Users/nahitpawar/zephyrproject/zephyr \
+  ZEPHYR_SDK_INSTALL_DIR=/Users/nahitpawar/zephyr-sdk-1.0.1 \
+  CCACHE_DIR=/tmp/dutchmate-basic-ccache \
+  /Users/nahitpawar/zephyrproject/.venv/bin/west build \
+  -b rpi_pico -s hardware/firmware/zephyr_dut \
+  -d build/dutchmate-zephyr-dut-basic-diag-d406684c5dff --pristine -- \
+  '-DCONFIG_DUTCHMATE_FIXTURE_BUILD_ID="basic-diag-20261027-d406684c5dff"' \
+  -DDTC_OVERLAY_FILE= -DEXTRA_DTC_OVERLAY_FILE= \
+  -DUSER_CACHE_DIR=/tmp/dutchmate-basic-zephyr-cache
+```
+
+- Source inventory SHA-256, using the earlier sorted relative-path/NUL/content/
+  NUL method excluding README:
+  `d406684c5dffd4b505c2d683198719913d4d4b4c630be44037539e865bc6c92b`.
+- Build passed; `.config` confirms `rpi_pico/rp2040` and build ID
+  `basic-diag-20261027-d406684c5dff`. Generated UART0 is 115200 with no
+  `hw-flow-control`; both overlay CMake settings are empty. The linked binary
+  contains the build ID, diagnostic format and both discard suffixes.
+- UF2: `build/dutchmate-zephyr-dut-basic-diag-d406684c5dff/zephyr/zephyr.uf2`,
+  35,328 bytes; SHA-256
+  `7eeead1fc216035eb4163aae768bdd22838988caa944d9f4bc5d3628575f43f3`.
+  `.config` SHA-256:
+  `2fdc5a73125134f512a42bf8bd8f8bcd1f765c7c78c8120b3ceec4cf741bc733`.
+- All 940 pre-existing `.dutchmate` evidence/configuration files are unchanged;
+  earlier history and the accepted Basic HIL report are untouched. No production
+  behavior, API, persistence, acceptance criterion or UART configuration changed.
+  No hardware was accessed, no serial port opened, no firmware flashed and no
+  physical HIL performed. **Phase 1A remains Complete/accepted**; Stage 8,
+  Phase 1B and overall Phase 1 remain incomplete. Enhanced HIL/MCP were not started.
+
+
 ## Phase 1A Accepted After Normative Contract Audit — 2026-10-27
 
 - Audited the fresh run `20261027T073956Z-7c038da2` at code baseline

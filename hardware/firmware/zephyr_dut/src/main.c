@@ -98,9 +98,9 @@ int main(void)
         }
         if (byte == '\n') {
             if (discarding != 0) {
-                dmf_fixture_handle_command(&fixture, command, 0U);
+                dmf_fixture_handle_command(&fixture, command, 0U, discarding);
             } else {
-                dmf_fixture_handle_command(&fixture, command, command_length);
+                dmf_fixture_handle_command(&fixture, command, command_length, discarding);
             }
             command_length = 0U;
             discarding = 0;

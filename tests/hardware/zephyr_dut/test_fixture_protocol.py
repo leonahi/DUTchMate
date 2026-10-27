@@ -4,17 +4,26 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_ROOT = REPO_ROOT / "hardware" / "firmware" / "zephyr_dut"
 HARNESS_SOURCE = Path(__file__).with_name("fixture_protocol_harness.c")
 
 
-def _build_harness(tmp_path: Path) -> Path:
+def _build_harness(tmp_path: Path, *, uart: bool = False) -> Path:
     compiler = shutil.which("cc")
     if compiler is None:
         raise AssertionError("a host C compiler is required for the Zephyr DUT protocol tests")
 
     executable = tmp_path / "fixture-protocol"
+    if uart:
+        # Compile the actual firmware UART loop against host-only I/O stubs.
+        for header in ("device.h", "devicetree.h", "drivers/gpio.h", "drivers/uart.h", "kernel.h"):
+            stub = tmp_path / "zephyr" / header
+            stub.parent.mkdir(parents=True, exist_ok=True)
+            stub.write_text('#include "fixture_uart_stubs.h"\n')
+    source = HARNESS_SOURCE.with_name("fixture_uart_harness.c") if uart else HARNESS_SOURCE
     result = subprocess.run(
         [
             compiler,
@@ -24,7 +33,11 @@ def _build_harness(tmp_path: Path) -> Path:
             "-Werror",
             "-I",
             str(FIXTURE_ROOT / "src"),
-            str(HARNESS_SOURCE),
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(HARNESS_SOURCE.parent),
+            str(source),
             str(FIXTURE_ROOT / "src" / "fixture_protocol.c"),
             "-o",
             str(executable),
@@ -214,4 +227,72 @@ def test_silent_command_acknowledges_then_mutes_until_reset(tmp_path: Path) -> N
 def test_unknown_command_has_stable_error(tmp_path: Path) -> None:
     result = _run_command(tmp_path, "UNKNOWN")
 
-    assert result.stdout == b"DMF/1 ERROR COMMAND code=E_COMMAND_001\n"
+    assert result.stdout == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 "
+        b"command_len=7 command_hex=554e4b4e4f574e discard=0\n"
+    )
+
+
+def _run_uart(tmp_path: Path, ingress: bytes) -> bytes:
+    result = subprocess.run(
+        [_build_harness(tmp_path, uart=True)], input=ingress, check=True, capture_output=True
+    )
+    boot = b"DMF/1 BOOT OK board=rpi_pico build=test-build\n"
+    assert result.stdout.startswith(boot)
+    assert result.stderr == b""
+    return result.stdout[len(boot):]
+
+
+@pytest.mark.parametrize(
+    ("ingress", "diagnostic"),
+    [
+        (b"UNKNOWN\n", b"command_len=7 command_hex=554e4b4e4f574e discard=0\n"),
+        (b"\x00INFO\n", b"command_len=5 command_hex=00494e464f discard=0\n"),
+        (b"XINFO\n", b"command_len=5 command_hex=58494e464f discard=0\n"),
+        (b"IN\x00FO\n", b"command_len=5 command_hex=494e00464f discard=0\n"),
+        (b"INFO\x00\x80\xff\n", b"command_len=7 command_hex=494e464f0080ff discard=0\n"),
+        (b"X\rIN\rFO\r\n", b"command_len=5 command_hex=58494e464f discard=0\n"),
+        (b"\r\n", b"command_len=0 command_hex= discard=0\n"),
+    ],
+)
+def test_uart_unknown_command_reports_every_interpreted_byte(
+    tmp_path: Path, ingress: bytes, diagnostic: bytes
+) -> None:
+    assert _run_uart(tmp_path, ingress) == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 " + diagnostic
+    )
+
+
+def test_uart_crs_are_ignored_and_success_has_no_diagnostics(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"P" + b"\r" * 100 + b"ING\r\nIN\rFO\n") == (
+        b"DMF/1 PONG\nDMF/1 INFO board=rpi_pico build=test-build protocol=1\n"
+    )
+
+
+def test_uart_unterminated_prefix_emits_nothing(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"XINFO") == b""
+
+
+def test_uart_full_32_byte_command_diagnostic_is_not_truncated(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"X" * 31 + b"\x00\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=32 command_hex="
+        + b"58" * 31 + b"00 discard=0\n"
+    )
+
+
+def test_uart_overflow_discards_until_lf_then_accepts_next_command(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"X" * 33 + b"\rINFO\x00\nINFO\n\n") == (
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=1\n"
+        b"DMF/1 INFO board=rpi_pico build=test-build protocol=1\n"
+        b"DMF/1 ERROR COMMAND code=E_COMMAND_001 command_len=0 command_hex= discard=0\n"
+    )
+
+
+def test_uart_unterminated_overflow_emits_nothing(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"X" * 100) == b""
+
+
+def test_uart_silent_mode_suppresses_even_unknown_diagnostics(tmp_path: Path) -> None:
+    assert _run_uart(tmp_path, b"SILENT\nXINFO\n" + b"X" * 33 + b"\n") == (
+        b"DMF/1 SILENT armed-until-reset\n"
+    )
