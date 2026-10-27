@@ -1106,3 +1106,172 @@ absent, TCP 2040 had no listener, and neither FTDI cu/tty path had an owner
 incomplete. Enhanced HIL and MCP were not started. Only this report and
 development status/history changed, left uncommitted for review; final
 diff/preservation checks are recorded in history.
+
+## Focused Basic unexpected-reconnect diagnostic — 2026-10-27
+
+Result: **automatic reconnect succeeded in the fully observed repeat** within
+the unchanged `reconnect_timeout_s=5.0`. No reconnect product defect was
+reproduced. Earlier timeout causes remain unclassified; this result does not
+retroactively establish their OS availability or complete Phase 1A. No full
+Basic HIL, Enhanced HIL or MCP workflow was run.
+
+### Preflight, scope and method
+
+- Clean branch `stage8-phase1-acceptance`, HEAD
+  `7d6cac3764176820f6dc62f79f2d705749735b24`, independently matched to pushed
+  HTTPS `ls-remote`. Reviewed CLI fix `ff8cc51` is merged. No production, test,
+  firmware, API or configuration changes were made.
+- Host: macOS 26.2 build `25C56`, Darwin 25.2.0 arm64. All table times below are
+  UTC on October 27; local Asia/Kolkata time is UTC+05:30.
+- FTDI FT231X `0403:6015`, serial `D358SG6A`, path
+  `/dev/cu.usbserial-D358SG6A`, current USB location `0-1.4` (IORegistry location
+  ID `1310720`). This differs from the older report's `0-1.3`; the repeat used
+  the same current socket. Serial enumeration and IORegistry independently
+  identified it. No service listener or FTDI cu/tty owner existed at preflight.
+- Existing Basic configuration remained byte-for-byte unchanged: external UART,
+  exact-path selector, reconnect 5.0 s, 115200 8-N-1, no RTS/CTS or XON/XOFF,
+  explicit TX enabled, default line ending none, driver-default DTR/RTS. Profile
+  digest `42326da48a5c72bae4ea6c6165a45718cf64dd6b21f8378ec32933ae08f6d837`.
+  Pico USB power and UART wiring stayed connected. Correct INFO responses
+  identify reviewed `rpi_pico` build `basic-v2-20261026-7bc2ec377767`; no flash
+  or build was performed.
+- Software gate completed before the first physical startup: 1,514 pytest tests
+  passed in 36.83 s, Ruff passed, mypy passed (103 files), offline lock check
+  passed (66 packages), and `git diff --check` passed. Commands used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. Current CLI help was
+  captured. No tests or additional runtime/session store ran while either
+  physical service was running; the first service was stopped before the repeat.
+- Normal starts used
+  `uv run --frozen --package dutchmate dutchmate start --backend basic --serial-port /dev/cu.usbserial-D358SG6A --baudrate 115200`.
+  The operator used local `mark_actions.py` to timestamp Enter immediately before
+  unplug and after replug. Parallel passive observers recorded IORegistry USB
+  matches, node `stat`, service-path `lsof`, HTTP status and read-only connection
+  evidence with UTC and monotonic timestamp pairs. No runtime monkeypatching or
+  production instrumentation was used.
+- DUTchMate retains ownership during reconnect, so no external open probe
+  competed with it. Successful service open is proven by reconnect publication
+  and a positive descriptor observation. The only external probe occurred after
+  the first attempt had terminalized, with disconnected status and no owner; it
+  sent/read zero bytes and closed before the next normal start.
+
+### First attempt: preserved with incomplete host timing
+
+Session `20261027T063720Z-2c95d57d`, PID 3175, first INFO matched. A local helper
+initially named `operator.py` shadowed Python's standard module and prevented the
+startup wrapper from importing; it was renamed before the service started. This
+was a diagnostic helper error, not DUTchMate behavior.
+
+The first observer's six-minute operator-wait window ended at
+06:44:03.879462, before the operator's pre-unplug marker at 06:44:17.251883 and
+post-replug marker at 06:44:34.144737. Native evidence nevertheless retained
+`unexpected_disconnect` 6 and `reconnect_started` 7 at 06:44:18, then
+`reconnect_failed` 8 / `reconnect_timeout` at 06:44:23. An attempted observer
+renewal found the service already disconnected and stopped at its connected
+precondition. The USB/node transitions during this interval were missed.
+
+These markers span 16.893 seconds but do not establish actual physical
+downtime or OS availability. A later measured external open succeeded after
+timeout (`05-post-timeout-open.json`); it does not prove earliest openability.
+This attempt remains **unclassified**, not an environment or software diagnosis.
+Its session, observer output and limitations are preserved. Public CLI stop
+completed, and no listener/serial owner remained before the focused repeat.
+
+### Fully observed repeat and timeline
+
+Fresh session **`20261027T064604Z-7239cdfe`**, PID **18348**. The passive observer
+remained active until the physical action, without an operator-wait expiry.
+The production reconnect deadline remained 5.0 s.
+
+| Event | Recorded UTC / evidence |
+|---|---|
+| Operator marker immediately before unplug | `06:51:45.911877` |
+| Serial node first observed absent | `06:51:47.546341` |
+| Durable `unexpected_disconnect` | Sequence **11**, native wall time `06:51:47Z`, first observed `06:51:47.546443` |
+| Durable `reconnect_started` | Sequence **12**, same first-observed poll; detail `timeout_s=5.0` |
+| FTDI USB first observed absent | `06:51:47.595688` |
+| Same VID/PID/serial USB device enumerated again | `06:51:48.560095` |
+| `/dev/cu.usbserial-D358SG6A` first observed back | `06:51:48.565031`, inode 713 (previously 705) |
+| Successful service open proven by publication | **No later than `06:51:49.091107`**, first observation of durable success; exact open syscall return time is not logged |
+| Durable fresh segment / reconnect success | **13** `segment_opened`, **14** `reconnect_succeeded`; native time `06:51:49Z`, first observed `06:51:49.091107` |
+| Operator marker immediately after replug | `06:51:49.110892` (USB was already enumerated) |
+| HTTP connected status observed | `06:51:49.117489`, same active session, segment 1 |
+| Service serial FD first positively observed again | `06:51:49.146319`, PID 18348 / FD 3 |
+| `reconnect_timeout` | **None in the repeat** |
+
+Observed start-to-success delta is **1.544660125 s**, well inside five seconds.
+Node reappearance preceded observed durable success by about 0.526 s. Individual
+failed reconnect/open attempts and error codes are not emitted by existing
+service logs/evidence; their number/times are **not inferred** from backoff code.
+Password-free passive syscall tracing was unavailable (`sudo -n` requires a
+password); no credentials or production changes were used to obtain it.
+
+These are observation times, not invented mechanical or syscall timestamps.
+Keypress markers bound/report operator actions; the physical contact instants
+were not directly instrumented. Native connection wall times have one-second
+resolution, while durable sequence order and the observer's monotonic clock
+establish ordering. Conservative change brackets from adjacent samples are:
+
+| Host transition | Previous sample start → first positive/negative sample finish |
+|---|---|
+| USB disappears | `06:51:47.500474` → `06:51:47.595688` |
+| Node disappears | `06:51:47.533746` → `06:51:47.546341` |
+| USB reappears | `06:51:48.353355` → `06:51:48.560095` |
+| Node reappears | `06:51:48.552395` → `06:51:48.565031` |
+| Service FD positively visible again | `06:51:49.050453` → `06:51:49.146319` |
+
+The path-filtered `lsof` sample cannot timestamp closure of an old descriptor
+while the device node is missing. A negative sample then includes `stat` errors;
+it is not silently treated as an exact close event. Successful publication and
+final ownership checks provide the stronger assertions. No external probe
+measured the earliest possible open before the service succeeded; the actual
+successful service open is sufficient to demonstrate in-window openability.
+
+### Continuity, resumed RX and command anomaly
+
+The same native-v2 session stayed active across the successful reconnect.
+Segment 0 closes with `end_reason=unexpected_disconnect`; segment 1 opens with
+`start_reason=reconnect` and a fresh host-monotonic origin. Metadata durably
+records one observation gap. Profile/serial/DTR/RTS settings remain unchanged,
+Basic loss is `not_observable`, local recording quality is `complete`, and
+status answered connected with no active operation after the checks.
+
+The earlier unexplained command anomaly **recurred**, independently of reconnect
+publication: exact audited `INFO\n` (5 accepted bytes) received
+`DMF/1 ERROR COMMAND code=E_COMMAND_001\n` at RX **4** before unplug and RX **18**
+after successful reconnect. Their INFO-condition Interacts timed out truthfully.
+Separate explicit INFO retests matched the exact reviewed build at RX **9** and
+**23**. Each operation sent once; this was not automatic TX retry. Post-reconnect
+RX 18/23 proves resumed recording, including the unexpected response. No cause
+is assigned to DUTchMate, the fixture or wiring from audit/response evidence
+alone, and no fix was made. The anomaly remains a separate acceptance concern.
+
+### Evidence preservation and cleanup
+
+Artifacts: `.dutchmate/hil/basic-reconnect-diagnostic-20261027/`, with the complete
+repeat under `repeat/`. Files include software/preflight records, action markers,
+`timing-samples.jsonl`, `timing-summary.json`, `event-sampling-statistics.json`,
+`diagnostic-summary.json`, native before/after-stop copies, raw service logs and
+exact CLI/HTTP argument/output records. The first attempt's missed interval and
+helper/precondition errors are explicitly retained, not erased by the repeat.
+
+The repeat contains **226 raw RX bytes**, **4 RX records**, **4 TX pairs**,
+**4 completed operations**, **2 segments**, and contiguous evidence **0..24**.
+Decoded RX reproduces raw bytes exactly. Final state is
+`completed/service_shutdown`, with gap count 1 and no unresolved action.
+
+| Final repeat artifact | SHA-256 |
+|---|---|
+| `uart_raw.log` | `d19391e91b1caeaff0bb9fe59480bd51e82624e4089293beb3b081441f997a7e` |
+| `uart_events.jsonl` | `a534ab9619158513dc02eef6b6d150eecfc7a15b19f22c9a4e0456043013ed48` |
+| `operation_events.jsonl` | `61cc8f243df951298ef36967625dd11bee5bb00c37627d6a27f06c1fa33e03ca` |
+| `connection_events.jsonl` | `810379a239a920db42f29f2bf86162ee24a4057cda53a52c9c4146235c796c82` |
+| `metadata.json` | `2978294e9b2db2b9d5c2719b7decfb314b3d946bade3cbecc6ed3515960ea9ad` |
+
+Normal CLI stop needed no SIGKILL. At **06:54:05.385913 UTC**, PID 18348 was
+absent, TCP 2040 had no listener, and neither FTDI cu/tty path had an owner
+(`repeat/11-cleanup-verification.json`). All pre-existing session hashes and
+configuration bytes are unchanged. Only this report and development
+status/history were updated, uncommitted for review. Phase 1A, Stage 8,
+Phase 1B and Phase 1 remain incomplete; Enhanced HIL and MCP remain deferred.

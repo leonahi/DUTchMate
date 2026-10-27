@@ -10,6 +10,76 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Focused Basic Unexpected-Reconnect Diagnostic — 2026-10-27
+
+- Started from clean pushed `stage8-phase1-acceptance` HEAD
+  `7d6cac3764176820f6dc62f79f2d705749735b24`; read-only HTTPS `ls-remote`
+  independently matched. Reviewed CLI loss fix `ff8cc51` was already merged.
+  Read current reconnect semantics, Phase 1 specification and Basic HIL record.
+- Before physical startup, completed 1,514 tests in 36.83 s, Ruff, mypy (103
+  files), offline lockfile check (66 packages), and `git diff --check`. Commands
+  used `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short`, `uv run --frozen ruff check .`,
+  `uv run --frozen mypy`, and `uv lock --check --offline`. No tests or additional
+  runtime/store construction occurred during either physical service interval.
+- macOS 26.2/25C56, Darwin 25.2.0 arm64; FTDI FT231X `0403:6015`, serial
+  `D358SG6A`, `/dev/cu.usbserial-D358SG6A`, current USB location `0-1.4`.
+  No service listener or serial owner existed at preflight. Configuration stayed
+  byte-for-byte unchanged: reconnect 5.0 s, Basic/external UART/exact path,
+  115200 8-N-1/no flow control, TX enabled, default ending none. Correct INFO
+  responses identified reviewed build `basic-v2-20261026-7bc2ec377767`.
+- Initial diagnostic session `20261027T063720Z-2c95d57d`, PID 3175, timed out
+  after disconnect/start 6/7 at 06:44:18 UTC and failure 8 at 06:44:23. Its
+  observer wait had expired at 06:44:03.879462 before physical action markers
+  06:44:17.251883/06:44:34.144737, so USB/node timings were missed. This attempt
+  remains unclassified. Its evidence, later successful post-timeout zero-byte
+  external open and helper/precondition failures are preserved. A helper name
+  shadowed Python's `operator` module before startup and was corrected locally;
+  no product defect is inferred. Service stopped and listener/port were free
+  before a fresh focused repeat. The operator-wait expiry was removed from the
+  passive helper, without changing DUTchMate's five-second timeout.
+- Fully observed repeat `20261027T064604Z-7239cdfe`, PID 18348, **successfully
+  reconnected automatically**. Durable disconnect/start 11/12 were first observed
+  06:51:47.546443 UTC; USB re-enumeration 06:51:48.560095; node reappearance
+  06:51:48.565031; fresh segment/success 13/14 observed 06:51:49.091107. Observed
+  start-to-success delta: **1.544660125 s**. Positive service FD observation was
+  06:51:49.146319. The successful publication proves an actual in-window open.
+- Kept the same active schema-v2 ownership session; fresh segment 1 has
+  `start_reason=reconnect` and a new host-monotonic origin. One durable
+  observation gap, unchanged profile/serial provenance, resumed RX and responsive
+  connected status were verified. No manual reacquire or competing external
+  open probe occurred during the automatic reconnect window.
+- Operator markers, USB/node/stat/status/descriptor samples and durable evidence
+  used paired UTC/monotonic timestamps. Sample bounds and native one-second wall
+  resolution are explicit in the report. Physical mechanical contact instants,
+  the exact successful open syscall return time and individual failed open
+  attempts are not fabricated: existing logs do not expose each attempt, and
+  password-free passive syscall tracing was unavailable. No root credentials,
+  runtime monkeypatching or production instrumentation were used.
+- **Command anomaly recurred:** exact audited INFO received `E_COMMAND_001` at
+  RX 4 before unplug and RX 18 after reconnect; INFO-condition Interacts timed
+  out. Separate explicit INFO retests matched at RX 9/23, without automatic TX
+  retry. Resumed raw RX includes both the anomaly and the correct reviewed
+  response. No software/fixture/wiring cause or fix is claimed.
+- Preserved both new native sessions, before/after-stop copies, raw logs,
+  commands, markers and timing summaries under
+  `.dutchmate/hil/basic-reconnect-diagnostic-20261027/` (successful repeat in
+  `repeat/`). Repeat evidence: 226 raw bytes, four RX records, four TX pairs,
+  four completed operations, two segments, contiguous sequences 0..24; decoded
+  RX matches raw exactly. Final state `completed/service_shutdown`, gap count 1.
+- Public CLI stop completed normally. At 06:54:05.385913 UTC, PID 18348 was
+  absent, no TCP 2040 listener existed and both FTDI cu/tty paths were unowned.
+  All pre-existing session hashes and configuration bytes are unchanged. Only
+  the Basic HIL validation record and development status/history changed;
+  final diff/preservation checks passed. No production/test/hardware code was
+  patched, no firmware flashed, and no full Basic HIL was run.
+
+The measured repeat did not reproduce a reconnect defect; earlier timeouts
+remain unclassified. This focused diagnostic is not Phase 1A acceptance.
+Phase 1A, Stage 8, Phase 1B and Phase 1 remain incomplete. Enhanced HIL and MCP
+were not started. Documentation changes remain uncommitted for review.
+
+
 ## Schema-v2 CLI Session Loss Display Fixed in Software — 2026-10-27
 
 - Created `fix/cli-v2-loss-status` from clean, independently verified pushed

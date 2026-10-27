@@ -8,6 +8,7 @@
 > Basic release fix branch base: `b4ad4f32c138a42f255110dc222c1258723cc138`
 > Accepted Basic release fix: `df3ca29` (merged into the HIL baseline)
 > CLI loss fix branch base: `acffad49ec63765d827f83f2921a61a6a5220bab`
+> Accepted CLI loss fix: `ff8cc51` (merged); reconnect diagnostic HEAD: `7d6cac3764176820f6dc62f79f2d705749735b24`
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -18,11 +19,12 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** The schema-v2 CLI session/list loss-display fix is
-  validated on `fix/cli-v2-loss-status`, uncommitted for review. Both views now
-  read native-v2 evidence quality; historical v0/v1 formatting is preserved.
-  No new HIL occurred. Stage 8 and Phase 1A/1B/Phase 1 remain **Incomplete**;
-  the unexpected reconnect in `20261026T185908Z-a2a4fdef` is unresolved.
+- **Current milestone:** The reviewed CLI loss fix is merged into pushed
+  `stage8-phase1-acceptance`. Focused Basic reconnect diagnostic
+  `20261027T064604Z-7239cdfe` succeeded inside the unchanged 5-second window,
+  continuing the same session in segment 1 with a durable gap and resumed RX.
+  This was not full Basic HIL. Stage 8 and Phase 1A/1B/Phase 1 remain
+  **Incomplete**; prior timeouts are not retroactively classified.
 - **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
   provenance, audited reset/boot, immediate boot preservation, and CLI parity
   pass deterministic acceptance. Obsolete production v0/v1 writers, finite
@@ -31,18 +33,18 @@ Read this document first whenever development resumes.
 - **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
   its recorded measurements. Existing HIL records were not rewritten or treated
   as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review/integrate the CLI loss fix into
-  `stage8-phase1-acceptance`. Separately establish why unexpected FTDI reconnect
-  missed the 5-second window, measuring OS enumeration/open availability before
-  classifying its cause. After resolving that gate, rerun full Basic HIL from the
-  beginning with software checks finished before physical startup. Preserve all
-  failed runs. Enhanced HIL, Revision A, and MCP remain deferred.
-- **Open blockers:** The CLI fix awaits review/integration and fresh physical
-  acceptance. Unexpected reconnect recorded disconnect/start/failure at sequences
-  69/70/71; operator replug was within 1–2 seconds, but OS availability before
-  the deadline was not measured. No reconnect product cause is established. The
-  old `E_COMMAND_001` remains unexplained. Release/external ownership and fresh
-  segment 1 passed in the last HIL run; Enhanced/Phase 4 blockers are unchanged.
+- **Next step:** Review the focused diagnostic and investigate the recurring
+  `E_COMMAND_001` command-path anomaly separately. Rerun full Basic HIL from the
+  beginning with continuous reconnect timing observation and all software checks
+  finished before physical startup. Preserve all failed runs. Enhanced HIL,
+  Revision A, and MCP remain deferred.
+- **Open blockers:** Full Basic acceptance is still outstanding. The measured
+  reconnect succeeded in about 1.545 s; neither a reconnect defect nor the cause
+  of earlier timeouts was established. An initial diagnostic attempt missed host
+  transitions after its observer wait expired and remains unclassified.
+  `E_COMMAND_001` recurred before and after the successful reconnect; separate
+  explicit INFO retests matched. Its cause is unknown, not attributed to product
+  or fixture. Enhanced/Phase 4 blockers remain unchanged.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -84,7 +86,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | HIL incomplete | CLI loss fix validated for review; unexpected reconnect unresolved; fresh Basic acceptance required |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | HIL incomplete | CLI loss fix merged; focused reconnect passed; recurring command anomaly and full Basic acceptance remain open |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -105,11 +107,34 @@ progress; it does not redefine either document.
 
 | Gate | Status |
 |---|---|
-| Phase 1A — Basic | Incomplete; CLI loss fix awaits review/integration; unexpected reconnect unresolved; fresh Basic HIL required |
+| Phase 1A — Basic | Incomplete; focused reconnect passed, prior timeout cause unclassified; recurring E_COMMAND_001 and full Basic HIL remain open |
 | Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Focused Basic reconnect diagnostic, 2026-10-27: clean pushed HEAD `7d6cac3`.
+All software checks completed before startup: 1,514 tests passed in 36.83 s,
+Ruff, mypy (103 files), offline lock check (66 packages), and diff check passed.
+No tests or additional runtime/store ran during either physical service interval.
+Two fresh diagnostic sessions are preserved: incompletely observed timeout
+`20261027T063720Z-2c95d57d` and fully observed success
+`20261027T064604Z-7239cdfe`. Timeout configuration remained 5.0 s throughout.
+
+In the successful repeat, durable disconnect/start 11/12 were observed at
+06:51:47.546443 UTC, FTDI USB again at 06:51:48.560095, serial node again at
+06:51:48.565031, and segment-open/success 13/14 at 06:51:49.091107. Observed
+start-to-success delta: 1.544660 s. Same ownership session, fresh segment 1,
+gap count 1, resumed RX and responsive service were verified. Failed individual
+open attempts are not exposed by existing logs; external probes did not compete
+with automatic reconnect. Operator markers and poll bounds are preserved.
+
+Exact audited INFO received `E_COMMAND_001` at RX 4/18; separate explicit INFO
+retests returned the reviewed build at RX 9/23. No cause or fix is claimed.
+Graceful stop released PID 18348, TCP 2040 and both FTDI paths. Original sessions
+and configuration are unchanged. Only Basic validation/status/history changed;
+no production patch, full Basic HIL, Enhanced HIL or MCP work occurred. Detailed
+timings and limitations are in the [Basic report](../hardware/validation/phase1_basic_hil.md).
 
 CLI v2 loss-display fix, 2026-10-27: four list/detail regression cases failed
 RED with `none` or the obsolete projection, then passed GREEN using
