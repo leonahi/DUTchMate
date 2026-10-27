@@ -14,6 +14,7 @@
 > Committed fixture / physical diagnostic HEAD: `69a0980e1c7ced2cfcf053ebdd95e7b8dcc16df4` (pushed)
 > Bounded overflow enhancement source base: `68ae39714fb5ebfd55ec970e2709d29561c822e9` (pushed)
 > Bounded overflow fixture / physical diagnostic HEAD: `4692444f771f33b6d27994e03f2722c268e3f43a` (pushed)
+> Enhanced HIL code baseline: `887768c2e10da1ba8ae9c323474fad86648a7d34` (clean latest pushed verified; blocked HIL docs uncommitted)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -24,35 +25,37 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Bounded physical diagnostic reproduced `E_COMMAND_001`
-  on trial 1 in `20261027T105245Z-a78a6741`: line_len=90, discarded_count=58,
-  first overflow=00, prefix 29 NUL/3 ff bytes, suffix `000000ff494e464f`.
-  INFO reached an already-overlong line. Uncaptured middle values and root cause
-  remain unknown; stopped without retry. Diagnostic docs are uncommitted for
-  review. Earlier diagnostic and acceptance evidence remain unchanged.
-  **Phase 1A remains Complete/accepted** from `20261027T073956Z-7c038da2`.
-  The anomaly remains unresolved/non-blocking; Stage 8, Phase 1B and overall
-  Phase 1 remain **Incomplete** pending Enhanced HIL/physical evidence.
-- **Implementation status:** Enhanced continuous RX/telemetry, per-segment RP2350
-  provenance, audited reset/boot, immediate boot preservation, and CLI parity
-  pass deterministic acceptance. Obsolete production v0/v1 writers, finite
-  reconnect/discard paths, legacy response fallbacks, and single-workflow status
-  are removed. Historical read/replay and Debug Agent v1 compatibility remain.
-- **Historical evidence:** The ring-buffer decision remains `accepted_32k` for
-  its recorded measurements. Existing HIL records were not rewritten or treated
-  as current v2 acceptance; Revision A measurement gaps remain open.
-- **Next step:** Review the bounded ingress evidence and diagnostic documentation
-  before selecting a separate investigation. No cause is assigned to host,
-  adapter, wiring, UART, Zephyr or fixture, and no fix was attempted. Enhanced
-  HIL/remaining physical gates stay pending; MCP remains deferred until overall
-  Phase 1 acceptance. No further physical diagnostic was started.
-- **Open blockers:** No normative Basic acceptance blocker remains. Stage 8,
-  Phase 1B and Phase 1 await Enhanced HIL and remaining physical evidence.
-  Current audit 11/12 accepted exact INFO, RX 13 reports the 90-byte overlong
-  line, terminal 14 is timeout. Only prefix/first overflow/last eight bytes are
-  exposed; positions 34–82 remain unknown. No electrical waveform was captured
-  or cause assigned; older anomalies are not retroactively classified. Older
-  timeout causes and Enhanced/Phase 4 blockers remain open.
+- **Current milestone:** Real Enhanced HIL ran on clean pushed `887768c` in
+  `20261027T114440Z-7db24eae`, then **stopped incomplete on a control blocker**.
+  After release/external ownership/reacquire, status still advertised CTRL0/1
+  configured, but the first reset returned HTTP 409 `not_configured` for CTRL0.
+  Durable attempt/result 739/740 preserve the failure; no retry or reconfiguration.
+  Service is stopped; session completed normally as `service_shutdown`.
+  **Phase 1A remains Complete/accepted**; Phase 1B, Stage 8 and Phase 1 incomplete.
+- **Passed this HIL:** Continuous RX/32 KiB telemetry, exact first boot bytes
+  before Monitor, matched/elapsed/timeout Interact, duration/literal/timeout
+  Monitor, follow/console detach, audited reset/boot in segment 0, ambient fault,
+  release/external ownership, same-session reacquire, two RP2350 segment origins,
+  v2 session/log/cursor retrieval and complete raw reconciliation.
+- **Evidence:** Operator-authorized exact accepted helper and 460800 DUT UF2s
+  were flashed to separately identified boot targets before acceptance; GP3 open
+  and UART/control/ground/VIO wiring confirmed. Original Basic config preserved;
+  separate immutable Enhanced profile used 5.0 s reconnect policy. Full pre-start
+  gate passed: 1,533 tests, Ruff, mypy, lock/architecture and diff checks.
+- **Next step:** Review the Enhanced HIL evidence and handle the configured-state
+  mismatch after Enhanced reacquire in a separate focused fix/TDD slice. Do not
+  reapply GPIOs or retry this failed reset to manufacture acceptance. Then run
+  the required fresh HIL for remaining lifecycle/control criteria; unexpected USB
+  reconnect was not attempted in this run. Stop for review; MCP stays deferred.
+- **Historical evidence:** `accepted_32k` remains applicable to the reflashed
+  accepted references; no heavy stress or accepted physical measurement repeated.
+  All 448 earlier session-file hashes and Basic config unchanged. Report/status/
+  history are uncommitted for review, and prior Basic/Enhanced evidence retained.
+- **Open blockers:** Enhanced reacquire/control mismatch and untested unexpected
+  USB reconnect; identified Revision A design/correction verification, analog
+  UART/cable/series-resistor, leakage/transient/isolation and ESD evidence gaps.
+  Reuse existing bounded physical passes. Basic ingress anomaly remains
+  unresolved/non-blocking; no cause/fix assigned. Phase 4 remains paused.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -94,7 +97,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL/physical gates required; bounded diagnostic reproduced NUL/ff prefix plus INFO suffix, cause unresolved/non-blocking |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced HIL stopped on reacquire/control mismatch; USB reconnect and physical gaps remain open |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -116,10 +119,29 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Software parity accepted; incomplete pending real Pico 2 + fixture v2 HIL and required Revision A physical evidence |
+| Phase 1B — Enhanced | Partial real v2 HIL; blocked by configured controls rejected after reacquire; unexpected USB reconnect and identified Revision A gaps open |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Enhanced real-hardware HIL, 2026-10-27: clean latest pushed `887768c` verified
+again after exact accepted helper/DUT reference flashes. Separate Enhanced
+profile resolved CTRL0/RUN and CTRL1/GP2; Basic config preserved. Fresh full gate
+finished before service start: 1,533 passed in 43.44 s, Ruff, mypy/103 files,
+offline lock/66 packages, architecture and diff checks passed. No tests/second
+runtime/store ran while the service owned hardware. Session
+`20261027T114440Z-7db24eae` passed continuous RX, initial first-byte retention,
+Monitor/Interact/follow/console, boot-mode control, scoped telemetry and retrieval.
+Release/external ownership/same-session reacquire produced one gap and segment 1,
+but status still said CTRL0/1 configured while reset 739/740 returned
+`not_configured`. Stopped without retry, GPIO reapplication or fix; unexpected USB
+reconnect untested. Graceful stop/PID/listener/serial cleanup verified. Final
+0..866 reconciles 510 raw bytes/47 RX records, eight TX pairs, six control pairs,
+six bounded operations and 774 status records. All 448 earlier session files and
+Basic config unchanged; `accepted_32k` and bounded physical evidence reused,
+not repeated. Full evidence/limits/§34 disposition are in the
+[Enhanced HIL report](../hardware/validation/phase1_enhanced_hil.md). Only that
+report/status/history changed, uncommitted for review; final diff check passed.
 
 Bounded overflow physical diagnostic, 2026-10-27: clean `4692444`, independently
 verified pushed before startup. Full software gate completed first: 1,533 tests

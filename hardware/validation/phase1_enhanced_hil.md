@@ -1,8 +1,445 @@
 # Phase 1B Enhanced Workflow HIL Evidence
 
-This record contains the 2026-09-15 configured reset/boot-test and USB reconnect
-runs against the same Pico 1 Zephyr DUT fixture used for the Enhanced load
-profiles. Phase and next-step ownership remain in `docs/development_status.md`.
+This record preserves the historical Enhanced runs, the current-contract HIL,
+and its preflight audit below. Phase and next-step ownership remain in
+`docs/development_status.md`.
+
+## Current v2 HIL: Reacquire/Control Blocker — 2026-10-27
+
+**Enhanced HIL stopped incomplete.** Phase 1B, Stage 8 and overall Phase 1
+remain incomplete; Phase 1A remains accepted. This run did not reach unexpected
+USB reconnect. A real control-state mismatch after explicit reacquire stopped
+the affected path without reconfiguration, retry, or an in-run product fix.
+
+### Known-reference preparation and clean baseline
+
+The operator declared the installed images unknown and authorized reflashing
+the retained accepted references before acceptance. Both images match the
+SHA-256 values in the audit below; UF2 block magic/count/order/payload/end
+markers and RP2350/RP2040 families were checked. Each target boot drive was
+identified separately before its single successful `/bin/cp` transfer:
+
+| Target | Boot identity | Transfer and reboot observation (UTC) |
+|---|---|---|
+| Pico 2 helper | `/Volumes/RP2350`, bootloader v1.0, model Raspberry Pi RP2350, board RP2350 | Normal accepted UF2, 104,448 bytes; copy 11:40:25.369806–11:40:26.267602, exit 0. Boot volume absent and expected helper serial present at 11:40:31.920834. |
+| Pico 1 DUT | `/Volumes/RPI-RP2`, bootloader v3.0, model Raspberry Pi RP2, board RPI-RP2 | Accepted `phase1-enhanced-460800-001` UF2, 34,304 bytes; copy 11:42:20.956161–11:42:21.459537, exit 0. Boot volume absent at 11:42:43.924033. |
+
+The images were not read back. Available provenance is the exact accepted
+source hashes, identified boot targets, successful transfers, passive reboot
+observations, subsequent helper hello and exact DUT boot/INFO markers. The
+helper uses the accepted normal image, not the changing-identity stack probe.
+Preparation records are `flash-helper.json`, `helper-after-flash.json`,
+`flash-dut.json`, and `dut-after-flash.json` in the preflight audit folder.
+
+Operator-confirmed wiring: `CTRL0 → RUN`, `CTRL1 → GP2`, `DUT_TX → GP0`,
+`DUT_RX → GP1`, common GND, GP3 open, and `DUT_VIO` supplied from Pico 2 3V3.
+This is a trusted wiring/supply declaration, not a new calibrated measurement.
+No accepted physical measurement was repeated.
+
+Before startup, HEAD again matched the latest pushed
+`887768c2e10da1ba8ae9c323474fad86648a7d34` by independent HTTPS remote lookup.
+The pending documentation was backed up, temporarily restored to HEAD for a
+clean tracked tree, and restored after HIL. No product source changed. The
+original Basic config was preserved. A separate HIL working directory supplied
+an immutable Enhanced profile at
+`.dutchmate/hil/enhanced-phase1b-20261027/run/.dutchmate/config.toml`:
+460800 8-N-1/no flow control, explicit TX enable, exact helper path
+`/dev/cu.usbmodem1401`, 5.0 s reconnect timeout, 3.3 V declaration, reset
+CTRL0/RUN open-drain active-low, boot CTRL1/GP2 push-pull active-high/idle-low.
+Profile digest: `941268f4df4522268941b23364cdbf0c0ff6927bfd3efbbb244ad4cad6cbb319`;
+config-file SHA-256:
+`df0ac6bd8a424f60a20c8ae27f127f70520945eda9d6402775f8f344a52f005c`.
+
+Fresh software gate finished before service startup, with
+`rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+`uv run --frozen pytest -q --tb=short` **1,533 passed in 43.44 s**, including
+architecture; Ruff passed; mypy passed/103 files; offline lock check passed/66
+packages; `git diff --check` and clean tracked status passed. No pytest or second
+DUTchMate runtime/session store ran while the service was live.
+
+### Continuous session and bounded/human operations
+
+CLI startup at 11:44:39–40 UTC created sole service PID **46863** and native-v2
+session **`20261027T114440Z-7db24eae`**. Passive ownership checks showed that PID
+alone on the helper. Live hello/status reported `dutchmate-rp2350`, firmware
+`development`, and `uart_receive`, `uart_send`, `gpio_control`,
+`device_timestamp`, `overflow_telemetry`; no `uart_capture` or EVENT capability.
+Startup mode attempts/results 1/3 and 4/5 accepted boot/reset configuration.
+
+Acquisition and ambient telemetry were already active before reset attempt 42.
+RX 43 retained the reset-induced `00` before successful result 44; RX 45..49
+retained the complete 62-byte BOOT OK marker. The exact **63 raw bytes** were
+verified before any Monitor started. The configured reset path therefore has
+positive continuous-v2 first-byte evidence in segment 0, without live boot-test.
+
+| Check | Durable result |
+|---|---|
+| First INFO Interact | One exact `INFO\n` send; matched fixture build; range `[67,77)`, terminal 76. |
+| Duration Monitor | 0.5 s, elapsed; `[77,80)`, terminal 79. |
+| Follow/detach | CLI follow displayed split `DMF/1 PARTIAL complete\n` at RX 135/136 and TX audit 133/134; SIGINT detached the view. Later BINARY RX remained recorded, including invalid UTF-8. |
+| Duration Interact | One exact `PING\n`, 0.3 s, elapsed; `[190,195)`, terminal 194. |
+| Condition Interact timeout | One exact `PARTIAL\n`, unmatched literal/0.3 s, normal timeout; `[195,202)`, terminal 201; unrelated partial-line UART retained. |
+| Literal Monitor | Active Monitor followed by one standalone `PING\n`; matched PONG, `[214,219)`, terminal 218. |
+| Condition Monitor timeout | Unmatched literal/0.3 s, normal timeout; `[219,221)`, terminal 220. |
+| Console | Actual CLI console with interactive piped stdin sent one `PING` line using explicit LF and displayed PONG; SIGINT detached. Later standalone INFO RX remained recorded. |
+
+The first follow-verification harness expected an incorrect PARTIAL literal and
+asserted after the valid response. Inspection of retained fixture source
+`203649f:hardware/firmware/zephyr_dut/src/fixture_protocol.c` confirmed the
+captured `DMF/1 PARTIAL complete\n` is correct. Original output and the harness
+correction are preserved; that send was not repeated. This was not a product
+failure or a silently retried operation.
+
+### Boot role and ambient fault evidence
+
+Following the fixture's startup-only strap constraint, the operator held RUN
+low while the audited boot role selected bootloader (attempt/result 556/557,
+device timestamp `745243683` us), then removed the temporary jumper. RX 582..587
+retained the exact 81-byte `E_INIT_001` boot line at 11:53:16 UTC with no bounded
+operation active. This expected synthetic fixture fault is also the session's
+detected first error; it is not the later control blocker.
+The retained fixture predates `DELAYFAULT`, so no scheduled delayed-fault UART
+command was run. Physical ambient-fault evidence here is the boot error outside
+all bounded operations; delayed-fault semantics also have the pre-start software
+gate's coverage.
+
+The operator held RUN low again for audited `normal` (680/681, device timestamp
+`860324220` us), then released it. RX 700..704 retained the exact 62-byte normal
+boot line. CTRL0 remained wired throughout; only the temporary RUN-ground
+jumper was removed. The manual reset assertions' NUL bytes were retained too.
+No GP2 change was commanded outside a confirmed held-reset interval.
+
+Live actions and durable parameters establish role→channel resolution.
+Current encoder/adapter source and the passing wire-level regression tests
+establish generic `pulse_control`/`set_control_state` payloads without `role` or
+`dut_signal`; no independent physical USB packet capture was made. Capability,
+configuration and electrical-mode rejection tests passed in the pre-start gate.
+
+### Ownership handoff and the blocking result
+
+Release at 11:55:32–33 UTC persisted request/released **733/734**, closed segment
+0, and left an explicit intentional observation gap. No serial owner was then
+reported. Only while status was `released`, standalone pyserial PID **47481**
+opened the helper at 11:55:57–59 UTC. It received the normal hello and two
+32 KiB status frames, sent no UART/control command, and closed. Its sole
+ownership is recorded in `external-owner.json`; no second DUTchMate runtime or
+session store was constructed.
+
+One CLI reacquire at 11:56:29–30 UTC persisted started/opened/succeeded
+**735/736/737**, retained the same session, created segment 1 and resumed
+telemetry at 738. RP2350 origins are **253900607** us for segment 0 and
+**964063386** us for segment 1; timestamps are segment-local, not comparable
+across the gap. The profile and its reset/boot mappings were unchanged.
+
+**Blocker:** status immediately after reacquire still advertised CTRL0 and CTRL1
+as `configured`, `source=config`, with their old 11:44:40 acceptance metadata.
+The single following CLI reset returned HTTP **409 `not_configured`**, detail
+**`CTRL0 is not configured`**. Its durable attempt **739** resolved
+`reset → CTRL0/RUN`; result **740** records `status=not_configured` and null
+device timestamp. There is no success result to substitute for that failure.
+Final public status still advertised both configured channels. The observed
+host/helper configuration mismatch and unavailable reset after same-profile
+reacquire are the defect; full root cause and repair are outside this run.
+
+The acceptance path stopped. No GPIO reapplication, reset retry, product or
+firmware patch, timeout enlargement, further Interact, or USB reconnect trial
+followed. Segment 1 later retained a separate reset byte plus exact normal boot
+at RX **784..789**, 11:57:14 UTC, about 44 s after the rejected reset. Its trigger
+is not established by host action evidence and is not credited as success of
+the rejected reset. It does establish resumed UART recording alongside telemetry.
+
+### Telemetry, retrieval and shutdown
+
+All **774** native `buffer_status` records report 32,768 bytes, lifetime dropped
+bytes 0 and overflow events 0; observed high-water reached **81 bytes**. Session
+integrity is `none_reported`, scope `debug_helper_rx_buffer`, dropped bytes 0;
+local recording and line processing are complete. This does not claim electrical
+losslessness or physically exercise a nonzero current-session counter delta.
+The exact accepted normal helper and Enhanced fixture were reflashed, so the
+audited `accepted_32k`/deliberate-overflow measurements below remain reusable;
+no heavy ring-buffer campaign was repeated. Nonzero/baselined loss projection
+has the prior physical evidence plus current deterministic v2 coverage.
+
+CLI `sessions`, `session`, `logs`, and `status`, plus service detail/log retrieval,
+passed before shutdown. A saved pre-reset cursor retrieved contiguous **42..866**
+in 825 records, retaining controls, operation results, both segments and gap
+markers, including failed control 739/740. Direct native reconciliation covers
+**0..866**, 867 primary records, **510 raw RX bytes / 47 RX records**, eight
+exact TX attempt/result pairs, six control attempt/result pairs (five successes,
+one `not_configured`), and six completed bounded operations. Raw reconstruction
+is byte-for-byte; SHA-256
+`feeaabbc890ece3168090a62b324f10c2ae5845f2eceeccab70d9a88ca3f2e17`.
+
+Graceful CLI stop returned at 11:58:31.098956 UTC; native state is
+`completed/service_shutdown`, ended 11:58:31 UTC, two closed segments and one
+gap. This normal journal termination does not mean acceptance passed. PID
+46863/PID file, TCP 2040 listener and serial ownership were verified absent.
+All 448 prior session-file hashes and the original Basic config remain unchanged.
+Full artifacts, snapshots, CLI/API output, cursor pages, copied service log,
+terminal reconciliation and final native hashes are under
+`.dutchmate/hil/enhanced-phase1b-20261027/`. Documentation remains uncommitted.
+
+### Specification §34 disposition after this HIL
+
+| Criterion (in §34 order) | Evidence/disposition |
+|---|---|
+| Phase 1A host semantics through Enhanced | Passed current bounded operations, exact audited TX, follow/console/detach, ambient RX, v2 retrieval and ownership handoff; post-reacquire Control blocked, unexpected USB reconnect remains open. Default policy/rollover limits have software coverage, not a forced physical rollover. |
+| Normalized RP2350 RX/send contracts | Passed current raw/normalized RX and eight exact successful TX audits through service/CLI. |
+| `uart_receive`, not `uart_capture` | Passed live hello/status and segment capabilities. |
+| Generic channel actions | Passed initial reset and both boot-mode actions; source/exact-wire regression tests verify `pulse_control`/`set_control_state`. |
+| Role/signal metadata host-side | Passed current host resolution/audit plus encoder/schema/regression evidence; no independent USB packet trace. |
+| Adopted hardware consistency and measurements | Still-valid bounded Revision A results reused; genuine mapping/parts/correction, analog UART/passive, leakage/transient and ESD gaps remain as audited below. |
+| Gated/audited reset and boot | Passed segment-0 actions and durable failure/gating evidence; **blocked across reacquire by stale configured status/helper rejection**. |
+| Acquisition before reset; first boot bytes retained | Passed current 42..49; exact reset NUL + 62-byte normal marker persisted before any Monitor. |
+| RP2350 timestamp provenance | Passed native metadata, cursor RX projections and two fresh segment origins. |
+| Continuous buffer/overflow telemetry | Passed 774 ambient status records across operations and two segments; loss scope stays explicit. No current overflow was forced. |
+| Measured 32 KiB gate | Satisfied by still-valid `accepted_32k`; reference-image hashes and live ring size match. |
+| Deliberate-overflow observer/count | Satisfied by audited prior accepted byte accounting for the reflashed references, with current v2 regression coverage; no stress repeat. |
+| EVENT ownership documented, unadvertised/unimplemented | Passed current live capabilities plus unchanged protocol/source coverage; no EVENT workflow introduced. |
+| Fake Enhanced integration/CLI tests | Passed full fresh 1,533-test gate before startup. |
+| Real Pico 2 + same Zephyr fixture combined acceptance | Partial current HIL; stopped on post-reacquire reset mismatch. Unexpected USB reconnect and subsequent same-session provenance/retrieval remain open, in addition to identified physical gaps. |
+
+Shared §35 cannot close: configured Control is unavailable after the ownership
+boundary, and the complete Enhanced lifecycle path has not passed. The initial
+software gate and successful portions above do not supersede this blocker.
+No MCP work or separate fix/TDD slice was started.
+
+## Initial v2 Acceptance Preflight — 2026-10-27
+
+**Stopped before acceptance service startup; no current Enhanced HIL result.** Phase 1A
+remains accepted. Phase 1B, Stage 8, and overall Phase 1 remain incomplete.
+This audit applies specification §§33–35 and Stage 8 of the coding-agent plan;
+it does not convert historical finite-capture/`boot_test` sessions into v2
+acceptance. The removed live boot-test workflow was not invoked.
+
+### Baseline and preflight observations
+
+- Clean `stage8-phase1-acceptance` HEAD
+  `887768c2e10da1ba8ae9c323474fad86648a7d34` matched both the local origin ref
+  and an independent HTTPS `git ls-remote` of the pushed branch. Sandbox fetch
+  could not write `.git/FETCH_HEAD`; SSH remote verification failed public-key
+  authentication. Read-only HTTPS verification succeeded without changing refs.
+- At `2026-10-27T11:27:19.705174Z` (16:57:19 IST), passive pyserial enumeration
+  returned only `/dev/cu.debug-console` and
+  `/dev/cu.Bluetooth-Incoming-Port`, neither with USB identity. `ioreg -p IOUSB`
+  subsequently showed only host controllers and two hubs. No Pico 2 CDC path,
+  VID:PID, serial number, or live firmware identity could be verified. Historical
+  `2E8A:000A` / `FA63A4D787572B33` and old CDC paths are expectations only.
+- `lsof -nP -iTCP:2040 -sTCP:LISTEN` returned no listener. Process enumeration
+  was sandbox-denied; no global process-absence claim is made. Ownership of an
+  attached helper still needs verification once a device exists. No physical
+  port was opened, service started, or ownership session created by this audit.
+- Pure profile resolution of unchanged `.dutchmate/config.toml` selected
+  **Basic**, exact path `/dev/cu.usbserial-D358SG6A`, external UART,
+  115200 8-N-1, no flow control, TX enabled, line ending `none`, driver-default
+  DTR/RTS, reconnect timeout **5.0 s**, and declared `DUT_VIO=3.3 V`.
+  Its control mapping is empty: neither reset nor boot resolves to a channel.
+  A voltage declaration is not a physical measurement. There is no resolved
+  Enhanced acceptance profile in this configuration; it was not changed.
+- Actual DUT image, UART wiring/baud, voltage, strap state, adopted hardware
+  correction, and reset/boot wiring were not positively established. Recent
+  Basic diagnostics used a different 115200-baud image; that is not evidence
+  that the required Enhanced fixture is currently flashed.
+
+Operator follow-up on 2026-10-27 confirms `CTRL0 → RUN`, `CTRL1 → GP2`,
+`DUT_TX → GP0`, `DUT_RX → GP1`, common ground, and `DUT_VIO` supplied from
+**Pico 2 `3V3`**. This records the operator's wiring declaration; it is not a
+new voltage or continuity measurement. GP3/strap state, installed hardware
+correction, flashed helper/DUT images, and 460800-baud DUT operation remain
+unconfirmed. A subsequent passive serial/IOUSB recheck still found no Pico
+device and no TCP 2040 listener. The Basic configuration remains unchanged;
+acceptance is still stopped before startup.
+
+After the operator connected USB, the recheck at
+`2026-10-27T11:34:50.844840Z` (17:04:50 IST) enumerated
+`/dev/cu.usbmodem1401`, VID:PID `2E8A:000A`, serial `FA63A4D787572B33`,
+description `Debug Helper`, location `0-1.4`. IOUSB independently showed
+`Debug Helper@00140000`. No owner was reported by `lsof` for its cu/tty paths,
+and no TCP 2040 listener was observed. This resolves USB visibility and matches
+the recorded helper's USB identity; it does not identify its flashed firmware.
+Both flashed-image identities, DUT baud, GP3/strap state, actual voltage and
+installed correction remain unverified. No serial open or service startup
+occurred. The passive result is saved as `usb-recheck.json` in the audit folder.
+
+The operator then reported that installed images are unknown and authorized
+reflashing known references. This is a separate hardware-preparation step before
+acceptance. At `2026-10-27T11:37:23.514031Z`, both retained UF2s again matched
+the hashes below, and all block headers, sequence/count fields, payload bounds,
+end markers and board-family IDs were validated: normal helper, 104,448 bytes /
+204 blocks, RP2350 ARM secure `0xe48bff57`; DUT, 34,304 bytes / 67 blocks,
+RP2040 `0xe48bff56`. No boot volume was mounted and no flashing had yet occurred.
+`flash-preparation.json` records the chosen images and authorization. The operator
+was asked to enter BOOTSEL on Pico 2 first and confirm Pico 1 GP3 state; each
+boot drive must be identified before writing its corresponding image.
+
+### Authorized known-reference hardware preparation
+
+The operator confirmed Pico 1 GP3 is open and put Pico 2 into BOOTSEL.
+`/Volumes/RP2350/INFO_UF2.TXT` reported `UF2 Bootloader v1.0`,
+`Model: Raspberry Pi RP2350`, `Board-ID: RP2350`; IOUSB showed
+`RP2350 Boot@00140000`. No service listener was observed. After rechecking
+the accepted normal helper UF2 hash, one `/bin/cp` wrote all 104,448 source
+bytes to `/Volumes/RP2350/dutchmate-helper-accepted.uf2` between
+`2026-10-27T11:40:25.369806Z` and `11:40:26.267602Z`, exit 0, no stderr.
+At `11:40:31.920834Z` the boot volume was absent and the helper again enumerated
+at `/dev/cu.usbmodem1401`, `2E8A:000A`, serial `FA63A4D787572B33`.
+`flash-helper.json` and `helper-after-flash.json` preserve the transfer and
+passive reboot observations. The firmware was not read back; provenance is
+the identified boot target, exact accepted source hash, successful transfer,
+and re-enumeration. Live hello/capabilities remain for the preflight/service path.
+
+Pico 1's installed image is still unknown at this point. The operator was asked
+to put only Pico 1 into BOOTSEL for a separately identified RP2040 transfer of
+the accepted 460800-baud fixture. No DUT image has yet been written. No
+acceptance session, UART send, control action, or stress run has started.
+
+Local passive facts, profile projection, artifact hashes, and a preservation
+manifest are retained under `.dutchmate/hil/enhanced-preflight-20261027/`.
+They are preflight audit artifacts, not a native-v2 hardware session.
+
+### Reuse audit: ring buffer and firmware provenance
+
+The following retained images were hashed again and match the accepted records:
+
+| Artifact | SHA-256 |
+|---|---|
+| Normal helper `build/dutchmate-rp2350-normal-v2/zephyr/zephyr.uf2` | `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819` |
+| Diagnostic helper `build/dutchmate-rp2350-stack-probe-v2/zephyr/zephyr.uf2` | `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66` |
+| Enhanced DUT `build/dutchmate-zephyr-dut-460800/zephyr/zephyr.uf2` | `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6` |
+| Enhanced DUT generated `.config` | `4e472f3f0ea19c89611b2d9f05ef2f08b0fcfca198fc573a0b074b7de3441595` |
+
+The DUT configuration identifies `rpi_pico/rp2040`, build
+`phase1-enhanced-460800-001`; its accepted provenance is Zephyr 4.4.0 / SDK
+1.0.1, with the 460800 overlay. The helper images have accepted Zephyr 4.4.2 /
+SDK 1.0.1 provenance. Local image identity does **not** establish flashed-image
+identity; a generic live `development` string alone would not prove a UF2 hash.
+The stack diagnostic changes its identity across CDC epochs and is unsuitable
+for the normal reconnect acceptance path, as the historical run below shows.
+
+All five revised stack/profile JSON reports named in the ring-buffer record
+(boot, stack/backpressure, profile/backpressure, stack/overflow, profile/overflow)
+match their recorded hashes. The boot Saleae CSV and five-cycle TX-pull-up CSV
+also match. The accepted record establishes 32,768 raw ring bytes, final normal
+static RAM 81,040/532,480 bytes, at least 1,248/5,120 bytes free on CDC RX,
+and deliberate overflow of 19,418 retained + 23,663 reported dropped = 43,081
+fixture bytes with six overflow records and surviving BEGIN/END checksum.
+The corrected host repeat separately reconciles 19,079 + 24,002 = 43,081.
+
+Source comparison from accepted stack-margin commit `ae01ce2` to this HEAD
+found no change in ring, UART drain, control, stack sizing, mapping, or protocol
+schemas. Changes within the helper are product-version documentation/config
+and equivalent bounded hello-string length calculation. They do not establish
+invalidation of the accepted measured images. The host v2 migration still
+requires fresh continuous telemetry/evidence HIL; older v1 projections do not
+prove it. **Retain `accepted_32k`; do not repeat heavy stress.** Applicability
+to the actual setup remains open until flashed helper/fixture and hardware
+identity are confirmed. No firmware/protocol/hardware invalidation was observed
+and no new stress procedure was devised.
+
+`none_reported` means only no reported Debug Helper RX-buffer loss for the
+session, after applicable counter baselining. It does not establish losslessness
+on the electrical UART path. Live 32 KiB status, high-water, session-local
+counter interpretation, and continuous persisted telemetry remain untested here.
+
+### Reuse audit: Revision A physical evidence
+
+The detailed source is [the Revision A record](phase1_revision_a.md), including
+its later dated sections rather than just its summary or unchecked design list.
+No accepted measurement was repeated or withdrawn.
+
+| Area | Reusable evidence and actual remaining limits |
+|---|---|
+| Mapping and logic parts | Prior 17-net schematic/board/overlay audit agrees; provisional parts are recorded. Populated markings/physical continuity remain unaudited. Replacement KiCad sources are absent. The accepted 10 kOhm helper-input correction after R16 has digital evidence but its next-revision schematic/BOM and actual installed state remain unverified. |
+| Voltage operation | Exact 33-byte 460800-baud loopback passed at 1.8/2.5/3.3/5.0 V, with idle-current evidence; reuse these results within that short-jumper scope. They do not establish all cable lengths or analog margins. |
+| Controls | All four push-pull controls at 1.8 V and representative CTRL0 levels at 2.5/3.3/5.0 V passed; representative open-drain reset with 10 kOhm pull-up, 250 ms/2 s/10 s pulses, and every control high-impedance during helper reset passed. Broader loading/threshold/voltage margins remain limited to recorded conditions. |
+| Missing supplies/isolation | Loaded missing-VIO sweep covers all external digital signals; debugger-unpowered 1.8 V sweeps cover controls, UART, and events. Loaded 3V3 back-power observation fell from 0.13 to 0.02 V. Reuse these static results; calibrated absolute leakage and broader voltage/transient isolation are still open. |
+| Sequencing/hot-plug | All four control /OE nodes passed settled both-order sequencing; repeated unloaded supply cycles passed at 1.8 V. Later 3.3 V digital captures establish clean recovery with the helper-side 10 kOhm TX pull-up, including five cycles. These are valid bounded results, not closure of all loaded-cable/power transient combinations. |
+| UART signal integrity/passives | Analog edge shape, overshoot/undershoot/ringing, voltage margin, cable-length coverage, and oscilloscope validation of series resistors remain explicitly deferred/open; digital Saleae decoding cannot close them. ESD capacitance/leakage/clamping measurements are not recorded as passed. |
+| Configuration safety | Prior trusted-voltage and invalid/duplicate mapping rejection evidence plus current software tests remain reusable; no new physical no-glitch/contention measurement was made. |
+| EVENT0–EVENT3 | Physical input-path measurements do not imply a live EVENT feature. Phase 1 keeps these unadvertised/unimplemented; no EVENT API or event-rate HIL was introduced. Broader design-checklist event tests have no accepted result here. |
+
+### Explicit specification §34 disposition
+
+“Open” below means the current physical requirement has not been demonstrated;
+passing deterministic tests are supporting evidence, not a fabricated HIL pass.
+
+| Criterion (in §34 order) | Disposition at this preflight |
+|---|---|
+| Inherited Phase 1A host semantics through Enhanced | Open live: ambient recording, follow/detach, duration/literal Monitor, exact single-send matched/elapsed/timeout Interact, asynchronous UART, console, v2 provenance/retrieval, release/reacquire gap, and unexpected reconnect. Software gate passes; Basic acceptance is preserved, not transferred to Enhanced. |
+| Normalized RP2350 RX/TX contracts | Software tests pass; open live. |
+| `uart_receive`, not `uart_capture` | Current hello source/protocol and prior live identity support it; current live capabilities open. |
+| Generic `pulse_control` / `set_control_state` | Current decoder/schema and tests support both; current live action evidence open. |
+| Role/DUT-signal metadata host-side | Current protocol/tests support separation; live resolved profile/action evidence open. |
+| Adopted hardware consistency and prototype measurements | Prior bounded physical results above remain reusable; identified design/measurement gaps remain open. |
+| Gated reset/boot with durable v2 audit | Deterministic tests pass; current profile has no mappings, live test open. |
+| Acquisition active before reset; immediate boot bytes retained | Historical exact 63-byte boot is supporting physical evidence only; current continuous-v2 proof open. No reset or boot action was attempted. |
+| RP2350 segment timestamp provenance | Prior device-timestamp evidence reusable as history; current persisted v2 segments/origins open. |
+| Continuous buffer/overflow telemetry | Deterministic tests pass; current ambient v2 telemetry open. |
+| Measured 32 KiB acceptance gate | Satisfied by still-valid `accepted_32k` measurements for their recorded image/setup; hashes verified. Actual connected-image applicability awaits identity. |
+| Deliberate overflow scope/count | Satisfied by prior reconciled `debug_helper_rx_buffer` measurements for the accepted image/setup; no stress repeat justified. Current v2 loss projection remains a live HIL check. |
+| EVENT ownership documented, unadvertised/unimplemented | Source/protocol and prior capabilities support this; current live capabilities open. |
+| Fake Enhanced integration/CLI tests | Passed in the full 1,533-test software gate, including Stage 8 Enhanced parity and shared CLI acceptance tests. |
+| Real Pico 2 + same Zephyr fixture: continuous RX/Interact/reset/boot retrieval/timestamps/telemetry/v2/retrieval | Open: physical preflight prevented startup; no fresh Enhanced session exists. |
+
+No criterion passed **by current HIL**, because none ran. Shared §35 completion
+also cannot be asserted: Enhanced continuous RX/first-byte preservation,
+follow/Monitor/Interact/console, configured control, ownership/reconnect, and
+live provenance/quality still lack this run's physical evidence. Software schema,
+storage, ownership, and architecture regressions passed, but do not close the
+remaining backend/physical gates. MCP remains deferred.
+
+### Operator prerequisites for a subsequent run
+
+1. Connect the accepted RP2350 Pico 2/Revision A helper and the same Pico 1
+   Enhanced fixture; establish the actual USB VID/PID/serial/path and absence
+   of a competing owner before opening it. Identify the installed hardware
+   correction rather than assuming historical wiring still applies.
+2. Positively identify the flashed normal helper and 460800-baud DUT images
+   against the retained provenance above. If different/missing, prepare and
+   identify the required images before acceptance; the authorized helper flash
+   is recorded separately above and DUT preparation remains pending. Confirm
+   GP0/pin 1 TX → helper RX, helper TX → GP1/pin 2 RX,
+   common ground, actual `DUT_VIO=3.3 V`, GP3 open, and strap state. The operator
+   has declared the UART/control/ground wiring and Pico 2 3V3 supply above;
+   image/baud/strap confirmation remains required; helper USB now enumerates
+   with the accepted serial identity at `/dev/cu.usbmodem1401`.
+3. Establish the Enhanced profile before acceptance: 460800 8-N-1/no flow
+   control, explicit TX policy, unchanged 5.0 s reconnect timeout, reset
+   `CTRL0 → RUN`/pin 30 open-drain active-low, boot `CTRL1 → GP2`/pin 4
+   push-pull active-high/idle-low, or positively document the actual accepted
+   mapping. The existing Basic configuration was left unchanged. GP2 is sampled
+   only at startup; preserve the fixture's held-reset/unpowered strap constraint.
+4. Repeat passive preflight and the required software gate before physical
+   startup on the then-reviewed baseline. Use one service owner and fresh native
+   v2 session where practical. Reset/boot Control and later evidence/Monitor
+   retrieval must prove acquisition precedes control; use no live boot-test.
+   Any failed required action must be preserved without an acceptance retry or
+   in-run patch. Do not enlarge reconnect timeouts or rerun accepted stress.
+
+### Validation and preservation
+
+Before any possible physical startup, using
+`rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+- `uv run --frozen pytest -q --tb=short`: **1,533 passed in 42.86 s**,
+  including `tests/architecture/test_dependencies.py`.
+- `uv run --frozen ruff check .`: passed.
+- `uv run --frozen mypy`: passed, 103 source files.
+- `uv lock --check --offline`: passed, 66 packages.
+- `rtk git diff --check`: passed before documentation and after final review.
+
+The initial audit started no service, firmware flash, control, UART send,
+reconnect, runtime/store probe, or stress campaign. The subsequent authorized
+helper flash is recorded separately above; acceptance has not started.
+The software gate used its existing isolated
+test infrastructure. All 448 existing session-file hashes and the local config
+were preserved. Only this report, development status, and a new history entry
+are changed, uncommitted for review; previous evidence remains intact.
+
+## Historical Enhanced Workflow HIL — 2026-09-15
+
+The following configured reset/boot-test and USB reconnect runs used the same
+Pico 1 Zephyr DUT fixture as the Enhanced load profiles under the earlier contract.
 
 | Provenance | Observed value |
 |---|---|

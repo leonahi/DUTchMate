@@ -9,6 +9,214 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Enhanced v2 HIL: Stopped on Reacquire/Control Mismatch — 2026-10-27
+
+- Ran from clean `stage8-phase1-acceptance` at latest pushed
+  `887768c2e10da1ba8ae9c323474fad86648a7d34`, independently reverified via HTTPS.
+  Pending audit documentation was backed up, temporarily restored to HEAD to
+  obtain a clean tracked tree, then restored after HIL. No product code changed.
+- Operator reported unknown installed images and authorized known-reference
+  reflashing before acceptance. Accepted normal helper UF2 SHA-256
+  `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819` was copied
+  once to the identified RP2350 boot drive at 11:40:25–26 UTC (record below).
+  Accepted 460800 DUT UF2
+  `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6` was copied
+  once at `11:42:20.956161`–`11:42:21.459537` UTC to `/Volumes/RPI-RP2`,
+  whose bootloader v3.0 reported model Raspberry Pi RP2/board RPI-RP2. Both
+  copies exited 0, then boot volumes disappeared. UF2 structure/families and
+  source hashes were verified first. No image readback; transfer/boot-target
+  records plus subsequent live hello/boot/INFO are the available provenance.
+- Operator confirmed CTRL0→RUN, CTRL1→GP2, DUT_TX→GP0, DUT_RX→GP1, common
+  ground, GP3 open and VIO from Pico 2 3V3. This is a trusted declaration, not a
+  new voltage measurement. A separate HIL working directory supplied the fixed
+  Enhanced 460800 8-N-1/no-flow-control/TX-enabled profile with those mappings
+  and unchanged 5.0 s reconnect timeout. Original Basic config stayed unchanged.
+  Profile digest `941268f4df4522268941b23364cdbf0c0ff6927bfd3efbbb244ad4cad6cbb319`.
+- Fresh pre-start gate, using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen pytest -q --tb=short` **1,533 passed in 43.44 s** (including
+  architecture), `uv run --frozen ruff check .` passed,
+  `uv run --frozen mypy` passed/103 files, `uv lock --check --offline` passed/66
+  packages, diff check and clean tracked status passed. No pytest or second
+  DUTchMate runtime/session store ran while the physical service was live.
+- Normal CLI start created sole owner PID 46863 and native-v2 session
+  **`20261027T114440Z-7db24eae`** at 11:44:40 UTC. Live identity was
+  `dutchmate-rp2350`/`development`, expected USB serial `FA63A4D787572B33` at
+  `/dev/cu.usbmodem1401`, with `uart_receive`, no legacy receive/EVENT feature.
+  Startup control attempts/results 1/3 and 4/5 configured boot/reset.
+- Initial audited reset 42/44 persisted reset NUL at RX 43 before the result;
+  RX 45..49 retained the complete 62-byte fixture marker. Exact 63 raw bytes
+  were verified before any Monitor. INFO Interact `[67,77)` matched its one
+  exact `INFO\n`; duration Monitor `[77,80)` elapsed. Follow displayed split
+  PARTIAL RX 135/136, detached, and later BINARY RX (including invalid UTF-8)
+  remained stored. A harness incorrectly expected different PARTIAL text;
+  retained source verified the captured `DMF/1 PARTIAL complete` was correct.
+  Original output/correction retained, no send retried.
+- Duration Interact `[190,195)` elapsed, condition Interact `[195,202)` timed
+  out normally with unrelated UART retained, literal Monitor `[214,219)` matched
+  PONG, and condition Monitor `[219,221)` timed out normally. Real CLI console
+  with interactive piped stdin sent one PING/LF, displayed PONG and detached
+  via SIGINT; later standalone INFO remained recorded. All TX was audited once.
+- Operator held RUN low while audited bootloader 556/557 selected CTRL1/GP2,
+  then released it; exact 81-byte expected E_INIT_001 boot RX 582..587 was
+  retained outside bounded operations. Another confirmed held-reset interval
+  allowed audited normal 680/681; release retained exact normal RX 700..704.
+  These expected fixture modes are distinct from the later control blocker.
+- Release intent/released 733/734 closed segment 0 and exposed a gap. Only while
+  Device Core was `released`, standalone serial PID 47481 exclusively opened
+  the helper at 11:55:57–59 UTC, received hello/two status frames, sent no
+  UART/control command, then closed. One reacquire 735..737 continued the same
+  session in segment 1; telemetry resumed at 738. Segment RP2350 source origins
+  are 253900607 and 964063386 us; segment-local timing is not comparable across
+  the gap. No extra runtime/store was constructed for external ownership.
+- **Observed blocker:** post-reacquire status still advertised CTRL0/1 configured
+  from the original config, but the single following reset returned HTTP 409
+  `not_configured`, `CTRL0 is not configured`. Attempt 739 resolves reset to
+  CTRL0/RUN; result 740 records not_configured/null device timestamp. Final
+  status still showed both configured. Stopped the acceptance path without
+  GPIO reapplication, retry, timeout enlargement, firmware/product fix or
+  further Interact. Unexpected USB reconnect was not attempted. Root cause
+  and repair were left for a separate focused slice.
+- RX 784..789 later retained a separate 63-byte normal boot at 11:57:14 UTC,
+  about 44 s after the rejected reset. Its trigger is not established by host
+  action evidence and was not credited as success of the rejected reset; it
+  demonstrates resumed RX alongside ambient telemetry in segment 1.
+- All 774 status records report ring size 32768, dropped totals/overflow 0;
+  high-water reached 81 bytes. `none_reported` remains scoped only to reported
+  Debug Helper RX-buffer loss, not electrical losslessness. Prior accepted
+  deliberate-overflow/32 KiB evidence remains applicable to the exact reflashed
+  reference images; no heavy stress or accepted physical measurement repeated.
+- CLI list/detail/log/status, service detail/log and saved-cursor retrieval
+  passed. Cursor retrieval retained contiguous 42..866 (825 records), including
+  the failed control and ownership gap. Final native reconciliation: sequences
+  0..866 contiguous, 510 raw bytes/47 RX, eight TX pairs, six control pairs
+  (five success/one not_configured), six terminal bounded operations, two closed
+  segments and one gap. Raw SHA-256
+  `feeaabbc890ece3168090a62b324f10c2ae5845f2eceeccab70d9a88ca3f2e17`.
+- Graceful stop returned 11:58:31.098956 UTC; journal is
+  completed/service_shutdown, not an acceptance pass. PID 46863/PID file,
+  listener and serial ownership were verified absent. All 448 earlier
+  session-file hashes and Basic config are unchanged. Full artifacts, snapshots,
+  cursor pages, final hashes and service log are retained in
+  `.dutchmate/hil/enhanced-phase1b-20261027/`; earlier preflight/preparation
+  artifacts remain in their original folder.
+- Enhanced report maps every §34 criterion to passed current evidence, reused
+  accepted evidence or open/blocking evidence, and retains the separate Revision
+  A measurement/design gaps. **Enhanced HIL, Phase 1B, Stage 8 and Phase 1 remain
+  incomplete**; Phase 1A remains accepted and its anomaly unchanged. No MCP or
+  fix/TDD work started. Only Enhanced report/status/this newest history record
+  changed for this run, uncommitted for review; final diff check passed.
+
+## Authorized Enhanced Hardware Preparation: Helper Reference Flash — 2026-10-27
+
+- Operator reported installed images unknown and authorized known-reference
+  reflashing before acceptance, then confirmed Pico 1 GP3 open and Pico 2
+  BOOTSEL. This preparation is separate from the acceptance run; no product
+  code, fixture source, profile, timeout or acceptance criterion was changed.
+- Passive boot-drive check identified `/Volumes/RP2350`, bootloader v1.0,
+  model/board `Raspberry Pi RP2350` / `RP2350`, and IOUSB
+  `RP2350 Boot@00140000`. No service listener was observed. Recomputed normal
+  helper UF2 SHA-256 matched
+  `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819`.
+- One guarded transfer copied the 104,448-byte accepted normal helper to that
+  drive, `2026-10-27T11:40:25.369806Z`–`11:40:26.267602Z`; `/bin/cp` returned
+  0 without stderr. At `11:40:31.920834Z`, the boot volume was gone and helper
+  `/dev/cu.usbmodem1401`, `2E8A:000A`, `FA63A4D787572B33` was present again.
+  The image was not read back; exact source hash, boot-target identification,
+  successful transfer and passive re-enumeration establish available provenance.
+  No live hello or UART command was used in this preparation step.
+- `flash-helper.json` and `helper-after-flash.json` under the existing Enhanced
+  preflight audit folder preserve the write and observations. Pico 1 transfer
+  had not occurred at this record; its installed firmware remained unknown.
+  No acceptance service/session, runtime/store probe, control or stress run
+  started. No new software gate is claimed by this hardware-preparation record.
+
+## Enhanced Phase 1B Evidence Audit: Stopped at Hardware Preflight — 2026-10-27
+
+- Started from clean `stage8-phase1-acceptance` at
+  `887768c2e10da1ba8ae9c323474fad86648a7d34`. Local origin ref matched; independent
+  read-only HTTPS `git ls-remote` confirmed the same latest pushed branch SHA.
+  Sandbox fetch could not write `.git/FETCH_HEAD`; elevated SSH lookup failed
+  public-key authentication, then HTTPS lookup succeeded. No checkout/ref change,
+  production patch, configuration edit, firmware build/flash, or MCP work occurred.
+- Audited specification §§33–35, Stage 8, Enhanced HIL, ring-buffer acceptance,
+  and Revision A records before any hardware access. Added an explicit §34
+  disposition matrix to the Enhanced report. No criterion is claimed passed by
+  current HIL: physical preflight prevented startup. Phase 1A remains accepted;
+  Phase 1B, Stage 8, and overall Phase 1 remain incomplete.
+- Full software gate used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` followed by
+  `uv run --frozen pytest -q --tb=short` (**1,533 passed in 42.86 s**, including
+  architecture tests), `uv run --frozen ruff check .` (passed),
+  `uv run --frozen mypy` (103 files, passed), and
+  `uv lock --check --offline` (66 packages, passed). `rtk git diff --check`
+  passed before edits and after documentation review. No physical service ran
+  during tests or afterward; no separate runtime/session-store probe was used.
+- Passive inventory at `2026-10-27T11:27:19.705174Z` (16:57:19 IST) found only
+  debug-console/Bluetooth serial entries with no USB identities. Later IOUSB tree
+  showed controllers and two hubs, no Pico. No TCP 2040 listener was observed;
+  process enumeration was sandbox-denied, so absence of all background processes
+  is not asserted. No serial port was opened. Actual connected/flashed helper
+  and fixture identities, baud, wiring, VIO, and control mapping were unverified.
+- Pure profile resolution confirmed unchanged Basic exact-path FTDI selection,
+  115200 8-N-1/no flow control, TX enabled, line ending `none`, driver-default
+  DTR/RTS, declared 3.3 V, 5.0 s reconnect timeout, and no reset/boot mappings.
+  That profile cannot establish the requested Enhanced path. Operator
+  prerequisites are recorded in the Enhanced report; hardware preparation and
+  positive identity/wiring verification are required before acceptance startup.
+- Operator follow-up confirmed CTRL0→RUN, CTRL1→GP2, DUT_TX→GP0, DUT_RX→GP1,
+  common ground, and `DUT_VIO` supplied from Pico 2 3V3. Passive serial and IOUSB
+  recheck still found no Pico and no TCP 2040 listener. This is a wiring
+  declaration, not a voltage/continuity measurement; flashed images, DUT baud,
+  GP3/strap state and installed correction remain unverified. Startup stayed
+  stopped; configuration and hardware were not changed.
+- After the operator connected USB, passive enumeration at
+  `2026-10-27T11:34:50.844840Z` found `/dev/cu.usbmodem1401`, VID:PID
+  `2E8A:000A`, serial `FA63A4D787572B33`, location `0-1.4`; IOUSB showed
+  `Debug Helper@00140000`. No cu/tty owner or TCP 2040 listener was reported.
+  This resolves USB visibility and matches recorded USB identity, not flashed
+  firmware provenance. `usb-recheck.json` preserves the passive inventory;
+  firmware/DUT baud/strap questions remained pending and startup stayed stopped.
+- Operator reported both installed images unknown and authorized reflashing
+  known references as preparation before acceptance. At
+  `2026-10-27T11:37:23.514031Z`, both retained UF2 hashes matched again;
+  block magic/end markers, payload bounds, ordered block/count fields and board
+  families verified (helper 104,448 bytes / 204 blocks / `0xe48bff57`, DUT
+  34,304 bytes / 67 blocks / `0xe48bff56`). No boot volume was mounted and no
+  image was flashed at that point. `flash-preparation.json` preserves the
+  selected sources/hashes and authorization; operator was asked for Pico 2
+  BOOTSEL first and GP3 confirmation before any write.
+- Recomputed normal helper UF2
+  `5a706740df03b046cbbbee68c2b6668b33cbabee06e08003edb16f21060c8819`, diagnostic
+  helper UF2 `3dd67569e0fda9042c72a96632a72a19626fdf55cc2cf01b3c6920565a6b3d66`,
+  Enhanced fixture UF2 `152cc8593e5c75be92c2595f6fc2dc664738dcb2716dec204aa6ffd0634ecbb6`,
+  and fixture `.config` hashes match accepted records. All five revised
+  boot/backpressure/overflow stack/profile JSON reports and boot/five-cycle
+  pull-up Saleae CSV hashes also match. These prove retained artifacts, not
+  the currently flashed images. Source comparison from `ae01ce2` found no ring,
+  drain, stack-sizing, mapping or protocol-schema change; helper differences
+  concern product-version metadata and equivalent bounded hello-string length.
+- Retained `accepted_32k` for the measured images/setup: 32,768 raw ring bytes,
+  normal static RAM 81,040/532,480, CDC RX minimum 1,248/5,120 bytes free,
+  deliberate-overflow accounting 19,418 retained + 23,663 dropped = 43,081,
+  six overflow records and surviving checksum. No invalidation was established
+  and no heavy stress was repeated. Applicability to actual connected hardware
+  is still unverified; current continuous-v2 telemetry/loss projection needs HIL.
+  `none_reported` remains scoped to reported helper RX-buffer loss only.
+- Reused recorded voltage loopbacks/current, push-pull/open-drain/reset safety,
+  loaded static missing-supply isolation, settled sequencing, unloaded hot-plug,
+  and later bounded TX-pull-up digital recovery results. Actual gaps include
+  populated-part/continuity and adopted correction verification, analog
+  UART/cable/series-resistor evidence, calibrated absolute leakage, broader
+  transient/isolation coverage, and ESD measurements. No accepted physical
+  measurement was repeated. EVENTn remains outside Phase 1 live implementation.
+- Preserved all 448 prior session-file hashes plus the unchanged config.
+  Passive preflight/profile JSON, artifact hashes, and preservation manifest
+  are under `.dutchmate/hil/enhanced-preflight-20261027/`; no native-v2 hardware
+  session was created. Only Enhanced report/status/this new history entry
+  changed, uncommitted for review. Prior Basic/Enhanced history and evidence
+  were preserved; no cause/fix is assigned to the non-blocking Basic anomaly.
+
 
 ## Bounded Overflow Physical Diagnostic: NUL/ff Prefix and INFO Tail — 2026-10-27
 
