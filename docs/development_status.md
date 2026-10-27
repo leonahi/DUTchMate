@@ -15,7 +15,7 @@
 > Bounded overflow enhancement source base: `68ae39714fb5ebfd55ec970e2709d29561c822e9` (pushed)
 > Bounded overflow fixture / physical diagnostic HEAD: `4692444f771f33b6d27994e03f2722c268e3f43a` (pushed)
 > Enhanced HIL code baseline: `887768c2e10da1ba8ae9c323474fad86648a7d34` (failed HIL evidence committed at `90c744f`)
-> Enhanced control fix base: `90c744fe97ed3af2224989a954261bef42797b45` (latest pushed verified); branch `fix/enhanced-reacquire-control-config`, changes uncommitted
+> Enhanced control fix base: `90c744fe97ed3af2224989a954261bef42797b45`; accepted fix/focused HIL baseline: `6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8` (latest pushed verified on `fix/enhanced-reacquire-control-config`)
 > Documentation state reviewed: 2026-10-27
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -26,38 +26,36 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Focused Enhanced connection-generation control fix on
-  `fix/enhanced-reacquire-control-config`, based on latest pushed `90c744f`.
-  Changes remain uncommitted for another review after two focused corrections.
-  All 22 lifecycle cases and 911 targeted tests pass; final full gate is below.
+- **Current milestone:** Focused Enhanced physical control-generation HIL on
+  clean, latest pushed `fix/enhanced-reacquire-control-config` at `6d0c1a8`.
+  Startup and explicit handoff/immediate reset passed; automatic USB reconnect
+  stopped on `cleanup_unconfirmed` before opening a replacement generation.
+  HIL report/status/history changes remain unstaged and uncommitted for review.
   **Phase 1A remains Complete/accepted**; Phase 1B, Stage 8 and Phase 1 incomplete.
-- **Confirmed cause:** Startup alone applied Profile GPIO modes. Reopen swapped
-  the control target without invalidating/re-establishing the registry's prior
-  acknowledgements. New helper epochs correctly had no configured channels.
-  RED reproduced the HIL's immediate-reset HTTP 409 `not_configured`.
-- **Software behavior:** Both explicit reacquire and automatic reconnect stage
-  the segment, wait for submitted mutations, invalidate old acceptance, and
-  reapply immutable Profile modes through canonical audited configuration.
-  Final success follows fresh acknowledgements and deadline/cancellation checks.
-  Non-connected status exposes no prior accepted controls. Interact preserves
-  its exclusive lease while observation leaves the mutation lock available for
-  initialization; TX is never retried. Basic behavior remains covered unchanged.
-- **Failure behavior:** Required initialization rejection/timeout records its
-  actual result and faults ownership without lifecycle success. Candidate close
-  belongs only to the coordinator until successful recorder handoff, exactly
-  once on rejection. Partial initialization and final-ACK readiness failure clear
-  GPIO acceptance and commanded boot mode; cleanup uncertainty blocks ownership.
-- **Next step:** Review the uncommitted software fix and validation evidence.
-  After an accepted/pushed fix, resume real Enhanced HIL for reacquire controls
-  and unexpected USB reconnect, then reconcile the remaining physical gates.
-  This slice performed no hardware access, firmware/Revision A or MCP work.
-- **Preserved evidence:** Failed session `20261027T114440Z-7db24eae`, especially
-  attempt/result 739/740, and its HIL report are unchanged. `accepted_32k` and
-  bounded Revision A measurements remain reusable; do not repeat for freshness.
-- **Open gates:** Fresh physical validation after this software fix, unexpected
-  USB reconnect, and identified Revision A design/correction, analog UART/cable/
-  resistor, leakage/transient/isolation and ESD evidence. Basic ingress anomaly
-  remains unresolved/non-blocking. Phase 4 stays paused; MCP remains deferred.
+- **Explicit evidence:** Session `20261027T165848Z-b9a62f0b` retained the same
+  immutable Profile across release/external ownership. Segment 1 opened at 38;
+  fresh CTRL1/CTRL0 ACKs 40/42 precede reacquire success 43 and successful reset
+  45/47. Reset dispatch followed the CLI return by 0.232 ms, without manual GPIO
+  configuration. Startup/reset and both exact normal boot lines also passed.
+- **Current blocker:** USB disconnect/start 303/304 is followed by faulted status
+  and `failed/backend_input_error` metadata. Old transport close re-raised
+  `SerialException: read failed: [Errno 6] Device not configured` through
+  `writer.wait_closed`. No segment 2, automatic configuration ACKs, reconnect
+  success or subsequent reset exists. The configured window remained 5.0 s.
+- **Stop/validation:** Stopped without retry or in-run fix. CLI stop acknowledged;
+  application shutdown logged the retained error. PID/listener/serial ownership
+  are verified absent. Fresh pre-start gate: 1,555 tests/46.31 s, Ruff, mypy/103,
+  offline lock/66 and diff check passed; no tests/second runtime during HIL.
+- **Next step:** Review the focused HIL evidence and investigate/resolve the
+  Enhanced unplug/old-source cleanup fault in a separate software slice before
+  repeating the required USB lifecycle check. Reconcile remaining §34/Revision A
+  gaps separately. No product/firmware/Revision A/MCP changes were made here.
+- **Preservation/open gates:** All 456 prior session/config hashes, including
+  failed 739/740, are unchanged. Reuse prior accepted/current bounded workflows,
+  `accepted_32k` and physical measurements. Automatic reconnect and identified
+  parts/continuity/adopted-correction, analog UART/cable/passive, leakage/
+  transient/isolation/ESD gates remain open. Basic anomaly remains non-blocking;
+  Phase 4 stays paused and MCP deferred. Combined Enhanced acceptance is open.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -99,7 +97,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced control-generation software fix under review; fresh Enhanced HIL/USB reconnect and physical gaps remain open |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; explicit Enhanced reacquire/control passed on accepted fix; automatic USB cleanup fault and remaining physical gaps are open |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -121,10 +119,29 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Reacquire/control software fix under review; failed HIL unchanged, fresh physical lifecycle validation and Revision A evidence still required |
+| Phase 1B — Enhanced | Focused startup/explicit handoff/control passed; unexpected USB lifecycle failed on old-source cleanup; combined acceptance and remaining Revision A evidence stay open |
 | Phase 1 shared done criteria | Software regressions pass; incomplete until both backend/physical gates pass |
 
 ## Current Validation Requirements
+
+Focused Enhanced physical control-generation HIL, 2026-10-27: clean latest
+pushed `6d0c1a8` independently fetched before startup. Fresh software gate:
+**1,555 passed in 46.31 s**, Ruff, mypy/103 files, offline lock/66 packages,
+architecture and diff/clean checks passed before the sole hardware service.
+Session `20261027T165848Z-b9a62f0b`: startup ACKs 3/5 and reset 6/8 passed;
+release/external owner/reacquire staged segment 1 at 38, fresh ACKs 40/42,
+success 43, immediate reset 45/47 passed. Automatic Pico 2 USB disconnect/start
+303/304 faulted `cleanup_unconfirmed` before replacement; terminal metadata
+retains `backend_input_error`, `read failed: [Errno 6] Device not configured`.
+No third segment, automatic ACKs/success or reset; no retry/timeout change/fix.
+CLI stop acknowledged but application shutdown logged the retained serial error;
+PID/file/listener/serial ownership absent afterward. Native 0..304 reconciles
+126 RX bytes/12 RX records, six successful control pairs, 273 ambient telemetry
+records, two segments/two gaps. All 456 prior session/config hashes preserved.
+No tests/second runtime/store during HIL; other accepted checks reused. Only
+HIL report/status/history changed, uncommitted; final diff check passed.
+Phase 1B/Stage 8/Phase 1 remain incomplete. Full evidence and limits are in the
+[Enhanced HIL report](../hardware/validation/phase1_enhanced_hil.md).
 
 Enhanced control-generation software fix, 2026-10-27: branch
 `fix/enhanced-reacquire-control-config` from latest pushed `90c744f`; no physical
@@ -140,7 +157,8 @@ lock passed/66 packages; architecture tests included; final diff check passed.
 Graphify updated once (5,887 nodes); unchanged fixture header parser limitation
 is recorded in history. No generated graph artifacts are included in the diff.
 Failed HIL report/session remain unchanged; Phase 1B/Stage 8/Phase 1 remain
-incomplete pending physical validation and required evidence. Changes uncommitted.
+incomplete pending physical validation and required evidence. Software fix is
+accepted/pushed at `6d0c1a8`; the subsequent focused physical result is above.
 
 Enhanced real-hardware HIL, 2026-10-27: clean latest pushed `887768c` verified
 again after exact accepted helper/DUT reference flashes. Separate Enhanced
@@ -159,7 +177,7 @@ six bounded operations and 774 status records. All 448 earlier session files and
 Basic config unchanged; `accepted_32k` and bounded physical evidence reused,
 not repeated. Full evidence/limits/§34 disposition are in the
 [Enhanced HIL report](../hardware/validation/phase1_enhanced_hil.md). Only that
-report/status/history changed, uncommitted for review; final diff check passed.
+report/status/history changed then; failed-run evidence committed at `90c744f`.
 
 Bounded overflow physical diagnostic, 2026-10-27: clean `4692444`, independently
 verified pushed before startup. Full software gate completed first: 1,533 tests

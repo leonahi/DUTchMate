@@ -4,6 +4,143 @@ This record preserves the historical Enhanced runs, the current-contract HIL,
 and its preflight audit below. Phase and next-step ownership remain in
 `docs/development_status.md`.
 
+## Focused Control-Generation HIL: Explicit Pass, USB Cleanup Failure — 2026-10-27
+
+**Focused HIL stopped on the automatic USB path.** Startup and explicit
+`release → external owner → reacquire → immediate reset` passed on the reviewed
+fix. Unexpected USB reconnect failed before a replacement could be initialized.
+The combined control-generation acceptance and current unexpected-reconnect
+criterion remain open. Phase 1B, Stage 8 and overall Phase 1 remain incomplete;
+Phase 1A remains accepted. The earlier failed run below, including 739/740, is
+preserved unchanged and is not reclassified as passing.
+
+### Reviewed baseline, setup and pre-start gate
+
+Clean `fix/enhanced-reacquire-control-config` HEAD
+`6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8` matched its freshly fetched pushed
+branch before startup. No product source was changed during HIL. The original
+Basic config was preserved; a new working directory copied the earlier Enhanced
+config byte-for-byte: SHA-256
+`df0ac6bd8a424f60a20c8ae27f127f70520945eda9d6402775f8f344a52f005c`,
+Profile digest
+`941268f4df4522268941b23364cdbf0c0ff6927bfd3efbbb244ad4cad6cbb319`.
+It retains 460800 8-N-1/no flow control, explicit TX enable, exact path
+`/dev/cu.usbmodem1401`, **5.0 s** reconnect timeout, declared 3.3 V, reset
+CTRL0/RUN open-drain active-low and boot CTRL1/GP2 push-pull active-high/idle-low.
+
+The retained setup is the same previously identified normal helper and
+`phase1-enhanced-460800-001` DUT reference pair, with the operator-confirmed
+UART/control/common-ground/Pico 2 3V3 wiring and GP3 open recorded below.
+Both retained UF2 hashes again matched the accepted values in the reuse audit.
+No new flash or image readback was performed: image provenance remains the
+identified same-day transfers plus stable live helper identity and the exact
+DUT boot marker. USB enumerated `2E8A:000A`, serial `FA63A4D787572B33`, at the
+configured path. Passive checks found no service listener or serial owner before
+startup. No new Revision A measurement or correction was made.
+
+The normal software gate completed by **16:56:26 UTC**, before physical startup:
+using `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`,
+`uv run --frozen pytest -q --tb=line` **1,555 passed in 46.31 s**;
+Ruff passed; mypy passed/103 source files; offline lock check passed/66 packages;
+`git diff --check` and clean tracked status passed. No tests or additional
+DUTchMate runtime/session store ran while the physical service was active.
+
+### Startup and explicit ownership lifecycle: passed
+
+One CLI start, **16:58:47.161072–16:58:49.024171 UTC**, created sole service
+PID **3559** and fresh native-v2 session **`20261027T165848Z-b9a62f0b`**.
+The journal retained these exact primary sequence orders; intervening telemetry
+and RX remain in the native files:
+
+| Path / segment | Durable ordering and physical result |
+|---|---|
+| Startup / 0 | Connected **0**; CTRL1 configuration **1 → 3**, CTRL0 configuration **4 → 5**; one 100 ms reset **6 → 8**, success. RX **7, 9..13** reconstructs exact NUL + 62-byte normal boot line. |
+| Explicit release | CLI release **16:59:10.467476–16:59:10.730948 UTC**; intent **35**, released **36**. Segment 0 closed `released`; automatic reconnect stayed suspended. |
+| External owner | Standalone pyserial PID **3600** owned the released helper **16:59:10.732885–16:59:13.272852 UTC**, received one stable `hello` and two buffer-status frames, then closed. Service status remained `released`. No DUT UART send or control command was issued by the external owner; no second runtime/store was constructed. |
+| Reacquire / 1 | CLI reacquire **16:59:13.273277–16:59:14.709352 UTC**; started **37**, segment opened **38**, CTRL1 configuration **39 → 40**, CTRL0 configuration **41 → 42**, then `reacquire_succeeded` **43**. Both configuration results are `success`, `source=config`, with new acceptance metadata. |
+| Immediate reset / 1 | Single HTTP reset dispatched **16:59:14.709605 UTC**, **0.232 ms** after the CLI subprocess completed; attempt/result **45 → 47**, HTTP 200/success. RX **46, 48..52** reconstructs exact NUL + normal boot line. No manual GPIO configuration or reset retry occurred. |
+
+Fresh CTRL1/CTRL0 raw acknowledgement timestamps are **399416360 / 399427759**
+us at startup and **425213260 / 425226654** us after reacquire; public status
+matches those new results. RP2350 segment origins are **399388717** and
+**425196591** us. The same session and immutable Profile are retained across the
+intentional gap. Sequence **38 < 39 < 40 < 41 < 42 < 43 < 45 < 47** establishes
+segment staging, fresh configuration, lifecycle success and immediate reset in
+the required order. Explicit reacquire/control behavior passed this physical run;
+the full two-path criterion is not closed by that narrower pass.
+
+### Automatic Pico 2 USB lifecycle: failed before replacement
+
+After the explicit path passed, a read-only HTTP/native-journal observer was
+armed. The operator confirmed unplugging/replugging only Pico 2 USB, with Pico 1
+power and the other wiring left in place. The unchanged **5.0 s** policy is
+retained both in metadata and `reconnect_started` **304**. No reconnect/reset
+trial was repeated.
+
+At **17:03:25 UTC**, native **303** records `unexpected_disconnect`, detail
+`Enhanced serial read failed`; **304** records `reconnect_started`. Observer
+samples show `reconnecting` with the serial node absent at
+**17:03:25.355909 UTC**, then **`faulted` / `service_unavailable` /
+`cleanup_unconfirmed`** at **17:03:25.415053 UTC**. That status reports
+`Physical cleanup is unconfirmed`, no active session/provenance/capabilities,
+unconfigured controls and null commanded boot mode. Native metadata terminalized
+as **`failed/backend_input_error`**, detail
+**`read failed: [Errno 6] Device not configured`**, at 17:03:25 UTC.
+
+The shutdown traceback retains the old-source close path:
+`close_current_source_for_reconnect → EnhancedAsyncHost.close →
+close_and_drain_events → reader.close → writer.wait_closed`, re-raising that
+`serial.serialutil.SerialException`. There is **no segment 2**, fresh automatic
+GPIO configuration, `reconnect_succeeded`, or post-reconnect reset attempt.
+There is also no separate native `reconnect_failed` event: the fault is retained
+in terminal metadata, public status and the service log. This is not a reconnect
+deadline-expiry result; the old transport fault stopped the path before the
+replacement-generation behavior could be physically validated. Further root
+cause investigation/repair was outside this HIL and was not performed.
+
+The observer stopped at the first fault and requested CLI stop at
+**17:03:25.419487 UTC**, acknowledged at **17:03:25.561989 UTC**. Application
+shutdown logged the retained serial exception and `Application shutdown failed`;
+the CLI acknowledgment is not represented as an error-free shutdown. Subsequent
+checks verified PID 3559/PID file, TCP 2040 listener and serial ownership absent.
+The helper re-enumerated at its original path/identity after the operator's
+replug; no reopen/reset was attempted afterward. Later process/owner absence
+does not turn the failed in-run cleanup certainty into a reconnect pass.
+
+### Evidence preservation, reuse and disposition
+
+Final native **0..304**, **305** primary records, reconcile without gaps or
+duplicates: **126 raw RX bytes / 12 RX records**, six successful control
+attempt/result pairs, two segments and two observation gaps. Raw reconstruction
+is byte-for-byte, SHA-256
+`9fc5ffce82472defa7adb38f69ed3306894732766fd911956b8541960228fa5d`.
+There are no DUT UART sends, bounded operations or unresolved action attempts.
+Ambient recording naturally retained **273** buffer-status records; all report
+32,768 bytes, zero dropped/overflow counts, maximum high-water **62** bytes.
+`none_reported` remains scoped to `debug_helper_rx_buffer`; local recording and
+line processing are complete despite the failed ownership lifecycle.
+
+All **456** earlier session/config file hashes remain unchanged, including the
+original failed HIL session and Basic config. Artifacts live under
+`.dutchmate/hil/enhanced-control-generation-20261027T165521Z/`: baseline/preflight,
+per-command software gate, CLI/API timestamps and responses, startup/reacquire
+proofs, external ownership, full USB observer stream, fault observation,
+operator declaration, copied service log, shutdown ownership checks, terminal
+native snapshot/hash manifest and reconciliation. A passive diagnostic initially
+expected exit 0 from `lsof` with both cu/unused tty paths; its actual rows listed
+the sole correct service PID but exit 1. The corrected read-only check preserved
+both results; no physical action was retried for that harness assumption.
+
+This was not a full Phase 1B repeat. Existing accepted/current Monitor, Interact,
+follow, console, first-byte retention, telemetry, `accepted_32k`/overflow and
+bounded Revision A evidence below remain reused within their recorded limits.
+No timeout enlargement, manual GPIO reconfiguration, product/firmware patch,
+stress repeat, Revision A or MCP work occurred. §34/§35 cannot close: the
+automatic Enhanced lifecycle now has a preserved cleanup blocker, and the
+previously identified populated-parts/continuity/adopted-correction, analog UART,
+cable/passive, leakage/transient/isolation and ESD gaps remain open. Only this
+report, development status and development history are changed, uncommitted.
+
 ## Current v2 HIL: Reacquire/Control Blocker — 2026-10-27
 
 **Enhanced HIL stopped incomplete.** Phase 1B, Stage 8 and overall Phase 1

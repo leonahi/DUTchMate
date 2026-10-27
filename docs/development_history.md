@@ -9,6 +9,78 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Focused Enhanced Physical HIL: Explicit Pass, Automatic Cleanup Fault — 2026-10-27
+
+- Worked from clean `fix/enhanced-reacquire-control-config` at
+  `6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8`, verified against the freshly
+  fetched pushed branch. The reviewed software fix was already committed/pushed;
+  no product source or firmware was changed during this HIL. Scope was startup,
+  explicit ownership handoff/immediate reset and one automatic Pico 2 USB trial.
+- Reused the previously identified normal helper/460800 DUT reference flashes,
+  confirmed wiring/GP3 state and accepted physical evidence. Retained UF2 hashes
+  matched; no new flash/readback occurred. USB `2E8A:000A`, serial
+  `FA63A4D787572B33`, matched `/dev/cu.usbmodem1401`. Separate HIL working
+  config copied the prior Enhanced profile byte-for-byte, retained 5.0 s timeout,
+  CTRL0/RUN and CTRL1/GP2 mappings, digest
+  `941268f4df4522268941b23364cdbf0c0ff6927bfd3efbbb244ad4cad6cbb319`.
+- Fresh normal software gate, using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`, finished before
+  physical startup: `uv run --frozen pytest -q --tb=line`
+  **1,555 passed in 46.31 s**; Ruff passed; mypy passed/103 source files;
+  offline lock check passed/66 packages; architecture included; diff/clean checks
+  passed. No tests or second DUTchMate runtime/store ran while the service lived.
+- CLI start at 16:58:47–49 UTC created sole service PID 3559 and native-v2
+  session `20261027T165848Z-b9a62f0b`. Startup CTRL1/CTRL0 attempts/results
+  **1/3, 4/5** preceded single successful 100 ms reset **6/8**. RX
+  **7, 9..13** retained exact NUL plus the 62-byte normal fixture boot marker.
+- Explicit release **35/36** at 16:59:10 UTC suspended automatic reconnect.
+  Standalone external serial owner PID 3600 held the port at
+  16:59:10.732885–16:59:13.272852 UTC, received hello/two statuses, sent no
+  DUT UART/control and closed. Service remained released. Reacquire
+  **37/38** staged segment 1; fresh CTRL1 **39/40**, CTRL0 **41/42** preceded
+  `reacquire_succeeded` **43**. Immediate reset **45/47** succeeded, dispatched
+  0.232 ms after the CLI return, without manual reconfiguration. RX
+  **46, 48..52** retained the exact normal boot. Origins **399388717** and
+  **425196591** us establish fresh per-segment RP2350 provenance.
+- The operator then unplugged/replugged only Pico 2 USB while a continuous
+  read-only observer was armed to dispatch one reset after connection success.
+  At 17:03:25 UTC, **303** records unexpected disconnect (`Enhanced serial read
+  failed`); **304** starts reconnect with timeout 5.0 s. Status sampled
+  `reconnecting` at 17:03:25.355909 UTC, then `faulted/cleanup_unconfirmed`
+  at 17:03:25.415053 UTC. Terminal journal is **failed/backend_input_error**,
+  detail `read failed: [Errno 6] Device not configured`. There is no segment 2,
+  automatic configuration ACK, reconnect success or post-reconnect reset, and no
+  separate native reconnect-failed record. This failed before deadline expiry.
+- The retained shutdown traceback shows old-source
+  `close_current_source_for_reconnect` through Enhanced host/drain/reader close
+  to `writer.wait_closed`, re-raising that pyserial read exception. No root-cause
+  fix was attempted. The observer stopped at the first fault and requested CLI
+  stop at 17:03:25.419487 UTC, acknowledged 17:03:25.561989 UTC. Application
+  shutdown logged the retained exception/failed shutdown; PID/file/listener and
+  serial owner were verified absent afterward. Re-enumerated helper identity
+  matched; no reopen, reset retry or timeout enlargement followed.
+- Final native **0..304 / 305** primary records reconcile **126 raw RX bytes /
+  12 RX records**, six successful control pairs, two segments and two gaps;
+  no UART sends/bounded operations/unresolved attempts. Raw SHA-256
+  `9fc5ffce82472defa7adb38f69ed3306894732766fd911956b8541960228fa5d`.
+  Ambient telemetry naturally retained 273 32-KiB status records with zero loss
+  counts/high-water at most 62; this is not a stress repeat or electrical-loss
+  claim. Scoped integrity, local recording and line processing remain complete.
+- Full local artifacts are under
+  `.dutchmate/hil/enhanced-control-generation-20261027T165521Z/`, including gate,
+  preflight, CLI/API, exact ordering proofs, external owner, USB observer/fault,
+  service log, shutdown checks, terminal native hashes and reconciliation.
+  A passive cu/unused-tty `lsof` exit-code assumption was corrected using its
+  actual sole-PID rows; no physical action was retried for that harness check.
+  All 456 earlier session/config hashes, including failed 739/740, are unchanged.
+- Reused previous accepted/current Monitor, Interact, follow, console, first-byte,
+  telemetry, `accepted_32k`/overflow and bounded Revision A evidence. Explicit
+  reacquire/control passed, but the combined acceptance and current unexpected
+  reconnect criterion remain open due to the old-source cleanup fault. Phase 1A
+  stays accepted; Phase 1B/Stage 8/Phase 1 and the recorded §34/Revision A gaps
+  remain incomplete. Only Enhanced HIL report/status/history changed, unstaged
+  and uncommitted; final `git diff --check` passed. No MCP or hardware-design work.
+
 ## Enhanced Control Generation Review Corrections — 2026-10-27
 
 - Continued the existing unstaged, uncommitted
