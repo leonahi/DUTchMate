@@ -50,7 +50,7 @@ def format_session_detail(payload: Mapping[str, object]) -> str:
                 f"Backend: {_display(payload.get('backend_mode'))}",
                 f"Baseline: {_yes_no(payload.get('baseline'))}",
                 f"Segments: {_display(payload.get('segment_count'))}",
-                f"Integrity: {_nested_display(payload.get('integrity'), 'loss_status')}",
+                f"Integrity: {_loss_status(payload)}",
                 f"First error: {_format_first_error(payload.get('first_error'))}",
                 f"Truncated: {_yes_no(payload.get('truncated'))}",
                 f"Interrupted: {_yes_no(payload.get('interrupted'))}",
@@ -79,8 +79,17 @@ def _format_list_item(item: Mapping[str, object] | None) -> str:
         f"backend={_display(item.get('backend_mode'))} "
         f"baseline={_yes_no(item.get('baseline'))} "
         f"segments={_display(item.get('segment_count'))} "
-        f"loss={_nested_display(item.get('integrity'), 'loss_status')}"
+        f"loss={_loss_status(item)}"
     )
+
+
+def _loss_status(payload: Mapping[str, object]) -> str:
+    if payload.get("schema_version") == 2:
+        quality = _as_mapping(payload.get("evidence_quality"))
+        integrity = quality.get("backend_integrity") if quality is not None else None
+    else:
+        integrity = payload.get("integrity")
+    return _nested_display(integrity, "loss_status")
 
 
 def _format_artifacts(value: object) -> list[str]:

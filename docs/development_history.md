@@ -10,6 +10,53 @@ retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
 
+## Schema-v2 CLI Session Loss Display Fixed in Software — 2026-10-27
+
+- Created `fix/cli-v2-loss-status` from clean, independently verified pushed
+  `stage8-phase1-acceptance` HEAD `acffad49ec63765d827f83f2921a61a6a5220bab`.
+  Read-only HTTPS `ls-remote` matched the local/tracking SHA. No future fix
+  commit is assigned; changes remain uncommitted for review.
+- Confirmed the current v2 API list/detail contract serializes
+  `evidence_quality.backend_integrity.loss_status`. Both CLI views instead read
+  v1's top-level `integrity`, explaining the preserved Basic HIL output
+  `Integrity: none` / `loss=none` despite correct `not_observable` API evidence.
+- Added RED regressions for both formatters: an ordinary native-v2 payload and
+  one with a conflicting obsolete top-level projection. All four failed on
+  the actual wrong output before implementation. The minimal formatter-only
+  fix selects the v2 field for schema 2 and retains the historical source for
+  older schemas. The v0 read-only branch and v1 output are unchanged; an added
+  v1 detail check complements existing mixed v1/v0 list and v0 detail coverage.
+- GREEN: all ten session CLI tests passed. A focused CLI/session-store/service
+  retrieval/architecture gate passed 368 tests. Offline formatting of the actual
+  preserved HIL API payload now prints `Integrity: not_observable` and
+  `loss=not_observable`; this is software replay, not new physical acceptance.
+- Only CLI formatting/tests and development status/history changed. Session
+  persistence, API schemas, Basic backend, reconnect and hardware code were
+  untouched. All 641 local `.dutchmate` file hashes matched before/after software
+  checks, including failed HIL evidence. No serial port was opened, hardware
+  accessed, firmware flashed or physical service started. Architecture ownership
+  and interfaces did not change; no Graphify update was required.
+
+Commands used prefix `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`
+except the final Git check:
+
+| Command | Result |
+|---|---|
+| `uv run --frozen pytest -q apps/cli/tests/test_sessions.py -k shows_v2_loss_status --tb=short` | RED: 4 failed, 6 deselected in 0.04 s |
+| `uv run --frozen pytest -q apps/cli/tests/test_sessions.py --tb=short` | GREEN: 10 passed in 0.03 s |
+| `uv run --frozen pytest -q apps/cli/tests tests/unit/session_store apps/service/tests/test_session_endpoints.py tests/architecture --tb=short` | 368 passed in 3.62 s, including architecture checks |
+| `uv run --frozen pytest -q --tb=short` | 1,514 passed in 36.46 s |
+| `uv run --frozen ruff check .` | Passed |
+| `uv run --frozen mypy` | Passed, 103 source files |
+| `uv lock --check --offline` | Passed, 66 packages; lockfile unchanged |
+| `rtk proxy git diff --check` | Passed |
+
+Phase 1A remains incomplete: unexpected FTDI reconnect is unresolved, and no
+physical acceptance is claimed. Stage 8, Phase 1B and Phase 1 remain incomplete.
+Enhanced HIL and MCP remain deferred. Historical HIL reports and earlier history
+entries were preserved.
+
+
 ## Basic Release-Fix HIL Rerun: Handoff Passed, Acceptance Stopped — 2026-10-27
 
 - Used clean `stage8-phase1-acceptance`, HEAD

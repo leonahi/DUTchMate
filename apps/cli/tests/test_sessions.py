@@ -8,6 +8,73 @@ from dutchmate_cli.client import ServiceApiError
 from dutchmate_cli.sessions import format_session_detail, format_session_list
 
 
+@pytest.mark.parametrize("legacy_integrity", [None, {"loss_status": "none_reported"}])
+def test_format_session_list_shows_v2_loss_status(
+    legacy_integrity: dict[str, str] | None,
+) -> None:
+    item: dict[str, object] = {
+        "session_id": "20261026T185908Z-basic",
+        "schema_version": 2,
+        "compatibility": "native",
+        "state": "completed",
+        "backend_mode": "basic",
+        "baseline": False,
+        "segment_count": 2,
+        "evidence_quality": {
+            "backend_integrity": {
+                "loss_status": "not_observable",
+                "observation_scope": None,
+                "dropped_bytes": None,
+            },
+            "local_recording": "complete",
+        },
+    }
+    if legacy_integrity is not None:
+        item["integrity"] = legacy_integrity
+
+    output = format_session_list({"items": [item], "next_cursor": None})
+
+    assert "backend=basic baseline=no segments=2 loss=not_observable" in output
+
+
+@pytest.mark.parametrize("legacy_integrity", [None, {"loss_status": "none_reported"}])
+def test_format_session_detail_shows_v2_loss_status(
+    legacy_integrity: dict[str, str] | None,
+) -> None:
+    payload: dict[str, object] = {
+        "session_id": "20261026T185908Z-basic",
+        "schema_version": 2,
+        "compatibility": "native",
+        "evidence_quality": {
+            "backend_integrity": {
+                "loss_status": "not_observable",
+                "observation_scope": None,
+                "dropped_bytes": None,
+            },
+            "local_recording": "complete",
+        },
+    }
+    if legacy_integrity is not None:
+        payload["integrity"] = legacy_integrity
+
+    output = format_session_detail(payload)
+
+    assert "Integrity: not_observable" in output
+
+
+def test_format_session_detail_preserves_v1_integrity() -> None:
+    output = format_session_detail(
+        {
+            "session_id": "20260820T120000Z-native",
+            "schema_version": 1,
+            "compatibility": "native",
+            "integrity": {"loss_status": "none_reported"},
+        }
+    )
+
+    assert "Integrity: none_reported" in output
+
+
 def test_format_session_list_discriminates_native_and_legacy_items() -> None:
     output = format_session_list(
         {
