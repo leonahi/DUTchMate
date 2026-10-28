@@ -11,6 +11,83 @@ observation is not an acceptance result when its instrument, method, or numeric
 result is missing or uncertain. Unresolved items remain unchecked in the
 normative checklist.
 
+## Phase 1B Evidence Reconciliation — 2026-10-28
+
+Documentation-only audit at pushed baseline `9ff33c1` (code/HIL baseline
+`14e6717`). No hardware was accessed and no new measurement is claimed. All
+earlier run sections, including **Current Decision**, are preserved below as
+dated evidence. Their broader open-gap lists do not define today's acceptance
+contract. Current progress and next action belong only in
+[Development Status](../../docs/development_status.md).
+
+### Normative scope
+
+[Implementation specification §34](../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced)
+requires:
+
+- **H1:** “the accepted Revision A/current-adopted hardware mapping and
+  provisional/current adopted logic-device choices are consistent across schematic,
+  firmware, tests, and validation records”; and
+- **H2:** “with leakage, sequencing, isolation, voltage-level, and UART
+  signal-integrity measurements recorded for the prototype”.
+
+Specification §11 retains the legacy Revision A document as **electrical/pin
+authority**, with the exact GPIO safety contract delegated to
+`docs/gpio_configuration_semantics.md`. It does not turn every unchecked legacy
+§14 qualification task into a Phase 1B exit criterion. In particular, §34 does
+not prescribe calibration, absolute per-pin leakage limits, transient capture,
+an ESD test standard, or a matrix of cable lengths/loads. Conversely, H2
+explicitly requires UART signal-integrity measurements; protocol success alone
+cannot replace that electrical evidence. Revision A §§6.3/9 identify the relevant
+UART path, series resistor and waveform concerns. Project-context §19.2 keeps
+software permission separate from electrical safety; it adds no qualification
+matrix. The software architecture adds ownership boundaries, not extra physical
+acceptance tests.
+
+### Physical reconciliation
+
+Each row has exactly one classification. **Satisfied** applies only to the
+stated Phase 1 requirement and recorded setup, not to every legacy qualification
+claim. Evidence links refer to unchanged sections in this record.
+
+| Item | Exact requirement evaluated | Classification | Existing evidence and sufficiency/limit | Smallest additional physical work for Phase 1B |
+|---|---|---|---|---|
+| Mapping and logic choices in the accepted records | H1; Revision A §10.1 fixes 17 Pico assignments and §3 fixes U1/U2/U3/U5/U6 MPNs | **Satisfied** | [2026-09-15 audit](#2026-09-15-source-mapping-and-configured-rejection-audit) compares all 17 schematic/board/table assignments and the 14 assigned UART/event/control GPIOs in firmware, including channel order. Legacy schematic/board values match `TXU0202DCUR`, `TXU0104PWR`, `SN74LV4T125PWR`, `SN74LVC2G06DBVR`. Retained firmware mapping/control tests and current HIL agree; no mapping or logic substitution is recorded. This excludes the separate adopted pull-up discrepancy below. | None for the unchanged mapping/logic records. |
+| Populated component/part markings, full assembly/BOM inspection | H1 requires consistent adopted logic choices; it does not explicitly require an independent populated-part inspection | **Not a Phase 1B blocker** | The prototype is user-identified as assembled Revision A and has accepted functional/electrical evidence. Markings were explicitly deferred; no physical MPN verification is claimed. Missing independent assembly assurance is not itself a contradiction between the accepted schematic, firmware, tests and records. | None required; defer marking/procurement and full passive/ESD population audit. A discovered substitution would require review under Revision A §3. |
+| Exhaustive physical continuity / board net mapping audit | H1 and specification §11's accepted electrical/pin mapping | **Not a Phase 1B blocker** | Source mapping is reconciled above. All four controls were exercised, UART loopback passed, and loaded isolation covered all ten external signals. Current HIL confirms declared CTRL0/RUN, CTRL1/GP2 and UART wiring. This is not an ohmmeter trace of every net, but the contract does not demand that separate audit without a mapping discrepancy. | None required; defer exhaustive continuity/connector inspection. Do not claim it was performed. |
+| Adopted helper-input 10 kOhm correction: accepted/as-built configuration and schematic/BOM consistency | H1 plus Revision A §6.3: next revision adds 10 kOhm from `UART_TX` (`U1.B2`, pin 1, after R16) to `DUT_VIO`; existing prototypes need equivalent helper-side rework for loaded UART hot-plug testing | **Required and open** | [One-cycle comparison](#helper-side-10-kohm-tx-pull-up-comparison) and [five-cycle repeat](#five-cycle-helper-side-tx-pull-up-repeatability) establish effective 3.3 V idle bias and the accepted decision. The tested temporary resistor was at J1 pin 4, before R16; the adopted location is after R16. The record explicitly says the revised schematic/BOM is unverified, and current HIL does not identify installed rework. Neither a new PCB nor another five-cycle campaign is mandated, but the accepted configuration cannot remain ambiguous across these records. | Identify whether the accepted prototype retains equivalent 10 kOhm helper-side bias; record value, endpoints and relation to R16. Reconcile it with an as-built schematic/BOM annotation and the accepted after-R16 decision. If absent/different, resolve applicability of the corrected-prototype evidence before closure; do not silently assume rework or redesign it in this audit. |
+| Prototype UART electrical signal integrity, including analog edges | H2 explicitly requires “UART signal-integrity measurements recorded for the prototype”; Revision A §9 identifies waveform validation of the UART series path | **Required and open** | Four-voltage exact loopbacks and digital paired traces prove function/timing. The [deferred analog record](#deferred-analog-uart-cableedge-validation) explicitly lacks rise/fall shape, overshoot, undershoot, ringing and electrical margin. Neither zero reported ring loss nor digital stop-bit validity supplies those measurements. | Record both UART directions at 460800 baud on the accepted, identified prototype/cabling with its adopted bias and R16 fitted. Capture levels and edge shape/settling, overshoot/undershoot/ringing with a suitable analog instrument; assess against the adopted devices' applicable electrical limits. Retain setup/probe/instrument identity and traces. No new numeric product limit or multi-length sweep is introduced. |
+| Functional UART rate/voltage operation on accepted prototype cabling | H2 voltage-level measurements; Revision A §6.3 operation at maximum intended baud rate/cable length | **Satisfied** | Exact 33-byte loopbacks at 460800 baud passed at 1.8/2.5/3.3/5.0 V; current same-fixture HIL exercises bidirectional operation. Acceptance scope is the recorded short-jumper setup, not an unspecified longer cable rating. Analog integrity is separately open above. | None; identify the actual cabling in the remaining waveform record, without inventing a new maximum cable specification. |
+| Multiple cable lengths, load/passive optimization, final production series-resistor selection | No separate §34 matrix; Revision A §§9/13 discuss final passive values and maximum cable qualification; legacy §14 lists oscilloscope resistor validation | **Not a Phase 1B blocker** | No production cable-length range is specified in the Phase 1 contract. Functional prototype evidence exists; the limited electrical measurement above remains required. A cable sweep or optimization of all R13/R15/R16 values would exceed that requirement. | None beyond the accepted-setup UART measurement above; defer wider cable/load/passive qualification. |
+| Recorded leakage and back-power behavior | H2: leakage and isolation measurements recorded for the prototype | **Satisfied** | [Debugger-off current](#dut-powered-debugger-unpowered-leakage-at-18-v) is 25.2 uA at 1.8 V. [Loaded back-power check](#loaded-3v3-back-power-check-at-18-v) collapses 0.13 V to 0.02 V through 10 kOhm (about 2 uA); 75 uA supply current remains a distinct result, not a repeat of the earlier idle measurement. [Missing-VIO injection](#loaded-missing-dut_vio-isolation-sweep) covers all ten external signals with a loaded VIO rail at 0.0 V. These are numeric, bounded prototype measurements, not calibrated absolute leakage limits. | None for H2's recorded-measurement requirement. |
+| Calibrated absolute/per-pin leakage campaign and unexplained idle-current difference | H2 says leakage measurements, without a calibration requirement or absolute per-pin acceptance threshold | **Not a Phase 1B blocker** | Instrument identity/resolution limits and 25.2 versus 75 uA differing setups remain explicitly recorded. They limit quantitative assurance; they do not erase the loaded measurements or introduce a new calibration gate. Separate idle results are within the documented voltage-specific targets. | None mandated; defer controlled correlation and calibrated absolute leakage qualification. |
+| Static isolation, settled supply ordering and measured hot-plug behavior | H2 sequencing/isolation; Revision A §§7.4/7.5 safe states and expected power combinations | **Satisfied** | Loaded missing-VIO and debugger-off control/UART/event sweeps cover both absent-supply directions. [Supply-order and /OE follow-up](#pulled-control-supply-order-sequence-at-18-v) records every /OE disabled through both power orders at 1.8 V. [Repeated unloaded cycles](#repeated-unloaded-supply-hot-plug-at-18-v) and corrected five-cycle loaded UART digital traces add unplug/recovery evidence; both-powered operation is demonstrated. Scope and unpowered/loaded conditions remain as recorded. | None for the recorded prototype measurements; adopted-correction applicability remains separate above. |
+| Transient waveforms, all voltage/load/power/cable combinations, extended hot-plug qualification | H2 requires sequencing/isolation measurements, not a transient waveform matrix | **Not a Phase 1B blocker** | Settled numeric sequencing and loaded static isolation are already recorded. Digital hot-plug results do not establish analog transients, and no such claim is made. Historical “transient capture remains open” is an engineering limitation, not an additional §34 exit criterion. | None mandated; defer extended power/cable transient qualification. |
+| ESD capacitance/leakage/clamping measurement campaign | No explicit §34 ESD measurement criterion; Revision A §9 requires voltage-compatible, non-excessively capacitive selection, and legacy §14 lists ESD characterization | **Not a Phase 1B blocker** | Revision A §§9/15 record the provisional signal/rail ESD choices. Independent capacitance/clamping measurements are absent and remain unclaimed. Selection requirements still apply; the current contract does not require an ESD qualification campaign to close Phase 1B. | None mandated; defer capacitance, leakage, clamping and immunity qualification. |
+| Control levels, open-drain release and reset/startup safety | H2 voltage-level measurements; specification §11 high-impedance safety states and accepted idle modes | **Satisfied** | All four push-pull controls passed at 1.8 V; representative CTRL0 levels passed at 2.5/3.3/5.0 V. Open-drain reset with a 10 kOhm pull-up passed 250 ms/2 s/10 s pulses. [Every-control debugger-reset check](#control-high-impedance-during-debugger-reset), loaded absent-supply measurements and configuration rejection evidence support safe states; current v2 control HIL adds durable audit. | None; a threshold/load/temperature characterization matrix is not specified. |
+| EVENT capture and event-rate/pull-up qualification | Specification §§3/11/34 explicitly reserve EVENTn, unadvertised/unimplemented until Phase 5 | **Not a Phase 1B blocker** | Physical event isolation was measured; no event API/capture pass is claimed. The legacy event-capture checklist cannot override the explicit Phase 1 exclusion. | None in Phase 1B. |
+
+### Closed §34/§35 criteria and residual acceptance boundary
+
+The [Enhanced HIL record](phase1_enhanced_hil.md) provides the unchanged run
+details. Its successive accepted portions can be combined; §34 does not require
+one monolithic repeat after each host fix:
+
+| Normative criterion | Classification | Accepted evidence |
+|---|---|---|
+| §34 inherited host semantics; normalized RX/TX; `uart_receive`; generic `pulse_control`/`set_control_state`; host-only role metadata | **Satisfied** | `20261027T114440Z-7db24eae`: exact RX/TX, Monitor matched/elapsed/timeout, Interact matched/elapsed/timeout, asynchronous UART, follow/detach, console and durable retrieval; source/protocol regressions establish exact generic wire payloads. |
+| §34 gated/audited reset/boot, acquisition before reset, RP2350 segment timestamps, continuous telemetry | **Satisfied** | Same run retains 42..49 first bytes before Monitor, both boot selections, 774 ambient status records and segment origins; later explicit and automatic runs prove fresh configuration and immediate reset after ownership boundaries. |
+| §34 32 KiB measured firmware gate and deliberate overflow scope/count | **Satisfied** | [Ring-buffer final decision](phase1_ring_buffer.md#final-decision) is `accepted_32k`: RAM/stack/boot/backpressure evidence and reconciled retained+dropped bytes. Enhanced provenance audit and known-reference flashes establish continued applicability; current v2 loss projection has deterministic coverage. No stress repeat is needed. |
+| §34 EVENT ownership, fake Enhanced integration/CLI tests, real Pico 2 + same Zephyr fixture workflows | **Satisfied** | EVENT remains reserved/unadvertised. Retained pre-start full gate at `14e6717`: 1,569 tests, Ruff and mypy pass. Combined current HIL plus `20261027T165848Z-b9a62f0b` explicit handoff/control pass and `20261027T180121Z-9ea027ae` automatic USB/control pass close the workflow failures while preserving both failed runs. |
+| §35 items 1–15 (shared behavioral criteria, including item 7 configured safe Control) | **Satisfied** | Accepted Basic HIL plus the Enhanced runs above cover continuous ambient evidence, first bytes, follow, Monitor, Interact, console, gated/audited Control with measured safe states, handoff, provenance/quality, one owner and CLI-first workflows. Retained full software gates cover shared backend architecture, v2/read-only compatibility, rollover and fail-closed persistence. Forced physical rollover and another nonzero-overflow campaign are not specified. |
+| §35 prerequisite: “both 1A and 1B are done” | **Required and open** | Phase 1A is accepted. Phase 1B still depends on H1 correction consistency and H2 UART electrical signal-integrity evidence above. No new Control failure is inferred; Phase 1B/Stage 8/Phase 1 remain incomplete. |
+
+This reconciliation leaves **two acceptance gaps**: the adopted-correction
+configuration/record reconciliation, and accepted-setup UART electrical
+signal-integrity measurements. It does not withdraw existing results or convert
+deferred qualification into passed measurements. The minimum remaining physical
+work and its order are maintained only in Development Status.
+
 ## Prototype And Run Identity
 
 | Field | Result |

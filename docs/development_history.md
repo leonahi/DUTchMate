@@ -9,6 +9,54 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Phase 1B Evidence Reconciliation Audit — 2026-10-28
+
+- Started with a clean tracked tree at `9ff33c10858d5e040688e895b9d201cae70bcf71`,
+  the successful automatic USB reconnect HIL documentation commit. Independent
+  HTTPS `git ls-remote` matched the pushed branch; initial sandbox DNS and then
+  SSH authentication failed, without changing refs or the baseline.
+- Compared implementation-specification §§11/34/35, GPIO semantics and normative
+  project-context/architecture boundaries with the Revision A, Enhanced HIL,
+  ring-buffer, firmware and retained development records. Added a dated
+  item-by-item reconciliation; no acceptance criterion or historical run was
+  rewritten. Earlier broad gap lists remain intact as historical dispositions.
+- Rechecked source consistency: all 17 table/schematic/board Pico assignments,
+  five logic-device references and 14 ordered firmware GPIO assignments plus
+  UART0/460800 agree. This does not claim populated-part or physical continuity
+  inspection. Snapshot of 1,285 local validation/evidence/status files preceded
+  edits and validation.
+- Reconciliation found two unresolved acceptance criteria: accepted/as-built
+  10 kOhm helper-input correction consistency, and prototype UART electrical
+  signal-integrity measurements. Existing digital hot-plug evidence demonstrates
+  the temporary bias; it does not establish the current installed after-R16
+  configuration or analog waveform margins. No new board, cable matrix or
+  repeat of accepted workflows/32 KiB stress was inferred as a requirement.
+- Recorded leakage, loaded isolation, settled supply sequencing, voltage-level
+  and control-safe-state measurements satisfy their bounded §34 requirements.
+  Independent parts/full-BOM inspection, exhaustive continuity, wider cable/
+  passive qualification, calibrated absolute leakage, transient matrices, ESD
+  characterization and Phase 5 EVENT capture were classified non-blocking.
+  No missing qualification measurement was converted into a physical pass.
+- Accepted current Enhanced runs jointly support the §34 workflow criteria
+  and shared §35 behavioral criteria, including corrected explicit/automatic
+  ownership paths. Phase 1A stays accepted; the §35 prerequisite that Phase 1B
+  be done remains unmet. Phase 1B/Stage 8/Phase 1 were not marked complete.
+- Fresh offline validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen --offline pytest -q --tb=line`: **1,569 passed in 48.31 s**;
+  `uv run --frozen --offline ruff check .`: passed;
+  `uv run --frozen --offline mypy`: passed/103 source files;
+  `uv lock --check --offline`: passed/66 packages.
+- Preservation check passed: removing only the newly inserted addenda reproduces
+  original history and both physical/HIL records byte-for-byte; all 1,281 other
+  snapshotted files are unchanged. Exactly four allowed documentation files
+  changed; staging is empty. Reconciliation links/anchors and final
+  `git diff --check` passed. No Graphify update was needed for this documentation
+  audit. Complete diff retained separately for review.
+  No hardware access, service startup, product code, tests, firmware, hardware
+  design or normative criteria changed. Four documentation files only; left
+  unstaged and uncommitted for review.
+
 ## Automatic-Only Enhanced Pico 2 USB Reconnect HIL — 2026-10-27
 
 - Ran from clean `fix/enhanced-terminal-read-cleanup` at

@@ -16,8 +16,9 @@
 > Bounded overflow fixture / physical diagnostic HEAD: `4692444f771f33b6d27994e03f2722c268e3f43a` (pushed)
 > Enhanced HIL code baseline: `887768c2e10da1ba8ae9c323474fad86648a7d34` (failed HIL evidence committed at `90c744f`)
 > Enhanced control fix base: `90c744fe97ed3af2224989a954261bef42797b45`; accepted fix/focused HIL baseline: `6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8`; focused HIL documentation: `df8e7a6` (pushed)
-> Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (latest pushed independently fetched on `fix/enhanced-terminal-read-cleanup`)
-> Documentation state reviewed: 2026-10-27
+> Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (pushed code/HIL baseline on `fix/enhanced-terminal-read-cleanup`)
+> Pushed evidence-audit baseline: `9ff33c10858d5e040688e895b9d201cae70bcf71` (automatic USB reconnect HIL documentation; independently verified by HTTPS remote lookup)
+> Documentation state reviewed: 2026-10-28
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -27,38 +28,43 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** The current Enhanced unexpected Pico 2 USB reconnect
-  criterion passed on clean, latest pushed `14e6717`. Only startup and automatic
-  USB reconnect were exercised; prior explicit handoff/control remains passed.
-  HIL report/status/history updates are unstaged and uncommitted for review.
-  **Phase 1A remains Complete/accepted**; Phase 1B, Stage 8 and Phase 1 incomplete.
-- **Exact evidence:** Fresh session `20261027T180121Z-9ea027ae` retained
-  disconnect 100 → reconnect start 101 → segment 1 at 102 → fresh CTRL1 ACK 104
-  → CTRL0 ACK 106 → reconnect success 107 → single immediate reset success 111.
-  No manual GPIO configuration or release/reacquire. Resumed telemetry 108 and
-  normal boot RX 110, 112..116 are durable; status reports fresh accepted controls.
-- **Timing/provenance:** Observed reconnect upper bound 4.579836 s is below the
-  unchanged 5.0 s policy. Reset dispatch followed connected status by 0.379 ms.
-  RP2350 origins 188867368/3001478 us are fresh, segment-local contexts.
-- **Cleanup/error:** Original read-failure description remains at 100 and in
-  public cursor retrieval. Successful old close before replacement follows the
-  reviewed positive serial-closed/transport-released checks; no cleanup fault.
-  Raw exception identity/private flags are not public measurements; the enforced
-  code path and pre-start regressions provide that confirmation boundary.
-- **Validation/shutdown:** Pre-start gate 1,569 tests/47.60 s, Ruff, mypy/103,
-  offline lock/66 and diff/clean checks passed. No tests/second runtime/store
-  during HIL. Native/public retrieval passed; completed/service_shutdown with
-  no application error, PID/file/listener/serial owner absent. Native 0..144:
-  126 RX bytes/13 RX records, six control pairs, two segments/one gap.
-- **Next step:** Review these documentation changes and reconcile remaining
-  §34/Revision A evidence gaps separately. Do not repeat passed host workflows
-  or infer Phase 1B completion from the focused USB result.
-- **Preservation/open gates:** All 463 earlier session/config hashes, including
-  failed 303/304 and 739/740, are unchanged. Reuse prior explicit handoff,
-  bounded workflows, `accepted_32k` and physical evidence. Parts/continuity/
-  adopted-correction, analog UART/cable/passive, leakage/transient/isolation/ESD
-  gaps remain open. No firmware/design/MCP work; Basic anomaly stays non-blocking,
-  Phase 4 paused and MCP deferred. No product code or timeout changed during HIL.
+- **Current milestone:** Evidence reconciliation at pushed `9ff33c1` leaves
+  **two §34 acceptance gaps**: adopted 10 kΩ helper-input correction consistency
+  and prototype UART electrical signal-integrity measurements. Phase 1A remains
+  Complete/accepted; Phase 1B, Stage 8 and overall Phase 1 remain incomplete.
+- **Closed workflows:** Reuse `20261027T114440Z-7db24eae` for continuous RX,
+  first bytes, Monitor/Interact/follow/console, boot control, v2 timestamps,
+  telemetry and retrieval; `20261027T165848Z-b9a62f0b` for explicit handoff and
+  immediate reset; `20261027T180121Z-9ea027ae` for automatic USB reconnect,
+  fresh CTRL1/CTRL0 ACKs and immediate reset within unchanged 5.0 s policy.
+  Retain `accepted_32k`, reconciled overflow and accepted Basic evidence.
+- **Minimum physical work:** (1) Identify/document the accepted prototype's
+  installed helper-side 10 kΩ bias, endpoints/value and relation to R16; reconcile
+  the as-built schematic/BOM record with the accepted after-R16 correction.
+  (2) Record both UART directions' electrical levels/edges, settling and
+  overshoot/undershoot/ringing at 460800 baud on that accepted setup, assessed
+  against adopted-device limits. Record actual cabling/probes/instrument.
+  No hardware was accessed or design changed during this audit. If the bias
+  differs/is absent, resolve corrected-evidence applicability before closure.
+- **Deferred, non-blocking:** Independent populated-part/full-BOM inspection,
+  exhaustive board continuity, multi-length/load/passive optimization,
+  calibrated absolute/per-pin leakage, extended transient/power/cable matrices,
+  ESD characterization and Phase 5 EVENT capture. None is claimed measured.
+  Source mapping/logic consistency, recorded leakage, settled sequencing,
+  loaded isolation, voltage levels and control safe states already satisfy
+  their bounded prototype requirements. A discovered mismatch needs review.
+- **Next step:** Review the unstaged reconciliation, then obtain only the two
+  missing evidence items above. Do not repeat passed host workflows, ring-buffer
+  stress or Basic HIL. Do not mark Phase 1B complete until both are resolved.
+- **Audit/validation:** Normative §§11/34/35 checked against retained physical,
+  firmware/ring-buffer and current HIL records; classifications and evidence
+  are in the [Revision A reconciliation](../hardware/validation/phase1_revision_a.md#phase-1b-evidence-reconciliation--2026-10-28).
+  Documentation preservation and final validation results are recorded below.
+  All historical run sections remain unchanged; no product/test/firmware/design
+  or acceptance-criteria changes. Changes remain unstaged and uncommitted.
+- **Other boundaries:** Basic anomaly remains non-blocking; Phase 4 paused and
+  MCP deferred. Historical failed Enhanced runs remain evidence, superseded
+  only by the later successful explicit/automatic paths for those criteria.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -74,7 +80,7 @@ demonstrated again against the new normative done criteria.
 
 | Area | Current baseline | Phase 1 v2 status |
 |---|---|---|
-| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Basic v2 accepted from the fresh run; Enhanced v2 physical acceptance remains open |
+| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Basic v2 accepted; Enhanced workflows passed, two §34 hardware-evidence gaps remain |
 | DUT Profile and effective serial provenance | One immutable resolved profile owns backend, selector/topology, UART policy, DTR/RTS request, GPIO config, projection, and digest | Stage 1 complete; exposed through runtime/service/CLI status without v2 storage |
 | Native session schema v2 | Deterministic v2 store/recovery/retrieval/retention is implemented | Stage 2 complete; production runtime ownership adopted in Stage 3 |
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
@@ -100,7 +106,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; explicit Enhanced handoff/control and current automatic USB reconnect physically passed; remaining §34/Revision A evidence requires reconciliation |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced workflows passed; only adopted-correction consistency and prototype UART electrical signal-integrity evidence remain open |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -109,8 +115,9 @@ progress; it does not redefine either document.
 
 ## Deferred Work Outside the Active Slice
 
-- Revision A corrected-design and remaining physical measurements are preserved
-  as open Phase 1 acceptance evidence for Stage 8.
+- Broader Revision A assembly/continuity, cable/passive, absolute-leakage,
+  transient and ESD qualification remains deferred and non-blocking under the
+  reconciled §34 contract. The two actual acceptance gaps are listed above.
 - Phase 4 Debug Agent evidence packaging remains paused after VS Code host
   acceptance; authenticated Claude Code host validation remains unavailable.
 - Public `dutchmate-debug-agent` distribution remains deferred to `v0.2.0`.
@@ -122,10 +129,28 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Explicit handoff/control and current unexpected USB reconnect criterion passed; remaining Revision A/§34 evidence stays open |
-| Phase 1 shared done criteria | Software and focused lifecycle gates pass; incomplete until remaining Phase 1B physical requirements are reconciled |
+| Phase 1B — Enhanced | Workflow criteria passed; adopted 10 kΩ correction consistency and prototype UART electrical signal-integrity measurements remain open (§34) |
+| Phase 1 shared done criteria | Shared §35 behavioral criteria supported by accepted software/HIL; overall completion awaits the two §34 Phase 1B evidence gaps |
 
 ## Current Validation Requirements
+
+Evidence-only reconciliation, 2026-10-28: clean `9ff33c1` matched the pushed
+branch by independent HTTPS lookup (SSH authentication unavailable). No hardware
+access, flashing, service startup or product/test/firmware/design/specification
+edits. Exact §34 mapping/logic consistency and recorded-measurement requirements
+were evaluated separately from the wider legacy checklist. The dated Revision A
+reconciliation identifies the two unresolved evidence criteria and each deferred
+qualification item; existing measurements are not upgraded to broader claims.
+Fresh offline validation: **1,569 passed in 48.31 s**; Ruff passed; mypy
+passed/103 source files; lock check passed/66 packages. Source comparison passed
+17 pin assignments, five logic references and ordered firmware GPIOs/UART.
+Preservation checks passed: original history and both HIL records remain
+byte-for-byte outside new addenda; all 1,281 other snapshotted evidence files
+are unchanged. Exactly four permitted documentation files changed, staging
+empty; reconciliation links/anchors and final `git diff --check` passed.
+
+The dated entries below retain their original validation and historical gap
+wording; use Resume Here and the reconciliation for the current disposition.
 
 Automatic-only Enhanced USB reconnect HIL, 2026-10-27: clean latest pushed
 `14e6717` verified independently. Fresh gate **1,569 passed in 47.60 s**, Ruff,

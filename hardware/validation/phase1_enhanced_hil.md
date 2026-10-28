@@ -4,6 +4,20 @@ This record preserves the historical Enhanced runs, the current-contract HIL,
 and its preflight audit below. Phase and next-step ownership remain in
 `docs/development_status.md`.
 
+## Evidence Reconciliation Addendum — 2026-10-28
+
+The [Revision A reconciliation](phase1_revision_a.md#phase-1b-evidence-reconciliation--2026-10-28)
+audits the combined accepted evidence at pushed `9ff33c1` against normative
+§§11/34/35. Enhanced workflow criteria, including explicit handoff/control and
+automatic USB reconnect/control, are satisfied across the retained runs. Two
+§34 evidence gaps remain: adopted 10 kOhm helper-input correction consistency
+and prototype UART electrical signal-integrity measurements. The wider historical
+parts/continuity, cable/passive, absolute-leakage, transient/isolation and ESD
+gap lists below must be read with that item-by-item reconciliation; they are
+not additional acceptance criteria. No old run or measurement is amended, and
+no hardware was accessed. Phase 1B remains incomplete; current work belongs in
+Development Status.
+
 ## Automatic Pico 2 USB Reconnect HIL: Passed — 2026-10-27
 
 **The current Enhanced unexpected USB reconnect criterion passed.** This run
