@@ -4,6 +4,54 @@ This record preserves the historical Enhanced runs, the current-contract HIL,
 and its preflight audit below. Phase and next-step ownership remain in
 `docs/development_status.md`.
 
+## Accepted Rev A Pull-Up Closure — 2026-10-28
+
+**Physical blocker #1 is Satisfied.** The
+[accepted as-built closure](phase1_revision_a.md#revision-a-10-kω-pull-up-accepted-as-built-closure--2026-10-28)
+records the operator-confirmed **10 kΩ axial leaded resistor**, measured
+approximately **9.9 kΩ**, connected by jumper wire as
+**DUT_VIO (J3 pin 8) ↔ 10 kΩ ↔ DUT_UART_TX (J1 pin 4)**. The incorrect
+11.88 kΩ part has been replaced; its earlier result remains unchanged.
+Both repository EAGLE sources place J1 pin 4 on the DUT-side R16 node, so the
+Rev A rework is **before R16**. Future KiCad **after-R16** intent is outside
+this repository and supplies no Rev A acceptance evidence.
+
+This supersedes the older open/pending pull-up dispositions below without
+rewriting any run or measurement. **Only UART electrical signal-integrity/
+oscilloscope evidence remains open for Phase 1B.** Phase 1B/Stage 8/Phase 1
+remain incomplete. No hardware or scope work was performed; firmware, software,
+tests and PCB design were not modified.
+
+## Replacement Pull-Up Follow-Up — 2026-10-28
+
+The operator reports the incorrect 11.88 kOhm external part has been replaced
+by nominal 10 kOhm, measured approximately 9.9 kOhm with power removed. The
+[final replacement/as-built check](phase1_revision_a.md#revision-a-replacement-pull-up-final-as-built-check--2026-10-28)
+keeps that component history separate from final endpoint/R16 verification.
+Isolated 9.9 kOhm is now confirmed; later A→B is 9.91 kOhm and R16 pads 2→3
+measure 22.4 Ohm. Operator clarifies the initially duplicated A→R16 entries
+as A→pad 2 9.91 kOhm and A→pad 3 9.94 kOhm; direct endpoint/input results
+remain missing. A later 9.45 kOhm response was clarified as J3 pin 8→J1 pin 4,
+not a direct supply-contact measurement or a verified contact failure. Probing
+is paused for physical-point identification; both physical blockers remain open. Accepted
+Rev A's expected pull-up is before R16; future KiCad after-R16 intent supplies
+no evidence for this check. Historical measurements and HIL sections below
+remain unchanged; the removed 11.88 kOhm part is not acceptance evidence.
+
+## Revision A Pull-Up Interpretation Correction — 2026-10-28
+
+The [operator-guided as-built check](phase1_revision_a.md#revision-a-external-uart-pull-up-as-built-verification--2026-10-28)
+distinguishes the operator-declared accepted Revision A external pull-up on the
+**DUT side before R16** from the **future KiCad after-R16** placement, whose
+design is outside this repository. Earlier “helper-side” wording described an
+input-bias function and must not establish physical placement after R16 on
+Revision A. The isolated external resistor measured **11.88 kOhm** on the
+operator's Themisto TH-M100 with the DUT-TX-side lead unplugged and all power
+removed. No safe R16/receiver-side probe access was available, so the check
+stopped without endpoint/R16 confirmation or acceptance of the nominal 10 kOhm
+value. Blocker #1 and the UART electrical signal-integrity blocker both remain
+open. All historical runs and measurements below are unchanged.
+
 ## Evidence Reconciliation Addendum — 2026-10-28
 
 The [Revision A reconciliation](phase1_revision_a.md#phase-1b-evidence-reconciliation--2026-10-28)

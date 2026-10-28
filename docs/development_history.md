@@ -9,6 +9,215 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Rev A 10 kΩ Pull-Up Documentation Blocker Closed — 2026-10-28
+
+- Worked on existing `validation/phase1b-revision-a` at `4c87383`, preserving
+  all prior unstaged documentation. Applied the operator-confirmed final
+  as-built facts: **10 kΩ axial leaded resistor**, approximately **9.9 kΩ**
+  measured, connected through jumper wire exactly as **DUT_VIO (J3 pin 8)
+  ↔ 10 kΩ ↔ DUT_UART_TX (J1 pin 4)**. The old **11.88 kΩ** component was
+  incorrect and replaced; its recorded readings were not reinterpreted.
+- Fresh XML checks of the accepted EAGLE schematic and board confirm
+  J1 pin 4/R16 pad 2 on DUT_UART_TX, R16 pad 3/U1.B2 (pin 1) on UART_TX,
+  and J3 pin 8 on VCC/DUT_VIO. Together with the operator-confirmed endpoints,
+  this establishes the Rev A **before-R16** rework without additional physical
+  checks. Future KiCad **after-R16** placement remains outside the repository
+  and outside Rev A acceptance evidence.
+- Marked physical blocker #1 **Satisfied**. Only prototype UART electrical
+  signal-integrity/oscilloscope evidence remains; Phase 1B/Stage 8/Phase 1
+  remain incomplete. Added explicit superseding closure notes while retaining
+  every earlier physical/HIL/history section byte-for-byte. No unreported
+  jumper-contact or pad-to-input meter result was invented.
+- Four permitted documentation files only; no hardware access, scope work,
+  source/test/firmware or PCB design changes. All changes unstaged/uncommitted.
+- Fresh offline gate using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen --offline pytest -q --tb=line`: **1,569 passed in 46.68 s**;
+  Ruff passed; mypy passed/103 source files; lock check passed/66 packages.
+  XML mapping, closure links/anchors, branch/four-file scope, empty staging and
+  `git diff --check` passed. Every prior physical/HIL/history section and dated
+  status validation record remains byte-for-byte outside new closure additions;
+  all 1,281 other snapshotted files unchanged. Complete diff retained for review;
+  no commit or push performed.
+
+## Revision A DUT_VIO Attachment Identified As Jumper Wire — 2026-10-28
+
+- Operator identifies a jumper wire between the resistor supply end and J3
+  pin 8. Adapted the requested power-off direct check to the installed
+  resistor lead→jumper/contacts→J3 pin 8 path; no numeric result supplied yet.
+  Earlier 9.45 kOhm remains J3 pin 8→J1 pin 4, not this direct path.
+
+## Revision A 9.45 kOhm Probe Locations Clarified — 2026-10-28
+
+- In reply to the requested supply-contact check, operator reported **9.45 kOhm**.
+  Physical checks were paused to identify the probe locations before treating
+  this as a connection result. Operator then explicitly identified the probes
+  as **J3 pin 8 and J1 pin 4**, not the resistor supply lead and J3 pin 8.
+- Retained 9.45 kOhm as the actual connector-to-connector installed-circuit
+  reading. It is not a measured failed supply contact; no fault or explanation
+  of its difference from the isolated value is inferred. The four requested
+  direct endpoint/node/input results remain missing and blocker #1 stays open.
+- Asked only whether two separate supply-contact surfaces can be identified/
+  accessed with the resistor installed, keeping power removed. No further
+  probing was requested while that identification remains unclear. No powered
+  or scope work, firmware, software, test or PCB design change occurred.
+
+## Revision A Lead Baseline And Replacement Connector Locations Reported — 2026-10-28
+
+- Operator reports **shorted probes 0.1 Ohm** and identifies the replacement
+  as connected between **DUT_VIO/J3 pin 8** and **DUT_UART_TX/J1 pin 4**.
+  The resistor was unplugged at the J3 pin 8 end for a reported **9.90 kOhm**
+  reading, retained as an isolated value measurement rather than an endpoint
+  connection-resistance result.
+- The 22.4 Ohm reading across R16 is distinct from the 0.1 Ohm lead baseline.
+  Direct endpoint/node/input readings remain missing. Requested only the next
+  supply-end connection check, with the resistor restored, all power removed
+  and both probes on the supply-side connection. No endpoint pass or full
+  topology closure was inferred; blocker #1 stays open.
+
+## Revision A A/B Definitions And R16 Reading Labels Clarified — 2026-10-28
+
+- Operator clarified/corrected the existing measurements as **A→R16 pad 2
+  9.91 kOhm** and **A→R16 pad 3 9.94 kOhm**. The original duplicated
+  A→R16 9.94 kOhm report is preserved in its earlier entry and raw-reading
+  table; no inferred pad assignment or silent correction was made.
+- Operator asked for the A/B definitions again. Restated A as the resistor
+  supply lead unplugged for the isolated 9.9 kOhm measurement, and B as the
+  other lead intended for DUT TX before R16. Requested power-off direct checks
+  one step at a time, starting with shorted probes and A→DUT_VIO.
+  No direct endpoint/node/input reading was supplied; blocker #1 stayed open.
+
+## Revision A Replacement Isolation And Partial Resistance Results — 2026-10-28
+
+- Operator explicitly confirmed the replacement's **own supply-side lead was
+  unplugged** for the **9.9 kOhm** reading. This confirms the isolated nominal
+  10 kOhm value requirement; old 11.88 kOhm remains the replaced incorrect part.
+- In reply to power-off installed-connection instructions, operator reported
+  **A→B 9.91 kOhm**, **A→R16 UART-TX 9.94 kOhm** twice with identical labels,
+  and **R16 pad 2→pad 3 22.4 Ohm**. All readings are retained exactly; the two
+  A→R16 entries are not assigned to different pads by inference.
+- No shorted-probe or direct A→DUT_VIO, B→J1 pin 4, J1 pin 4→R16 pad 2,
+  or R16 pad 3→U1.B2 result was supplied. Requested clarification of readings
+  already taken, with further probing paused for the ambiguous labels.
+  Blocker #1 remains open pending topology proof; the UART electrical
+  signal-integrity blocker remains open. No powered/scope run or source,
+  firmware, test or PCB design change occurred.
+
+## Revision A Replacement Meter Display And Probe Access Confirmed — 2026-10-28
+
+- Operator confirmed all three requested R16/receiver probe points accessible
+  and replacement display **9.9 kOhm**, stating “DUT_VIO was removed for the
+  measurement” and everything else remained the same. The unchanged setup
+  retains the previously identified Themisto TH-M100 and removed power sources.
+- Asked whether the resistor supply-side lead itself was unplugged or only
+  the board supply wire, rather than inferring isolated measurement. Requested
+  actual numeric readings for shorted probes, both replacement endpoints,
+  DUT-TX-node/R16-pad and R16-pad/U1.B2 connectivity, and across R16.
+  No endpoint or R16 result was reported in this reply; blocker #1 remains open.
+- Earlier access-limited and 11.88 kOhm records remain unchanged. The former
+  access limit is superseded by this report; it is not retrospectively treated
+  as a successful topology measurement. No powered/oscilloscope run or source,
+  firmware, test or PCB design change occurred.
+
+## Revision A Pull-Up Replacement Report And Final-Check Preparation — 2026-10-28
+
+- On the existing `validation/phase1b-revision-a` branch at `4c87383`, the
+  operator explicitly identified the old 11.88 kOhm resistor as incorrect,
+  replaced by intended nominal 10 kOhm, measured approximately **9.9 kOhm**
+  with all power removed. The old reading remains unchanged and is excluded
+  from final-part acceptance evidence.
+- Added a separate final-check record for the replacement. No installed
+  endpoint, R16 relationship or absence of a bridge was inferred from the
+  reported replacement value or expected diagram. Asked whether the previously
+  inaccessible R16 pads/receiver net can now be reached safely, and requested
+  the replacement measurement's isolation method, meter and displayed reading.
+- Preserved all prior unstaged physical/HIL/history sections unchanged.
+  Follow-up snapshot covers 1,285 local files, including those existing pending
+  records. Final checks remain unestablished; blocker #1 and the UART electrical
+  signal-integrity blocker remain open. No scope measurements, product code,
+  tests, firmware or PCB design changed. Changes remain unstaged/uncommitted.
+- Fresh follow-up documentation checks passed: all pre-follow-up physical/HIL/
+  history sections preserved byte-for-byte outside new additions; all 1,281
+  other snapshot files unchanged. Branch/four-file scope, empty staging,
+  new local links/anchors and `git diff --check` passed. No physical pass is
+  inferred; actual endpoint/R16 outcomes remain unestablished.
+
+## Revision A Pull-Up Check Stopped: Value And Access Not Verified — 2026-10-28
+
+- Operator confirmed all power connections removed and reported **11.88 kOhm**
+  measured directly across the external resistor after unplugging its
+  **DUT-TX-side lead**, using the previously identified Themisto TH-M100.
+  This is 18.8% above 10 kOhm; no marking/tolerance, range, calibration or
+  independent reference establishes an explanation. The reading is preserved
+  exactly and is not accepted as confirmation of nominal 10 kOhm.
+- The earlier 0.0 V readings and operator identification of DUT_VIO as supply
+  remain applicable. No endpoint-continuity readings were supplied. Operator
+  reports no safe access to R16 pads or an alternative receiver-net point.
+  R16's presence between the bias node and receiver input was not physically
+  established. Source-file mapping was not substituted for that missing result.
+- Applied the requested stop rule: blocker #1 remains required/open; no further
+  physical checks or oscilloscope/UART signal-integrity work followed. Both
+  physical blockers and Phase 1B/Stage 8/Phase 1 incompleteness remain. No
+  resistor relocation/replacement, soldering, firmware, product code, tests or
+  hardware design changed. Restoration of the temporary disconnected lead has
+  not been reported and is not assumed.
+- Updated only the four permitted documentation files, unstaged/uncommitted.
+  Earlier historical entries remain intact. The preparation software gate
+  recorded below remains the only software run for this documentation slice;
+  no source/test changes followed it. Fresh documentation checks passed:
+  baseline historical sections byte-for-byte outside the additions; all 1,281
+  other snapshot files unchanged; exactly four allowed documentation files;
+  staging empty; new local links/anchors and `git diff --check` passed.
+  Complete diff retained for review.
+
+## Revision A Pull-Up Initial Operator Meter Report — 2026-10-28
+
+- Operator reported both requested DC readings as **0.0 V**: external pull-up
+  supply node to GND and DUT_VIO to GND. Meter identified as **Themisto TH-M100**;
+  exact measurement time, range and calibration status were not supplied.
+- Operator identified DUT_VIO as the pull-up supply and confirmed the external
+  resistor is accessible/removable without soldering. R16 UART-TX pads could
+  not be accessed. No resistor-value or endpoint-continuity reading was reported.
+- Requested an isolated resistor reading and explicit power-disconnection
+  confirmation; asked whether U1.B2 or an exposed receiver-net point is safely
+  accessible for an alternative R16 check. No alternative access was presumed,
+  no hardware change was requested and blocker #1 remained open. The initial
+  voltage readings were recorded without inferring resistance, wiring or placement.
+
+## Revision A Pull-Up Check Preparation And Interpretation Correction — 2026-10-28
+
+- Created `validation/phase1b-revision-a` from clean updated main
+  `4c87383038377401da785fdf22a5527031e8f97c`, verified against pushed main by
+  read-only HTTPS lookup. No commit, staging or push was performed.
+- The operator corrected the as-built interpretation: accepted Rev A has an
+  external 10 kOhm pull-up from 3.3 V to DUT TX before R16; future KiCad intent
+  moves it after R16 and is outside the repository. Added an explicit note
+  separating these configurations without rewriting historical measurements
+  or treating this declaration as newly measured evidence.
+- Source inspection of the preserved EAGLE schematic/board identifies the
+  candidate probe nodes: J1 pin 4/R16 pad 2 is DUT_UART_TX; R16 pad 3/U1 pin 1
+  (B2) is UART_TX. This establishes source references only. A continuity beep
+  cannot establish which side of a nominal 22 Ohm resistor carries the rework;
+  the prepared record calls for numeric readings and shorted-probe comparison.
+- Requested operator confirmation of disconnected supplies/accessories,
+  residual DC voltages, meter identity, physical rail source and accessible
+  terminals before resistance checks. No physical readings have been supplied;
+  blocker #1 was kept open. The separate UART electrical signal-integrity
+  blocker and overall Phase 1B incompleteness are unchanged.
+- Preservation snapshot captured 1,285 local validation/evidence/status files.
+  Fresh offline preparation gate with
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen --offline pytest -q --tb=line`: **1,569 passed in 47.03 s**;
+  Ruff passed; mypy passed/103 files; lock passed/66 packages.
+- Preservation and documentation checks passed: original history/validation
+  content is byte-for-byte outside new sections; all 1,281 other snapshot files
+  unchanged; four permitted documentation files only; staging empty; new local
+  links/anchors and `git diff --check` passed. Physical verification remains
+  pending and no bench criterion was marked passed. Changes remain unstaged
+  and uncommitted. No firmware,
+  product software, tests, hardware design, runtime/serial access, oscilloscope
+  measurement or physical rework was performed by the agent.
+
 ## Phase 1B Evidence Reconciliation Audit — 2026-10-28
 
 - Started with a clean tracked tree at `9ff33c10858d5e040688e895b9d201cae70bcf71`,

@@ -18,6 +18,7 @@
 > Enhanced control fix base: `90c744fe97ed3af2224989a954261bef42797b45`; accepted fix/focused HIL baseline: `6d0c1a87b8867d6ea0741b90a9e6d90cb9fc7ce8`; focused HIL documentation: `df8e7a6` (pushed)
 > Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (pushed code/HIL baseline on `fix/enhanced-terminal-read-cleanup`)
 > Pushed evidence-audit baseline: `9ff33c10858d5e040688e895b9d201cae70bcf71` (automatic USB reconnect HIL documentation; independently verified by HTTPS remote lookup)
+> Revision A pull-up validation base: `4c87383038377401da785fdf22a5527031e8f97c` (updated pushed `main`); working branch `validation/phase1b-revision-a`
 > Documentation state reviewed: 2026-10-28
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -28,43 +29,38 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Evidence reconciliation at pushed `9ff33c1` leaves
-  **two §34 acceptance gaps**: adopted 10 kΩ helper-input correction consistency
-  and prototype UART electrical signal-integrity measurements. Phase 1A remains
-  Complete/accepted; Phase 1B, Stage 8 and overall Phase 1 remain incomplete.
-- **Closed workflows:** Reuse `20261027T114440Z-7db24eae` for continuous RX,
-  first bytes, Monitor/Interact/follow/console, boot control, v2 timestamps,
-  telemetry and retrieval; `20261027T165848Z-b9a62f0b` for explicit handoff and
-  immediate reset; `20261027T180121Z-9ea027ae` for automatic USB reconnect,
-  fresh CTRL1/CTRL0 ACKs and immediate reset within unchanged 5.0 s policy.
-  Retain `accepted_32k`, reconciled overflow and accepted Basic evidence.
-- **Minimum physical work:** (1) Identify/document the accepted prototype's
-  installed helper-side 10 kΩ bias, endpoints/value and relation to R16; reconcile
-  the as-built schematic/BOM record with the accepted after-R16 correction.
-  (2) Record both UART directions' electrical levels/edges, settling and
-  overshoot/undershoot/ringing at 460800 baud on that accepted setup, assessed
-  against adopted-device limits. Record actual cabling/probes/instrument.
-  No hardware was accessed or design changed during this audit. If the bias
-  differs/is absent, resolve corrected-evidence applicability before closure.
-- **Deferred, non-blocking:** Independent populated-part/full-BOM inspection,
-  exhaustive board continuity, multi-length/load/passive optimization,
-  calibrated absolute/per-pin leakage, extended transient/power/cable matrices,
-  ESD characterization and Phase 5 EVENT capture. None is claimed measured.
-  Source mapping/logic consistency, recorded leakage, settled sequencing,
-  loaded isolation, voltage levels and control safe states already satisfy
-  their bounded prototype requirements. A discovered mismatch needs review.
-- **Next step:** Review the unstaged reconciliation, then obtain only the two
-  missing evidence items above. Do not repeat passed host workflows, ring-buffer
-  stress or Basic HIL. Do not mark Phase 1B complete until both are resolved.
-- **Audit/validation:** Normative §§11/34/35 checked against retained physical,
-  firmware/ring-buffer and current HIL records; classifications and evidence
-  are in the [Revision A reconciliation](../hardware/validation/phase1_revision_a.md#phase-1b-evidence-reconciliation--2026-10-28).
-  Documentation preservation and final validation results are recorded below.
-  All historical run sections remain unchanged; no product/test/firmware/design
-  or acceptance-criteria changes. Changes remain unstaged and uncommitted.
-- **Other boundaries:** Basic anomaly remains non-blocking; Phase 4 paused and
-  MCP deferred. Historical failed Enhanced runs remain evidence, superseded
-  only by the later successful explicit/automatic paths for those criteria.
+- **Current milestone:** Rev A 10 kΩ pull-up documentation blocker #1 is
+  **Satisfied** on `validation/phase1b-revision-a` (base main `4c87383`).
+  Closure uses operator-confirmed installed endpoints, measured replacement
+  value and the accepted repository schematic/board mapping.
+- **Accepted as-built:** A nominal **10 kΩ axial leaded resistor** is attached
+  by jumper wire exactly as **DUT_VIO (J3 pin 8) ↔ 10 kΩ ↔ DUT_UART_TX
+  (J1 pin 4)**. Replacement measures approximately **9.9 kΩ**; isolated
+  9.90 kΩ is recorded. Incorrect 11.88 kΩ component has been replaced and is
+  retained only as historical evidence of the removed part.
+- **R16 relationship:** Both EAGLE sources confirm J1 pin 4/R16 pad 2 on
+  DUT_UART_TX, then R16 pad 3/U1.B2 (pin 1) on UART_TX. The installed Rev A
+  pull-up is **before R16**. Future KiCad after-R16 placement is outside this
+  repository and is not Rev A acceptance evidence. No design file changed.
+- **Only remaining Phase 1B blocker:** Prototype UART electrical signal-
+  integrity/oscilloscope evidence. Phase 1A stays Complete; Phase 1B, Stage 8
+  and Phase 1 remain incomplete. No additional pull-up continuity check is
+  required for this documentation closure, and no missing meter result is
+  represented as measured.
+- **Next step:** Review these unstaged closure documents. The next acceptance
+  slice is the remaining prototype UART electrical signal-integrity evidence;
+  no oscilloscope or hardware work is performed in this slice.
+- **Closed evidence:** Retain Basic acceptance, `accepted_32k`/overflow and
+  Enhanced continuous/Monitor/Interact/follow/console/control/telemetry/retrieval,
+  explicit handoff and automatic USB reconnect passes. No workflow/stress repeat.
+- **Deferred, non-blocking:** Full parts/BOM inspection, exhaustive continuity,
+  wider cable/load/passive qualification, calibrated absolute leakage,
+  transient matrices, ESD characterization and Phase 5 EVENT capture unchanged.
+- **Evidence/validation:** The [accepted as-built closure](../hardware/validation/phase1_revision_a.md#revision-a-10-kω-pull-up-accepted-as-built-closure--2026-10-28)
+  supersedes earlier open/pending interpretations while preserving historical
+  readings and HIL. Four permitted documentation files only, unstaged and
+  uncommitted. Final validation and preservation results are recorded below.
+- **Other boundaries:** Basic anomaly non-blocking; Phase 4 paused; MCP deferred.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -80,7 +76,7 @@ demonstrated again against the new normative done criteria.
 
 | Area | Current baseline | Phase 1 v2 status |
 |---|---|---|
-| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Basic v2 accepted; Enhanced workflows passed, two §34 hardware-evidence gaps remain |
+| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Basic v2 accepted; Enhanced workflows and Rev A pull-up accepted; only prototype UART electrical signal-integrity evidence remains |
 | DUT Profile and effective serial provenance | One immutable resolved profile owns backend, selector/topology, UART policy, DTR/RTS request, GPIO config, projection, and digest | Stage 1 complete; exposed through runtime/service/CLI status without v2 storage |
 | Native session schema v2 | Deterministic v2 store/recovery/retrieval/retention is implemented | Stage 2 complete; production runtime ownership adopted in Stage 3 |
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
@@ -106,7 +102,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced workflows passed; only adopted-correction consistency and prototype UART electrical signal-integrity evidence remain open |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced workflows and physical blocker #1 satisfied; only prototype UART electrical signal-integrity/oscilloscope evidence remains open |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -117,7 +113,7 @@ progress; it does not redefine either document.
 
 - Broader Revision A assembly/continuity, cable/passive, absolute-leakage,
   transient and ESD qualification remains deferred and non-blocking under the
-  reconciled §34 contract. The two actual acceptance gaps are listed above.
+  reconciled §34 contract. The sole remaining physical acceptance gap is listed above.
 - Phase 4 Debug Agent evidence packaging remains paused after VS Code host
   acceptance; authenticated Claude Code host validation remains unavailable.
 - Public `dutchmate-debug-agent` distribution remains deferred to `v0.2.0`.
@@ -129,10 +125,77 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Workflow criteria passed; adopted 10 kΩ correction consistency and prototype UART electrical signal-integrity measurements remain open (§34) |
-| Phase 1 shared done criteria | Shared §35 behavioral criteria supported by accepted software/HIL; overall completion awaits the two §34 Phase 1B evidence gaps |
+| Phase 1B — Enhanced | Workflow criteria and physical blocker #1 satisfied; only prototype UART electrical signal-integrity/oscilloscope evidence remains open (§34) |
+| Phase 1 shared done criteria | Shared §35 behavioral criteria supported by accepted software/HIL; overall completion awaits the sole remaining §34 UART electrical signal-integrity gate |
 
 ## Current Validation Requirements
+
+Rev A pull-up documentation closure, 2026-10-28: blocker #1 **Satisfied** using
+operator-confirmed nominal 10 kΩ axial leaded resistor, approximately 9.9 kΩ
+measured, attached by jumper wire as DUT_VIO (J3 pin 8) ↔ 10 kΩ ↔ DUT_UART_TX
+(J1 pin 4). Incorrect 11.88 kΩ part replaced; previous measurements retained.
+Fresh XML inspection of both accepted EAGLE sources confirms J1 pin 4→R16
+pad 2, and R16 pad 3→U1.B2/pin 1. The Rev A pull-up is before R16; future
+KiCad after-R16 intent is outside this repository. No additional physical
+continuity check is needed to establish this documented relationship. No
+unreported contact measurement or new hardware result is claimed. Only UART
+electrical signal-integrity/oscilloscope acceptance remains open; Phase 1B
+is incomplete. Four allowed docs only, unstaged/uncommitted; no hardware access,
+oscilloscope work, software/test/firmware or PCB design changes.
+Fresh offline gate: **1,569 passed in 46.68 s**; Ruff passed; mypy passed/103
+source files; lock check passed/66 packages. XML mapping, new links/anchors,
+branch/four-file scope, empty staging and `git diff --check` passed. Removing
+only the new closure additions reproduces every prior physical/HIL/history
+section byte-for-byte; earlier dated status validation records and all 1,281
+other snapshotted files remain unchanged. Complete working-tree diff retained
+for review; no commit or push performed.
+
+The dated entries below preserve earlier readings and dispositions. The current
+as-built closure above supersedes their open/pending pull-up interpretations;
+it does not rewrite their historical measurement results.
+
+Rev A replacement follow-up, 2026-10-28: current validation branch remains at
+`4c87383` with prior unstaged documentation preserved. Operator identifies the
+11.88 kΩ part as incorrect and replaced, and reports nominal 10 kΩ replacement
+measured approximately 9.9 kΩ, power removed. Final endpoint, pad/input and
+R16 non-bridge measurements are not supplied. The operator now confirms all
+three R16/receiver points accessible and the resistor's own supply lead unplugged
+for the 9.9 kΩ reading, setup otherwise unchanged. Further report: A→B 9.91 kΩ,
+two initially unspecified A→R16 entries 9.94 kΩ each, R16 pads 2→3 22.4 Ω.
+Operator subsequently clarifies A→pad 2 9.91 kΩ and A→pad 3 9.94 kΩ; earlier
+reports are retained. Subsequent shorted probes read 0.1 Ω; latest isolated
+value 9.90 kΩ with the J3 pin 8 resistor lead unplugged. Operator identifies
+installed endpoints as J3 pin 8/J1 pin 4. Value accepted; four direct endpoint/
+node/U1.B2 readings remain missing. The A→DUT_VIO connection check is being
+guided with the resistor restored, power removed and both probes on that
+supply-side connection. Its reply 9.45 kΩ was clarified as J3 pin 8→J1 pin 4,
+so no direct supply-contact result exists. Physical probing is paused while
+separate access to the correct two contact surfaces is clarified; no fault
+is inferred from the connector-to-connector reading. Both blockers remain
+open. Follow-up preservation snapshot includes the prior unstaged stopped-check
+and history sections. Fresh documentation checks passed: all pre-follow-up
+physical/HIL/history sections remain byte-for-byte outside new additions;
+1,281 other snapshot files unchanged; four-file scope/staging/link/diff checks
+passed. No software/hardware run or design change performed for this follow-up.
+No physical acceptance is inferred from these documentation checks.
+
+Revision A pull-up check, 2026-10-28: `validation/phase1b-revision-a` starts
+from clean main `4c87383`, independently verified pushed before branch creation.
+Themisto TH-M100 operator readings: pull-up supply→GND 0.0 V; DUT_VIO→GND
+0.0 V; isolated external resistor **11.88 kΩ**, with DUT-TX-side lead unplugged
+and all power connections removed. Operator identifies supply as DUT_VIO.
+No numeric endpoint-continuity result; R16 pads and receiver-side alternatives
+are not safely accessible. Physical check stopped, blocker #1 kept open; scope
+work not performed. No resistor replacement or firmware/product/test/design
+change; restoring the disconnected lead has not been reported. Nominal value,
+marking/tolerance and exact R16 relationship remain unverified.
+Preparation software gate (before these later operator replies): **1,569 passed
+in 47.03 s**; Ruff passed; mypy passed/103 source files; offline lock passed/66
+packages. No source/test changes followed; these software results are not a
+physical pass. Fresh final documentation checks passed: baseline historical
+sections preserved byte-for-byte outside new additions; all 1,281 other snapshot
+files unchanged; exactly four allowed documentation files, staging empty;
+new links/anchors and `git diff --check` passed. Complete diff retained for review.
 
 Evidence-only reconciliation, 2026-10-28: clean `9ff33c1` matched the pushed
 branch by independent HTTPS lookup (SSH authentication unavailable). No hardware
