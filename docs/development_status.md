@@ -19,7 +19,8 @@
 > Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (pushed code/HIL baseline on `fix/enhanced-terminal-read-cleanup`)
 > Pushed evidence-audit baseline: `9ff33c10858d5e040688e895b9d201cae70bcf71` (automatic USB reconnect HIL documentation; independently verified by HTTPS remote lookup)
 > Revision A pull-up validation base: `4c87383038377401da785fdf22a5527031e8f97c` (updated pushed `main`); working branch `validation/phase1b-revision-a`
-> Documentation state reviewed: 2026-10-28
+> KiCad source-review baseline: `e8ce97c` on `hardware/kicad-schematic-review-20261028`; manual corrections and review cleanup remain uncommitted
+> Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -29,37 +30,37 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Rev A 10 kΩ pull-up documentation blocker #1 is
-  **Satisfied** on `validation/phase1b-revision-a` (base main `4c87383`).
-  Closure uses operator-confirmed installed endpoints, measured replacement
-  value and the accepted repository schematic/board mapping.
-- **Accepted as-built:** A nominal **10 kΩ axial leaded resistor** is attached
-  by jumper wire exactly as **DUT_VIO (J3 pin 8) ↔ 10 kΩ ↔ DUT_UART_TX
-  (J1 pin 4)**. Replacement measures approximately **9.9 kΩ**; isolated
-  9.90 kΩ is recorded. Incorrect 11.88 kΩ component has been replaced and is
-  retained only as historical evidence of the removed part.
-- **R16 relationship:** Both EAGLE sources confirm J1 pin 4/R16 pad 2 on
-  DUT_UART_TX, then R16 pad 3/U1.B2 (pin 1) on UART_TX. The installed Rev A
-  pull-up is **before R16**. Future KiCad after-R16 placement is outside this
-  repository and is not Rev A acceptance evidence. No design file changed.
-- **Only remaining Phase 1B blocker:** Prototype UART electrical signal-
-  integrity/oscilloscope evidence. Phase 1A stays Complete; Phase 1B, Stage 8
-  and Phase 1 remain incomplete. No additional pull-up continuity check is
-  required for this documentation closure, and no missing meter result is
-  represented as measured.
-- **Next step:** Review these unstaged closure documents. The next acceptance
-  slice is the remaining prototype UART electrical signal-integrity evidence;
-  no oscilloscope or hardware work is performed in this slice.
-- **Closed evidence:** Retain Basic acceptance, `accepted_32k`/overflow and
-  Enhanced continuous/Monitor/Interact/follow/console/control/telemetry/retrieval,
-  explicit handoff and automatic USB reconnect passes. No workflow/stress repeat.
-- **Deferred, non-blocking:** Full parts/BOM inspection, exhaustive continuity,
-  wider cable/load/passive qualification, calibrated absolute leakage,
-  transient matrices, ESD characterization and Phase 5 EVENT capture unchanged.
-- **Evidence/validation:** The [accepted as-built closure](../hardware/validation/phase1_revision_a.md#revision-a-10-kω-pull-up-accepted-as-built-closure--2026-10-28)
-  supersedes earlier open/pending interpretations while preserving historical
-  readings and HIL. Four permitted documentation files only, unstaged and
-  uncommitted. Final validation and preservation results are recorded below.
+- **Current milestone:** KiCad Rev-A schematic/source review is complete on
+  `hardware/kicad-schematic-review-20261028` (source baseline `e8ce97c`).
+- **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
+  uses one 2×8 J1, hardware-defined TMUX2819 sense isolation, an after-RN5A
+  10 kΩ UART pull-up to DUT_VIO, and corrected data/enable/OE bias networks.
+  This is design-source verification, not hardware or fabrication acceptance.
+- **Manual hardware work:** The hardware designer handles PCB layout/routing,
+  DFM, fabrication preparation, Gerber review and manufacturing submission
+  outside the agent workflow; no repository-driven PCB/DFM task or gate.
+- **Accepted prototype unchanged:** Historical EAGLE/as-built pull-up blocker
+  #1 stays **Satisfied**: nominal 10 kΩ axial resistor/jumper from DUT_VIO
+  (J3 pin 8) to DUT_UART_TX (J1 pin 4), measured approximately 9.9 kΩ.
+  That installed pull-up is **before historical R16**. The KiCad implementation
+  does not replace or extend its acceptance evidence.
+- **Historical EAGLE gap:** UART signal-integrity/oscilloscope evidence remains
+  unresolved; no further prototype testing is planned. Collect equivalent UART
+  evidence on manufactured KiCad Rev-A boards. Phase 1A stays Complete;
+  Phase 1B, Stage 8 and Phase 1 remain incomplete until required current-board
+  physical validation is performed and accepted.
+- **Next step:** Wait for manufactured KiCad Rev-A PCBs. Once boards are
+  physically available, run fresh physical Rev-A validation adapted to the
+  corrected KiCad implementation and the README's validation categories.
+- **Evidence boundary:** EAGLE results guide procedures only; the manufactured
+  KiCad board requires its own physical evidence and acceptance assessment.
+- **GP28 firmware boundary:** ADC sensing is not implemented; no ADC channel
+  setup or explicit digital-input-buffer configuration exists for GP28.
+  Future ADC use must disable that buffer. Firmware remains unchanged.
+- **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
+- **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
+- **Documentation checks:** Scope/preservation, links and diff checks passed.
+  Prior source/test results remain dated evidence; no hardware, commit or push.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 paused; MCP deferred.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -76,7 +77,7 @@ demonstrated again against the new normative done criteria.
 
 | Area | Current baseline | Phase 1 v2 status |
 |---|---|---|
-| Basic and Enhanced physical adapters | Existing backend, protocol, firmware, and HIL evidence is reusable | Basic v2 accepted; Enhanced workflows and Rev A pull-up accepted; only prototype UART electrical signal-integrity evidence remains |
+| Basic and Enhanced physical adapters | Existing backend/protocol/firmware baseline and historical EAGLE evidence retained; KiCad physical acceptance requires fresh evidence | Basic v2 accepted; historical Enhanced workflows/pull-up evidence retained; Phase 1B awaits manufactured KiCad Rev-A physical validation |
 | DUT Profile and effective serial provenance | One immutable resolved profile owns backend, selector/topology, UART policy, DTR/RTS request, GPIO config, projection, and digest | Stage 1 complete; exposed through runtime/service/CLI status without v2 storage |
 | Native session schema v2 | Deterministic v2 store/recovery/retrieval/retention is implemented | Stage 2 complete; production runtime ownership adopted in Stage 3 |
 | Continuous ambient evidence recording | One core recorder owns backend receive, durable admission, projections, reconnect transfer, and shutdown/fault terminalization | Stage 3 complete |
@@ -102,7 +103,7 @@ the new contract.
 | 5 — audited TX, Interact, Control | Complete | Atomic-capability review committed at `857261b` |
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
-| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Enhanced workflows and physical blocker #1 satisfied; only prototype UART electrical signal-integrity/oscilloscope evidence remains open |
+| 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Phase 1B awaits fresh manufactured KiCad Rev-A physical validation, including UART oscilloscope evidence; legacy EAGLE UART gap remains historically unresolved |
 | Post-Phase-1 MCP migration | Deferred | After Phase 1 CLI/HIL acceptance |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
@@ -111,9 +112,11 @@ progress; it does not redefine either document.
 
 ## Deferred Work Outside the Active Slice
 
-- Broader Revision A assembly/continuity, cable/passive, absolute-leakage,
-  transient and ESD qualification remains deferred and non-blocking under the
-  reconciled §34 contract. The sole remaining physical acceptance gap is listed above.
+- No further physical validation of the historical EAGLE prototype is planned,
+  including its unresolved UART oscilloscope gap and broader qualification.
+  Equivalent UART evidence and the other applicable electrical categories belong
+  to manufactured KiCad Rev-A validation once boards are available, as described
+  in the KiCad README. Existing specifications and acceptance criteria are unchanged.
 - Phase 4 Debug Agent evidence packaging remains paused after VS Code host
   acceptance; authenticated Claude Code host validation remains unavailable.
 - Public `dutchmate-debug-agent` distribution remains deferred to `v0.2.0`.
@@ -125,10 +128,70 @@ progress; it does not redefine either document.
 | Gate | Status |
 |---|---|
 | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
-| Phase 1B — Enhanced | Workflow criteria and physical blocker #1 satisfied; only prototype UART electrical signal-integrity/oscilloscope evidence remains open (§34) |
-| Phase 1 shared done criteria | Shared §35 behavioral criteria supported by accepted software/HIL; overall completion awaits the sole remaining §34 UART electrical signal-integrity gate |
+| Phase 1B — Enhanced | Incomplete until required manufactured KiCad Rev-A physical validation is performed and accepted; includes fresh UART electrical/oscilloscope evidence under existing criteria; EAGLE results remain historical only |
+| Phase 1 shared done criteria | Shared §35 behavioral evidence is retained; Phase 1 remains incomplete pending accepted current-board physical validation, without transferring EAGLE acceptance to KiCad |
+
+## Current Rev-A KiCad Source Checklist
+
+| Check | Result |
+|---|---|
+| TMUX2819 hardware-defined isolation, divider and GNDA | Verified from schematic/netlist; powered-off behavior cross-checked against datasheet |
+| UART bias, control defaults and A2-safe enable biasing | Agreed resistor values and connections verified |
+| Single J1 mapping, fixed directions and PCB pad-net consistency | Verified; no placement/routing change during review |
+| Symbols, metadata and intentional unused pins | Verified; reusable TMUX metadata completed |
+| ERC | 0 errors, 1 reviewed warning: bidirectional analog SA on an externally supplied power net; no exclusions added |
+| GP28 ADC input-buffer setting | Not applicable to an active ADC path: sensing is not implemented; firmware unchanged |
+| Source/schematic review | Complete; no hardware validation or fabrication acceptance established |
+| PCB/DFM/fabrication preparation | Manual hardware-designer work outside the agent workflow; no repository review task or acceptance gate |
+| Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
 
 ## Current Validation Requirements
+
+KiCad Rev-A hardware lifecycle decision, 2026-10-30: schematic/source review
+is complete. PCB layout/routing, fabrication preparation, DFM, Gerber review
+and manufacturing submission are manual hardware-designer activities outside
+the agent workflow. No further repository-driven PCB review is planned before
+fabrication. The next formal validation activity for the new KiCad design
+begins once manufactured KiCad Rev-A PCBs are physically available. It requires
+fresh physical evidence using the historical Rev-A validation categories,
+adapted to the authoritative KiCad circuit and connector mapping; the intended
+categories are recorded in the [KiCad README](../hardware/pcb/debug-helper/rev-a/README.md#validation-lifecycle-and-evidence-boundaries).
+The historical EAGLE prototype retains an unresolved UART signal-integrity/
+oscilloscope evidence gap. No further validation of that prototype is planned.
+Equivalent UART electrical evidence will be collected as part of the fresh
+manufactured KiCad Rev-A validation campaign, alongside the other applicable
+README categories. Historical EAGLE results guide procedures but do not establish
+acceptance for the manufactured KiCad board or resolve the old evidence gap.
+Phase 1B, Stage 8 and Phase 1 remain incomplete until required current-board
+physical validation is performed and accepted; existing acceptance criteria
+are unchanged.
+This documentation-only change accessed no hardware and created no physical
+validation report or result. Scope/hash preservation, documentation links and
+`git diff --check` passed; no software-suite or CAD-check rerun was required.
+
+Rev-A KiCad correction review, 2026-10-29: worked from `e8ce97c` with manual
+schematic/project/PCB/library edits preserved. Confirmed TMUX pinout, hardware
+EN/SEL, NC/EP handling, C16 bypass, GNDA divider, after-RN5A 10 kΩ UART bias,
+10 kΩ control-data pull-downs, all agreed 4.7 kΩ networks and J1 mapping.
+Added an explicit DUT_VIO PWR_FLAG for the external supply and filled only
+missing reusable TMUX description/datasheet fields. No electrical pin/net
+connection changed during cleanup; PCB, project settings, firmware, tests and
+historical validation files were not edited by this review. KiCad 10.0.5 ERC
+with errors/warnings/exclusions included reports **0 errors, 1 warning**:
+TMUX SA is typed bidirectional on the externally supplied power net. This is
+intentional analog connectivity, not a second digital power driver; no rule
+severity or exclusion was changed. Source assertions: **309 passed**, covering
+all **47 components** against PCB values/pad nets. Focused firmware suite:
+**97 passed in 19.47 s**; full pytest: **1,569 passed in 49.22 s**; Ruff, mypy
+(103 source files), offline lock (66 packages) and `git diff --check` passed.
+The firmware has no GP28 ADC sensing implementation, so no existing ADC-mode
+buffer-disable configuration is claimed. Source status does not alter Phase
+1 acceptance or constitute physical measurements or fabrication acceptance.
+
+The earlier dated records below retain their historical scope and wording;
+references to future/unavailable KiCad files or legacy-prototype follow-up
+describe those earlier slices, not current tasks. The EAGLE UART evidence gap
+remains unresolved, with no further legacy-board validation planned.
 
 Rev A pull-up documentation closure, 2026-10-28: blocker #1 **Satisfied** using
 operator-confirmed nominal 10 kΩ axial leaded resistor, approximately 9.9 kΩ

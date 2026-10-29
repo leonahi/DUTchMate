@@ -9,6 +9,105 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Legacy EAGLE Validation Gap Retained Without Further Testing — 2026-10-30
+
+- Recorded that the historical EAGLE prototype's UART signal-integrity/
+  oscilloscope evidence gap remains unresolved. No further physical validation
+  of that prototype is planned; the missing evidence is not marked passed.
+- Assigned equivalent UART electrical/oscilloscope evidence to the fresh
+  manufactured KiCad Rev-A validation campaign, together with the other
+  applicable categories already in the KiCad README. Historical EAGLE physical
+  acceptance is not transferred to the corrected board. Phase 1B/Stage 8/Phase 1
+  remain incomplete until required current-board physical validation is accepted;
+  specifications and acceptance criteria were not changed.
+- Documentation only: reconciled development-status sections, added a small
+  README evidence-boundary clarification and this dated entry. No hardware was
+  accessed and no new physical evidence was created. Earlier history and
+  validation records remain unchanged. Scope/hash preservation, local links/
+  anchors and `git diff --check` passed; no full-suite rerun or commit.
+
+## KiCad Rev-A Manufactured-Board Validation Sequence Recorded — 2026-10-30
+
+- Recorded the agreed lifecycle after completed KiCad Rev-A schematic/source
+  review: PCB layout/routing, DFM, fabrication preparation, Gerber review and
+  manufacturing submission are manual hardware-designer work outside the
+  coding-agent workflow. No further repository-driven PCB review is planned
+  before fabrication, and PCB/DFM is not a repository acceptance gate.
+- Recorded that the next formal hardware-validation slice for the new KiCad
+  design begins only when manufactured KiCad Rev-A PCBs are physically
+  available. It will repeat/adapt the historical Rev-A physical-validation
+  categories against the corrected circuit. The category inventory and
+  connector/component/pull-up adaptations live in the
+  [KiCad README](../hardware/pcb/debug-helper/rev-a/README.md#validation-lifecycle-and-evidence-boundaries).
+- This workflow decision replaces earlier prospective agent-task wording about
+  PCB/DFM review. Earlier source-review/test results and historical EAGLE
+  physical evidence remain intact; none is transferred into acceptance of the
+  manufactured KiCad board. Phase 1 criteria/status and the separate legacy
+  prototype UART oscilloscope evidence gap were not changed.
+- Documentation only: no hardware access, new physical validation, fabricated
+  results or premature validation report. Changed only development status,
+  this history entry and the KiCad README, preserving the existing working
+  tree changes. Scope/hash preservation, documentation links and
+  `git diff --check` passed; no software-suite or CAD-check rerun, commit or push.
+
+## Rev-A Manual KiCad Corrections Verified — 2026-10-29
+
+- Reviewed the current working Rev-A KiCad design on
+  `hardware/kicad-schematic-review-20261028`, source baseline `e8ce97c`.
+  Inspected and snapshotted the existing schematic, PCB, project and symbol
+  library diffs before editing. Preserved the operator's manual circuit and
+  placement/routing corrections; no commit or push performed.
+- Verified actual netlist connections for U3 TMUX2819DSGR: SA=DUT_VIO,
+  D=R10 input, SB unused, EN/VDD=+3.3V, SEL/NC/GND/EP=GND, and C16=100 nF.
+  TI datasheet pin functions and truth table confirm SA selection with power
+  present and powered-off protection without firmware GPIO control. Verified
+  R10/R11=47 kΩ, C7=10 nF, GNDA return and GP28/ADC2 mapping.
+- Verified R13=10 kΩ to DUT_VIO after RN5A, R14–R17=10 kΩ data pull-downs,
+  R6–R9=4.7 kΩ DUT_VIO OE pull-ups, R1–R5/R12=4.7 kΩ enable pull-downs,
+  RN3/RN4=180 Ω, channel directions, retained helper signal/OE labels and the
+  authoritative single 2×8 J1 mapping. No event pull-ups were added; the
+  DUT/developer supplies valid event levels and any required open-drain pull-up.
+  U1 remains SN74LV4T125; controls must stay within DUT_VIO, including when
+  released into an external pull-up. Older RP2350 A2 modules remain supported.
+- Confirmed U2/U5 power/signal/OE types, U7/U8 open-collector/drain types,
+  intentional unused pins, Pico 2 identity/metadata and resolved symbol
+  references. Added only the missing reusable TMUX description/datasheet
+  metadata, keeping its embedded definition synchronized. Existing valid
+  symbol graphics and component metadata were retained.
+- Initial ERC: 1 error, no warnings, for undeclared external DUT_VIO power.
+  Added a standard PWR_FLAG to declare the J1-supplied reference. Final KiCad
+  10.0.5 ERC (`sch erc --severity-all --exit-code-violations`): **0 errors,
+  1 warning**, exit 5 because warnings are included. The warning connects U3
+  SA (bidirectional analog terminal) to the declared external power source;
+  that is the intended sense input, not conflicting digital drivers. Reviewed
+  the warning without exclusions or severity changes. No other ERC messages
+  remain; existing ignored categories are unchanged.
+- Read-only source checks: **309 assertions passed**; all **47 electrical
+  component values and numbered PCB pad nets** match the schematic. All
+  electrical pin/net memberships remain identical to the pre-cleanup netlist.
+  Symbol references resolve, project-library pin definitions match their
+  embedded copies, and the PCB/project bytes remain as supplied for review.
+  Source-check scripts and ERC/netlist exports were kept outside the repository.
+- GP28 ADC sensing is not implemented in helper firmware: no ADC channel setup
+  or explicit GP28 digital-input-buffer configuration was found in its source,
+  overlay or configuration. No firmware change was made or working ADC-mode
+  buffer-disable setting claimed. Future sensing must disable that buffer.
+- Updated the KiCad README with design authority, source/library ownership,
+  circuit/connector requirements and validation boundaries. Added only a
+  current-source pointer to the historical EAGLE record; its original details
+  and every hardware validation record remain unchanged. Updated current
+  status separately; existing prototype acceptance and HIL evidence were not
+  reinterpreted as validation of the corrected KiCad board.
+- Fresh offline verification using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+  `uv run --frozen --offline pytest -q tests/hardware/rp2350_debug_helper --tb=line`:
+  **97 passed in 19.47 s**; full `uv run --frozen --offline pytest -q --tb=line`:
+  **1,569 passed in 49.22 s**. Ruff passed; mypy passed/103 source files;
+  `uv lock --check --offline` passed/66 packages. Documentation link/scope,
+  preservation and `git diff --check` checks passed. No schematic fabrication
+  blocker was identified within the agreed correction scope; source checks
+  support proceeding to PCB/DFM review, not fabrication or hardware acceptance.
+
 ## Rev A 10 kΩ Pull-Up Documentation Blocker Closed — 2026-10-28
 
 - Worked on existing `validation/phase1b-revision-a` at `4c87383`, preserving
