@@ -2,8 +2,12 @@
 
 > Legacy EAGLE design record. The historical board and schematic sources are
 > retained under `hardware/pcb/debug-helper/legacy-eagle/revision_a/eagle/`.
-> The replacement KiCad design will live under
-> `hardware/pcb/debug-helper/rev-a/` after its provenance audit.
+> The replacement KiCad design lives under `hardware/pcb/debug-helper/rev-a/`.
+> Its licensing/provenance status is documented in that directory.
+
+The current working Rev-A design authority is the [KiCad source](../rev-a/README.md).
+This historical EAGLE/prototype record retains its original pinout, component
+references, and implementation details; it does not describe the corrected KiCad board.
 
 **Revision:** 1.0<br>
 **Date:** 2026-08-11<br>

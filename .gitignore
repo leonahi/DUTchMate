@@ -60,6 +60,8 @@ compile_commands.json
 *.kicad_sym-bak
 *.kicad_mod-bak
 *.kicad_wks-bak
+/hardware/pcb/debug-helper/rev-a/.history/
+/hardware/pcb/debug-helper/rev-a/**/*.bak
 ~*.lck
 _autosave-*
 *.autosave
