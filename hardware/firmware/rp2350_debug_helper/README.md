@@ -3,7 +3,7 @@
 Phase 1B firmware target for the non-wireless Raspberry Pi Pico 2 with the
 RP2350A MCU.
 
-## Current slice
+## Firmware behavior
 
 The application owns the Revision A GPIO mapping, establishes startup safe
 states, and exposes its initial USB CDC identity:
@@ -24,7 +24,7 @@ states, and exposes its initial USB CDC identity:
   descriptors, preserves FIFO ordering across wrap, and drops oldest data on
   byte or descriptor exhaustion;
 - boot-cumulative high-water and loss counters plus bounded overflow-episode
-  state are available for the later telemetry adapter;
+  state feed the telemetry adapter;
 - UART0 uses GP0/GP1 at fixed 460800 baud, 8-N-1 with no flow control;
 - one RP2350 64-bit microsecond timer value is sampled for every UART RX
   interrupt callback, and all bytes drained by that callback retain it;
@@ -98,6 +98,13 @@ states, and exposes its initial USB CDC identity:
   v1 error; epoch end discards partial input, queued commands, and unsent
   responses.
 
+### Historical build and USB startup checkpoint
+
+The paragraph below retains the early build/USB observations and the remaining
+work identified at that checkpoint. It is not a current progress summary;
+later runs are recorded in [Enhanced HIL evidence](../../validation/phase1_enhanced_hil.md)
+and current acceptance belongs only in [development status](../../../docs/development_status.md).
+
 The command path now consumes live CDC input and shares the sole output owner
 with evidence. Complete CDC-driver acceptance, mid-frame failure semantics, and
 bounded output-drain pacing are target-build verified. On the Pico 2, macOS
@@ -109,8 +116,10 @@ the application is not yet accepted as a complete Enhanced Debug Helper.
 
 ## Revision A mapping
 
-The devicetree overlay preserves the normative mapping from
-`hardware/pcb/debug-helper/legacy-eagle/revision_a.md` section 10.1:
+The devicetree overlay preserves the Pico GPIO mapping shared with the
+[legacy EAGLE prototype](../../pcb/debug-helper/legacy-eagle/revision_a.md#101-phase-1-revision-a-raspberry-pi-pico-2-pin-assignment).
+The [current KiCad design](../../pcb/debug-helper/rev-a/README.md) owns its
+connector and component references; legacy harness pin numbers do not transfer.
 
 | Function | Pico 2 GPIOs |
 |---|---|
@@ -196,20 +205,21 @@ footprint and compare the margins against the normal image before closing the
 32 KiB decision. The collector holds DTR low through port opening and input
 flushing so the one-shot `hello` is not discarded.
 
-For the synthetic profiles, the helper below starts a 15 s capture, sends the
-fixture command after 0.5 s, and (for the backpressure run) pauses the verified
-Device Core Service process 1.5 s after send completion. It always resumes the
-service if interrupted and records the measured monotonic pause and host load:
+For current no-stall synthetic profiles, enable TX in the DUT Profile and use
+bounded Interact with explicit LF against the already-running Enhanced service:
 
 ```bash
-"$repo_root/.venv/bin/python" \
-  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
-  SUSTAIN --stall-ms 500 --out "$repo_root/build/stack-profile-500ms.json"
+"$repo_root/.venv/bin/dutchmate" interact SUSTAIN --line-ending lf --seconds 15
 
-"$repo_root/.venv/bin/python" \
-  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
-  BURST --out "$repo_root/build/stack-profile-overflow.json"
+"$repo_root/.venv/bin/dutchmate" interact BURST --line-ending lf --seconds 15
 ```
+
+These commands do not perform a host-stall experiment. Backpressure acceptance
+still requires controlled, measured pauses and the recorded provenance below.
+The retained `tools/run_load_profile.py` is historical tooling: it invokes the
+retired `send --force` option and cannot drive the current CLI. Updating that
+tool is separate code work; do not treat its command as a working v2 procedure.
+The historical load/stack measurements remain unchanged.
 
 Keeping the build at this repository-relative path also supplies the
 `compile_commands.json` used by the root `.clangd` configuration. After the
@@ -222,6 +232,11 @@ ASCII letters, digits, `.`, `_`, `+`, and `-`. Production builds must also set
 `CONFIG_DUTCHMATE_PRODUCTION_BUILD=y` and override both
 `CONFIG_CDC_ACM_SERIAL_VID` and `CONFIG_CDC_ACM_SERIAL_PID` with an assigned
 pair. A production build that retains `2E8A:000A` fails at compile time.
+
+### Historical build-evidence scope
+
+The following scope statement records the early build/USB checkpoint, not the
+latest HIL disposition or acceptance of manufactured KiCad Rev-A hardware:
 
 This build proves compilation, identity configuration, bounded command ingress,
 command/control and USB-writer ownership, explicit CDC FIFO-acceptance logic,
@@ -252,9 +267,11 @@ and exercises these boundaries without Zephyr or a connected board:
 | Connection epochs, bounded output draining, and complete CDC frame acceptance | `test_connection_epoch.py`, `test_output_drain.py`, `test_cdc_tx_state.py` |
 
 The target build verifies Zephyr adapter integration, compile-time devicetree
-mapping checks, and static allocation. Focused Pico 2 HIL verifies USB startup,
-packet-paced `hello`, and consecutive idle epochs; it does not prove UART
-timing, GPIO voltage or sequencing, physical-disconnect behavior, stack margins,
-or load behavior. Those remain Step 6 hardware-validation gates. EVENT pins
-remain safely initialized and reserved, with no capture implementation or
-advertised capability.
+mapping checks and static allocation. Host-compiled tests establish no physical
+UART, voltage, sequencing or signal-integrity result. Existing physical results
+remain scoped to their recorded fixture/build in the validation records;
+current-board acceptance requires the manufactured KiCad campaign under
+[Phase 1 sections 34–35](../../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
+EVENT pins remain safely initialized and reserved, with no capture implementation
+or advertised capability. GP28 voltage sensing is also unimplemented; the
+hardware-defined TMUX2819 isolation does not imply firmware ADC measurements.

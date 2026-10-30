@@ -67,13 +67,28 @@ readable. The Debug Agent currently accepts schema-v1 evidence only.
 
 Coding agents can use the CLI or service to compose procedures from Monitor,
 Interact, audited UART TX, and audited reset/boot/GPIO Control. UART TX requires
-the profile's TX policy to be enabled. The separate MCP adapter's contract and
-migration scope are tracked in the [development status](docs/development_status.md).
+the profile's TX policy to be enabled. The local stdio MCP adapter exposes the
+[twelve-tool v2 catalog](docs/mcp_integration_plan.md#target-tool-catalog), including
+Monitor, Interact, configured reset/boot Control and evidence retrieval. It is a
+thin HTTP client of the already-running Device Core Service; it never starts the
+service or acquires the serial port. Register the installed `dutchmate-mcp` or
+`dutchmate mcp` command using the [developer guide](docs/developer_guide.md#register-mcp-with-a-coding-agent).
 
 ## Install
 
-DUTchMate requires Python 3.10 or newer. Install the `v0.1.0` release with one
-of these isolated-tool installers:
+DUTchMate requires Python 3.10 or newer. The examples on this page describe the
+current checkout. Install its workspace and make its commands available in the
+current shell:
+
+```bash
+uv sync --all-packages
+export PATH="$PWD/.venv/bin:$PATH"
+```
+
+For the published `v0.1.0` release, use either isolated-tool installer below.
+That release predates the Phase 1/MCP v2 migrations; its original surface is
+described in the [historical release notes](docs/releases/v0.1.0.md). The workspace
+package version alone does not mean these checkout changes have been published.
 
 ```bash
 uv tool install dutchmate==0.1.0
@@ -83,7 +98,9 @@ pipx install dutchmate==0.1.0
 
 ## Quick Start
 
-List candidate devices, start one backend, inspect it, and stop the service:
+For Enhanced, set `[hardware].dut_io_voltage` in `.dutchmate/config.toml` to
+the actual DUT logic voltage before opening the Debug Helper. List candidate
+devices, start one backend, inspect it, and stop the service:
 
 ```bash
 dutchmate devices
@@ -97,6 +114,10 @@ auto-select one metadata-hinted Debug Helper; multiple candidates require an
 explicit port. Run `dutchmate --help` for the complete command surface and see
 the [developer guide](docs/developer_guide.md) for configuration and MCP host
 registration.
+
+For Basic, replace the start command with
+`dutchmate start --backend basic --serial-port /dev/cu.EXAMPLE`, using the
+actual adapter path. Select one backend at a time.
 
 ## Hardware
 

@@ -1,5 +1,11 @@
 # Phase 1A Basic Hardware-in-the-Loop Validation
 
+> Recorded procedures/evidence retain the commands and session semantics of
+> their identified builds; early examples predate v2. For current commands use
+> the [CLI guide](../../docs/developer_guide.md#continuous-evidence-through-the-cli),
+> [normative acceptance criteria](../../docs/phase1_implementation_spec.md#33-phase-1a-done--basic)
+> and [development status](../../docs/development_status.md). No old run is revalidated here.
+
 This document is the reproducible procedure and report template for accepting
 the DUTchMate Phase 1A Basic hardware path. It uses the deterministic Zephyr
 DUT fixture on a Raspberry Pi Pico 1 and a generic 3.3 V USB-to-UART adapter.

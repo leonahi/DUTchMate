@@ -11,8 +11,12 @@ inside the coding-agent host.
 
 Before an operation, inspect the available tools and confirm that the local
 Device Core Service is running with the intended Basic or Enhanced backend.
-Use the deterministic MCP tools for reset, boot mode, UART capture, UART send,
-wait-pattern, boot-test, recent-log, and session retrieval operations.
+Use the twelve-tool MCP v2 surface for status, bounded Monitor/Interact,
+exact UART send, configured `reset_dut`/`set_dut_boot_mode`, evidence/log/session
+retrieval and explicit release/reacquire. Text TX requires an explicit line
+ending; binary TX uses `data_b64`. Boot validation is client composition of
+atomic tools, not a dedicated MCP workflow. MCP never starts the Device Core
+Service.
 
 Treat tool errors as bounded Device Core results. Report the operation,
 backend, session ID, and structured error without inventing missing hardware

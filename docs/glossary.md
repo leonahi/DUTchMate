@@ -69,8 +69,8 @@ required HIL gate.
 ## Ingestion
 
 The continuous service-owned consumption of normalized backend events into
-session evidence. Finite workflows temporarily claim the active event window
-without creating a second device reader.
+schema-v2 session evidence. Monitor/Interact establish bounded cursor windows
+over durable evidence without claiming the physical reader.
 
 ## Integrity
 
@@ -86,9 +86,10 @@ digest.
 
 ## Native session
 
-A session written in the current versioned evidence format. Legacy or unknown
-formats may remain readable through explicitly bounded compatibility paths but
-are not interpreted as native evidence.
+A current Device Core ownership session uses schema v2. Historical schema-v1
+native sessions and recognized unversioned v0 sessions remain explicit read-only
+compatibility data; unsupported versions are rejected. The separate Debug Agent
+accepts schema-v1 native detail only until its v2 migration.
 
 ## Segment
 

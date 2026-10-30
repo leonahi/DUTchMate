@@ -1,6 +1,6 @@
 # DUTchMate Phase 1 v2 Repository Migration Plan
 
-> **Purpose:** temporary implementation plan for migrating the current repository to the approved `docs/project_context.md` and rewritten `docs/phase1_implementation_spec.md`.
+> **Purpose:** migration-time execution reference for the approved `docs/project_context.md` and `docs/phase1_implementation_spec.md`. Baseline descriptions and replacement instructions below refer to the pre-v2 source snapshot, not the current implementation. Retain the staged acceptance scenarios as references; current module ownership is in `docs/software_architecture.md`.
 >
 > **Authority:** the two normative documents define behavior. This plan maps the current repository to those contracts; it must not redefine them. `docs/development_status.md` remains the only progress/next-step tracker.
 >
@@ -10,11 +10,11 @@
 
 ## 1. Repository Baseline and Main Gap
 
-The inspected repository is the snapshot whose `docs/development_status.md` names code baseline `6d54acf0a11a3fa7a43eccfa753c2230cdaaad88` reviewed on 2026-09-24. The repository currently considers the old Phase 1A Basic behavior accepted and the old Phase 1B host/firmware behavior largely implemented.
+The inspected migration baseline was code snapshot `6d54acf0a11a3fa7a43eccfa753c2230cdaaad88`, reviewed on 2026-09-24. At that snapshot, the old Phase 1A Basic behavior was accepted and the old Phase 1B host/firmware behavior was largely implemented. These are historical baseline facts, not current progress.
 
 Those historical results remain useful evidence, but they do **not** satisfy the newly approved Phase 1 contract because the product semantics have changed.
 
-The central current runtime path is:
+The pre-v2 runtime path at that baseline was:
 
 ```text
 Basic/Enhanced backend source

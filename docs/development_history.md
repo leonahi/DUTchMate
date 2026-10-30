@@ -9,6 +9,91 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Repository Documentation Consistency Audit — 2026-10-30
+
+- Started clean at merged cleanup `a4707f3` (PR #6, code commit `d11cb1a`) on
+  `docs/repository-consistency-audit`. Audited all 30 project Markdown files,
+  including every tracked README, product/specification, architecture, focused
+  plans/contracts, release/distribution, firmware, hardware and validation docs,
+  and bundled plugin guidance. Compared current claims with source, metadata,
+  CLI parsers/formatters, service routes, MCP schemas and firmware/CI settings.
+  No production, test, dependency, schema, hardware-design or firmware change.
+- Corrected root README checkout setup versus the historical published
+  `v0.1.0` surface; package versions remain 0.1.0 and do not imply a new release.
+  Added the twelve-tool catalog/stdio registration links and explicit backend
+  prerequisites. Updated the documentation index and developer workspace map
+  (`hardware/pcb`, public executable composition, existing firmware tests).
+- Corrected the distribution plan's obsolete executable owners and nine-tool
+  acceptance wording. Scoped its first-publisher procedure and the pre-v2
+  Phase 1 execution baseline as migration-time references. Scoped the MCP
+  inventory to retired paths, retained its live tool/acceptance contract, and
+  refreshed the bundled operate skill to Monitor/Interact, exact payloads,
+  configured Control and release/reacquire without a boot-test composite.
+- Corrected GPIO docs to current KiCad authority, v2 mutation arbitration,
+  `active_operations`, continuous-session Control evidence, real validation
+  detail and actual CLI output. Replaced the obsolete prose section reference
+  with Phase 1 section 28.3/28.4 links. Clarified glossary v2 versus historical
+  v0/v1 detail. The ring plan now leaves decisions in per-fixture records and
+  defers MCP sequencing to specification section 4.1; all numeric ring criteria
+  and acceptance measurements are retained.
+- Corrected the fixture's RP2040/Pico 1 versus RP2350/Pico 2 Debug Helper
+  distinction and firmware README host examples. Early USB/build observations
+  are explicitly scoped checkpoints, with their measured results unchanged.
+  Added scope banners above all four validation records and the original
+  v0.1.0 release notes; verified the complete old bodies remain byte-for-byte
+  suffixes. No historical commands/results were modernized inside those records.
+- Checked and retained the already-current product context, normative Phase 1
+  specification, software architecture, reconnect/session semantics, Debug
+  Agent contract, current KiCad README and historical EAGLE design. Protocol
+  schemas/examples and build definitions were inspected without modification.
+  No package-specific README exists outside the five tracked project READMEs.
+  No old `development_history.md` entry was changed. Normative criteria and
+  ownership remain in their existing sources; no competing progress page added.
+- Documentation exposed a separate host-tool defect:
+  `hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py` still invokes
+  `send --force`. Safe parser reproduction returns exit 2, `No such option:
+  --force`, without contacting hardware. Left the tool unchanged and replaced
+  its runnable README examples with current no-stall Interact commands using
+  explicit LF. These examples do not claim measured backpressure acceptance;
+  controlled stall automation requires a separate tool update.
+- Initial full-suite validation exposed an existing reconnect-test observation
+  race in `test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_order[incomplete]`:
+  `KeyError: connection_error` at line 131. The recorder publishes `faulted` in
+  `_record_fatal` before the coordinator catches the close failure and publishes
+  its diagnostic. The test waits only for `faulted`, then assumes both facts
+  are present. All four variants passed in isolation (0.40 s). A temporary
+  process-only wrapper holding that handoff for 50 ms reproduced the exact
+  assertion failure; no repository monkeypatch or source/test edit was retained.
+  This is a separate synchronization follow-up, not a documentation-caused
+  behavior change or a claimed fix. A fresh full run without concurrent
+  validation processes passed all 1,872 tests in 48.87 s.
+- Validation using `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Check/command suffix | Result |
+  |---|---|
+  | `uv sync --all-packages --frozen --offline` | Passed; current workspace setup |
+  | Documented command parsing with inert callbacks | 53 CLI/MCP/Debug Agent examples passed; no service, provider or hardware dispatch |
+  | Live source comparisons | Required service routes, exact twelve MCP names/order, GPIO status keys and package entrypoints agree |
+  | `uv run --frozen --offline pytest -q tests/packaging tests/architecture apps/mcp_server/tests apps/cli/tests --tb=short` | 533 passed in 12.77 s |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | Initial run: 1 failed/1,871 passed in 58.35 s at the documented race; fresh unmodified rerun: 1,872 passed in 48.87 s |
+  | `uv build --all-packages --no-sources --no-create-gitignore --offline --out-dir /tmp/dutchmate-doc-consistency-dist` | All six wheel/sdist pairs built |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-doc-consistency-dist` | Passed, exit 0; isolated actual wheel installs, metadata/entrypoints and both installed stdio commands; declared dependency downloads used sandbox escalation |
+  | Relative Markdown links/anchors and registration JSON | 163 local links/anchors passed across project documentation; initial scan found no broken Markdown links. Corrected stale plain paths/section references and verified added links. |
+  | Preservation/scope and `git diff --check` | Passed; documentation only, old history/validation/release bodies and acceptance dispositions preserved |
+
+- Changes cover 19 documentation files: root/index/guide; distribution and
+  Phase 1/MCP migration references; glossary/GPIO/ring documents; v0.1.0 scope
+  banner; both firmware READMEs; four validation scope banners; bundled operate
+  skill; status/history. Current KiCad design source/readme, EAGLE artifacts,
+  firmware code, protocol, production and tests remain untouched. Firmware
+  build commands were checked against CMake/CI; no new cross-build or physical
+  HIL result, external host UI acceptance, publication, commit or push occurred.
+  MCP v2 and Phase 1A remain complete; Phase 1B/Stage 8/Phase 1 remain incomplete
+  pending manufactured KiCad Rev-A physical/electrical validation. Optional
+  named-host checks remain unavailable, not required passes.
+
 ## Repository Stale/Dead-Code Audit and Cleanup — 2026-10-30
 
 - Started clean on `refactor/stale-code-cleanup` at merged `main` `5c517ad`

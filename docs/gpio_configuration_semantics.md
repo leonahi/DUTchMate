@@ -18,8 +18,10 @@ CTRL2
 CTRL3
 ```
 
-The current hardware channel mapping model is preserved in the legacy design
-record at `hardware/pcb/debug-helper/legacy-eagle/revision_a.md`. In that model,
+The current connector/circuit authority is the
+[Rev-A KiCad source](../hardware/pcb/debug-helper/rev-a/README.md); the
+[legacy EAGLE record](../hardware/pcb/debug-helper/legacy-eagle/revision_a.md)
+retains its historical pinout. In the host channel model,
 physical channels such as `CTRL0` are separate from workflow roles such as `reset` and DUT
 schematic names such as `RESET_N`. Phase 1 host code accepts custom control
 roles as project metadata, while built-in workflows only assign semantics to
@@ -139,7 +141,9 @@ The Device Core validates before sending a command to firmware:
    | `push_pull` | required `low` or `high` | required and opposite `active_level` |
 
 6. The requested mode is allowed by the connected firmware capabilities and hardware revision metadata, if known.
-7. No capture or hardware-starting workflow is currently in a conflicting state.
+7. No submitted mutation, Interact or ownership transition conflicts with the
+   request under Phase 1 specification section 25. Read-only Monitor does not
+   itself exclude configured Control.
 
 Firmware remains the final authority. If firmware rejects the mode, the Device Core preserves the previous accepted channel state and returns the firmware error. If no previous accepted mode exists, the channel state becomes `rejected`.
 
@@ -182,8 +186,8 @@ Backend capability gating happens before role-state validation. A Basic backend
 therefore returns `unsupported_capability` for reset or boot-mode requests even
 though it has no control-role registry. `not_configured` applies only after the
 selected backend has demonstrated `gpio_control`. These service-level errors use
-HTTP 409 and the structured context defined under "Device Core Service
-Requirements" in `docs/phase1_implementation_spec.md`.
+HTTP 409 and the structured context defined in
+[Phase 1 specification sections 28.3–28.4](phase1_implementation_spec.md#283-error-envelope).
 
 One effective role maps to at most one physical channel. Config-file validation
 rejects conflicting channel assignments. A successful runtime request that
@@ -200,9 +204,8 @@ channel before dispatch. Firmware action commands remain role-neutral:
 `pulse_control(channel, pulse_ms)` applies configured active then idle behavior,
 and `set_control_state(channel, active|idle)` selects one configured behavior.
 The public reset and boot-mode APIs remain semantic safety boundaries; Phase 1
-does not expose arbitrary raw levels. The Phase 1B protocol migration removes
-legacy role-specific actions and wire role metadata atomically across schemas,
-examples, encoders, tests, and firmware.
+does not expose arbitrary raw levels. The v1 wire contract uses generic channel
+actions without host role metadata; legacy role-specific wire actions are invalid.
 
 Before `reset_dut()`:
 
@@ -254,8 +257,8 @@ capability, and reconnect fields defined in the Phase 1 implementation spec:
   "reconnect_remaining_s": null,
   "port": "/dev/ttyACM0",
   "firmware": "0.1.0",
-  "active_session_id": null,
-  "active_workflow": null,
+  "active_session_id": "20261030T100000Z-demo0001",
+  "active_operations": [],
   "commanded_boot_mode": "normal",
   "control_channels": {
     "CTRL0": {
@@ -282,8 +285,9 @@ capability, and reconnect fields defined in the Phase 1 implementation spec:
 only the last state successfully commanded by Device Core; it is not an
 electrical readback of the DUT pin. It is `null` when the boot role is not
 configured, the boot state is externally controlled or otherwise unknown, or
-the connection/safety state invalidates the last command. Capture-like session
-metadata snapshots this nullable value when the session begins.
+the connection/safety state invalidates the last command. Schema-v2 Control
+attempt/result evidence records accepted actions in the continuous ownership
+session; status is the current commanded-state projection.
 
 `POST /gpio/mode` success response:
 
@@ -319,7 +323,7 @@ Rejected response:
 {
   "ok": false,
   "error": "invalid_argument",
-  "detail": "push_pull is not supported for reset on this hardware revision",
+  "detail": "GPIO open_drain active_level must be 'low'",
   "detail_truncated": false
 }
 ```
@@ -329,8 +333,8 @@ Rejected response:
 `dutchmate status` should show GPIO state in human-readable form:
 
 ```text
-GPIO:
-  CTRL0: reset RESET_N open_drain (config)
+Control channels:
+  CTRL0: reset -> RESET_N (mode=open_drain, active=low, source=config)
   CTRL1: unconfigured
 ```
 

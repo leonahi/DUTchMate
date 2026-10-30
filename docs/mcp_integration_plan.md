@@ -1,6 +1,6 @@
 # MCP Integration Plan
 
-> Scope: Phase 2 stdio adapter migration to the accepted Phase 1 v2 service API.
+> Scope: Phase 2 stdio adapter contract, acceptance policy and migration reference for the accepted Phase 1 v2 service API.
 > [Project context](project_context.md) and the
 > [Phase 1 specification](phase1_implementation_spec.md) define product and
 > service behavior. This plan maps those contracts; it does not redefine them.
@@ -60,10 +60,11 @@ finite evidence long-polling is an ordinary bounded tool call.
 
 ## Migration Inventory
 
-The inventory distinguishes reusable infrastructure from obsolete adapter
-behavior. Existing MCP source/tests are evidence of transport behavior, not of
-v2 tool compatibility. Tests using mocked HTTP success for obsolete endpoints
-cannot establish acceptance against the real v2 service.
+This migration-time inventory distinguishes reusable infrastructure from the
+retired pre-v2 adapter surface; it is not the current tool catalog. Pre-v2
+transport tests and mocked HTTP success for obsolete endpoints cannot establish
+v2 compatibility. Actual service-backed coverage lives in
+`apps/mcp_server/tests/test_protocol_integration.py`; the live contract is below.
 
 | Existing consumer/path | Migration action |
 |---|---|
@@ -76,9 +77,8 @@ cannot establish acceptance against the real v2 service.
 | MCP server/client/protocol tests | Replace obsolete target fixtures/assertions; keep modern protocol, error, cancellation and stdio coverage. |
 | `apps/cli/src/dutchmate_cli/mcp.py`, MCP `main.py`, entrypoint/CLI tests | Preserve existing launch implementation; refresh catalog/installed-launch acceptance only where needed. |
 
-No production code changes are part of this audit. During implementation,
-remove retired methods once registration/tests no longer consume them; do not
-create service compatibility behavior to keep an obsolete MCP tool working.
+Retired MCP methods and tools must not be restored as compatibility aliases.
+Do not create service compatibility behavior to support an obsolete MCP tool.
 
 ## Target Tool Catalog
 
@@ -232,8 +232,9 @@ mode or sleeps/reads the serial port.
 
 ## Independently Testable Implementation Sequence
 
-This is dependency order, not a second progress tracker. Preserve the existing
-protocol/dependency/server foundation; do not repeat its original implementation.
+This records the migration's dependency order and validation boundaries, not a
+second progress tracker or an instruction to reimplement completed work.
+Preserve the protocol/dependency/server foundation.
 
 1. **V2 HTTP service-client mappings and error projection.** Change MCP
    `service_client.py` and `test_service_client.py` to implement the catalog's

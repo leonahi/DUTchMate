@@ -2,7 +2,7 @@
 
 The Zephyr DUT fixture is a controlled device under test for DUTchMate hardware-in-the-loop
 (HIL) validation. It runs on a first-generation Raspberry Pi Pico or Pico H and produces known
-UART and boot behaviour. It is deliberately separate from the DUTchMate RP2040 Debug Helper:
+UART and boot behaviour. It is deliberately separate from the RP2350 Pico 2 Debug Helper:
 the fixture is the target being observed, while the Debug Helper is one of the transports used
 to observe and control it.
 
@@ -177,7 +177,7 @@ DELAYFAULT replaces the pending deadline; SILENT or reset cancels it. Existing
 blocking PARTIAL/BURST/SUSTAIN handlers can postpone emission until the UART
 loop runs again, so leave the fixture idle during this acceptance scenario.
 
-For the later Basic HIL run, with TX explicitly enabled and continuous recording
+For a Basic HIL run, with TX explicitly enabled and continuous recording
 already connected, use the normal bounded Interact:
 
 ```bash
@@ -299,6 +299,9 @@ Record all of the following with every Basic or Enhanced acceptance run:
 - DUTchMate session IDs for every scenario;
 - expected and observed sequence counts, checksums, first error, timeout, and integrity result.
 
-The reproducible Basic acceptance procedure and report template are maintained in
-[`hardware/validation/phase1_basic_hil.md`](../../validation/phase1_basic_hil.md). Use that
-procedure to record the real adapter/Pico session evidence required for Phase 1A acceptance.
+The [Basic validation record](../../validation/phase1_basic_hil.md) preserves the
+original smoke procedure and its historical evidence. Use
+[Phase 1 sections 32–35](../../../docs/phase1_implementation_spec.md#32-dut-firmware-validation-fixture)
+and the [v2 CLI guide](../../../docs/developer_guide.md#continuous-evidence-through-the-cli)
+for current operation/session semantics; do not replay old forced-send examples
+against the current CLI. Record the actual fixture build used for any new run.

@@ -24,7 +24,7 @@ core/
   src/             Reusable Python library.
 
 packages/
-  dutchmate/       Public executable and optional-feature composition.
+  dutchmate/       Public executable composition.
 
 plugins/
   dutchmate/       Portable local MCP registration and workflow skills.
@@ -32,7 +32,7 @@ plugins/
 hardware/
   firmware/        RP2350/Pico 2 Zephyr firmware location.
   protocol/        Versioned wire schemas and examples.
-  schematics/      Electrical design notes and schematic files.
+  pcb/             Current KiCad source and preserved legacy EAGLE design.
   validation/      Hardware acceptance records and unrun templates.
 
 docs/              Architecture, contracts, plans, and guides.
@@ -351,7 +351,7 @@ Update these as one coherent change:
 - `core/src/dutchmate_core/device_connection/parser.py`
 - `core/src/dutchmate_core/device_connection/commands.py`, when commands change
 - protocol parser, encoder, and canonical-example tests
-- firmware handling, once firmware exists
+- Debug Helper firmware handling and host-compiled firmware tests
 
 Do not accept fields in code that are absent from schemas and examples. The
 canonical Enhanced receive capability is `uart_receive`; do not reintroduce a

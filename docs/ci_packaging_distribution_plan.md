@@ -5,14 +5,14 @@
 
 ## Purpose
 
-Add repeatable CI, installable Python distributions, independently versioned
+Define repeatable CI, installable Python distributions, independently versioned
 firmware artifacts, gated public releases, and local coding-agent integration
 without changing DUTchMate's Device Core, backend, protocol, or hardware-control
 boundaries.
 
-The delivery-infrastructure milestone can proceed independently of the
-remaining Phase 4 source-area quality review and deferred Phase 1 hardware
-work. Normal pull-request CI remains independent of physical hardware.
+Delivery infrastructure is independent of Debug Agent analysis and Phase 1
+hardware acceptance. Normal pull-request CI remains independent of physical
+hardware. Implementation status and release evidence belong in status/history.
 
 ## Architectural Invariants
 
@@ -36,7 +36,7 @@ work. Normal pull-request CI remains independent of physical hardware.
 
 ### Current distribution graph
 
-The repository currently builds five component distributions:
+The workspace has five component distributions:
 
 ```text
 dutchmate-core
@@ -46,8 +46,8 @@ dutchmate-core
 └── dutchmate-debug-agent
 ```
 
-Add a sixth workspace distribution, `dutchmate`, under `packages/dutchmate`.
-It is the normal user installation target and, for `v0.1.0`, depends on:
+The sixth workspace distribution, `dutchmate`, lives under `packages/dutchmate`.
+It is the normal user installation target and depends on:
 
 ```text
 dutchmate
@@ -64,20 +64,18 @@ aggregator does not duplicate application or hardware-control logic.
 
 ### Executable ownership
 
-Move normal-user executable ownership to the aggregator:
+Normal-user executable ownership belongs to the aggregator:
 
-| Executable | Current owner | Authoritative owner |
-|---|---|---|
-| `dutchmate` | `dutchmate-cli` | `dutchmate` |
-| `dm` | `dutchmate-cli` | `dutchmate` |
-| `dutchmate-service` | `dutchmate-service` | `dutchmate` |
-| `dutchmate-mcp` | `dutchmate-mcp-server` | `dutchmate` |
-| `dutchmate-debug` | `dutchmate-debug-agent` | `dutchmate-debug-agent` |
+| Executable | Authoritative owner |
+|---|---|
+| `dutchmate` | `dutchmate` |
+| `dm` | `dutchmate` |
+| `dutchmate-service` | `dutchmate` |
+| `dutchmate-mcp` | `dutchmate` |
+| `dutchmate-debug` | `dutchmate-debug-agent` |
 
-The aggregator's scripts call the existing component entry functions. Remove
-the competing script declarations from the CLI, service, and MCP component
-distributions only after the migration inventory and workspace acceptance below
-are in place.
+The aggregator's scripts call the component entry functions. CLI, service and
+MCP component distributions do not declare competing console scripts.
 
 The supported installation interface is:
 
@@ -295,8 +293,9 @@ Validate the following sequence in normal CI:
 7. Verify the aggregator rejects the absent `debug` command.
 8. Install the standalone Debug Agent wheel from the same workspace artifact
    set and invoke `dutchmate-debug --help`.
-9. Start the installed MCP server, initialize it, list the nine expected tools
-   in deterministic order, and verify clean EOF.
+9. Start the installed MCP server over stdio, perform modern discovery, list the
+   [twelve v2 tools](mcp_integration_plan.md#target-tool-catalog) in deterministic
+   order, verify bounded unavailable-service errors and clean EOF.
 
 For `v0.1.0`, copy only the five public wheel/source-distribution pairs into a
 separate release directory, rerun metadata, command, and MCP acceptance against
@@ -351,7 +350,7 @@ dutchmate mcp
 ```
 
 Validate manifest schemas, skill frontmatter, referenced files, installed
-command resolution, MCP initialization, and the nine expected tools. Plugin
+command resolution, modern MCP discovery, and the twelve-tool v2 catalog. Plugin
 skills may describe workflows and evidence interpretation but must not duplicate
 Device Core, backend, or firmware behavior.
 
@@ -424,6 +423,9 @@ The host release workflow must:
     jobs without rebuilding.
 
 ### Initial `v0.1.0` Trusted Publisher Bootstrap
+
+This is the historical first-publication procedure, not a request to repeat
+bootstrap or publish current checkout changes under an existing release tag.
 
 Before pushing `v0.1.0`, register only `dutchmate-core` as a pending TestPyPI
 publisher with owner `leonahi`, repository `DUTchMate`, workflow `release.yml`,
