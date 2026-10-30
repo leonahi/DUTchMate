@@ -42,15 +42,18 @@ PUBLIC_RELEASE_DISTRIBUTIONS = {
     "dutchmate-mcp-server",
 }
 EXPECTED_TOOLS = [
+    "get_status",
+    "monitor",
+    "interact",
+    "send_uart",
     "reset_dut",
-    "set_boot_mode",
-    "capture_uart",
-    "get_recent_uart_log",
-    "wait_for_uart_pattern",
-    "run_boot_test",
-    "send_uart_command",
-    "get_debug_session",
-    "list_debug_sessions",
+    "set_dut_boot_mode",
+    "get_evidence",
+    "get_recent_logs",
+    "list_sessions",
+    "get_session",
+    "release_connection",
+    "reacquire_connection",
 ]
 EXPECTED_AUTHOR = "Nahit Pawar"
 EXPECTED_PROJECT_URLS = {
@@ -86,7 +89,7 @@ def main() -> None:
             extra=None,
         )
         _validate_base_commands(base_bin, base_env, root)
-        anyio.run(_validate_mcp, base_bin / "dutchmate", base_env)
+        anyio.run(_validate_mcp, base_bin, base_env, root)
 
         if not arguments.public_release:
             debug_bin, debug_env = _install_tool(
@@ -120,6 +123,11 @@ def _wheels_by_distribution(
                 name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
             )
             metadata = Parser().parsestr(archive.read(metadata_path).decode("utf-8"))
+            if metadata["Name"] == "dutchmate-mcp-server":
+                requirements = metadata.get_all("Requires-Dist")
+                assert "mcp>=2.0,<3" in requirements
+                assert "httpx>=0.27" in requirements
+                assert "dutchmate-core==0.1.0" in requirements
         distribution = metadata["Name"]
         if distribution in wheels:
             raise AssertionError(f"multiple wheels built for {distribution}")
@@ -286,22 +294,40 @@ def _validate_debug_command(bin_dir: Path, environment: dict[str, str], root: Pa
     assert "analyze" in result.stdout
 
 
-async def _validate_mcp(executable: Path, environment: dict[str, str]) -> None:
+async def _validate_mcp(bin_dir: Path, environment: dict[str, str], root: Path) -> None:
     child_environment = environment.copy()
-    child_environment.pop("PYTHONPATH", None)
-    child_environment["PATH"] = os.pathsep.join(
-        [str(executable.parent), "/usr/bin", "/bin"]
-    )
-    parameters = StdioServerParameters(
-        command=str(executable),
-        args=["mcp", "--service-url", "http://127.0.0.1:0"],
-        env=child_environment,
-    )
+    for name in ("PYTHONPATH", "VIRTUAL_ENV", "DUTCHMATE_SERVICE_URL"):
+        child_environment.pop(name, None)
+    child_environment["PATH"] = os.pathsep.join(["/usr/bin", "/bin"])
 
-    with anyio.fail_after(20):
-        async with Client(stdio_client(parameters), mode="auto", cache=None) as client:
-            listing = await client.list_tools()
-            assert [tool.name for tool in listing.tools] == EXPECTED_TOOLS
+    for name, prefix in (("dutchmate", ["mcp"]), ("dutchmate-mcp", [])):
+        executable = bin_dir / name
+        parameters = StdioServerParameters(
+            command=str(executable),
+            args=[*prefix, "--service-url", "http://127.0.0.1:0"],
+            env=child_environment,
+            cwd=str(root),
+        )
+        with anyio.fail_after(20):
+            async with Client(stdio_client(parameters), mode="auto", cache=None) as client:
+                discover = client.session.discover_result
+                assert discover is not None
+                assert discover.ttl_ms == 300000 and discover.cache_scope == "private"
+                listing = await client.list_tools()
+                assert [tool.name for tool in listing.tools] == EXPECTED_TOOLS
+                assert await client.list_tools() == listing
+                assert listing.ttl_ms == 300000 and listing.cache_scope == "private"
+                result = await client.call_tool("get_status", {})
+                assert result.result_type == "complete" and result.is_error is True
+                error = result.structured_content
+                assert error is not None and error["error"] == "service_unavailable"
+                assert error["detail_truncated"] is False
+                assert len(str(error["detail"]).encode()) <= 1024
+        completed = subprocess.run(
+            [str(executable), *prefix], input="", text=True, capture_output=True,
+            env=child_environment, cwd=root, timeout=10, check=False,
+        )
+        assert completed.returncode == 0 and completed.stdout == ""
 
 
 def _run(

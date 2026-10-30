@@ -23,7 +23,8 @@ def test_main_runs_stdio_with_default_service_and_log_level(
 
     main_module.main([])
 
-    assert calls == [(DEFAULT_SERVICE_URL, "INFO")]
+    assert calls == [("http://127.0.0.1:2040", "INFO")]
+    assert DEFAULT_SERVICE_URL == "http://127.0.0.1:2040"
     assert capsys.readouterr() == ("", "")
 
 
@@ -57,6 +58,14 @@ def test_main_explicit_service_url_overrides_environment(
     main_module.main(["--service-url", "http://127.0.0.1:4040", "--log-level", "warning"])
 
     assert calls == [("http://127.0.0.1:4040", "WARNING")]
+
+
+@pytest.mark.parametrize("level", ["DeBuG", "INFO", "warning", "error", "critical"])
+def test_main_preserves_all_accepted_log_levels(level, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(main_module, "run_stdio", lambda **kwargs: calls.append(kwargs))
+    main_module.main(["--log-level", level])
+    assert calls[0]["log_level"] == level.upper()
 
 
 def test_real_stdio_entrypoint_keeps_stdout_protocol_clean_on_eof() -> None:

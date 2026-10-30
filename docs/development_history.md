@@ -9,6 +9,72 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 4 — Installed Launch and Boundary Regressions — 2026-10-30
+
+- Implemented only [MCP plan Slice 4](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 3 `c119532` on `mcp/v2-service-client`.
+  Changes are tests, installed-distribution verification tooling and status/
+  history only. No production launcher, MCP, service, Device Core, packaging
+  contract, firmware or hardware change was needed.
+- Added fourteen installed-process cases in `test_installed_launch.py` for
+  absolute `dutchmate mcp` and sibling `dutchmate-mcp`, from temporary working
+  directories with `PATH=/usr/bin:/bin`, no `PYTHONPATH` or `VIRTUAL_ENV`.
+  Raw JSON-RPC exchanges parse every stdout line instead of allowing an SDK
+  transport to discard noise. Modern discovery, exact ordered twelve-tool
+  catalog, repeated listing, private 300000 ms cache hints, matching structured/
+  text errors, bounded actionable unavailable-service errors, continued protocol
+  operation after errors, clean EOF and empty-stdin shutdown pass. Debug logs
+  appear on stderr; stdout contains only protocol replies and no trailing output.
+- Installed-process URL cases distinguish explicit flag from environment using
+  conflicting valid/invalid values: flag overrides `DUTCHMATE_SERVICE_URL`,
+  environment overrides the default, invalid scheme/credentials remain rejected
+  as bounded tool errors. Existing client URL validation coverage stays passing;
+  no normalization rule changed. Exact default `http://127.0.0.1:2040` and all
+  five accepted case-normalized log levels are asserted at the entrypoint.
+  Installed invalid-log-level and hosted-transport options fail on stderr with
+  exit 2 and empty stdout. No service startup or local evidence artifacts occur.
+- Strengthened the existing AST architecture suite with a narrow MCP import
+  boundary: only HTTP/SDK, standard library support and the existing pure Core
+  diagnostic/validation/query contracts are permitted. Hardware backends,
+  firmware transport, runtime/service composition, evidence stores, Debug Agent
+  and LLM dependencies are excluded. Direct file/dynamic-import/process calls
+  and hosted transport launch paths are guarded; the only server `run` transport
+  is stdio. Existing exact catalog/retired-tool/field rejection tests remain
+  passing; no raw GPIO or compatibility aliases were added.
+- Reproduced one verification defect before fixing it: the wheel smoke script
+  still expected the retired nine-tool catalog. The new packaging regression
+  failed with that mismatch (31 other focused cases passed). Refreshed only
+  that verification script to the twelve tools, exercising both installed
+  entrypoints, actual unavailable-service errors, modern metadata/cache hints,
+  repeated listing and empty EOF without adding the tool bin directory to PATH.
+  Added installed-distribution entrypoint/dependency checks and wheel metadata
+  assertions for `mcp>=2.0,<3`, `httpx>=0.27` and `dutchmate-core==0.1.0`.
+  No production product defect was found or fixed.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py tests/architecture tests/packaging --tb=short` | 372 passed in 11.32 s |
+  | `uv build --all-packages --no-sources --no-create-gitignore --out-dir /tmp/dutchmate-mcp-slice4-dist` | All six wheel/sdist pairs built; initially unavailable offline build backend fetched with sandbox escalation |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-mcp-slice4-dist` | Passed (exit 0); temporary isolated uv tool environments installed actual built wheels, fetched declared runtime dependencies with sandbox escalation, verified metadata/entrypoints and both MCP stdio commands outside repository/dev PATH; existing debug-package help smoke also passed without starting an agent |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,872 passed in 56.22 s; existing cancellation, EOF, version rejection and Slice 3 actual-service coverage retained |
+  | `git diff --check` | Passed |
+
+- Reviewed the complete seven-file diff and local documentation links. Prior
+  history and dated validation text, production files/contracts and hardware
+  acceptance/checklist remain intact. Only test/verification changes were made;
+  no production interfaces, module ownership or dependency direction changed,
+  so no architecture document or Graphify update was needed. No hardware/HIL,
+  physical serial access, TCP listener, Device Core Service process, commit or
+  push was used.
+- Recorded Slice 4 complete; overall MCP migration remains incomplete. Stage 8,
+  Phase 1B and Phase 1 remain incomplete pending manufactured KiCad Rev-A
+  physical/electrical acceptance. Legacy EAGLE functional-HIL policy and
+  unresolved historical electrical gaps remain unchanged.
+
 ## MCP v2 Slice 3 — Actual Service/Protocol Integration — 2026-10-30
 
 - Implemented only [MCP plan Slice 3](mcp_integration_plan.md#independently-testable-implementation-sequence),
