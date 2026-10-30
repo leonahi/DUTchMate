@@ -25,7 +25,8 @@
 > Accepted MCP Slice 3: `c119532` (pushed on `mcp/v2-service-client`); original implementation base `6497f85`
 > Accepted MCP Slice 4: `71a43f0` (pushed on `mcp/v2-service-client`); original implementation base `c119532`
 > Accepted MCP Slice 5: `664615a`; merged into `main` via PR #5 at `5c517ad`; original implementation base `71a43f0`
-> Cleanup source base: `5c517ad`; current branch `refactor/stale-code-cleanup`, cleanup uncommitted
+> Accepted cleanup: `d11cb1a`; merged into `main` via PR #6 at `a4707f3`; original source base `5c517ad`
+> Documentation audit base: `a4707f3`; current branch `docs/repository-consistency-audit`, documentation uncommitted
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
@@ -38,7 +39,7 @@
 Read this document first whenever development resumes.
 
 - **Current milestone:** MCP v2 migration **Complete** under the approved scoped
-  policy; repository stale-code cleanup validated, with optional host UI gaps below.
+  policy; documentation consistency audited, with optional host UI gaps unchanged.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -66,8 +67,9 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Cleanup focused 184/450, architecture/packaging 30, full 1,872;
-  build/install smoke, Ruff, mypy/103, interfaces and links/diff pass; no hardware/HIL.
+- **Validation:** Docs: 53 commands/163 links; focused 533; full rerun 1,872;
+  build/install smoke, Ruff, mypy/103 and diff/preservation pass; no hardware/HIL.
+- **Follow-up:** Legacy load-profile script and reconnect-test synchronization; see audit below.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -173,6 +175,25 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 | Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
 
 ## Current Validation Requirements
+
+Repository documentation consistency audit, 2026-10-30: checked 30 project
+Markdown files, including all five tracked READMEs. Corrected current checkout/
+release scope, package paths/entrypoint ownership, MCP/plugin examples, GPIO v2
+reporting, firmware/DUT identity and migration-reference wording. Validation and
+release records received scope banners only; their original bodies and all
+prior history remain unchanged. Product/Phase 1 requirements, acceptance tables,
+MCP catalog/acceptance policy and hardware design are unchanged. Verified 53
+documented commands with inert callbacks, route/catalog/status shapes and local
+links/anchors. Current known follow-ups: historical `run_load_profile.py` uses
+retired `send --force`; a reconnect test can sample recorder `faulted` before
+coordinator `connection_error` publication. Neither code/test issue was changed.
+Focused tests: **533 passed in 12.77 s**; isolated reconnect variants **4 passed
+in 0.40 s**. Initial full run: **1 failed/1,871 passed in 58.35 s** at that
+publication window; temporary instrumentation reproduced it. Unmodified full
+rerun: **1,872 passed in 48.87 s**. Ruff, mypy/103, six wheel/sdist builds,
+isolated installed smoke, link/preservation checks and `git diff --check` passed.
+No live hardware, cross-build, named-host UI acceptance, commit or push. Details
+and exact scope are in history; Phase 1/MCP dispositions remain unchanged.
 
 Repository stale/dead-code audit, 2026-10-30: removed one unreferenced internal
 GPIO-role constant and five uncalled test helpers after mapping source, test,

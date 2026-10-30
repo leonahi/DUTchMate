@@ -1,5 +1,10 @@
 # Phase 1 Ring Buffer Validation Record
 
+> Historical measurements and decision for the fixture/builds identified below.
+> `accepted_32k` does not transfer physical acceptance to manufactured KiCad Rev-A.
+> See [Phase 1 section 4.1](../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
+> and [development status](../../docs/development_status.md) for the separate current-board gate.
+
 > Status: accepted_32k
 > Scope: Phase 1B RP2350-based Raspberry Pi Pico 2 Debug Helper 32 KiB UART RX
 > ring-buffer acceptance evidence.

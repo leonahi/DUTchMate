@@ -13,11 +13,14 @@ host/USB scheduling stalls at 460800 baud while leaving most of the RP2350's
 520 KiB SRAM available for firmware, stacks, USB buffers, and protocol
 encoding. The validation gate must confirm both assumptions.
 
-This is the selected implementation baseline, not a validated final size. Its
-decision state is `selected_unvalidated` until the firmware RAM report and HIL
-measurements in this document produce either `accepted_32k` or
-`revised_with_evidence`. Phase 1B cannot be declared complete while the state is
-`selected_unvalidated`.
+This document defines the implementation baseline and acceptance method; it
+does not own a rolling validation status. Each fixture/build campaign records
+`selected_unvalidated` until its required RAM/HIL measurements establish
+`accepted_32k` or `revised_with_evidence`. The
+[historical report](../hardware/validation/phase1_ring_buffer.md) retains its
+actual decision and measurements. That result does not establish acceptance of
+manufactured KiCad Rev-A hardware; apply the
+[Phase 1 evidence boundaries](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries).
 
 ## Throughput Assumptions
 
@@ -102,8 +105,9 @@ The Device Core must:
 - Preserve raw bytes that are received after overflow.
 
 `none_reported` applies only to the Debug Helper RX buffer. It is not proof that
-the complete electrical UART path was lossless. `truncated` and `interrupted`
-remain independent session fields.
+the complete electrical UART path was lossless. Current schema-v2 continuity,
+local recording and derived-line completeness are separate evidence-quality
+dimensions. Historical v1 `truncated`/`interrupted` fields remain readable.
 
 Firmware reports telemetry with a v1 `buffer_status` event. The service should expose the most recent buffer telemetry when available:
 
@@ -170,7 +174,10 @@ After validation, the report records exactly one outcome:
   required; the report records the failed criterion, measurements, new value,
   and associated firmware/documentation changes.
 
-If normal boot logs overflow, increase the buffer to 64 KiB or reduce firmware/protocol overhead before exposing MCP tools.
+If normal boot logs overflow, increase the buffer to 64 KiB or reduce firmware/
+protocol overhead before claiming ring-buffer acceptance. Independent MCP
+software sequencing follows specification section 4.1; manufacturing lead time
+does not block that work.
 
 If only dense synthetic continuous logging overflows, keep 32 KiB for MVP and document the limitation.
 

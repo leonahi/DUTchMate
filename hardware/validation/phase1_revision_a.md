@@ -1,5 +1,11 @@
 # Phase 1B Revision A Prototype Validation Record
 
+> Historical EAGLE/as-built record. Dated references below to a future KiCad
+> design describe that checkpoint, not today's repository source. Use the
+> [current KiCad design](../pcb/debug-helper/rev-a/README.md) and
+> [Phase 1 evidence boundaries](../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
+> no measurement, acceptance result or unresolved historical gap is changed.
+
 > Status: in_progress
 > Scope: Phase 1B electrical, isolation, sequencing, and signal-integrity
 > evidence for the first assembled Revision A translator prototype.
