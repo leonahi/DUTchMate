@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -35,15 +36,18 @@ from dutchmate_mcp_server.server import (
 from dutchmate_mcp_server.service_client import DeviceCoreClient
 
 EXPECTED_TOOL_NAMES = [
+    "get_status",
+    "monitor",
+    "interact",
+    "send_uart",
     "reset_dut",
-    "set_boot_mode",
-    "capture_uart",
-    "get_recent_uart_log",
-    "wait_for_uart_pattern",
-    "run_boot_test",
-    "send_uart_command",
-    "get_debug_session",
-    "list_debug_sessions",
+    "set_dut_boot_mode",
+    "get_evidence",
+    "get_recent_logs",
+    "list_sessions",
+    "get_session",
+    "release_connection",
+    "reacquire_connection",
 ]
 
 
@@ -112,9 +116,7 @@ async def test_modern_stream_client_discovers_lists_and_calls_tools() -> None:
     assert result.result_type == "complete"
     assert result.is_error is False
     assert result.structured_content == {"ok": True, "pulse_ms": 100}
-    assert [(request.method, request.url.path) for request in requests] == [
-        ("POST", "/dut/reset")
-    ]
+    assert [(request.method, request.url.path) for request in requests] == [("POST", "/dut/reset")]
 
     request_observations = [item for item in observations if item[0] != "notifications/cancelled"]
     assert [item[0] for item in request_observations] == [
@@ -193,7 +195,7 @@ async def test_modern_stream_client_cancellation_stops_the_tool_call() -> None:
         with anyio.CancelScope() as scope:
             call_scope = scope
             cancel_scope_ready.set()
-            await client.call_tool("capture_uart", {"duration_s": 10})
+            await client.call_tool("monitor", {"duration_s": 10})
 
     server = create_server(client_factory=_client_factory(handler))
     server.middleware.append(record_request)
@@ -235,7 +237,7 @@ async def test_installed_cli_serves_modern_stdio_without_service_or_venv_path() 
             listing = await client.list_tools()
             assert [tool.name for tool in listing.tools] == EXPECTED_TOOL_NAMES
 
-            result = await client.call_tool("get_recent_uart_log", {})
+            result = await client.call_tool("get_recent_logs", {})
             assert result.result_type == "complete"
             assert result.is_error is True
             assert result.structured_content is not None
@@ -258,3 +260,57 @@ def _client_factory(
     handler: Callable[[httpx.Request], Coroutine[None, None, httpx.Response]],
 ) -> Callable[[], DeviceCoreClient]:
     return lambda: DeviceCoreClient(transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.parametrize(
+    "name, arguments, method, path",
+    [
+        ("monitor", {"conditions": [{"pattern": "READY"}], "timeout_s": 1}, "POST", "/dut/monitor"),
+        (
+            "interact",
+            {"text": "null", "line_ending": "none", "duration_s": 1},
+            "POST",
+            "/dut/interact",
+        ),
+        ("send_uart", {"text": "{}", "line_ending": "none"}, "POST", "/dut/uart/send"),
+        ("get_evidence", {"cursor": "null", "wait_s": 0}, "GET", "/dut/evidence"),
+        ("list_sessions", {"cursor": "[]"}, "GET", "/sessions"),
+        ("get_session", {"session_id": "null"}, "GET", "/sessions/null"),
+    ],
+)
+async def test_modern_tools_preserve_v2_arguments_on_the_wire(name, arguments, method, path):
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True, "operation_id": "service-op"})
+
+    server = create_server(client_factory=_client_factory(handler))
+    async with Client(InMemoryTransport(server), mode="auto", cache=None) as client:
+        result = await client.call_tool(name, arguments)
+    assert result.is_error is False
+    assert result.result_type == "complete"
+    assert result.structured_content == {"ok": True, "operation_id": "service-op"}
+    assert len(requests) == 1
+    assert (requests[0].method, requests[0].url.path) == (method, path)
+    if method == "POST":
+        assert json.loads(requests[0].content) == arguments
+    elif "cursor" in arguments:
+        assert dict(requests[0].url.params)["cursor"] == arguments["cursor"]
+
+
+@pytest.mark.parametrize("retired", ["force", "cmd", "append_newline"])
+async def test_modern_tools_reject_retired_arguments_as_bounded_tool_errors(retired):
+    async def handler(request):
+        pytest.fail("invalid tool request reached Device Core")
+
+    server = create_server(client_factory=_client_factory(handler))
+    async with Client(InMemoryTransport(server), mode="auto", cache=None) as client:
+        result = await client.call_tool("send_uart", {"data_b64": "eA==", retired: "x" * 10000})
+    assert result.is_error is True
+    assert result.structured_content == {
+        "ok": False,
+        "error": "invalid_argument",
+        "detail": "Invalid MCP tool arguments",
+        "detail_truncated": False,
+    }

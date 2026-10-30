@@ -9,6 +9,73 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 2 — Public Catalog and Retired-Path Removal — 2026-10-30
+
+- Implemented only [MCP plan Slice 2](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 1 `22cbd11` on `mcp/v2-service-client`.
+  Registered exactly the twelve documented tools in order, each directly
+  invoking its corresponding Slice 1 service-client operation once.
+  `set_dut_boot_mode` uses unchanged `POST /dut/boot-mode`; reset, Control,
+  evidence, ownership and operation semantics remain authoritative in the
+  service/Device Core. Boot validation remains client-composed.
+- After migrating every server consumer, removed MCP client/server paths for
+  `set_boot_mode`, `capture_uart`, `wait_for_uart_pattern`, `run_boot_test`,
+  `send_uart_command`, `get_recent_uart_log`, `get_debug_session` and
+  `list_debug_sessions`, plus unused `_timed_workflow` and legacy-validation
+  imports. Removed three positive legacy-client tests; updated catalog-dependent
+  server/protocol/installed-launch tests. No compatibility aliases or service
+  endpoints were added. Retired names/fields remain only in negative MCP tests.
+- Preserved MCP 2.x/stdin-stdout transport, identity/discovery and per-request
+  metadata, deterministic ordering, private 300,000 ms cache hints, complete
+  structured results, cancellation/EOF and launcher source. No raw GPIO/serial,
+  LLM/Debug Agent, automatic retries, MCP-owned lifecycle/timing or evidence
+  truth was added. No Device Core/service API behavior changed.
+- Test-first catalog migration initially produced **124 failed, 7 passed**.
+  Basic registration exposed **45 failed, 86 passed**: the installed SDK ignores
+  extra arguments and convenience-parses JSON-looking strings (`null`, `true`,
+  `{}`, `[]`). That could silently accept retired fields or corrupt valid UART
+  text/cursor strings. A narrow `MCPServer` subclass now validates original
+  arguments with the SDK-generated Pydantic model (`strict`, extras forbidden)
+  and invokes the registered async context-free handler without convenience
+  parsing. Public schemas forbid extra properties. Missing/extra-argument
+  errors are bounded structured `invalid_argument` results without input dumps;
+  local diagnostics use the shared projector. This is argument adaptation only,
+  not a second operation or service model.
+- Focused tests verify all twelve client-method calls once, exact HTTP mappings,
+  Monitor/Interact forms and outcomes/ranges, binary/text payloads and all five
+  explicit endings, raw JSON-looking text/cursors, reset/boot, session/evidence
+  cursors, release/reacquire projections, negative retired-tool/field calls,
+  bounded structured errors and schema/catalog/cache behavior. Modern SDK
+  in-memory tests cover argument preservation/rejection on the wire; installed
+  real-stdio tests retain discovery, twelve-tool listing, unavailable-service
+  errors and clean shutdown without a venv on PATH. HTTP remains mocked here;
+  no actual-service/ASGI Slice 3 acceptance is claimed.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_server.py apps/mcp_server/tests/test_protocol_integration.py --tb=line -r N` | 139 passed in 2.06 s after catalog/raw-argument fixes |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | Final focused run: 311 passed in 3.44 s, including additional modern wire regressions |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,838 passed in 48.25 s |
+  | `git diff --check` | Passed |
+
+  Net test-count change from 1,709: 123 added server cases + nine modern wire
+  cases − three removed legacy-client cases = 129.
+- Complete diff, documentation links, source/reference inventory, exact catalog
+  and thin-client checks passed. Seven files changed: server/client, their three
+  test files, status and this history addition. Prior history and dated status
+  evidence are preserved; hardware acceptance/checklist, Device Core, service,
+  launcher, firmware and historical hardware evidence remain unchanged. No
+  module/ownership/layer-direction change required architecture documentation
+  or a Graphify update. No hardware/HIL, commit or push.
+- Recorded Slice 2 complete in status. Overall MCP migration remains incomplete;
+  Stage 8, Phase 1B and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical validation. Historical EAGLE electrical gaps remain
+  unresolved; legacy functional HIL permission is unchanged.
+
 ## MCP v2 Slice 1 — Service-Client Mappings and Error Projection — 2026-10-30
 
 - Implemented only [MCP plan Slice 1](mcp_integration_plan.md#independently-testable-implementation-sequence)

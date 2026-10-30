@@ -13,14 +13,10 @@ from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.evidence.tail import validate_evidence_query
 from dutchmate_core.operations.monitor import MonitorCondition, validate_monitor_request
 from dutchmate_core.validation import (
-    prepare_uart_send_payload,
     prepare_uart_tx_payload,
     validate_boot_mode,
-    validate_capture_duration,
     validate_reset_pulse,
     validate_session_id,
-    validate_wait_pattern,
-    validate_wait_timeout,
 )
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
@@ -217,60 +213,6 @@ class DeviceCoreClient:
             timeout_s=CONNECTION_MUTATION_TIMEOUT_S,
         )
 
-    # Retained only for the pre-v2 catalog; migrate its consumers in Slice 2.
-    async def set_boot_mode(self, *, mode: str) -> dict[str, object]:
-        return await self.set_dut_boot_mode(mode=mode)
-
-    async def capture_uart(self, *, duration_s: float) -> dict[str, object]:
-        return await self._timed_workflow(
-            "/dut/capture",
-            duration_s=validate_capture_duration(duration_s),
-        )
-
-    async def run_boot_test(self, *, duration_s: float) -> dict[str, object]:
-        return await self._timed_workflow(
-            "/dut/boot-test",
-            duration_s=validate_capture_duration(duration_s),
-        )
-
-    async def wait_for_uart_pattern(
-        self,
-        *,
-        pattern: str,
-        timeout_s: float,
-    ) -> dict[str, object]:
-        validated_pattern = validate_wait_pattern(pattern)
-        validated_timeout = validate_wait_timeout(timeout_s)
-        return await self._request(
-            "POST",
-            "/dut/wait-pattern",
-            json={"pattern": validated_pattern, "timeout_s": validated_timeout},
-            timeout_s=max(
-                DEFAULT_REQUEST_TIMEOUT_S,
-                validated_timeout + WORKFLOW_TIMEOUT_GRACE_S,
-            ),
-        )
-
-    async def send_uart_command(
-        self,
-        *,
-        cmd: str,
-        append_newline: bool = True,
-        force: bool = False,
-    ) -> dict[str, object]:
-        prepare_uart_send_payload(cmd, append_newline=append_newline)
-        if not isinstance(force, bool):
-            raise ValueError("UART send force must be a boolean")
-        return await self._request(
-            "POST",
-            "/dut/uart/send",
-            json={
-                "cmd": cmd,
-                "append_newline": append_newline,
-                "force": force,
-            },
-        )
-
     async def get_recent_logs(
         self,
         *,
@@ -305,41 +247,6 @@ class DeviceCoreClient:
         if cursor is not None:
             params["cursor"] = cursor
         return await self._request("GET", "/sessions", params=params)
-
-    async def get_recent_uart_log(
-        self,
-        *,
-        lines: int = 300,
-        session_id: str | None = None,
-    ) -> dict[str, object]:
-        return await self.get_recent_logs(lines=lines, session_id=session_id)
-
-    async def get_debug_session(self, session_id: str) -> dict[str, object]:
-        return await self.get_session(session_id)
-
-    async def list_debug_sessions(
-        self,
-        *,
-        limit: int = 50,
-        cursor: str | None = None,
-    ) -> dict[str, object]:
-        return await self.list_sessions(limit=limit, cursor=cursor)
-
-    async def _timed_workflow(
-        self,
-        path: str,
-        *,
-        duration_s: float,
-    ) -> dict[str, object]:
-        return await self._request(
-            "POST",
-            path,
-            json={"duration_s": duration_s},
-            timeout_s=max(
-                DEFAULT_REQUEST_TIMEOUT_S,
-                duration_s + WORKFLOW_TIMEOUT_GRACE_S,
-            ),
-        )
 
     async def _request(
         self,
