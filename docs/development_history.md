@@ -9,6 +9,60 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Start Prerequisite and Contract Audit — 2026-10-30
+
+- Documentation/design audit only, starting with a clean working tree on
+  `main` at `2b7c89a0830c32da5ea9bbc293d8f4b6fc83e243`, matching `origin/main`.
+  Independently confirmed pushed `refs/heads/main` with
+  `rtk proxy env GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/leonahi/DUTchMate.git refs/heads/main`.
+- **MCP start prerequisite disposition: Satisfied** under specification §4.1.
+  Evidence for each prerequisite:
+
+  | Prerequisite | Committed evidence and audit conclusion |
+  |---|---|
+  | Accepted Device Core/service/CLI software baseline | [Stage 8 software acceptance](#stage-8-software-acceptance-and-hardware-availability-audit--2026-10-26), accepted Basic v2 status/HIL, subsequent `6d0c1a8` control-generation and `14e6717` cleanup fixes plus their recorded full gates establish the baseline. `git diff --name-only 14e6717554e76444a6b9bc21dbf257a0e51d1efe..HEAD -- core apps tests uv.lock pyproject.toml` returned no changes. |
+  | Available functional Enhanced HIL | [Retained v2 workflow results](../hardware/validation/phase1_enhanced_hil.md#continuous-session-and-boundedhuman-operations) from `20261027T114440Z-7db24eae`, [corrected explicit control-generation path](../hardware/validation/phase1_enhanced_hil.md#startup-and-explicit-ownership-lifecycle-passed) from `20261027T165848Z-b9a62f0b`, and [automatic USB reconnect pass](../hardware/validation/phase1_enhanced_hil.md#automatic-pico-2-usb-reconnect-hil-passed--2026-10-27) from `20261027T180121Z-9ea027ae` jointly support functional readiness. The [reconciliation](../hardware/validation/phase1_enhanced_hil.md#evidence-reconciliation-addendum--2026-10-28) accepts the combined workflow evidence; earlier failed actions/runs remain failed within their recorded scope. |
+
+- Legacy EAGLE use is functional HIL only. No physical HIL rerun was needed.
+  Its historical UART electrical/oscilloscope gap remains unresolved; KiCad
+  source review remains source verification. Final Stage 8, Phase 1B and Phase 1
+  acceptance still requires fresh manufactured KiCad Rev-A physical/electrical
+  validation. This audit claims no MCP implementation or new hardware acceptance.
+- Rewrote [the MCP integration plan](mcp_integration_plan.md) around actual
+  `app.py` endpoints, `schemas.py` serializers, core validators/cursors and
+  canonical errors. Defined twelve service-shaped tools, compact unchanged
+  service results, explicit text endings/binary TX, operation/range/cursor
+  preservation, read-only historical compatibility and release/reacquire.
+  Removed capture/wait, schema-v1-only responses, implicit newline, `force`,
+  `capture_active` and boot-test behavior as target requirements; retained a
+  retirement inventory for obsolete source consumers. Boot validation remains
+  client-composed from generic atomic operations.
+- Source/dependency reality supports preserving the existing modern foundation:
+  locked MCP `2.0.0`, protocol `2026-07-28`, `MCPServer`, tools-only stateless
+  stdio, fixed cache policy and working CLI/entrypoint launch. Existing MCP
+  tests mock obsolete endpoints, including absent `/dut/boot-test`, so those
+  passes are not v2 adapter acceptance. The sequence now starts with v2 HTTP
+  client mappings/tests, then catalog retirement, actual service/protocol
+  integration, installed launch/boundary regressions and scoped host acceptance.
+- Readiness/current task updated only in development status; MCP implementation
+  remains not started. No extra normative document was needed: the Phase 1 v2
+  specification already defines the required behavior. One focused Graphify
+  query (`MCP service client monitor interact evidence`, budget 1600) located
+  relevant layers; important findings were verified against actual source/tests.
+  No structural change or Graphify update was made.
+- Fresh non-physical verification command:
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py apps/service/tests/test_monitor_endpoint.py apps/service/tests/test_uart_send_endpoint.py apps/service/tests/test_device_action_endpoints.py apps/service/tests/test_session_endpoints.py apps/service/tests/test_atomic_service_surface.py apps/service/tests/test_status_endpoint.py tests/unit/runtime/test_phase1_cli_acceptance.py --tb=line`:
+  **75 passed in 3.31 s**. Covers existing MCP protocol/client/server/stdio,
+  launcher and service request/result schemas, v2 sessions and Basic/Enhanced
+  CLI acceptance with fake physical ports. This is software verification, not
+  fresh physical HIL or acceptance of the proposed MCP catalog.
+- Complete diff inspected. Three Markdown files changed; prior history and all
+  dated status validation evidence preserved byte-for-byte. Local links/anchors,
+  catalog-to-source mappings, obsolete-target checks, evidence-boundary and
+  documentation-only scope checks plus `git diff --check` passed. No production
+  code, tests, firmware, hardware design or historical validation files changed;
+  no full-suite/CAD/physical rerun, hardware access, commit or push.
+
 ## Functional Enhanced HIL and MCP Sequencing Policy Updated — 2026-10-30
 
 - Adopted the agreed policy in

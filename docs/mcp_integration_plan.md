@@ -1,552 +1,330 @@
 # MCP Integration Plan
 
-> **Status:** pre-v2 Phase 2 implementation reference. Its capture/wait,
-> schema-v1, implicit line-ending, `capture_active`, and `force` semantics are not
-> the target contracts. The former dedicated boot-test composite is also removed
-> from the target tool model. `project_context.md` and `phase1_implementation_spec.md`
-> are authoritative. MCP v2 remapping follows the software/HIL prerequisites in
-> [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
-> it need not wait for manufactured-board acceptance. Current progress belongs
-> only in [development status](development_status.md).
->
-> Scope: Phase 2 MCP server transport, launch model, and tool contract.
+> Scope: Phase 2 stdio adapter migration to the accepted Phase 1 v2 service API.
+> [Project context](project_context.md) and the
+> [Phase 1 specification](phase1_implementation_spec.md) define product and
+> service behavior. This plan maps those contracts; it does not redefine them.
+> [Development status](development_status.md) alone owns readiness, progress and
+> the next task. Dated audit evidence belongs in
+> [development history](development_history.md#mcp-v2-start-prerequisite-and-contract-audit--2026-10-30).
 
-## Decision Summary
+## Sequencing and Architectural Boundaries
 
-Phase 2 implements **MCP stdio transport only**.
+Apply the MCP start prerequisites and hardware evidence boundaries in
+[specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries):
+accepted Device Core/service/CLI software baseline plus available functional
+Enhanced HIL. Legacy EAGLE functional HIL is permitted. Manufactured KiCad Rev-A
+physical/electrical acceptance is a separate gate for final Stage 8, Phase 1B and
+Phase 1 completion; MCP work neither closes that gate nor the historical EAGLE
+UART electrical/oscilloscope gap. KiCad source review remains source verification.
 
-The normative protocol baseline is MCP `2026-07-28`. The MCP package requires
-the official Python SDK `mcp>=2.0,<3` and uses its `MCPServer` API. SDK 1.x,
-`FastMCP`, and code designed around the legacy `initialize` handshake are not
-accepted implementation foundations.
-
-For a modern client, DUTchMate is stateless at the MCP layer: there is no
-`initialize`/`notifications/initialized` exchange and no protocol session ID.
-Every request carries protocol version and client capabilities in `_meta`; the
-SDK owns that wire validation and the required `server/discover` implementation.
-The SDK's built-in handshake-era compatibility may remain available for older
-clients, but DUTchMate code must not depend on it or store per-connection state.
-Device Core session IDs and pagination cursors remain explicit ordinary tool
-arguments/results, not MCP transport state.
-
-The planned MCP server is launched by the coding agent as a subprocess and
-communicates MCP JSON-RPC over stdin/stdout. The MCP server does not own
-hardware and does not open the serial port. It calls the already-running Device
-Core Service over local HTTP at `http://127.0.0.1:2040` by default.
-
-No Phase 2 DUTchMate client or deployment requires an independently hosted MCP
-endpoint, so Streamable HTTP is outside Phase 2 scope. The deprecated HTTP+SSE
-transport will not be implemented.
-
-## Process Model
+The process boundary remains:
 
 ```text
-Coding Agent / IDE Agent
-        |
-        | MCP stdio
-        v
-MCP Server process (`dutchmate mcp`)
-        |
-        | HTTP Device Core Service API
-        v
-Device Core Service (`dutchmate start`, 127.0.0.1:2040)
-        |
-        | selected backend serial connection
-        v
-Basic generic USB-to-UART (raw UART) or Enhanced RP2350 Debug Helper (NDJSON)
+coding agent -> MCP stdio -> thin HTTP service client
+             -> authoritative Device Core Service -> Device Core -> backend/DUT
 ```
 
-The planned MCP server is a thin adapter:
+MCP must not open serial devices, import backend/firmware transports, recreate
+connection ownership or operation timing/state machines, keep independent
+session/evidence truth, invoke an LLM, or run the Debug Agent. One service owns
+physical acquisition. Tool calls request existing bounded operations or retrieve
+existing evidence; they do not own the UART reader. User configuration and
+service startup remain explicit, outside MCP tools.
 
-- Receives MCP tool calls.
-- Validates tool arguments.
-- Calls the Device Core Service API.
-- Returns compact structured results.
-- Registers tools in one deterministic order and configures `tools/list` cache
-  hints with a private scope.
-- Returns ordinary complete results only; Phase 2 does not use Multi Round-Trip
-  Requests, protocol tasks, resources, prompts, or subscriptions.
-- Returns deterministic Device Core evidence and does not invoke an LLM,
-  provider adapter, or Debug Agent report generator in Phase 2.
-- Does not implement deprecated Roots, Sampling, or protocol Logging; process
-  logs use stderr.
-- Never imports serial transport or firmware protocol code directly.
-- Never exposes raw GPIO writes as default tools.
+## Preserve the Existing Transport Foundation
 
-## Launch Commands
+Retain stdio-only Phase 2 transport, MCP `2026-07-28`, official Python SDK
+`mcp>=2.0,<3` (locked `2.0.0`), and `MCPServer`. The existing composition uses
+modern `server/discover`, per-request protocol/client-capability `_meta`, no
+application handshake/session state, tools-only capabilities, and complete
+structured results. Let the SDK validate protocol metadata and emit
+`resultType`/server identity. Do not replace it with SDK 1.x or `FastMCP`.
 
-Required Phase 2 command:
+The fixed tool catalog has deterministic registration order, `listChanged: false`
+and finite private cache hints (existing TTL: 300,000 ms). SDK legacy-client
+compatibility may remain, but DUTchMate does not depend on it. Phase 2 adds no
+resources, prompts, subscriptions, Multi Round-Trip Requests, protocol tasks,
+Roots, Sampling, or protocol Logging. Process logs go to stderr.
 
-```bash
-dutchmate mcp
-```
+Retain `dutchmate mcp [--service-url URL] [--log-level LEVEL]` and its
+`dutchmate-mcp` entrypoint. URL precedence is explicit flag, then
+`DUTCHMATE_SERVICE_URL`, then `http://127.0.0.1:2040`; existing log-level handling
+and sibling-executable launch remain. Do not silently start/stop the Device Core
+Service. An unavailable service returns a bounded actionable tool error.
 
-Required optional flags:
+Streamable HTTP and deprecated HTTP+SSE are not Phase 2 deliverables. A named
+client/deployment requirement and a separate approved transport/security design
+are required before adding hosted MCP. No open-ended MCP streaming is required;
+finite evidence long-polling is an ordinary bounded tool call.
 
-```bash
-dutchmate mcp --service-url http://127.0.0.1:2040
-dutchmate mcp --log-level info
-```
+## Migration Inventory
 
-The command writes only valid MCP JSON-RPC messages to stdout. Logs go to
-stderr.
+The inventory distinguishes reusable infrastructure from obsolete adapter
+behavior. Existing MCP source/tests are evidence of transport behavior, not of
+v2 tool compatibility. Tests using mocked HTTP success for obsolete endpoints
+cannot establish acceptance against the real v2 service.
 
-If the Device Core Service is not running, MCP tool calls return a structured
-tool error that tells the agent to select one backend, for example:
-
-```bash
-dutchmate start --backend basic --serial-port /dev/ttyUSB0
-# or: dutchmate start --backend enhanced
-```
-
-Plain `dutchmate start` is sufficient only when `[backend].mode` and any
-required Basic serial port are already configured.
-
-The MCP server should not silently start the Device Core Service in Phase 2. Keeping service lifecycle explicit avoids surprise hardware ownership and makes failures easier to understand.
-
-## Deferred Streamable HTTP Trigger
-
-Do not add a `dutchmate mcp-http` command or HTTP MCP server during Phase 2.
-Reconsider Streamable HTTP only when at least one concrete requirement is
-documented:
-
-- A named supported client cannot launch a local stdio subprocess.
-- An approved deployment needs one independently hosted MCP endpoint shared by
-  multiple clients.
-- A remote or containerized deployment cannot use a local stdio process and has
-  an identified operator/security owner.
-
-Before implementation, a follow-up design decision must define:
-
-- the target client and deployment topology
-- the MCP specification/SDK version to implement
-- localhost versus remote exposure and TLS/reverse-proxy ownership
-- authentication and authorization
-- mandatory `Origin` validation and DNS-rebinding protection
-- stateless per-request concurrency, cancellation, and `subscriptions/listen`
-  behavior
-- required per-request `_meta`, `MCP-Protocol-Version`, `Mcp-Method`, and
-  conditional `Mcp-Name` header validation
-- audit logging and secret handling
-- integration and security tests
-
-If approved, the server should bind to `127.0.0.1` by default and use one `/mcp`
-endpoint unless the documented deployment requires otherwise. Binding to
-non-loopback interfaces requires authentication and an explicit threat review.
-
-Legacy HTTP+SSE is not a fallback deliverable. A future compatibility request
-must identify a named legacy client and be reviewed separately; new DUTchMate
-integrations use stdio or, after the trigger above, Streamable HTTP.
-
-## MCP Tool Set
-
-Phase 2 tools:
-
-| Tool | Device Core Service endpoint |
+| Existing consumer/path | Migration action |
 |---|---|
-| `reset_dut(pulse_ms=100)` | `POST /dut/reset` |
-| `set_boot_mode(mode)` | `POST /dut/boot-mode` |
-| `capture_uart(duration_s)` | `POST /dut/capture` |
-| `get_recent_uart_log(lines=300, session_id=None)` | `GET /dut/logs` |
-| `wait_for_uart_pattern(pattern, timeout_s)` | `POST /dut/wait-pattern` |
-| `send_uart_command(cmd, append_newline=True, force=False)` | `POST /dut/uart/send` |
-| `get_debug_session(session_id)` | `GET /sessions/{id}` |
-| `list_debug_sessions(limit=50, cursor=None)` | `GET /sessions` |
+| `apps/mcp_server/src/dutchmate_mcp_server/service_client.py` | Keep one async HTTP client, URL validation, dependency injection, JSON/error handling and no-redirect/no-proxy behavior; add the mappings below. |
+| `apps/mcp_server/src/dutchmate_mcp_server/server.py` | Keep composition, discovery, result wrapping and cache policy; replace the tool catalog and its argument schemas. |
+| `capture_uart`, `wait_for_uart_pattern`, `/dut/capture`, `/dut/wait-pattern` | Retire from the MCP target surface; use `monitor`. Service-only compatibility aliases do not become MCP tools. |
+| `run_boot_test`, `/dut/boot-test` | Remove MCP registration/client method/tests; the live service has no such endpoint. Use client composition below. |
+| `send_uart_command(cmd, append_newline, force)` | Replace with `send_uart` and the v2 byte/text payload contract; retire implicit newline and bypass fields. |
+| `get_recent_uart_log`, `get_debug_session`, `list_debug_sessions` | Migrate to `get_recent_logs`, `get_session`, `list_sessions`, preserving service fields and compatibility discriminators. |
+| MCP server/client/protocol tests | Replace obsolete target fixtures/assertions; keep modern protocol, error, cancellation and stdio coverage. |
+| `apps/cli/src/dutchmate_cli/mcp.py`, MCP `main.py`, entrypoint/CLI tests | Preserve existing launch implementation; refresh catalog/installed-launch acceptance only where needed. |
 
-Phase 4 tool:
+No production code changes are part of this audit. During implementation,
+remove retired methods once registration/tests no longer consume them; do not
+create service compatibility behavior to keep an obsolete MCP tool working.
 
-| Tool | Device Core Service endpoint |
+## Target Tool Catalog
+
+Register these twelve tools in the table order. Names follow the existing
+service handler/operation names, except MCP tool `set_dut_boot_mode` maps to the
+unchanged service operation `set_boot_mode` at `POST /dut/boot-mode`. Forward the
+documented body/query without inventing another API model. Each result is the
+service's bounded JSON object
+in structured content, mirrored as compact JSON text; do not insert invented
+success fields or discard evidence/provenance fields.
+
+| Tool | Accepted service mapping and arguments | Coding-agent use |
+|---|---|---|
+| `get_status()` | `GET /status` | Inspect connection/profile, effective capabilities, active operations and policy before acting. |
+| `monitor(duration_s?, conditions?, timeout_s?)` | `POST /dut/monitor`; `MonitorRequest` | Bounded duration observation or literal-condition wait. |
+| `interact(data_b64?, text?, line_ending?, duration_s?, conditions?, timeout_s?)` | `POST /dut/interact`; `InteractRequest` | One exact audited TX plus bounded observation. |
+| `send_uart(data_b64?, text?, line_ending?)` | `POST /dut/uart/send`; `UartSendRequest` | Standalone audited TX without claiming a command-response window. |
+| `reset_dut(pulse_ms=100)` | `POST /dut/reset`, body `pulse_ms` | Pulse the already-configured reset role. |
+| `set_dut_boot_mode(mode)` | `POST /dut/boot-mode`, body `mode` | Command the configured boot role to `normal` or `bootloader`. |
+| `get_evidence(cursor?, limit=100, wait_s=1.0)` | `GET /dut/evidence`, query `cursor`, `limit`, `wait_s` | Establish a durable tail boundary or retrieve a finite page across actions/reconnects. |
+| `get_recent_logs(session_id?, lines=300)` | `GET /dut/logs`, query `session_id`, `lines` | Retrieve bounded historical UART, including from an explicitly selected session. |
+| `list_sessions(limit=50, cursor?)` | `GET /sessions`, query `limit`, `cursor` | Find recent evidence sessions using stable pagination. |
+| `get_session(session_id)` | `GET /sessions/{session_id}`; validated/escaped path ID | Inspect lifecycle, quality, segments, unresolved actions and artifact references. |
+| `release_connection()` | `POST /connection/release`, no body | Explicitly hand the transport to an external flash/tool process. |
+| `reacquire_connection()` | `POST /connection/reacquire`, no body | Resume service ownership and expose the new segment boundary. |
+
+Do not mechanically expose the remaining endpoints. Phase 2 has no profile/GPIO
+configuration tool, arbitrary raw GPIO, baseline mutation/comparison tool,
+service lifecycle tool, follow/console stream, or dedicated boot-validation tool.
+The twelve tools cover observation, exact interaction, configured control,
+bounded evidence and an external-tool handoff without broad configuration or
+analysis surfaces.
+
+### Requests and deadlines
+
+Use the accepted schemas/validators rather than independent policy:
+
+- Monitor and Interact require exactly one completion mode: finite
+  `0 < duration_s <= 300`, or 1..8 ordered `{pattern, name?}` conditions plus
+  finite `0 < timeout_s <= 300`. Reject booleans/nonfinite times, mixed modes,
+  missing bounds and invalid literals/names before HTTP dispatch. Literals are
+  case-sensitive, 1..256 UTF-8 bytes, without CR/LF; no regex/glob interpretation.
+- Send and Interact require exactly one payload: valid `data_b64` with no
+  `line_ending`, or `text` with explicit `line_ending` in `none`, `lf`, `cr`,
+  `crlf`, `profile_default`. Final bytes must be 1..1024. Forward the request;
+  Device Core resolves the active profile default. Do not pre-encode text into
+  a different request, trim bytes, deduplicate terminators or add implicit LF.
+  Reject retired `cmd`, `append_newline` and `force` fields.
+- Reset accepts only integer `pulse_ms` 1..10000, default 100. Boot-mode values
+  are exactly `normal` and `bootloader`; they are commanded state, not pin readback.
+- Evidence `limit` is integer 1..500; `wait_s` is finite 0..30. Session-list
+  `limit` is integer 1..100; log `lines` is integer 1..1000. Preserve opaque
+  cursors as strings, validated using the corresponding service contract.
+
+The client retains its 2-second ordinary request timeout and 2-second transport
+grace for bounded Monitor/Interact and evidence long-poll requests, sized from
+the accepted `duration_s`, `timeout_s` or `wait_s`. Connection mutations reuse
+the existing CLI client's 65-second HTTP timeout, allowing the service's
+configured reacquire deadline to run without a second reconnect loop or status
+polling. This is transport allowance, not a new service deadline. Do not shorten
+or extend Device Core's monotonic deadlines, automatically retry
+TX/Control/Interact/reacquire, or substitute a new operation/session after a
+timeout. An HTTP timeout means state
+may be unknown, not that an action was undone or bytes were never sent.
+
+### Result and evidence preservation
+
+- Status preserves actual `active_session_id`, `active_operations`, connection
+  state/error, profile/digest/effective settings, raw and effective capabilities,
+  `capability_policy`, integrity/provenance, commanded boot mode, controls and
+  retention fields. Effective `capabilities` determine permission; raw physical
+  capabilities do not override policy. TX policy is not electrical isolation.
+- Monitor/Interact preserve `operation_id`, all service outcomes (`elapsed`,
+  `matched`, `timeout`, `disconnected`, `released`, `cancelled`, `error`), mode,
+  accepted parameters, `start_cursor`, `end_cursor`, half-open `evidence_ranges`,
+  `matched_condition`, `line_processing_limited`, `integrity` and
+  `timestamp_provenance`. Preserve exact match excerpts/base64/offsets. Interact
+  also preserves `data_b64`, `transformation`, nullable `tx` and `tx_error`.
+  A service-returned terminal result stays a result; ordinary condition timeout
+  is not an MCP/HTTP transport error.
+- Send preserves `attempt_id`, exact `data_b64`, `accepted_bytes`, status,
+  `audit_status`, `transformation`, attempt/result session IDs and evidence
+  sequence references, `performed_at` and nullable `device_timestamp_us`.
+  Acceptance by a backend is not proof of electrical DUT receipt. Preserve
+  partial/unknown TX and unresolved attempts; never manufacture success.
+- Reset/boot success preserves the fields actually returned by
+  `device_action_payload`: `ok`, `performed_at`, nullable `device_timestamp_us`,
+  and accepted `pulse_ms` or `mode`. These responses do not contain operation
+  IDs or audit cursors; obtain control audit records through saved evidence
+  cursors instead of inventing them. Do not relabel raw device clocks as
+  normalized segment-relative time.
+- Evidence preserves `records`, exact `data_b64` and action/connection/telemetry
+  records, `next_cursor`, and `omitted_records`. Omitting `cursor` attaches at the
+  current durable tail with no historical replay. The public opaque cursor is
+  distinct from Monitor/Interact's structured `{session_id, next_evidence_seq}`
+  positions; do not interconvert or decode either into a fabricated cursor.
+- Recent logs preserve actual `complete_lines`, `partial_lines`,
+  `oversized_lines`, exact raw base64, lossy text, segment/channel/byte
+  coordinates, `schema_version`, `session_selection`, snapshot/provenance,
+  integrity/line-processing, storage/truncation and response-omission fields.
+  Keep service ordering; never merge arrays using timestamps across segments.
+- Session list/detail preserve the v2 `schema_version`/`compatibility`, lifecycle,
+  profile, rollover chain, segments, `evidence_quality`, storage, operation/action
+  counts, unresolved attempt counts, `first_error` and manifest fields wherever
+  returned by that endpoint. Do not require detail-only fields on list items.
+  Keep v0/v1 read-only compatibility shapes and schema errors; do not upgrade,
+  rewrite or fill missing native fields on historical data.
+- Release/reacquire preserve `ok`, `connection_state`, `session_id`, `segment_id`.
+  Intentional gaps, automatic reconnect and timestamp-origin changes remain
+  service evidence. MCP never opens an external port or assumes continuity.
+
+Evidence/log pages are already capped at 262144 compact UTF-8 bytes. Preserve
+whole records and service omission counts. Response omission, recording loss,
+backend loss, observation gaps and line-processing limits are different facts;
+`none_reported` is not global losslessness. Do not impose a schema-v1 result or
+copy journal truth into an MCP-owned cache/store.
+
+### Error projection and cancellation
+
+Keep SDK `CallToolResult` wrapping: success and bounded terminal operation
+results are complete structured results; input/service/client failures use
+`isError: true`. Unknown tools, malformed protocol requests and unsupported
+protocol versions remain protocol errors. Preserve service `ok: false`, `error`,
+`detail`, `detail_truncated` and optional bounded `context` without renaming
+codes. Reuse the shared diagnostic projection for locally generated errors;
+never copy raw frames, UART data, secrets or exception dumps into diagnostics.
+
+Preserve `invalid_argument`, `unsupported_capability` (including disabled-policy
+source), `not_configured`, `operation_active`, `invalid_connection_state`,
+`invalid_session_state`, `cursor_expired`, schema/persistence/backend errors and
+the service's exact context. Missing physical capability is distinct from a
+missing configured role. Preserve HTTP 410 cursor expiry; do not silently
+reattach or select another session. Keep malformed/non-object service responses
+as bounded `service_protocol_error`, and unreachable service as
+`service_unavailable` without attempting service startup.
+
+Propagate cancellation through the SDK/HTTP request path. Device Core owns
+terminalization and durable `cancelled` evidence; cancellation cannot roll back
+an action already dispatched. Phase 2 adds no cancel-by-ID API or client-owned
+operation state machine.
+
+### Client-composed boot validation
+
+Follow [specification §24](phase1_implementation_spec.md#24-client-composition-of-atomic-capabilities):
+obtain a tail cursor with `get_evidence`, optionally select boot mode, call
+`reset_dut`, then consume evidence from the saved cursor. A later Monitor is
+optional for subsequent bounded conditions; it does not retroactively match
+bytes acquired before its start. The caller explicitly restores `normal` when
+appropriate. No MCP handler combines these actions, automatically chooses boot
+mode or sleeps/reads the serial port.
+
+## Independently Testable Implementation Sequence
+
+This is dependency order, not a second progress tracker. Preserve the existing
+protocol/dependency/server foundation; do not repeat its original implementation.
+
+1. **V2 HTTP service-client mappings and error projection.** Change MCP
+   `service_client.py` and `test_service_client.py` to implement the catalog's
+   twelve mappings with the existing injected HTTP transport. Cover exact
+   bodies/queries, v2 payloads, finite timeouts, opaque cursor round trips and
+   canonical errors. Additive methods may coexist with still-registered old
+   consumers within this slice; no new compatibility API is added to the
+   service. Exit: focused mapping tests pass without hardware; SDK baseline,
+   existing catalog and launch tests stay passing. Public tool registration
+   changes belong to slice 2.
+2. **V2 tool catalog and removal of retired adapter paths.** Update `server.py`
+   and `test_server.py`, replacing registration/argument schemas with the table
+   order and service-shaped arguments. Update catalog-dependent protocol
+   fixtures so each commit remains testable. Remove obsolete methods/tests once
+   consumers migrate. Exit: all twelve tools dispatch exactly once; retired
+   tools/fields are absent or rejected; structured success/errors, duration and
+   condition outcomes, binary payloads and line endings are preserved.
+3. **Actual service and modern protocol integration.** Extend
+   `test_protocol_integration.py` and client/server tests to call the real service
+   app through an injected ASGI transport with deterministic fake backends.
+   Verify v2 operation/evidence/session projections instead of merely returning
+   mocked success for a path. Exit: protocol metadata/discovery/version/cache,
+   actual v2 endpoint mappings, error/cursor propagation and cancellation/EOF
+   tests pass; no real hardware, second owner or evidence-store truth in MCP.
+4. **Installed launch and boundary regressions.** Preserve CLI/entrypoint
+   implementation unless a concrete regression requires a change. Refresh
+   installed `dutchmate mcp` stdio catalog/unavailable-service tests, CLI flag/env
+   and sibling-launch tests, packaging and architecture checks. Exit: modern
+   discovery and exact tool listing work without a venv on PATH, no non-protocol
+   stdout, clean startup/shutdown, no hosted MCP command or forbidden imports.
+5. **Scoped protocol/host acceptance and documentation.** Refresh named VS Code
+   and Claude Code registration examples only as needed; perform the gate below
+   for the migrated catalog. Record unavailable host UI checks truthfully.
+   Preserve historical acceptance evidence without relabelling it as v2 tool
+   acceptance. Remove superseded working-plan material when migration finishes,
+   preserving durable contracts in authoritative documentation.
+
+Every implementation slice runs focused tests during development and the
+repository-required Ruff, mypy, full pytest and `git diff --check` gate before
+completion. Apply the repository Graphify policy only when interfaces or
+structure actually change. No firmware, protocol or hardware redesign is needed
+for this mapping migration.
+
+## Test and Acceptance Matrix
+
+| Area | Required checks for the migrated adapter |
 |---|---|
-| `compare_boot_log(session_id)` | `GET /sessions/{id}/compare` |
+| Mapping/validation | Each tool's exact method/path/body/query; invalid finite bounds, modes, literals, IDs, booleans and payload combinations rejected before dispatch; no retired fields. |
+| Monitor/Interact | Duration elapsed, condition matched/timeout and other terminal outcomes; operation IDs, cross-session half-open ranges, exact match excerpts and nullable TX/error fields unchanged. |
+| Exact TX | Binary/invalid-UTF-8 base64, multibyte text, all explicit endings including profile resolution; byte limits after transformation; no terminator deduplication or implicit LF; audit/partial/unknown outcomes retained. |
+| Control | Reset default/range and boot enum; capability/policy/role errors; only actual action response fields; boot validation remains composed by the caller. |
+| Evidence/sessions | Tail attach, opaque public cursor versus operation positions, long-poll bound, 410 expiry, omission counts, segments/gaps/rollover, v2 quality/counts, explicit logs selection and read-only v0/v1 compatibility. |
+| Ownership | Release/reacquire exact projection, invalid-state/conflict errors, no automatic retry/reopen, no serial imports or MCP-owned sessions/reader. |
+| Errors | Preserve canonical bounded service code/detail/truncation/context; malformed JSON/non-object/error contracts, unreachable service and unknown timeout state; no action retry. |
+| Protocol | Existing MCP 2.x/`2026-07-28` baseline, modern metadata, version rejection, discovery, exact ordered twelve-tool listing, private finite TTL, complete structured success/error, cancellation and EOF. |
+| Launch/dependencies | Existing URL precedence/logging/sibling executable behavior, installed real stdio process without service or venv PATH, deterministic listing, actionable unavailable-service result, stderr-only logs, clean shutdown. |
+| Boundaries | No serial/backend imports, LLM/Debug Agent dependency, raw GPIO, hidden operation/session truth, boot-test composite, open-ended stream or hosted MCP endpoint. |
 
-`compare_boot_log` never selects a baseline heuristically. Device Core resolves
-the one project-session-store `baseline.json` pointer; no designation preserves
-`not_found`, and a corrupt or dangling pointer preserves `persistence_fault`.
-Both baseline and subject must be native session schema version `1`; MCP
-preserves `unsupported_session_schema` for non-native evidence. The subject may be a terminal legacy capture or historical boot-test session.
-Text/pattern comparison may cross backend modes, while timing comparison is returned only
-for uninterrupted single-segment sessions with matching timestamp source,
-clock, observation point, and event granularity. MCP preserves
-`baseline_session_id`, `timing_comparable`, and the incompatibility reason.
+Final v2 adapter acceptance requires actual service-backed integration and a
+modern SDK real-stdio subprocess test of the exact catalog, unavailable-service
+error and clean shutdown. Re-run strict Inspector `tools/list` validation through
+the absolute installed launcher and record named host checks when available.
+Prior nine-tool mock/protocol or host evidence does not accept the new catalog.
 
-## Tool Response Rules
+Retain the existing scoped conformance policy. The pinned official runner
+`@modelcontextprotocol/conformance@0.2.0-alpha.11` accepts an HTTP server URL,
+not a stdio command. A temporary loopback HTTP projection of the same
+`create_server()` composition is supporting protocol evidence only, never a
+Phase 2 product endpoint. Run its frozen `2026-07-28` requirement set: applicable
+`server-stateless` checks must pass except the two synthetic
+`test_missing_capability` sampling-tool checks; all three `tools-list` checks
+and the tools-list cache/TTL/scope/wire-schema checks must pass. Record other
+optional-fixture results as out-of-scope evidence, not passes or stdio product
+failures. Reconcile any changed runner behavior explicitly rather than silently
+changing the protocol policy. Ruff, mypy, full pytest and diff checks must pass.
 
-MCP tools return compact JSON-compatible objects. The Python SDK wraps ordinary
-responses as `resultType: "complete"` and exposes their dictionaries as
-structured content. Device Core/API failures and input/business validation
-failures are tool execution errors (`isError: true`) with actionable bounded
-content, not JSON-RPC protocol errors. Unknown tools, malformed MCP requests,
-unsupported protocol versions, and internal protocol failures remain JSON-RPC
-errors. Tool results preserve evidence quality flags rather than hiding them in
-text.
+## Source and Contract References
 
-The tool catalog is static for one DUTchMate release. Registration order is
-therefore deterministic, `listChanged` is false, and `tools/list` uses a finite
-`ttlMs` with `cacheScope: "private"`. The private scope is conservative even
-though Phase 2 stdio has no shared HTTP intermediary. Every result's required
-`resultType` and modern server identity `_meta` are emitted by MCP SDK 2.x rather
-than being hand-assembled in DUTchMate handlers.
-
-Capture-like tools must include:
-
-- `session_id`
-- `schema_version: 1`
-- accepted `duration_s` for applicable legacy capture/historical boot-test
-  evidence
-- `integrity` with `loss_status`, `observation_scope`, and `dropped_bytes`
-- `line_processing` with `status`, `max_line_bytes`, and
-  `oversized_line_count`
-- `storage` with evidence budget/written bytes and nullable `truncation`
-- `truncated`
-- `interrupted`
-- `resumed`
-- integer `segments` count in 1..32 for capture-like results
-- relevant log excerpts when available
-
-Timestamped excerpts must include `segment_id` and segment-relative
-`timestamp_us`. MCP tools must not compare timestamps across segments or imply
-finer timing than the segment's `event_granularity` metadata.
-
-MCP does not retry or start a replacement workflow when Device Core returns
-`service_unavailable` for `reconnect_limit`. It preserves the failed session ID,
-the exact `segment_count: 32` / `max_segments: 32` context, and all retrievable
-session evidence for an explicit follow-up decision.
-
-The same no-retry rule applies to `reconnect_timeout`. MCP preserves
-`operation`, `session_id`, and the snapshotted `reconnect_timeout_s` from the
-service error and never appends to or replaces the terminal session implicitly.
-
-`get_recent_uart_log` forwards optional `session_id` and integer `lines` in the
-1..1000 range. Without an ID it preserves Device Core selection: active session
-first, otherwise newest terminal session (`completed`, `failed`, or
-`abandoned`). MCP must preserve `session_id`,
-`schema_version: 1`, `session_selection`, `active`, `snapshot_event_count`,
-complete `lines`,
-`partial_lines`, response-omission counts, session integrity/truncation facts,
-`oversized_lines` descriptors, line-processing facts, and referenced segment
-provenance. It also preserves storage accounting and quota-truncation detail;
-response omission must never be conflated with session quota truncation. It
-preserves `ingestion_index` and
-`line_index_in_event`, which are the only supported way to merge complete and
-partial/oversized arrays; MCP must not merge them by comparing timestamps.
-Device Core limits replay to native session schema version `1`; MCP preserves
-`unsupported_session_schema` for explicit legacy or unknown-version requests
-and does not silently substitute another session.
-
-`list_debug_sessions` forwards `limit` and opaque `cursor` without decoding or
-rewriting the cursor. It preserves the `{items, next_cursor}` page and every
-item's `schema_version` and `compatibility`. For native items it also preserves
-lifecycle, backend, baseline, integrity, truncation/reconnect, segment count,
-line-processing state, and compact reference-only `first_error` fields. A legacy
-version `0` item remains the service's bounded `legacy_read_only` identity shape;
-MCP must not populate absent native fields. `get_debug_session` preserves the
-complete bounded lifecycle metadata for native sessions,
-`first_error.match_excerpt`, grouped evidence counts, unresolved forced-send
-count, storage/truncation accounting, the 1..32 complete `metadata.json`
-segment objects, and artifact manifest. For legacy version
-`0`, it preserves only the bounded compatibility detail and artifact sizes.
-Unknown versions preserve `unsupported_session_schema`. Neither tool expands
-raw logs, JSONL events, or
-full detected-pattern arrays; callers use `get_recent_uart_log` for bounded UART
-evidence.
-
-For normal lines the tool returns exact `line_raw_b64` plus lossy `line_text`;
-it must not replace raw evidence with display text. A physical line over 65536
-bytes remains an `oversized_lines` descriptor without invented text/base64.
-MCP must not synthesize reconnect markers, silently discard partial/oversized
-records, or present `response_truncated` as session evidence loss. Device Core's
-compact JSON response remains capped at 262144 bytes. A missing explicit or
-implicit session preserves the `not_found` service error.
-
-Control-tool responses preserve the Device Core Service fields:
-`configured_at` for GPIO configuration, `performed_at` for reset/boot actions,
-and optional raw `device_timestamp_us`. MCP must not rename a raw device clock
-to unqualified `timestamp_us`; that name is reserved for normalized session
-evidence accompanied by `segment_id`.
-
-`reset_dut` validates or forwards only integer `pulse_ms` values from 1 through
-10000 and preserves the service default of 100 ms. Its result includes the
-accepted `pulse_ms`; MCP must not omit that value from a successful response.
-
-`set_boot_mode` preserves the accepted `mode` in its result. `normal` selects
-the configured boot role's idle behavior and `bootloader` its active behavior;
-the reported mode is commanded state, not DUT pin readback. Phase 2 exposes no
-dedicated boot-test tool. A Coding Agent composes boot validation from audited
-reset/boot-mode tools plus the v2 durable evidence/Monitor tools defined by the
-post-Phase-1 MCP remapping. A bootloader procedure explicitly selects
-`bootloader`, performs reset and evidence observation, then restores `normal` when
-appropriate. Device Core does not silently select or restore a boot mode.
-
-`capture_uart` requires an explicit numeric `duration_s` with
-no MCP default. It accepts finite integers/fractions satisfying
-`0 < duration_s <= 300`; booleans and all other types/ranges are invalid. MCP
-forwards the value unchanged and preserves Device Core's accepted `duration_s`
-in success responses. It must not retry with a shorter/longer value, round the
-duration, or dispatch boot-mode/reset tools after duration validation fails. A
-client/tool-call timeout may include bounded protocol grace beyond the requested
-duration but never changes the Device Core monotonic workflow deadline.
-
-`wait_for_uart_pattern` accepts a Unicode literal whose UTF-8 encoding is
-1..256 bytes with no CR/LF and a finite `0 < timeout_s <= 300`; booleans are
-invalid. Matching is case-sensitive on complete lines received after the new
-wait session starts. MCP must not interpret regex/glob syntax, search prior
-logs, attach to an active session, or retry `capture_active` automatically.
-
-The tool preserves `session_id`, `pattern`, `matched`, `end_reason`, bounded
-`match_excerpt` with byte offsets/exact base64, detected-pattern reference,
-segment/timestamp provenance, integrity, and line-processing fields. It never
-expands that excerpt to the complete source line. `matched: false` with
-`end_reason: "timeout"` is a successful bounded no-match result, not a tool
-error. Service/backend failures still preserve their canonical error codes.
-
-`send_uart_command` accepts Unicode text, encodes it as UTF-8, and defaults
-`append_newline = true`. Device Core appends one LF only when the encoded bytes
-do not already end in LF, preserving existing LF and CRLF endings. Setting it
-to `false` sends the UTF-8 bytes without an added terminator. MCP does not
-expose raw bytes or base64 payload input in Phase 2.
-
-The final encoded payload must contain 1..1024 bytes after optional LF
-insertion. MCP validates or forwards this exact contract and preserves
-`invalid_argument` context containing `actual_bytes` and `max_bytes` for an
-oversized request. The limit is measured in UTF-8 bytes, not characters. Empty
-text with default newline sends one LF; empty text with
-`append_newline = false` is invalid.
-
-`hardware.uart.tx_enabled` defaults false and filters `uart_send` for both
-backend modes. MCP must use effective `capabilities`, never infer permission
-from raw `backend_capabilities`, and preserve `disabled_by_policy` context when
-Device Core reports that TX was explicitly disabled.
-
-Status/session `tx_policy_enabled` means only that Device Core may submit UART
-bytes. MCP must not describe it as physical TX enable, high impedance, wiring
-detection, or electrical isolation. Setting it false does not disconnect Basic
-adapter TX and cannot independently disable the Enhanced Revision A transmit
-direction while its shared UART translator is enabled for receive.
-
-`send_uart_command` defaults to `force = false`. During an active legacy capture or wait-pattern session, the default preserves
-evidence isolation by returning `capture_active`; explicit `force = true` may bypass only that
-ownership conflict. It never bypasses argument validation, effective
-`uart_send` capability policy, `tx_enabled = false`, connection state, or
-backend errors.
-MCP must preserve `performed_at`, optional `device_timestamp_us`, and
-`perturbation_logged` from Device Core. It also preserves `attempt_id` on a
-forced in-session success or dispatched failure and preserves nullable
-`bytes_accepted` in error context.
-
-The MCP server must not infer `force = true` or automatically retry a
-`capture_active` response with force. A caller must request it explicitly. A
-forced in-session send is dispatched only after Device Core durably records
-`uart_tx_attempt`, and success returns only after the matching `uart_tx_result`
-is durable. MCP must not present either record or an accepted-byte count as
-proof that the DUT electrically received the bytes. A failed result may report
-partial acceptance; an unmatched attempt means completion is unknown and must
-be surfaced as such. `persistence_fault` after result dispatch must not be
-recast as a failed-to-transmit guarantee. Outside an active session, force has
-no additional effect.
-
-Before a forced attempt is dispatched, Device Core quota admission reserves the
-maximum matching-result record size. MCP does not expose, alter, or release that
-reservation. If the session reaches its evidence cap, MCP preserves
-`completed`/`size_limit`, `truncated`, and rejected-unit accounting; a physical
-write failure remains `persistence_fault` and must not be recast as clean quota
-truncation.
-
-Failure-analysis tools must surface `loss_reported` and `not_observable` without
-turning `none_reported` into a global lossless guarantee. They must also preserve
-independent `truncated` and `interrupted` flags.
-
-Tool errors should preserve Device Core Service error codes:
-
-```json
-{
-  "ok": false,
-  "error": "not_configured",
-  "detail": "reset role is not configured",
-  "detail_truncated": false,
-  "context": {
-    "operation": "reset",
-    "required_role": "reset",
-    "role_state": "unconfigured"
-  }
-}
-```
-
-In particular, MCP preserves `backend_input_error` and its bounded category/frame
-size context when the Enhanced backend emits malformed or oversized NDJSON. It
-must not retry the failed workflow, substitute another session, expose the raw
-offending frame, or recast the failure as timeout, disconnect, UART loss, or
-session truncation.
-
-They must also preserve the optional structured `context`. In particular,
-`unsupported_capability` means the selected backend cannot perform the
-operation, while `not_configured` means the capability exists but the required
-user role is not configured. MCP tools must not infer missing role
-configuration when Device Core reports an absent physical capability.
-
-## Streaming Policy
-
-For Phase 2, prefer bounded tools over open-ended streaming:
-
-- `capture_uart(duration_s)`
-- `wait_for_uart_pattern(pattern, timeout_s)`
-
-The MCP server may call the Device Core Service's `GET /dut/events` SSE endpoint
-internally later, but Phase 2 tools should return finite results. This avoids
-long-running MCP streams until the core workflow is stable. Capture and wait-pattern remain capped at 300 seconds even if an MCP client
-allows a longer tool-call timeout.
-
-Phase 2 does not advertise `subscriptions/listen` filters because its MCP tool
-catalog is fixed and it exposes no MCP resources or prompts. It also does not
-use Multi Round-Trip Requests: all required input is present in the original
-tool arguments, and user confirmation remains the responsibility of the MCP
-host/client UI.
-
-## Registration Example
-
-Planned generic MCP client configuration shape:
-
-```json
-{
-  "mcpServers": {
-    "dutchmate": {
-      "command": "dutchmate",
-      "args": ["mcp"],
-      "env": {
-        "DUTCHMATE_SERVICE_URL": "http://127.0.0.1:2040"
-      }
-    }
-  }
-}
-```
-
-Exact registration keys vary by coding agent. DUTchMate documentation keeps
-examples per client separate from the core architecture.
-
-## Implementation Sequence
-
-This section defines dependency order only. `docs/development_status.md` selects
-the active phase and next slice.
-
-Implement Phase 2 in these independently testable slices:
-
-1. **Protocol/dependency baseline:** require MCP SDK 2.x, lock it,
-   record `2026-07-28` as normative, and retain the tested Device Core HTTP port.
-2. **Stateless server composition:** create one `MCPServer` with fixed
-   identity, instructions, private finite cache hints, a deterministic initially
-   empty catalog, and stdio-only `run()` wiring. No application handshake/session
-   state is introduced.
-3. **Tool registration and error projection:** register the nine Phase 2 tools
-   in documented order, return structured complete results, and translate
-   actionable validation/service failures into `isError: true` tool results.
-4. **Modern protocol integration tests:** use the SDK v2 client in modern mode
-   to verify `server/discover`, per-request metadata, supported version,
-   deterministic cacheable tool listing, calls, cancellation, and clean EOF
-   shutdown. Add a legacy-client smoke test only for the SDK's compatibility
-   path; no DUTchMate behavior may depend on it.
-5. **CLI launch wiring:** replace both placeholders with `dutchmate mcp`, resolve
-   `--service-url`/`DUTCHMATE_SERVICE_URL` and stderr log level without writing
-   non-protocol data to stdout.
-6. **Host registration and acceptance:** document named host configurations and
-   accept the `2026-07-28` tools-only stdio server against the scoped gate below
-   before declaring Phase 2 complete.
-
-## Phase 2 Acceptance Gate
-
-The shipped transport is stdio. The official conformance CLI
-`@modelcontextprotocol/conformance@0.2.0-alpha.11` accepts an HTTP URL for
-server tests, not a stdio command. Its frozen `2026-07-28` requirement set also
-exercises optional prompts, resources, sampling, media, progress, tasks, and
-fixture tools that DUTchMate does not advertise. A nonzero full-suite result
-therefore cannot, by itself, accept or reject this fixed tools-only server.
-
-Phase 2 acceptance requires all of the following:
-
-1. The installed `dutchmate mcp` executable passes a modern SDK v2 **real stdio
-   subprocess** test for discovery, the exact nine-tool listing, a bounded
-   structured tool error with Device Core deliberately unreachable, and clean
-   shutdown. The Inspector CLI also passes strict modern `tools/list` validation
-   through the absolute launcher path.
-2. The SDK integration tests pass modern per-request metadata, version
-   rejection, private cache hints, stable tool order, complete structured
-   success/error calls, cancellation, and EOF. Server/client tests pass all
-   nine Device Core endpoint mappings and the defined validation/error paths.
-3. The official pinned requirement set is run against a temporary loopback HTTP
-   projection of the **same** `create_server()` composition, with an unreachable
-   Device Core URL. All applicable `server-stateless` checks must pass except
-   the two checks that require its synthetic `test_missing_capability` sampling
-   tool. All three `tools-list` checks and the `caching` checks for
-   `tools/list` hints, nonnegative TTL, valid cache scope, and wire schema must
-   pass. Other results are recorded as scope evidence, not counted as a stdio
-   product failure or silently reported as passing.
-4. Ruff, mypy, the full pytest suite, and `git diff --check` pass. Named VS Code
-   and Claude Code registrations are documented against their host formats;
-   host UI validation is follow-up evidence when those applications are
-   available, not a substitute for direct stdio checks.
-
-This gate accepts the declared stdio tool surface only. It does not claim that
-the optional conformance fixtures or an HTTP MCP deployment pass. The temporary
-HTTP projection is used only for protocol validation and must not be exposed as
-a Phase 2 product command.
-
-## Test Requirements
-
-Minimum Phase 2 tests:
-
-- The locked official Python MCP SDK is major version 2 and reports latest
-  protocol version `2026-07-28`.
-- A modern stdio client can call `server/discover` and receives supported
-  version `2026-07-28`, the tools capability, server identity, `resultType`, and
-  cache hints without an `initialize` handshake or protocol session ID.
-- Every modern request is accepted only with the SDK-validated protocol version
-  and client-capability `_meta`; unsupported versions preserve the specified
-  `UnsupportedProtocolVersion` behavior.
-- `tools/list` is deterministic across calls, reports `listChanged: false`, and
-  returns finite private cache hints.
-- Successful and failed tool results carry `resultType: "complete"`; Device Core
-  and actionable validation failures use `isError: true` rather than ad hoc
-  JSON-RPC server codes.
-- MCP server starts over stdio without writing logs to stdout.
-- Phase 2 packaging and CLI expose no Streamable HTTP or legacy HTTP+SSE server
-  command.
-- Tool call fails clearly when Device Core Service is not running.
-- Tool arguments are validated before calling the service.
-- Device Core Service errors are preserved in MCP tool results.
-- Capture-like tools include accepted duration when applicable, `integrity`,
-  `line_processing`, storage/truncation accounting, `truncated`, `interrupted`,
-  `resumed`, and `segments`.
-- Legacy capture rejects invalid or over-300-second durations without calling
-  Device Core and preserves the accepted duration from success responses.
-- Quota truncation remains distinct from response omission, backend loss, and
-  persistence failure; forced-send result reservations are not exposed or
-  modified by MCP.
-- Reconnect-limit and reconnect-timeout failures preserve their exact bounded
-  service context and failed session without an MCP retry or replacement
-  workflow.
-- Timestamped evidence preserves `segment_id` and never orders events across
-  segments by `timestamp_us`.
-- Control tools preserve `configured_at`/`performed_at` and
-  `device_timestamp_us` without presenting the raw device clock as normalized
-  session time.
-- `reset_dut` defaults to 100 ms, rejects invalid duration types/ranges, and
-  returns the accepted `pulse_ms`.
-- No default MCP tool can drive arbitrary raw GPIO state.
-- MCP server does not import serial transport modules.
-- MCP tool execution does not invoke an LLM or require model-provider
-  configuration.
-- MCP server code does not use deprecated Roots, Sampling, protocol Logging,
-  HTTP+SSE, `ping`, or hidden connection/session state.
-
-## References
-
-- MCP specification release `2026-07-28`:
-  https://modelcontextprotocol.io/specification/2026-07-28
-- MCP `2026-07-28` changelog:
-  https://modelcontextprotocol.io/specification/2026-07-28/changelog
-- MCP stdio transport `2026-07-28`:
-  https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio
-- Official Python SDK v2 documentation:
-  https://github.com/modelcontextprotocol/python-sdk
-- Official conformance runner:
-  https://github.com/modelcontextprotocol/conformance
-- Official MCP Inspector CLI:
-  https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md
+- [Service endpoints](../apps/service/src/dutchmate_service/app.py),
+  [request/response schemas](../apps/service/src/dutchmate_service/schemas.py),
+  [canonical errors](../apps/service/src/dutchmate_service/errors.py).
+- [Operation/cursor models](../core/src/dutchmate_core/operations/monitor.py),
+  [byte-first validation](../core/src/dutchmate_core/validation.py),
+  [public evidence pages](../core/src/dutchmate_core/evidence/tail.py).
+- [MCP source](../apps/mcp_server/src/dutchmate_mcp_server/server.py),
+  [service client](../apps/mcp_server/src/dutchmate_mcp_server/service_client.py),
+  [protocol baseline tests](../apps/mcp_server/tests/test_protocol_baseline.py),
+  [protocol/stdio tests](../apps/mcp_server/tests/test_protocol_integration.py).
+- [Migration sequencing](dutchmate_phase1_v2_coding_agent_plan.md#5-after-software-baseline-acceptance--migrate-mcp-resume-phase-4-separately).
+- [MCP specification 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28),
+  [stdio transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio),
+  [official Python SDK](https://github.com/modelcontextprotocol/python-sdk),
+  [conformance runner](https://github.com/modelcontextprotocol/conformance),
+  [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md).
