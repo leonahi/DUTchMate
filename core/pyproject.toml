@@ -3,7 +3,7 @@ name = "dutchmate-core"
 version = "0.1.0"
 description = "Core hardware interface, protocol parsing, session storage, and workflows for DUTchMate."
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Nahit Pawar" }]
 dependencies = [

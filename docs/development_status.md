@@ -27,6 +27,7 @@
 > Accepted MCP Slice 5: `664615a`; merged into `main` via PR #5 at `5c517ad`; original implementation base `71a43f0`
 > Accepted cleanup: `d11cb1a`; merged into `main` via PR #6 at `a4707f3`; original source base `5c517ad`
 > Documentation audit base: `a4707f3`; current branch `docs/repository-consistency-audit`, documentation uncommitted
+> Licensing migration base: `55c4dd1b09bfc0d83dace5725e1d746cb1687966`; metadata/documentation changes uncommitted
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
@@ -67,8 +68,8 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Docs: 53 commands/163 links; focused 533; full rerun 1,872;
-  build/install smoke, Ruff, mypy/103 and diff/preservation pass; no hardware/HIL.
+- **Validation:** Licensing: packaging 25/full 1,872; Ruff, mypy/103, lock,
+  six wheel/sdist pairs, isolated install, links and preservation pass; no hardware/HIL.
 - **Follow-up:** Legacy load-profile script and reconnect-test synchronization; see audit below.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 

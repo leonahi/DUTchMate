@@ -187,9 +187,17 @@ Current progress and the next formal hardware-validation step belong in
 and source-check results belong in
 [development history](../../../../docs/development_history.md).
 
-## Provenance
+## Licensing and provenance
 
-No CERN-OHL-P-2.0 grant applies to this directory until every symbol,
-footprint, model, template, imported asset, and manufacturing output has passed
-the planned provenance audit. Do not copy embedded EAGLE libraries or
-third-party CAD assets into this project without that audit.
+DUTchMate-authored design source, project metadata, and the project-owned
+symbol definitions in this directory are licensed under
+[CERN-OHL-P-2.0](../../../../LICENSES/CERN-OHL-P-2.0.txt).
+
+Embedded and referenced third-party symbols, footprints, models, and other CAD
+assets retain their existing terms. Standard KiCad library data retains its
+upstream license and design exception. This grant does not establish ownership
+of imported assets or complete the manufacturing-output provenance audit.
+Do not copy embedded EAGLE libraries or other third-party CAD assets into this
+project without checking their provenance and terms. See the
+[hardware scope](../../README.md) and
+[third-party notices](../../../../THIRD_PARTY_NOTICES.md).

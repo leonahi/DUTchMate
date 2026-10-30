@@ -305,3 +305,11 @@ original smoke procedure and its historical evidence. Use
 and the [v2 CLI guide](../../../docs/developer_guide.md#continuous-evidence-through-the-cli)
 for current operation/session semantics; do not replay old forced-send examples
 against the current CLI. Record the actual fixture build used for any new run.
+
+## Licensing
+
+DUTchMate-authored firmware and supporting tools use the
+[MIT License](../../../LICENSE). Zephyr and other third-party components
+retain their respective licenses; see the
+[repository scope](../../../LICENSE.md) and
+[third-party notices](../../../THIRD_PARTY_NOTICES.md).

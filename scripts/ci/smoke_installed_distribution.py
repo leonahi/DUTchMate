@@ -170,7 +170,7 @@ def _validate_artifact_metadata(dist: Path, wheels: dict[str, Path]) -> None:
                 name for name in names if name.endswith(".dist-info/licenses/LICENSE")
             )
             _assert_release_metadata(metadata, wheel.name)
-            _assert_apache_license(archive.read(license_path).decode("utf-8"), wheel.name)
+            _assert_mit_license(archive.read(license_path).decode("utf-8"), wheel.name)
             assert not any("hardware/" in name for name in names)
             identities.add((metadata["Name"], metadata["Version"]))
 
@@ -193,7 +193,7 @@ def _validate_artifact_metadata(dist: Path, wheels: dict[str, Path]) -> None:
             assert metadata_file is not None and license_file is not None
             metadata = Parser().parsestr(metadata_file.read().decode("utf-8"))
             _assert_release_metadata(metadata, source_distribution.name)
-            _assert_apache_license(
+            _assert_mit_license(
                 license_file.read().decode("utf-8"), source_distribution.name
             )
             assert not any("hardware/" in member.name for member in members)
@@ -203,15 +203,15 @@ def _validate_artifact_metadata(dist: Path, wheels: dict[str, Path]) -> None:
 
 
 def _assert_release_metadata(metadata: Message, artifact: str) -> None:
-    assert metadata["License-Expression"] == "Apache-2.0", artifact
+    assert metadata["License-Expression"] == "MIT", artifact
     assert metadata.get_all("License-File") == ["LICENSE"], artifact
     assert metadata.get_all("Author") == [EXPECTED_AUTHOR], artifact
     assert set(metadata.get_all("Project-URL")) == EXPECTED_PROJECT_URLS, artifact
 
 
-def _assert_apache_license(text: str, artifact: str) -> None:
-    assert "Apache License" in text, artifact
-    assert "Version 2.0, January 2004" in text, artifact
+def _assert_mit_license(text: str, artifact: str) -> None:
+    canonical_license = Path(__file__).resolve().parents[2] / "LICENSE"
+    assert text == canonical_license.read_text(encoding="utf-8"), artifact
 
 
 def _wheel_scripts(wheel: Path) -> dict[str, str]:
