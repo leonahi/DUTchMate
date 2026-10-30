@@ -2,26 +2,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from types import TracebackType
 from typing import Final, NoReturn, cast
 from urllib.parse import quote
 
 import httpx
 
+from dutchmate_core.diagnostics import project_diagnostic_detail
+from dutchmate_core.evidence.tail import validate_evidence_query
+from dutchmate_core.operations.monitor import MonitorCondition, validate_monitor_request
 from dutchmate_core.validation import (
-    prepare_uart_send_payload,
+    prepare_uart_tx_payload,
     validate_boot_mode,
-    validate_capture_duration,
     validate_reset_pulse,
     validate_session_id,
-    validate_wait_pattern,
-    validate_wait_timeout,
 )
 
 DEFAULT_SERVICE_URL: Final = "http://127.0.0.1:2040"
 DEFAULT_REQUEST_TIMEOUT_S: Final = 2.0
 WORKFLOW_TIMEOUT_GRACE_S: Final = 2.0
+CONNECTION_MUTATION_TIMEOUT_S: Final = 65.0
 SERVICE_NOT_RUNNING_DETAIL: Final = (
     "Device Core Service is not running. Start it with an explicit Basic or "
     "Enhanced backend before calling DUTchMate tools."
@@ -109,6 +110,61 @@ class DeviceCoreClient:
 
         await self._client.aclose()
 
+    async def get_status(self) -> dict[str, object]:
+        return await self._request("GET", "/status")
+
+    async def monitor(
+        self,
+        *,
+        duration_s: float | None = None,
+        conditions: Sequence[Mapping[str, object]] | None = None,
+        timeout_s: float | None = None,
+    ) -> dict[str, object]:
+        body, bound = _operation_body(
+            duration_s=duration_s,
+            conditions=conditions,
+            timeout_s=timeout_s,
+        )
+        return await self._request(
+            "POST",
+            "/dut/monitor",
+            json=body,
+            timeout_s=bound + WORKFLOW_TIMEOUT_GRACE_S,
+        )
+
+    async def interact(
+        self,
+        *,
+        data_b64: str | None = None,
+        text: str | None = None,
+        line_ending: str | None = None,
+        duration_s: float | None = None,
+        conditions: Sequence[Mapping[str, object]] | None = None,
+        timeout_s: float | None = None,
+    ) -> dict[str, object]:
+        body, bound = _operation_body(
+            duration_s=duration_s,
+            conditions=conditions,
+            timeout_s=timeout_s,
+        )
+        body.update(_uart_body(data_b64=data_b64, text=text, line_ending=line_ending))
+        return await self._request(
+            "POST",
+            "/dut/interact",
+            json=body,
+            timeout_s=bound + WORKFLOW_TIMEOUT_GRACE_S,
+        )
+
+    async def send_uart(
+        self,
+        *,
+        data_b64: str | None = None,
+        text: str | None = None,
+        line_ending: str | None = None,
+    ) -> dict[str, object]:
+        body = _uart_body(data_b64=data_b64, text=text, line_ending=line_ending)
+        return await self._request("POST", "/dut/uart/send", json=body)
+
     async def reset_dut(self, *, pulse_ms: int = 100) -> dict[str, object]:
         validated_pulse = validate_reset_pulse(pulse_ms)
         return await self._request(
@@ -117,7 +173,7 @@ class DeviceCoreClient:
             json={"pulse_ms": validated_pulse},
         )
 
-    async def set_boot_mode(self, *, mode: str) -> dict[str, object]:
+    async def set_dut_boot_mode(self, *, mode: str) -> dict[str, object]:
         validated_mode = validate_boot_mode(mode)
         return await self._request(
             "POST",
@@ -125,57 +181,39 @@ class DeviceCoreClient:
             json={"mode": validated_mode},
         )
 
-    async def capture_uart(self, *, duration_s: float) -> dict[str, object]:
-        return await self._timed_workflow(
-            "/dut/capture",
-            duration_s=validate_capture_duration(duration_s),
-        )
-
-    async def run_boot_test(self, *, duration_s: float) -> dict[str, object]:
-        return await self._timed_workflow(
-            "/dut/boot-test",
-            duration_s=validate_capture_duration(duration_s),
-        )
-
-    async def wait_for_uart_pattern(
+    async def get_evidence(
         self,
         *,
-        pattern: str,
-        timeout_s: float,
+        cursor: str | None = None,
+        limit: int = 100,
+        wait_s: float = 1.0,
     ) -> dict[str, object]:
-        validated_pattern = validate_wait_pattern(pattern)
-        validated_timeout = validate_wait_timeout(timeout_s)
+        validate_evidence_query(cursor=cursor, limit=limit, wait_s=wait_s)
+        params: dict[str, str | int | float] = {"limit": limit, "wait_s": wait_s}
+        if cursor is not None:
+            params["cursor"] = cursor
         return await self._request(
-            "POST",
-            "/dut/wait-pattern",
-            json={"pattern": validated_pattern, "timeout_s": validated_timeout},
-            timeout_s=max(
-                DEFAULT_REQUEST_TIMEOUT_S,
-                validated_timeout + WORKFLOW_TIMEOUT_GRACE_S,
-            ),
+            "GET",
+            "/dut/evidence",
+            params=params,
+            timeout_s=wait_s + WORKFLOW_TIMEOUT_GRACE_S,
         )
 
-    async def send_uart_command(
-        self,
-        *,
-        cmd: str,
-        append_newline: bool = True,
-        force: bool = False,
-    ) -> dict[str, object]:
-        prepare_uart_send_payload(cmd, append_newline=append_newline)
-        if not isinstance(force, bool):
-            raise ValueError("UART send force must be a boolean")
+    async def release_connection(self) -> dict[str, object]:
         return await self._request(
             "POST",
-            "/dut/uart/send",
-            json={
-                "cmd": cmd,
-                "append_newline": append_newline,
-                "force": force,
-            },
+            "/connection/release",
+            timeout_s=CONNECTION_MUTATION_TIMEOUT_S,
         )
 
-    async def get_recent_uart_log(
+    async def reacquire_connection(self) -> dict[str, object]:
+        return await self._request(
+            "POST",
+            "/connection/reacquire",
+            timeout_s=CONNECTION_MUTATION_TIMEOUT_S,
+        )
+
+    async def get_recent_logs(
         self,
         *,
         lines: int = 300,
@@ -188,14 +226,14 @@ class DeviceCoreClient:
             params["session_id"] = validate_session_id(session_id)
         return await self._request("GET", "/dut/logs", params=params)
 
-    async def get_debug_session(self, session_id: str) -> dict[str, object]:
+    async def get_session(self, session_id: str) -> dict[str, object]:
         session_name = validate_session_id(session_id)
         return await self._request(
             "GET",
             f"/sessions/{quote(session_name, safe='')}",
         )
 
-    async def list_debug_sessions(
+    async def list_sessions(
         self,
         *,
         limit: int = 50,
@@ -210,29 +248,13 @@ class DeviceCoreClient:
             params["cursor"] = cursor
         return await self._request("GET", "/sessions", params=params)
 
-    async def _timed_workflow(
-        self,
-        path: str,
-        *,
-        duration_s: float,
-    ) -> dict[str, object]:
-        return await self._request(
-            "POST",
-            path,
-            json={"duration_s": duration_s},
-            timeout_s=max(
-                DEFAULT_REQUEST_TIMEOUT_S,
-                duration_s + WORKFLOW_TIMEOUT_GRACE_S,
-            ),
-        )
-
     async def _request(
         self,
         method: str,
         path: str,
         *,
         json: Mapping[str, object] | None = None,
-        params: Mapping[str, str | int] | None = None,
+        params: Mapping[str, str | int | float] | None = None,
         timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
     ) -> dict[str, object]:
         try:
@@ -258,6 +280,57 @@ class DeviceCoreClient:
         if 200 <= response.status_code < 300:
             return payload
         _raise_service_error(response.status_code, payload)
+
+
+def _operation_body(
+    *,
+    duration_s: float | None,
+    conditions: Sequence[Mapping[str, object]] | None,
+    timeout_s: float | None,
+) -> tuple[dict[str, object], float]:
+    mapped = None
+    if conditions is not None:
+        if isinstance(conditions, (str, bytes)) or not isinstance(conditions, Sequence):
+            raise ValueError("Monitor conditions must be a sequence of condition objects")
+        mapped = []
+        for condition in conditions:
+            if not isinstance(condition, Mapping) or "pattern" not in condition:
+                raise ValueError("Monitor conditions require a pattern")
+            mapped.append(
+                MonitorCondition(
+                    pattern=cast(str, condition["pattern"]),
+                    name=cast(str | None, condition.get("name")),
+                )
+            )
+    validated = validate_monitor_request(
+        duration_s=duration_s,
+        conditions=mapped,
+        timeout_s=timeout_s,
+    )
+    body: dict[str, object] = {}
+    if duration_s is not None:
+        body["duration_s"] = duration_s
+    if conditions is not None:
+        body["conditions"] = [dict(item) for item in conditions]
+    if timeout_s is not None:
+        body["timeout_s"] = timeout_s
+    bound = validated.duration_s if validated.mode == "duration" else validated.timeout_s
+    assert bound is not None
+    return body, bound
+
+
+def _uart_body(
+    *,
+    data_b64: str | None,
+    text: str | None,
+    line_ending: str | None,
+) -> dict[str, object]:
+    prepare_uart_tx_payload(data_b64=data_b64, text=text, line_ending=line_ending)
+    return {
+        name: value
+        for name, value in (("data_b64", data_b64), ("text", text), ("line_ending", line_ending))
+        if value is not None
+    }
 
 
 def _validated_service_url(value: str) -> str:
@@ -309,5 +382,18 @@ def _raise_service_error(status_code: int, payload: dict[str, object]) -> NoRetu
     ):
         raise DeviceCoreProtocolError(
             f"Device Core Service returned an invalid error contract with HTTP {status_code}"
+        )
+    try:
+        projected, truncated = project_diagnostic_detail(
+            fallback_code="service_protocol_error",
+            detail=detail,
+        )
+    except UnicodeError as exc:
+        raise DeviceCoreProtocolError(
+            f"Device Core Service returned invalid diagnostic text with HTTP {status_code}"
+        ) from exc
+    if truncated or projected != detail:
+        raise DeviceCoreProtocolError(
+            f"Device Core Service returned invalid diagnostic text with HTTP {status_code}"
         )
     raise DeviceCoreServiceError(status_code=status_code, response_payload=payload)

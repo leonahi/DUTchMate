@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Annotated, Final, Literal, TypeAlias, cast
 
 from mcp.server import CacheHint, MCPServer
 from mcp.server.caching import CacheableMethod
 from mcp.server.context import ServerRequestContext
+from mcp.server.mcpserver import Context
 from mcp.types import (
     LATEST_PROTOCOL_VERSION,
     CallToolResult,
@@ -18,8 +19,9 @@ from mcp.types import (
     TextContent,
     ToolsCapability,
 )
-from pydantic import WithJsonSchema
+from pydantic import ValidationError, WithJsonSchema
 
+from dutchmate_core.diagnostics import project_diagnostic_detail
 from dutchmate_core.validation import UartSendValidationError
 from dutchmate_mcp_server.service_client import (
     DEFAULT_SERVICE_URL,
@@ -55,10 +57,6 @@ BootModeArgument: TypeAlias = Annotated[
     object,
     WithJsonSchema({"type": "string", "enum": ["normal", "bootloader"]}),
 ]
-DurationArgument: TypeAlias = Annotated[
-    object,
-    WithJsonSchema({"type": "number", "exclusiveMinimum": 0, "maximum": 300}),
-]
 LogLinesArgument: TypeAlias = Annotated[
     object,
     WithJsonSchema({"type": "integer", "minimum": 1, "maximum": 1000}),
@@ -75,10 +73,81 @@ OptionalStringArgument: TypeAlias = Annotated[
     object,
     WithJsonSchema({"anyOf": [{"type": "string"}, {"type": "null"}]}),
 ]
-BooleanArgument: TypeAlias = Annotated[
+OptionalDurationArgument: TypeAlias = Annotated[
     object,
-    WithJsonSchema({"type": "boolean"}),
+    WithJsonSchema(
+        {
+            "anyOf": [
+                {"type": "number", "exclusiveMinimum": 0, "maximum": 300},
+                {"type": "null"},
+            ]
+        }
+    ),
 ]
+ConditionsArgument: TypeAlias = Annotated[
+    object,
+    WithJsonSchema(
+        {
+            "anyOf": [
+                {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "pattern": {"type": "string", "minLength": 1},
+                            "name": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                        },
+                        "required": ["pattern"],
+                    },
+                },
+                {"type": "null"},
+            ]
+        }
+    ),
+]
+LineEndingArgument: TypeAlias = Annotated[
+    object,
+    WithJsonSchema({"enum": ["none", "lf", "cr", "crlf", "profile_default", None]}),
+]
+EvidenceLimitArgument: TypeAlias = Annotated[
+    object,
+    WithJsonSchema({"type": "integer", "minimum": 1, "maximum": 500}),
+]
+EvidenceWaitArgument: TypeAlias = Annotated[
+    object,
+    WithJsonSchema({"type": "number", "minimum": 0, "maximum": 30}),
+]
+
+
+class _ExactArgumentsServer(MCPServer[object]):
+    """Validate raw tool arguments without the SDK's JSON-string convenience parsing."""
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, object],
+        context: Context[object, object] | None = None,
+    ) -> CallToolResult:
+        tool = self._tool_manager.get_tool(name)
+        if tool is None:
+            return cast(CallToolResult, await super().call_tool(name, arguments, context))
+        try:
+            validated = tool.fn_metadata.arg_model.model_validate(
+                arguments,
+                strict=True,
+                extra="forbid",
+            )
+        except ValidationError:
+            # SDK validation errors can embed the original payload. Keep tool diagnostics bounded.
+            return _tool_result(
+                _validation_error_payload(ValueError("Invalid MCP tool arguments")),
+                is_error=True,
+            )
+        # Every registered handler is async, context-free, and returns a CallToolResult.
+        # Reuse the SDK argument model while preserving exact text and opaque cursor strings.
+        return cast(CallToolResult, await tool.fn(**validated.model_dump_one_level()))
 
 
 def create_server(
@@ -93,7 +162,7 @@ def create_server(
         "server/discover": CacheHint(ttl_ms=CACHE_TTL_MS, scope="private"),
         "tools/list": CacheHint(ttl_ms=CACHE_TTL_MS, scope="private"),
     }
-    server = MCPServer[object](
+    server = _ExactArgumentsServer(
         name=SERVER_NAME,
         title=SERVER_TITLE,
         description=SERVER_DESCRIPTION,
@@ -134,112 +203,141 @@ def create_server(
     )
 
     @server.tool()
+    async def get_status() -> CallToolResult:
+        """Inspect DUT connection, profile, effective capabilities and active operations."""
+        return await _execute(factory, lambda client: client.get_status())
+
+    @server.tool()
+    async def monitor(
+        duration_s: OptionalDurationArgument = None,
+        conditions: ConditionsArgument = None,
+        timeout_s: OptionalDurationArgument = None,
+    ) -> CallToolResult:
+        """Observe UART for duration_s or 1..8 literal conditions with timeout_s."""
+        return await _execute(
+            factory,
+            lambda client: client.monitor(
+                duration_s=cast(float | None, duration_s),
+                conditions=cast(Sequence[Mapping[str, object]] | None, conditions),
+                timeout_s=cast(float | None, timeout_s),
+            ),
+        )
+
+    @server.tool()
+    async def interact(
+        data_b64: OptionalStringArgument = None,
+        text: OptionalStringArgument = None,
+        line_ending: LineEndingArgument = None,
+        duration_s: OptionalDurationArgument = None,
+        conditions: ConditionsArgument = None,
+        timeout_s: OptionalDurationArgument = None,
+    ) -> CallToolResult:
+        """Send exact bytes or explicitly terminated text, then observe with a finite bound."""
+        return await _execute(
+            factory,
+            lambda client: client.interact(
+                data_b64=cast(str | None, data_b64),
+                text=cast(str | None, text),
+                line_ending=cast(str | None, line_ending),
+                duration_s=cast(float | None, duration_s),
+                conditions=cast(Sequence[Mapping[str, object]] | None, conditions),
+                timeout_s=cast(float | None, timeout_s),
+            ),
+        )
+
+    @server.tool()
+    async def send_uart(
+        data_b64: OptionalStringArgument = None,
+        text: OptionalStringArgument = None,
+        line_ending: LineEndingArgument = None,
+    ) -> CallToolResult:
+        """Send audited exact base64 bytes or text with an explicit line ending; no RX window."""
+        return await _execute(
+            factory,
+            lambda client: client.send_uart(
+                data_b64=cast(str | None, data_b64),
+                text=cast(str | None, text),
+                line_ending=cast(str | None, line_ending),
+            ),
+        )
+
+    @server.tool()
     async def reset_dut(pulse_ms: PulseMsArgument = 100) -> CallToolResult:
-        """Pulse the configured DUT reset control for 1..10000 milliseconds."""
-
+        """Pulse the configured DUT reset role for 1..10000 milliseconds."""
         return await _execute(
-            factory,
-            lambda client: client.reset_dut(pulse_ms=cast(int, pulse_ms)),
+            factory, lambda client: client.reset_dut(pulse_ms=cast(int, pulse_ms))
         )
 
     @server.tool()
-    async def set_boot_mode(mode: BootModeArgument) -> CallToolResult:
-        """Command the configured DUT boot role to normal or bootloader mode."""
-
+    async def set_dut_boot_mode(mode: BootModeArgument) -> CallToolResult:
+        """Command the configured DUT boot role to normal or bootloader; no reset or observation."""
         return await _execute(
-            factory,
-            lambda client: client.set_boot_mode(mode=cast(str, mode)),
+            factory, lambda client: client.set_dut_boot_mode(mode=cast(str, mode))
         )
 
     @server.tool()
-    async def capture_uart(duration_s: DurationArgument) -> CallToolResult:
-        """Capture bounded UART evidence for the requested duration in seconds."""
-
+    async def get_evidence(
+        cursor: OptionalStringArgument = None,
+        limit: EvidenceLimitArgument = 100,
+        wait_s: EvidenceWaitArgument = 1.0,
+    ) -> CallToolResult:
+        """Read a bounded durable evidence page; omit cursor to attach at the current tail."""
         return await _execute(
             factory,
-            lambda client: client.capture_uart(duration_s=cast(float, duration_s)),
+            lambda client: client.get_evidence(
+                cursor=cast(str | None, cursor),
+                limit=cast(int, limit),
+                wait_s=cast(float, wait_s),
+            ),
         )
 
     @server.tool()
-    async def get_recent_uart_log(
-        lines: LogLinesArgument = 300,
+    async def get_recent_logs(
         session_id: OptionalStringArgument = None,
+        lines: LogLinesArgument = 300,
     ) -> CallToolResult:
-        """Read bounded recent UART lines from an explicit or selected session."""
-
+        """Read bounded UART lines from an explicit or service-selected historical session."""
         return await _execute(
             factory,
-            lambda client: client.get_recent_uart_log(
-                lines=cast(int, lines),
+            lambda client: client.get_recent_logs(
                 session_id=cast(str | None, session_id),
+                lines=cast(int, lines),
             ),
         )
 
     @server.tool()
-    async def wait_for_uart_pattern(
-        pattern: RequiredStringArgument,
-        timeout_s: DurationArgument,
-    ) -> CallToolResult:
-        """Wait for a case-sensitive literal in new complete UART lines."""
-
-        return await _execute(
-            factory,
-            lambda client: client.wait_for_uart_pattern(
-                pattern=cast(str, pattern),
-                timeout_s=cast(float, timeout_s),
-            ),
-        )
-
-    @server.tool()
-    async def run_boot_test(duration_s: DurationArgument) -> CallToolResult:
-        """Reset the DUT and capture bounded boot evidence in its current boot mode."""
-
-        return await _execute(
-            factory,
-            lambda client: client.run_boot_test(duration_s=cast(float, duration_s)),
-        )
-
-    @server.tool()
-    async def send_uart_command(
-        cmd: RequiredStringArgument,
-        append_newline: BooleanArgument = True,
-        force: BooleanArgument = False,
-    ) -> CallToolResult:
-        """Send one bounded UTF-8 command through the configured UART backend."""
-
-        return await _execute(
-            factory,
-            lambda client: client.send_uart_command(
-                cmd=cast(str, cmd),
-                append_newline=cast(bool, append_newline),
-                force=cast(bool, force),
-            ),
-        )
-
-    @server.tool()
-    async def get_debug_session(session_id: RequiredStringArgument) -> CallToolResult:
-        """Get bounded lifecycle metadata for one explicit debug session."""
-
-        return await _execute(
-            factory,
-            lambda client: client.get_debug_session(cast(str, session_id)),
-        )
-
-    @server.tool()
-    async def list_debug_sessions(
+    async def list_sessions(
         limit: SessionLimitArgument = 50,
         cursor: OptionalStringArgument = None,
     ) -> CallToolResult:
-        """List a bounded page of debug-session summaries."""
-
+        """List a bounded session page, preserving the opaque service cursor."""
         return await _execute(
             factory,
-            lambda client: client.list_debug_sessions(
+            lambda client: client.list_sessions(
                 limit=cast(int, limit),
                 cursor=cast(str | None, cursor),
             ),
         )
 
+    @server.tool()
+    async def get_session(session_id: RequiredStringArgument) -> CallToolResult:
+        """Inspect bounded session metadata, quality, segments and artifact references."""
+        return await _execute(
+            factory, lambda client: client.get_session(session_id=cast(str, session_id))
+        )
+
+    @server.tool()
+    async def release_connection() -> CallToolResult:
+        """Explicitly release service transport ownership for an external tool."""
+        return await _execute(factory, lambda client: client.release_connection())
+
+    @server.tool()
+    async def reacquire_connection() -> CallToolResult:
+        """Reacquire the released transport through the service and return its segment boundary."""
+        return await _execute(factory, lambda client: client.reacquire_connection())
+
+    for tool in server._tool_manager.list_tools():
+        tool.parameters["additionalProperties"] = False
     return server
 
 
@@ -277,11 +375,12 @@ def _validation_error_payload(
     *,
     context: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    detail, truncated = project_diagnostic_detail(fallback_code="invalid_argument", detail=str(exc))
     payload: dict[str, object] = {
         "ok": False,
         "error": "invalid_argument",
-        "detail": str(exc),
-        "detail_truncated": False,
+        "detail": detail,
+        "detail_truncated": truncated,
     }
     if context is not None:
         payload["context"] = context

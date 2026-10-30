@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Coroutine
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
+import pytest
 from mcp.server import CacheHint
 from mcp.types import CallToolResult, TextContent
 
@@ -22,15 +23,18 @@ from dutchmate_mcp_server.server import (
 from dutchmate_mcp_server.service_client import DeviceCoreClient
 
 EXPECTED_TOOL_NAMES = [
+    "get_status",
+    "monitor",
+    "interact",
+    "send_uart",
     "reset_dut",
-    "set_boot_mode",
-    "capture_uart",
-    "get_recent_uart_log",
-    "wait_for_uart_pattern",
-    "run_boot_test",
-    "send_uart_command",
-    "get_debug_session",
-    "list_debug_sessions",
+    "set_dut_boot_mode",
+    "get_evidence",
+    "get_recent_logs",
+    "list_sessions",
+    "get_session",
+    "release_connection",
+    "reacquire_connection",
 ]
 
 
@@ -61,30 +65,37 @@ async def test_registered_tools_return_complete_structured_service_results() -> 
 
     server = create_server(client_factory=_client_factory(handler))
     calls: list[tuple[str, dict[str, object]]] = [
+        ("get_status", {}),
+        ("monitor", {"duration_s": 1.5}),
+        ("interact", {"data_b64": "AP8=", "duration_s": 1}),
+        ("send_uart", {"text": "version", "line_ending": "none"}),
         ("reset_dut", {}),
-        ("set_boot_mode", {"mode": "bootloader"}),
-        ("capture_uart", {"duration_s": 1.5}),
-        ("get_recent_uart_log", {}),
-        ("wait_for_uart_pattern", {"pattern": "READY", "timeout_s": 2}),
-        ("run_boot_test", {"duration_s": 3}),
-        ("send_uart_command", {"cmd": "version"}),
-        ("get_debug_session", {"session_id": "session-1"}),
-        ("list_debug_sessions", {}),
+        ("set_dut_boot_mode", {"mode": "bootloader"}),
+        ("get_evidence", {"cursor": "opaque+/=", "wait_s": 0}),
+        ("get_recent_logs", {}),
+        ("list_sessions", {}),
+        ("get_session", {"session_id": "session-1"}),
+        ("release_connection", {}),
+        ("reacquire_connection", {}),
     ]
 
     results = [await server.call_tool(name, arguments) for name, arguments in calls]
 
-    assert [request.url.path for request in requests] == [
-        "/dut/reset",
-        "/dut/boot-mode",
-        "/dut/capture",
-        "/dut/logs",
-        "/dut/wait-pattern",
-        "/dut/boot-test",
-        "/dut/uart/send",
-        "/sessions/session-1",
-        "/sessions",
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/status"),
+        ("POST", "/dut/monitor"),
+        ("POST", "/dut/interact"),
+        ("POST", "/dut/uart/send"),
+        ("POST", "/dut/reset"),
+        ("POST", "/dut/boot-mode"),
+        ("GET", "/dut/evidence"),
+        ("GET", "/dut/logs"),
+        ("GET", "/sessions"),
+        ("GET", "/sessions/session-1"),
+        ("POST", "/connection/release"),
+        ("POST", "/connection/reacquire"),
     ]
+
     for result, request in zip(results, requests, strict=True):
         assert isinstance(result, CallToolResult)
         assert result.result_type == "complete"
@@ -135,7 +146,7 @@ async def test_registered_tool_projects_validation_failure_without_http_dispatch
 
     server = create_server(client_factory=_client_factory(handler))
 
-    result = await server.call_tool("send_uart_command", {"cmd": "x" * 1025})
+    result = await server.call_tool("send_uart", {"text": "x" * 1025, "line_ending": "none"})
 
     assert isinstance(result, CallToolResult)
     assert result.result_type == "complete"
@@ -145,7 +156,7 @@ async def test_registered_tool_projects_validation_failure_without_http_dispatch
         "error": "invalid_argument",
         "detail": "UART send payload must contain 1..1024 bytes",
         "detail_truncated": False,
-        "context": {"actual_bytes": 1026, "max_bytes": 1024},
+        "context": {"actual_bytes": 1025, "max_bytes": 1024},
     }
     assert request_count == 0
 
@@ -212,3 +223,235 @@ def _client_factory(
     handler: Callable[[httpx.Request], Coroutine[None, None, httpx.Response]],
 ) -> Callable[[], DeviceCoreClient]:
     return lambda: DeviceCoreClient(transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments", "expected_kwargs"),
+    [
+        ("get_status", {}, {}),
+        ("monitor", {"duration_s": 1}, {"duration_s": 1, "conditions": None, "timeout_s": None}),
+        (
+            "interact",
+            {"data_b64": "AP8=", "duration_s": 1},
+            {
+                "data_b64": "AP8=",
+                "text": None,
+                "line_ending": None,
+                "duration_s": 1,
+                "conditions": None,
+                "timeout_s": None,
+            },
+        ),
+        (
+            "send_uart",
+            {"text": "INFO", "line_ending": "lf"},
+            {"data_b64": None, "text": "INFO", "line_ending": "lf"},
+        ),
+        ("reset_dut", {}, {"pulse_ms": 100}),
+        ("set_dut_boot_mode", {"mode": "bootloader"}, {"mode": "bootloader"}),
+        (
+            "get_evidence",
+            {"cursor": "opaque+/=", "wait_s": 0},
+            {"cursor": "opaque+/=", "limit": 100, "wait_s": 0},
+        ),
+        ("get_recent_logs", {"session_id": "s1"}, {"session_id": "s1", "lines": 300}),
+        ("list_sessions", {"cursor": "opaque+/="}, {"cursor": "opaque+/=", "limit": 50}),
+        ("get_session", {"session_id": "s1"}, {"session_id": "s1"}),
+        ("release_connection", {}, {}),
+        ("reacquire_connection", {}, {}),
+    ],
+)
+async def test_each_tool_calls_its_corresponding_client_operation_once(
+    name,
+    arguments,
+    expected_kwargs,
+    monkeypatch,
+):
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    client = DeviceCoreClient(transport=httpx.MockTransport(handler))
+    operation = AsyncMock(wraps=getattr(client, name))
+    monkeypatch.setattr(client, name, operation)
+    server = create_server(client_factory=lambda: client)
+    result = await server.call_tool(name, arguments)
+
+    operation.assert_awaited_once_with(**expected_kwargs)
+    assert len(requests) == 1
+    assert result.structured_content == {"ok": True}
+
+
+@pytest.mark.parametrize("name", ["monitor", "interact"])
+@pytest.mark.parametrize(
+    "completion",
+    [
+        {"duration_s": 0.25},
+        {
+            "conditions": [{"pattern": "READY", "name": "ready"}, {"pattern": "FAIL"}],
+            "timeout_s": 2.5,
+        },
+    ],
+)
+async def test_bounded_tools_forward_completion_requests_and_outcomes(name, completion):
+    requests = []
+    payload = {
+        "ok": True,
+        "operation_id": "op-1",
+        "outcome": "timeout",
+        "evidence_ranges": [
+            {"session_id": "s1", "start_evidence_seq": 4, "end_evidence_seq_exclusive": 8}
+        ],
+        "start_cursor": {"session_id": "s1", "next_evidence_seq": 5},
+        "end_cursor": {"session_id": "s1", "next_evidence_seq": 8},
+    }
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    arguments = dict(completion)
+    if name == "interact":
+        arguments["data_b64"] = "AP8="
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, arguments)
+    assert json.loads(requests[0].content) == arguments
+    assert result.is_error is False
+    assert result.structured_content == payload
+
+
+@pytest.mark.parametrize("name", ["send_uart", "interact"])
+@pytest.mark.parametrize("line_ending", ["none", "lf", "cr", "crlf", "profile_default"])
+@pytest.mark.parametrize("text", ["INFO", "null", "true", "[]", "{}", '"quoted"', "  λ\n"])
+async def test_uart_text_and_explicit_endings_are_not_reinterpreted(name, line_ending, text):
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True, "data_b64": "eA=="})
+
+    arguments = {"text": text, "line_ending": line_ending}
+    if name == "interact":
+        arguments["duration_s"] = 1
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, arguments)
+    assert result.is_error is False
+    assert len(requests) == 1
+    assert json.loads(requests[0].content) == arguments
+
+
+@pytest.mark.parametrize("name", ["send_uart", "interact"])
+@pytest.mark.parametrize("retired", ["force", "cmd", "append_newline"])
+async def test_retired_uart_arguments_are_rejected_without_dispatch(name, retired):
+    async def handler(request):
+        pytest.fail("retired argument reached Device Core")
+
+    arguments = {"data_b64": "eA==", retired: True}
+    if name == "interact":
+        arguments["duration_s"] = 1
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, arguments)
+    assert result.is_error is True
+    assert result.structured_content["error"] == "invalid_argument"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "set_boot_mode",
+        "capture_uart",
+        "wait_for_uart_pattern",
+        "run_boot_test",
+        "send_uart_command",
+        "get_recent_uart_log",
+        "get_debug_session",
+        "list_debug_sessions",
+    ],
+)
+async def test_retired_tool_names_cannot_dispatch(name):
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    async def handler(request):
+        pytest.fail("retired tool reached Device Core")
+
+    with pytest.raises(ToolError, match="Unknown tool"):
+        await create_server(client_factory=_client_factory(handler)).call_tool(name, {})
+
+
+@pytest.mark.parametrize("name", ["get_evidence", "list_sessions"])
+@pytest.mark.parametrize("cursor", ["opaque+/=雪", "null", "true", "{}", "[]"])
+async def test_cursor_strings_and_returned_pages_remain_opaque(name, cursor):
+    requests = []
+    payload = {"ok": True, "next_cursor": "opaque-next+/=", "records": [], "omitted_records": 1}
+    if name == "list_sessions":
+        payload = {
+            "items": [{"session_id": "s1", "schema_version": 2}],
+            "next_cursor": "opaque-next+/=",
+        }
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    arguments = {"cursor": cursor}
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, arguments)
+    assert result.is_error is False
+    assert dict(requests[0].url.params)["cursor"] == cursor
+    assert result.structured_content == payload
+
+
+@pytest.mark.parametrize(
+    "name, state", [("release_connection", "released"), ("reacquire_connection", "connected")]
+)
+async def test_connection_tools_preserve_service_boundaries(name, state):
+    requests = []
+    payload = {"ok": True, "connection_state": state, "session_id": "s1", "segment_id": 2}
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, {})
+    assert len(requests) == 1 and requests[0].content == b""
+    assert result.structured_content == payload
+
+
+@pytest.mark.parametrize(
+    "name, arguments",
+    [
+        ("monitor", {"duration_s": True}),
+        ("monitor", {"conditions": [{"pattern": "OK"}]}),
+        ("interact", {"text": "INFO", "duration_s": 1}),
+        ("send_uart", {"text": "INFO"}),
+        ("reset_dut", {"pulse_ms": True}),
+        ("set_dut_boot_mode", {"mode": "helper"}),
+        ("get_evidence", {"wait_s": 31}),
+        ("list_sessions", {"limit": True}),
+        ("get_session", {}),
+        ("set_dut_boot_mode", {}),
+    ],
+)
+async def test_invalid_tool_arguments_return_bounded_structured_errors(name, arguments):
+    async def handler(request):
+        pytest.fail("invalid arguments reached HTTP")
+
+    result = await create_server(client_factory=_client_factory(handler)).call_tool(name, arguments)
+    assert result.is_error is True
+    assert result.structured_content["error"] == "invalid_argument"
+    assert len(result.structured_content["detail"].encode()) <= 1024
+
+
+async def test_public_schemas_expose_only_v2_parameters():
+    listing = await create_server().list_tools()
+    by_name = {tool.name: tool.input_schema for tool in listing}
+    assert set(by_name["send_uart"]["properties"]) == {"data_b64", "text", "line_ending"}
+    assert set(by_name["monitor"]["properties"]) == {"duration_s", "conditions", "timeout_s"}
+    assert set(by_name["interact"]["properties"]) == {
+        "data_b64",
+        "text",
+        "line_ending",
+        "duration_s",
+        "conditions",
+        "timeout_s",
+    }
+    for schema in by_name.values():
+        assert schema["additionalProperties"] is False

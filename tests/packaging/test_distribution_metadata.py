@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import runpy
+from importlib import metadata
 from pathlib import Path
+
+from dutchmate_mcp_server.server import create_server
 
 try:
     import tomllib
@@ -93,6 +97,22 @@ def test_console_scripts_have_one_authoritative_owner() -> None:
                 f"and {distribution!r}"
             )
             owners[executable] = distribution
+
+
+async def test_installed_smoke_expects_the_current_public_catalog() -> None:
+    smoke = runpy.run_path(str(REPOSITORY_ROOT / "scripts/ci/smoke_installed_distribution.py"))
+    assert smoke["EXPECTED_TOOLS"] == [tool.name for tool in await create_server().list_tools()]
+
+
+def test_installed_metadata_exposes_mcp_entrypoints_and_runtime_dependencies() -> None:
+    installed = metadata.distribution("dutchmate")
+    scripts = {ep.name: ep.value for ep in installed.entry_points if ep.group == "console_scripts"}
+    assert scripts == EXPECTED_SCRIPTS["dutchmate"]
+    dependencies = metadata.distribution("dutchmate-mcp-server").requires
+    assert "mcp>=2.0,<3" in dependencies
+    assert "httpx>=0.27" in dependencies
+    assert "dutchmate-core==0.1.0" in dependencies
+    assert metadata.version("mcp").split(".", 1)[0] == "2"
 
 
 def test_all_host_distributions_publish_apache_license_and_owner_metadata() -> None:

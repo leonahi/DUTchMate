@@ -130,6 +130,42 @@ def test_production_import_graph_is_acyclic() -> None:
         raise AssertionError(f"production import cycle detected: {exc.args[1]}") from exc
 
 
+def test_mcp_imports_only_http_sdk_and_pure_core_contracts() -> None:
+    # This narrow external surface rules out hardware acquisition, service
+    # lifecycle, persistence, hosted transports, subprocesses and LLM clients.
+    allowed_roots = {
+        "__future__", "argparse", "collections", "json", "os", "types", "typing", "urllib",
+        "httpx", "mcp", "pydantic", "dutchmate_mcp_server", "dutchmate_core",
+    }
+    pure_core = {
+        "dutchmate_core.diagnostics", "dutchmate_core.evidence.tail",
+        "dutchmate_core.operations.monitor", "dutchmate_core.validation",
+    }
+    violations = set()
+    for module, path in _production_modules().items():
+        if not _matches_prefix(module, "dutchmate_mcp_server"):
+            continue
+        for imported in _module_imports(path):
+            if imported.split(".", 1)[0] not in allowed_roots or (
+                _matches_prefix(imported, "dutchmate_core") and imported not in pure_core
+            ):
+                violations.add((module, imported))
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name):
+                assert node.func.id not in {"open", "eval", "exec", "__import__"}, module
+            if isinstance(node.func, ast.Attribute):
+                assert node.func.attr not in {
+                    "system", "popen", "fork", "spawnv", "spawnvp", "execv", "execvp",
+                    "streamable_http_app", "sse_app", "run_sse_async", "run_streamable_http_async",
+                }, module
+                if node.func.attr == "run":
+                    assert [ast.literal_eval(arg) for arg in node.args] == ["stdio"], module
+    assert violations == set()
+
+
 def test_known_application_adapter_exceptions_do_not_expand_or_go_stale() -> None:
     modules = _production_modules()
     actual = {

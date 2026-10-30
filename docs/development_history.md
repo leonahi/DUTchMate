@@ -9,6 +9,410 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 5 — Scoped External Acceptance and Registration — 2026-10-30
+
+- Started clean at pushed Slice 4 `71a43f0` on `mcp/v2-service-client`.
+  Completed the [existing scoped acceptance policy](mcp_integration_plan.md#test-and-acceptance-matrix)
+  without changing its required/excluded checks. This record accepts the twelve
+  v2 tools, independently of earlier nine-tool host/protocol evidence. Changed
+  only the developer guide, current status and this history addition. No
+  production, test, package, service, Device Core, firmware or hardware change.
+- Verified current official documentation before external commands:
+  [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md)
+  and its [read-only config-file form](https://github.com/modelcontextprotocol/inspector/blob/main/docs/mcp-server-configuration.md),
+  [conformance requirements](https://github.com/modelcontextprotocol/conformance#conformance-requirements),
+  [VS Code MCP configuration](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)
+  and [connection destinations](https://code.visualstudio.com/docs/agent-customization/mcp-servers),
+  and [Claude Code local stdio](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server).
+  Official npm metadata reported Inspector 2.13.0 with Node >=22.19.0. Installed
+  acceptance tools under `/tmp` with
+  `npm install --prefix /tmp/dutchmate-mcp-slice5-tools --no-audit --no-fund node@22.19.0 @modelcontextprotocol/inspector@2.13.0 @modelcontextprotocol/conformance@0.2.0-alpha.11`
+  (`npm_config_cache=/tmp/dutchmate-mcp-slice5-npm`, sandbox escalation for
+  downloads). The system Node 22.18.0 emitted install-time engine warnings;
+  actual acceptance used the downloaded **Node v22.19.0**, verified with
+  `--version`. Runner `--version` returned **0.2.0-alpha.11**; Inspector
+  `--version` returned **2.13.0**. No global npm or project dependency changed.
+- Exact Inspector command (read-only session config avoids launcher-option
+  parsing ambiguity):
+
+  ```bash
+  /tmp/dutchmate-mcp-slice5-tools/node_modules/node/bin/node /tmp/dutchmate-mcp-slice5-tools/node_modules/@modelcontextprotocol/inspector/clients/launcher/build/index.js --cli --config /tmp/dutchmate-mcp-slice5/inspector.json --server dutchmate --method tools/list --strict
+  ```
+
+  The temporary `mcpServers.dutchmate` entry used `type: stdio`, `protocolEra:
+  modern`, an absolute installed `dutchmate-mcp` resolved from the workspace's
+  `.venv/bin`, `args: ["--service-url", "http://127.0.0.1:0"]` and stripped
+  child PATH `/usr/bin:/bin`. No repository-relative module launch, actual
+  Device Core access, or machine-specific config was committed. Exit **0**,
+  empty stderr (no schema-portability findings), and exactly this returned order:
+  `get_status`, `monitor`, `interact`, `send_uart`, `reset_dut`,
+  `set_dut_boot_mode`, `get_evidence`, `get_recent_logs`, `list_sessions`,
+  `get_session`, `release_connection`, `reacquire_connection`.
+  Captured stdout SHA-256:
+  `e99782a888c69f17ffa95080aa3daaf760ae045255549f656cd6fb290e5c112f`.
+- Conformance used a disposable `/tmp` harness around the unchanged
+  `create_server("http://127.0.0.1:0")` and SDK
+  `streamable_http_app(stateless_http=True, json_response=True)`, served by
+  uvicorn on **127.0.0.1:51527**. Only the runner's explicitly permitted
+  loopback test projection was exposed; no product transport, service process,
+  hardware, evidence store or fixture tools were added. Exact invocations below
+  use these literal executable/script paths:
+
+  ```bash
+  N=/tmp/dutchmate-mcp-slice5-tools/node_modules/node/bin/node
+  C=/tmp/dutchmate-mcp-slice5-tools/node_modules/@modelcontextprotocol/conformance/dist/index.js
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --requirements 2026-07-28 --output-dir /tmp/dutchmate-mcp-slice5/requirements --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario server-stateless --output-dir /tmp/dutchmate-mcp-slice5/stateless --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario tools-list --output-dir /tmp/dutchmate-mcp-slice5/tools-list --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario caching --output-dir /tmp/dutchmate-mcp-slice5/caching --verbose
+  ```
+
+  `--requirements` selects the complete frozen set; separate scoped probes use
+  `--spec-version`/`--scenario`, as required by the current official CLI.
+
+  | Run | Actual result and disposition |
+  |---|---|
+  | Frozen requirements | Exit 1; 50 scenarios, 104 checks passed/61 failed; 13 unscored scenarios, 11 failing. Optional prompts/resources/media/progress/sampling/HTTP/task/MRTR fixtures are outside the approved tools-only stdio gate, not passes. |
+  | `server-stateless` | Exit 1; 23 successes, 2 documented exclusions, 5 subscription checks skipped. Only `sep-2575-server-rejects-undeclared-capability` and `sep-2575-missing-capability-http-400` fail: both require the absent synthetic `test_missing_capability` sampling tool. All applicable checks pass. |
+  | `tools-list` | Exit 0; all 3 pass: `tools-list`, `tools-name-format`, `wire-schema-valid`. |
+  | `caching` | Exit 1; all 4 required checks pass: `sep-2549-tools-list-caching-hints`, `sep-2549-ttl-non-negative`, `sep-2549-cache-scope-valid`, `wire-schema-valid`. Three optional prompt/resource/template cache checks fail with METHOD_NOT_FOUND; resource-read cache skipped. |
+
+  Verified applicable checks in both the frozen run and the scoped reports.
+  Behavior matches the plan and historical runner investigation; no policy or
+  version was silently changed. Raw outputs and `checks.json` were captured
+  only under `/tmp/dutchmate-mcp-slice5` (temporary diagnostics, not permanent
+  evidence locations). The projection received SIGTERM after all probes;
+  uvicorn shutdown logged and connection refusal confirmed port 51527 closed.
+- **VS Code disposition:** installed CLI **1.141.0**, commit
+  `2a59476c9bfcb90b3ddc372c36762471b7dfad1c`, arm64. Ran
+  `code --user-data-dir /tmp/dutchmate-mcp-slice5/vscode-profile --add-mcp '<JSON>'`,
+  with JSON `name: dutchmate-slice5`, `type: stdio`, the same absolute installed
+  launcher and unreachable service arguments above. Exit **0**, stdout
+  `Added MCP servers: dutchmate-slice5`; parsed the temporary profile's
+  `User/mcp.json` and confirmed its `servers` entry. Electron also printed a
+  codesign `task_name_for_pid` error; registration persistence was independently
+  verified. No user profile or repository host config was edited. Authenticated
+  host UI/session was unavailable: startup, exact twelve-tool discovery and
+  read-only `get_status` through VS Code were **not performed**, not accepted
+  from registration/Inspector evidence. No agent host was started.
+- **Claude Code disposition:** absent from PATH and checked local install
+  locations; no authenticated Claude Code session was available. Registration,
+  discovery and read-only call were **not performed/unavailable**. No inference
+  from VS Code, Inspector or Claude API connector support. The plan explicitly
+  permits named-host checks only when available; these optional gaps do not
+  change the scoped migration disposition or become historical host passes.
+- Updated developer registration examples to installed `dutchmate-mcp` with
+  machine-independent placeholders and optional service URL/environment; kept
+  `dutchmate mcp` as the supported sibling launcher alternative. Distinguished
+  VS Code `.vscode/mcp.json`/user-profile `servers` from portable `.mcp.json`
+  `mcpServers`, documented current Claude separator syntax, and linked the
+  authoritative twelve-tool catalog. Service startup remains explicit and
+  separate, logs stderr-only, and no hosted endpoint is documented. No
+  superseded temporary working plan was present; the normative MCP mapping/
+  acceptance document remains authoritative.
+- Fresh repository validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py tests/architecture tests/packaging --tb=short` | 372 passed in 11.35 s; includes installed commands, packaging/metadata, boundaries and Slice 3 actual-service tests |
+  | `uv build --all-packages --no-sources --no-create-gitignore --offline --out-dir /tmp/dutchmate-mcp-slice5/dist` | All six wheel/sdist pairs built |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-mcp-slice5/dist` | Passed, exit 0; actual wheel installations in isolated tool environments, both installed MCP commands and existing metadata/command checks; downloads used sandbox escalation |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,872 passed in 58.24 s |
+  | `git diff --check` | Passed |
+
+- Reviewed the complete documentation-only diff, registration JSON examples,
+  local links and unchanged twelve-tool/retired-tool boundaries. Prior history,
+  dated validation evidence, production/test/package files and hardware gates
+  are preserved. No architecture, dependency, source ownership or product
+  transport change; no Graphify update was needed. No hardware/HIL, serial
+  access, commit or push. MCP v2 migration is complete under the approved
+  scoped policy. Phase 1B, Stage 8 and Phase 1 remain incomplete until fresh
+  manufactured KiCad Rev-A physical/electrical acceptance; historical EAGLE
+  gaps and functional-HIL evidence boundaries remain unchanged.
+
+## MCP v2 Slice 4 — Installed Launch and Boundary Regressions — 2026-10-30
+
+- Implemented only [MCP plan Slice 4](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 3 `c119532` on `mcp/v2-service-client`.
+  Changes are tests, installed-distribution verification tooling and status/
+  history only. No production launcher, MCP, service, Device Core, packaging
+  contract, firmware or hardware change was needed.
+- Added fourteen installed-process cases in `test_installed_launch.py` for
+  absolute `dutchmate mcp` and sibling `dutchmate-mcp`, from temporary working
+  directories with `PATH=/usr/bin:/bin`, no `PYTHONPATH` or `VIRTUAL_ENV`.
+  Raw JSON-RPC exchanges parse every stdout line instead of allowing an SDK
+  transport to discard noise. Modern discovery, exact ordered twelve-tool
+  catalog, repeated listing, private 300000 ms cache hints, matching structured/
+  text errors, bounded actionable unavailable-service errors, continued protocol
+  operation after errors, clean EOF and empty-stdin shutdown pass. Debug logs
+  appear on stderr; stdout contains only protocol replies and no trailing output.
+- Installed-process URL cases distinguish explicit flag from environment using
+  conflicting valid/invalid values: flag overrides `DUTCHMATE_SERVICE_URL`,
+  environment overrides the default, invalid scheme/credentials remain rejected
+  as bounded tool errors. Existing client URL validation coverage stays passing;
+  no normalization rule changed. Exact default `http://127.0.0.1:2040` and all
+  five accepted case-normalized log levels are asserted at the entrypoint.
+  Installed invalid-log-level and hosted-transport options fail on stderr with
+  exit 2 and empty stdout. No service startup or local evidence artifacts occur.
+- Strengthened the existing AST architecture suite with a narrow MCP import
+  boundary: only HTTP/SDK, standard library support and the existing pure Core
+  diagnostic/validation/query contracts are permitted. Hardware backends,
+  firmware transport, runtime/service composition, evidence stores, Debug Agent
+  and LLM dependencies are excluded. Direct file/dynamic-import/process calls
+  and hosted transport launch paths are guarded; the only server `run` transport
+  is stdio. Existing exact catalog/retired-tool/field rejection tests remain
+  passing; no raw GPIO or compatibility aliases were added.
+- Reproduced one verification defect before fixing it: the wheel smoke script
+  still expected the retired nine-tool catalog. The new packaging regression
+  failed with that mismatch (31 other focused cases passed). Refreshed only
+  that verification script to the twelve tools, exercising both installed
+  entrypoints, actual unavailable-service errors, modern metadata/cache hints,
+  repeated listing and empty EOF without adding the tool bin directory to PATH.
+  Added installed-distribution entrypoint/dependency checks and wheel metadata
+  assertions for `mcp>=2.0,<3`, `httpx>=0.27` and `dutchmate-core==0.1.0`.
+  No production product defect was found or fixed.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py tests/architecture tests/packaging --tb=short` | 372 passed in 11.32 s |
+  | `uv build --all-packages --no-sources --no-create-gitignore --out-dir /tmp/dutchmate-mcp-slice4-dist` | All six wheel/sdist pairs built; initially unavailable offline build backend fetched with sandbox escalation |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-mcp-slice4-dist` | Passed (exit 0); temporary isolated uv tool environments installed actual built wheels, fetched declared runtime dependencies with sandbox escalation, verified metadata/entrypoints and both MCP stdio commands outside repository/dev PATH; existing debug-package help smoke also passed without starting an agent |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,872 passed in 56.22 s; existing cancellation, EOF, version rejection and Slice 3 actual-service coverage retained |
+  | `git diff --check` | Passed |
+
+- Reviewed the complete seven-file diff and local documentation links. Prior
+  history and dated validation text, production files/contracts and hardware
+  acceptance/checklist remain intact. Only test/verification changes were made;
+  no production interfaces, module ownership or dependency direction changed,
+  so no architecture document or Graphify update was needed. No hardware/HIL,
+  physical serial access, TCP listener, Device Core Service process, commit or
+  push was used.
+- Recorded Slice 4 complete; overall MCP migration remains incomplete. Stage 8,
+  Phase 1B and Phase 1 remain incomplete pending manufactured KiCad Rev-A
+  physical/electrical acceptance. Legacy EAGLE functional-HIL policy and
+  unresolved historical electrical gaps remain unchanged.
+
+## MCP v2 Slice 3 — Actual Service/Protocol Integration — 2026-10-30
+
+- Implemented only [MCP plan Slice 3](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 2 `6497f85` on `mcp/v2-service-client`.
+  Added twelve representative actual-service test cases without changing any
+  production MCP, service, Device Core, firmware or hardware code/contracts.
+  No production Slice 1/2 defect was discovered; no fix or redesign was needed.
+- Added test-owned support in `tests/support/mcp_service_fixture.py`: a
+  condition-driven normalized RX source, fake physical TX/control, real
+  `DeviceCoreRuntime`, `ContinuousEvidenceRecorder`, `SessionStore` and
+  `BackendReconnectCoordinator`, plus the actual `create_app(runtime)`.
+  Modern SDK in-memory MCP calls use the real `DeviceCoreClient` with injected
+  ASGI transport. The observer records actual HTTP status/body before the MCP
+  projection and never replaces service validation, serialization or responses.
+  The fixture follows existing controlled-source/runtime acceptance patterns
+  without importing test modules through unstable test-directory paths.
+- All twelve public tools traverse that path. Assertions compare MCP structured
+  and text results with the actual ASGI response and independently inspect
+  operation IDs/outcomes, cursor/range coordinates, exact base64/match excerpts,
+  text transformation, integrity/provenance and actual fake physical dispatch.
+  Coverage includes elapsed/matched/normal-timeout operations, profile-default
+  CRLF, binary TX/RX including invalid UTF-8, nullable TX/error after lost ACK,
+  durable attempt/results, and no silent retry.
+- Real evidence/store coverage proves tail attach without historical replay,
+  bounded one-record pages and opaque next-cursor round trips, exact raw bytes,
+  omission fields, explicit recent-log session selection, v2 list/detail and
+  pagination, profile/quality metadata, intentional gap and two segments after
+  release/reacquire, and actual HTTP 410 after a terminal cursor cannot continue
+  into a new ownership session. The store remains exclusively service/runtime
+  infrastructure in the test directory; MCP owns no journal/session truth.
+- Actual service errors cover invalid opaque cursor (`invalid_argument`),
+  missing role (`not_configured`), absent capability and disabled TX policy
+  (`unsupported_capability`), active Interact (`operation_active`), invalid
+  release/reacquire state, expired cursor, and backend diagnostics truncated to
+  the canonical UTF-8 bound. Detail/truncation/context survive unchanged.
+  `invalid_session_state` is an explicitly injected runtime-boundary case:
+  the active-session baseline guard in the real store supplies the failure to
+  the real route/error handler. The twelve tools do not naturally invoke that
+  guard; no baseline tool or artificial production contract was introduced.
+- Modern cancellation reaches the real ASGI bounded Interact and Device Core
+  cancellation event. The native terminal record retains the same operation ID
+  with `cancelled`, while the dispatched TX keeps one successful audit/result;
+  a blocked competing send is never dispatched, and a subsequent send succeeds
+  after exclusivity releases. Event barriers replace timing guesses. MCP EOF
+  cleans up the protocol while service ownership remains connected; ambient
+  UART published afterward is still recorded. Fixture teardown closes runtime
+  resources. There is no rollback claim or MCP-owned operation state machine.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_protocol_integration.py -k actual_service --tb=short` | 12 passed in 1.45 s; existing behavior satisfied the new integration cases |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | 323 passed in 4.88 s, including unchanged ordered twelve-tool catalog, retired-tool absence, SDK metadata/cache/cancellation/EOF and installed stdio/launcher coverage |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,850 passed in 49.21 s |
+  | `git diff --check` | Passed |
+
+- Complete diff and documentation links/preservation checks passed. Four files
+  changed: protocol integration tests, the new test-support fixture, status and
+  this history addition. Prior history/dated validation evidence and hardware
+  acceptance/checklist remain intact. No production imports, module ownership,
+  shared ports or dependency direction changed; no architecture document or
+  Graphify update was needed for this test-only slice. No real serial hardware,
+  physical HIL, TCP listener, second service process, commit or push was used.
+- Recorded Slice 3 complete in status; overall MCP migration remains incomplete.
+  Stage 8, Phase 1B and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical acceptance. Existing EAGLE functional-HIL policy and
+  unresolved historical electrical gaps are unchanged.
+
+## MCP v2 Slice 2 — Public Catalog and Retired-Path Removal — 2026-10-30
+
+- Implemented only [MCP plan Slice 2](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 1 `22cbd11` on `mcp/v2-service-client`.
+  Registered exactly the twelve documented tools in order, each directly
+  invoking its corresponding Slice 1 service-client operation once.
+  `set_dut_boot_mode` uses unchanged `POST /dut/boot-mode`; reset, Control,
+  evidence, ownership and operation semantics remain authoritative in the
+  service/Device Core. Boot validation remains client-composed.
+- After migrating every server consumer, removed MCP client/server paths for
+  `set_boot_mode`, `capture_uart`, `wait_for_uart_pattern`, `run_boot_test`,
+  `send_uart_command`, `get_recent_uart_log`, `get_debug_session` and
+  `list_debug_sessions`, plus unused `_timed_workflow` and legacy-validation
+  imports. Removed three positive legacy-client tests; updated catalog-dependent
+  server/protocol/installed-launch tests. No compatibility aliases or service
+  endpoints were added. Retired names/fields remain only in negative MCP tests.
+- Preserved MCP 2.x/stdin-stdout transport, identity/discovery and per-request
+  metadata, deterministic ordering, private 300,000 ms cache hints, complete
+  structured results, cancellation/EOF and launcher source. No raw GPIO/serial,
+  LLM/Debug Agent, automatic retries, MCP-owned lifecycle/timing or evidence
+  truth was added. No Device Core/service API behavior changed.
+- Test-first catalog migration initially produced **124 failed, 7 passed**.
+  Basic registration exposed **45 failed, 86 passed**: the installed SDK ignores
+  extra arguments and convenience-parses JSON-looking strings (`null`, `true`,
+  `{}`, `[]`). That could silently accept retired fields or corrupt valid UART
+  text/cursor strings. A narrow `MCPServer` subclass now validates original
+  arguments with the SDK-generated Pydantic model (`strict`, extras forbidden)
+  and invokes the registered async context-free handler without convenience
+  parsing. Public schemas forbid extra properties. Missing/extra-argument
+  errors are bounded structured `invalid_argument` results without input dumps;
+  local diagnostics use the shared projector. This is argument adaptation only,
+  not a second operation or service model.
+- Focused tests verify all twelve client-method calls once, exact HTTP mappings,
+  Monitor/Interact forms and outcomes/ranges, binary/text payloads and all five
+  explicit endings, raw JSON-looking text/cursors, reset/boot, session/evidence
+  cursors, release/reacquire projections, negative retired-tool/field calls,
+  bounded structured errors and schema/catalog/cache behavior. Modern SDK
+  in-memory tests cover argument preservation/rejection on the wire; installed
+  real-stdio tests retain discovery, twelve-tool listing, unavailable-service
+  errors and clean shutdown without a venv on PATH. HTTP remains mocked here;
+  no actual-service/ASGI Slice 3 acceptance is claimed.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_server.py apps/mcp_server/tests/test_protocol_integration.py --tb=line -r N` | 139 passed in 2.06 s after catalog/raw-argument fixes |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | Final focused run: 311 passed in 3.44 s, including additional modern wire regressions |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,838 passed in 48.25 s |
+  | `git diff --check` | Passed |
+
+  Net test-count change from 1,709: 123 added server cases + nine modern wire
+  cases − three removed legacy-client cases = 129.
+- Complete diff, documentation links, source/reference inventory, exact catalog
+  and thin-client checks passed. Seven files changed: server/client, their three
+  test files, status and this history addition. Prior history and dated status
+  evidence are preserved; hardware acceptance/checklist, Device Core, service,
+  launcher, firmware and historical hardware evidence remain unchanged. No
+  module/ownership/layer-direction change required architecture documentation
+  or a Graphify update. No hardware/HIL, commit or push.
+- Recorded Slice 2 complete in status. Overall MCP migration remains incomplete;
+  Stage 8, Phase 1B and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical validation. Historical EAGLE electrical gaps remain
+  unresolved; legacy functional HIL permission is unchanged.
+
+## MCP v2 Slice 1 — Service-Client Mappings and Error Projection — 2026-10-30
+
+- Implemented only [MCP plan Slice 1](mcp_integration_plan.md#independently-testable-implementation-sequence)
+  on `mcp/v2-service-client`, starting clean at merged `9c0e0f9` (PR #4).
+  Added HTTP client support for all twelve planned operations, including
+  MCP-facing `set_dut_boot_mode` calling unchanged `POST /dut/boot-mode`.
+  `reset_dut` and underlying service/Device Core Control semantics are unchanged.
+- Client request bodies retain exact base64 or text plus explicit line endings,
+  duration/conditions modes, optional argument omission and opaque cursor strings.
+  Shared core validators enforce bounds before dispatch without importing service
+  schemas or transport implementations. Responses, operation outcomes/IDs,
+  ranges, provenance, schema compatibility, omission counts and canonical errors
+  pass through unchanged. HTTP 410 and bounded error context are preserved.
+- Ordinary requests retain the 2-second timeout; Monitor/Interact use accepted
+  bounds + 2 seconds transport grace; evidence uses `wait_s` + 2 seconds;
+  release/reacquire use bodyless POSTs with the existing CLI's 65-second HTTP
+  allowance. No retries, reconnect/polling loops, local lifecycle or evidence
+  truth, service startup or hardware ownership were added. HTTP timeouts retain
+  unknown-outcome wording, not rollback/non-dispatch guarantees.
+- Malformed/non-object responses keep bounded protocol errors. New regression
+  cases exposed that noncanonical service diagnostic detail could previously
+  leak unbounded/control/invalid-Unicode text. The shared diagnostic projector
+  now validates that peer detail already meets the canonical contract; invalid
+  detail is rejected with a fixed protocol diagnostic, while valid service
+  detail/truncation/context remain exact. This follows the plan's bounded-error
+  contract; no API or semantic deviation was required.
+- Kept the old public catalog and all registration/launch source unchanged.
+  Temporary client consumers retained for Slice 2:
+
+  | Retained client method | Remaining production consumer in `server.py` |
+  |---|---|
+  | `set_boot_mode` | Existing `set_boot_mode` tool handler; delegates to `set_dut_boot_mode` |
+  | `capture_uart` | Existing `capture_uart` tool handler |
+  | `wait_for_uart_pattern` | Existing `wait_for_uart_pattern` tool handler |
+  | `run_boot_test` | Existing `run_boot_test` tool handler |
+  | `send_uart_command` | Existing `send_uart_command` tool handler |
+  | `get_recent_uart_log` | Existing `get_recent_uart_log` tool handler; delegates to `get_recent_logs` |
+  | `get_debug_session` | Existing `get_debug_session` tool handler; delegates to `get_session` |
+  | `list_debug_sessions` | Existing `list_debug_sessions` tool handler; delegates to `list_sessions` |
+
+  Existing client/server/protocol tests also exercise those paths. Their removal
+  is deferred until registration and dependent fixtures migrate in Slice 2;
+  no service compatibility endpoint was added. Passing the pre-v2 catalog does
+  not accept the complete MCP v2 migration.
+- TDD evidence: initial client run **121 failed, 20 passed**, with failures on
+  missing v2 methods; first implementation **141 passed**. Added direct
+  no-implicit-LF coverage and regressions for non-sequence conditions and unsafe
+  peer diagnostics: **4 failed, 151 passed** before correction; then **155
+  passed in 0.24 s**. Tests cover all twelve routes/bodies/queries, optional
+  defaults, path-safe encoded session IDs, explicit endings, finite operation
+  and long-poll/mutation timeouts, cursor round trips, outcomes/compatibility,
+  capability/policy/lifecycle/schema/backend/persistence errors, HTTP 410,
+  unavailable service, malformed responses and single dispatch on failure.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_service_client.py --tb=line` | 155 passed in 0.24 s |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | Final focused run: 182 passed in 2.40 s, including unchanged nine-tool catalog, modern metadata/cancellation/EOF, real installed stdio launch and CLI tests |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,709 passed in 47.24 s |
+  | `git diff --check` | Passed |
+
+- Final diff, documentation links, retained-consumer inventory, unchanged
+  registration/service/firmware/hardware and historical evidence preservation
+  checks passed. Four files changed: client, its tests, status and this history
+  addition. This is a localized client extension with no new module, shared core
+  port or architectural ownership change; no architecture document or Graphify
+  update was needed. No physical HIL/hardware access, commit or push.
+- Recorded Slice 1 complete in status; overall MCP migration remains incomplete.
+  Phase 1B, Stage 8 and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical validation. Legacy EAGLE functional HIL permission
+  does not close its historical UART electrical gap or accept KiCad hardware.
+
 ## MCP v2 Start Prerequisite and Contract Audit — 2026-10-30
 
 - Documentation/design audit only, starting with a clean working tree on
