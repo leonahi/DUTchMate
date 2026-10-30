@@ -130,11 +130,48 @@ The following order is a dependency order, not a progress report:
    retain the existing safe generic channel semantics.
 9. Validate all Device Core/service/CLI tests, then run Basic and Enhanced HIL
    acceptance.
-10. Only after Phase 1 CLI acceptance, migrate Phase 2 MCP tools to the same
-    contracts.
+10. Once the required Device Core/service/CLI software baseline is accepted and
+    functional Enhanced HIL is available, MCP v2 migration MAY begin against
+    those same contracts under §4.1. Full Phase 1 hardware acceptance is not a
+    prerequisite for beginning that migration.
 
 No permanent compatibility path may preserve an obsolete runtime ownership or
 session model solely for MCP or other higher-level clients.
+
+### 4.1 Software sequencing and hardware acceptance boundaries
+
+While manufactured KiCad Rev-A boards are pending, Phase 1 software/behavioral
+work MAY continue using the historical EAGLE Rev-A board as a functional
+Enhanced-backend HIL/development fixture. Such testing MAY validate UART RX/TX,
+Monitor, Interact, Control, release/reacquire, reconnect, telemetry,
+session/evidence behavior, CLI/service behavior, and future MCP behavior.
+
+The evidence boundaries MUST remain explicit:
+
+- **Legacy EAGLE board:** a functional HIL/development fixture. New functional
+  results MUST identify the actual board/configuration and software tested.
+- **Historical EAGLE validation:** historical evidence only. Functional HIL
+  does not close its unresolved UART electrical/oscilloscope gap or establish
+  electrical or physical acceptance of the EAGLE board.
+- **KiCad source review:** design-source verification only; it establishes no
+  physical/electrical acceptance.
+- **Manufactured KiCad Rev-A:** the required fixture for final current-hardware
+  physical/electrical acceptance. Fresh validation MUST use the corrected
+  design and applicable acceptance criteria. EAGLE functional results do not
+  establish KiCad acceptance or validate TMUX2819 isolation, revised biasing,
+  the new J1 implementation, or current-board signal integrity.
+
+MCP v2 migration MAY begin once the required Device Core/service/CLI software
+baseline is accepted and functional Enhanced HIL is available, including on the
+legacy EAGLE fixture. PCB manufacturing lead time alone MUST NOT block that
+software work. MCP MUST remain a thin service client over authoritative
+Device Core/service behavior; it MUST NOT recreate ownership, timing, state,
+or evidence logic or independently open the serial device.
+
+This sequencing permission does not waive any acceptance criterion. Required
+manufactured KiCad Rev-A physical/electrical validation remains an outstanding
+Phase 1 hardware gate. Stage 8, Phase 1B and final Phase 1 completion MUST remain
+withheld until that current-board validation passes, as required by §§34–35.
 
 ## 5. Runtime Architecture
 
@@ -592,9 +629,12 @@ provenance is mandatory.
 
 ## 11. Enhanced Backend Hardware Mapping Contract
 
+The corrected current KiCad Rev-A design is authoritative in
+[the KiCad README](../hardware/pcb/debug-helper/rev-a/README.md).
 `hardware/pcb/debug-helper/legacy-eagle/revision_a.md` remains the preserved
-Revision A electrical/pin authority until a replacement KiCad revision is
-explicitly audited and adopted.
+electrical/pin reference for the historical EAGLE fixture only. Source adoption
+does not establish manufactured-board acceptance; §4.1 defines the evidence
+boundaries.
 
 `docs/gpio_configuration_semantics.md` owns the exact identifier, electrical
 mode, safety-state, validation-order, and reporting contract. This specification
@@ -2323,10 +2363,12 @@ Enhanced and:
 - firmware/protocol advertise `uart_receive`, not legacy `uart_capture`;
 - generic channel actions use `pulse_control` and `set_control_state`;
 - role/DUT-signal metadata remains host-side;
-- the accepted Revision A/current-adopted hardware mapping and provisional/current
-  adopted logic-device choices are consistent across schematic, firmware, tests,
-  and validation records, with leakage, sequencing, isolation, voltage-level,
-  and UART signal-integrity measurements recorded for the prototype;
+- the corrected current KiCad Rev-A hardware mapping and adopted logic-device
+  choices are consistent across schematic, firmware, tests, and validation
+  records, with fresh leakage, sequencing, isolation, voltage-level, and UART
+  signal-integrity measurements recorded on manufactured KiCad Rev-A boards
+  under §4.1; legacy EAGLE functional HIL and KiCad source review do not satisfy
+  this physical/electrical acceptance gate;
 - configured `reset` and `boot` workflows are capability/configuration-gated and
   auditable in v2 evidence;
 - audited reset leaves continuous acquisition running so immediate boot bytes are
@@ -2383,5 +2425,6 @@ criteria hold:
 15. **CLI first:** all Phase 1 acceptance is demonstrated through Device Core,
     service, and CLI without requiring MCP or AI.
 
-Only after these criteria pass should Phase 2 expose the same proven semantics to
-coding agents through MCP.
+MCP v2 migration may begin under §4.1 before the manufactured-board gate passes.
+It exposes the same proven Device Core/service semantics to coding agents and
+does not establish Phase 1B or Phase 1 completion.

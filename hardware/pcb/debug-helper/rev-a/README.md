@@ -172,8 +172,11 @@ The three evidence scopes remain separate:
 - Historical EAGLE [validation records](../../../validation/phase1_revision_a.md)
   establish evidence only for the actual EAGLE/as-built prototype, wiring,
   parts and firmware tested. They remain useful procedural/reference material.
-  Their UART oscilloscope gap remains unresolved; no further prototype testing
-  is planned. UART follow-up belongs to the manufactured KiCad campaign above.
+  Their UART oscilloscope gap remains unresolved. The legacy board may still
+  serve as a functional Enhanced HIL/development fixture under
+  [Phase 1 specification §4.1](../../../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
+  such use does not establish electrical acceptance. Current-board UART
+  electrical follow-up belongs to the manufactured KiCad campaign above.
 - The completed KiCad source review establishes that the corrected design
   source was reviewed; it is not physical-board validation.
 - Future manufactured KiCad Rev-A validation supplies separate physical

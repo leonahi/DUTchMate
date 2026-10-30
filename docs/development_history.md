@@ -9,6 +9,38 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Functional Enhanced HIL and MCP Sequencing Policy Updated — 2026-10-30
+
+- Adopted the agreed policy in
+  [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries).
+  The legacy EAGLE Rev-A board may serve as a functional Enhanced HIL/development
+  fixture while manufactured KiCad Rev-A boards are pending. This supersedes
+  earlier prospective wording that no further prototype testing was planned;
+  all earlier evidence and unresolved electrical gaps retain their scope.
+- MCP v2 migration may begin after the required Device Core/service/CLI
+  software baseline is accepted and functional Enhanced HIL is available.
+  Manufacturing lead time alone does not block it. MCP remains a thin client
+  over authoritative service/Device Core behavior. No MCP implementation or
+  new baseline acceptance is claimed by this documentation change.
+- Retained the separate manufactured KiCad Rev-A physical/electrical gate for
+  final Stage 8, Phase 1B and Phase 1 completion. EAGLE functional HIL neither
+  closes historical EAGLE UART electrical/oscilloscope gaps nor accepts either
+  board electrically/physically; it cannot validate KiCad-specific features.
+  KiCad source review remains design-source verification only.
+- Reconciled stale current-status branch/uncommitted wording with merged
+  `main`/`origin/main` at `f1c61d1` (PR #3; corrections at `a837f4b`). Updated the
+  migration plan and MCP reference header to point to the normative policy,
+  and replaced the KiCad README's blanket prototype-testing restriction with
+  a concise reference. Earlier dated history and validation evidence were not
+  rewritten.
+- Documentation verification: complete diff inspected; exactly six Markdown
+  documentation/specification files changed. Scope/preservation checks confirm
+  all other tracked files unchanged, earlier history byte-for-byte intact, and
+  dated physical HIL/source/test evidence in status preserved. Local link/anchor
+  and policy-consistency checks plus `git diff --check` passed. No production
+  code, firmware, hardware design, tests, or historical validation files changed;
+  no hardware access, software-suite/CAD rerun, commit or push.
+
 ## Legacy EAGLE Validation Gap Retained Without Further Testing — 2026-10-30
 
 - Recorded that the historical EAGLE prototype's UART signal-integrity/

@@ -78,7 +78,7 @@ The migration is therefore primarily a change in **evidence lifetime, session ow
 | retention, baseline, comparison, log replay concepts | **Keep / adapt** | Product still needs them, now with v2-aware semantics. |
 | FastAPI service as sole process owner | **Keep** | Still the one local service boundary. |
 | CLI as thin HTTP client | **Keep** | CLI remains first acceptance surface. |
-| MCP as a separate service client | **Keep, migrate last** | Must consume proven Phase 1 semantics, not drive them. |
+| MCP as a separate service client | **Keep, migrate after software baseline acceptance** | Must consume proven service semantics under specification §4.1, not drive them. |
 
 ### 2.2 Modify substantially
 
@@ -96,7 +96,7 @@ The migration is therefore primarily a change in **evidence lifetime, session ow
 | `apps/service/src/dutchmate_service/startup.py` | Resolve one DUT Profile, prepare v2 persistence before authoritative receive, publish initial segment, start recorder, and compose reconnect/action ports. |
 | `apps/service/src/dutchmate_service/app.py` / `schemas.py` / `errors.py` | Add v2 endpoints and operation/error contracts; phase out legacy capture/wait contracts. |
 | CLI client and commands | Add Monitor, Interact, Follow, Console, Release/Reacquire; explicit line endings; remove `--force`. |
-| MCP client/server | After CLI acceptance, remap tools to Monitor/Interact/Control/session-v2 semantics. |
+| MCP client/server | After the software/HIL prerequisites in specification §4.1, remap tools to Monitor/Interact/Control/session-v2 semantics. |
 
 ### 2.3 Retire after consumers migrate
 
@@ -777,6 +777,12 @@ Do not redesign Phase 4 during Phase 1. Preserve build/test health using the rea
 
 ### HIL acceptance
 
+Functional Enhanced HIL may use the legacy EAGLE fixture while manufactured
+KiCad Rev-A boards are pending. Apply the functional/electrical evidence
+boundaries in [specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries).
+This permits continued behavioral work without closing Stage 8's outstanding
+current-board physical acceptance gate.
+
 Run Basic first, then Enhanced, covering at least:
 
 **Basic**
@@ -829,9 +835,13 @@ All Phase 1A and 1B done criteria in the rewritten implementation spec are met t
 
 ---
 
-# 5. Post-Phase-1 CLI Acceptance — Migrate MCP, Then Resume Phase 4 Separately
+# 5. After Software Baseline Acceptance — Migrate MCP; Resume Phase 4 Separately
 
-Do this only after Stage 8 CLI/HIL acceptance.
+MCP v2 migration may begin once the required Device Core/service/CLI software
+baseline is accepted and functional Enhanced HIL is available, under
+[specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries).
+It need not wait for PCB manufacturing or full Stage 8/Phase 1 hardware
+acceptance. Those completion gates remain unchanged.
 
 ### MCP
 
@@ -862,8 +872,10 @@ Do not implement the migration in one coding-agent run or one giant commit. Reco
 6. audited TX + Interact + Control, with the dedicated boot-test composite removed;
 7. follow/console;
 8. release/reacquire + DTR/RTS + native USB;
-9. Enhanced parity + cleanup + full CLI/HIL acceptance;
-10. later MCP migration.
+9. Enhanced parity + cleanup + CLI/functional HIL acceptance, retaining the
+   separate manufactured-board gate for final Stage 8/Phase 1 completion;
+10. MCP migration once specification §4.1 prerequisites are met, including while
+    manufactured KiCad Rev-A validation is pending.
 
 Each structural commit should have focused tests during implementation and the repository-required final validation before it is declared complete.
 

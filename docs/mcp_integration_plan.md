@@ -4,10 +4,10 @@
 > schema-v1, implicit line-ending, `capture_active`, and `force` semantics are not
 > the target contracts. The former dedicated boot-test composite is also removed
 > from the target tool model. `project_context.md` and `phase1_implementation_spec.md`
-> are authoritative. Stage 1 DUT Profile/provenance is implemented, while the
-> schema-v2 and operation-contract migration is not; MCP remapping remains
-> deferred until the new Device Core/service/CLI behavior passes Phase 1
-> acceptance.
+> are authoritative. MCP v2 remapping follows the software/HIL prerequisites in
+> [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
+> it need not wait for manufactured-board acceptance. Current progress belongs
+> only in [development status](development_status.md).
 >
 > Scope: Phase 2 MCP server transport, launch model, and tool contract.
 
