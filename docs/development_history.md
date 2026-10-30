@@ -9,6 +9,77 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 3 — Actual Service/Protocol Integration — 2026-10-30
+
+- Implemented only [MCP plan Slice 3](mcp_integration_plan.md#independently-testable-implementation-sequence),
+  starting clean at pushed Slice 2 `6497f85` on `mcp/v2-service-client`.
+  Added twelve representative actual-service test cases without changing any
+  production MCP, service, Device Core, firmware or hardware code/contracts.
+  No production Slice 1/2 defect was discovered; no fix or redesign was needed.
+- Added test-owned support in `tests/support/mcp_service_fixture.py`: a
+  condition-driven normalized RX source, fake physical TX/control, real
+  `DeviceCoreRuntime`, `ContinuousEvidenceRecorder`, `SessionStore` and
+  `BackendReconnectCoordinator`, plus the actual `create_app(runtime)`.
+  Modern SDK in-memory MCP calls use the real `DeviceCoreClient` with injected
+  ASGI transport. The observer records actual HTTP status/body before the MCP
+  projection and never replaces service validation, serialization or responses.
+  The fixture follows existing controlled-source/runtime acceptance patterns
+  without importing test modules through unstable test-directory paths.
+- All twelve public tools traverse that path. Assertions compare MCP structured
+  and text results with the actual ASGI response and independently inspect
+  operation IDs/outcomes, cursor/range coordinates, exact base64/match excerpts,
+  text transformation, integrity/provenance and actual fake physical dispatch.
+  Coverage includes elapsed/matched/normal-timeout operations, profile-default
+  CRLF, binary TX/RX including invalid UTF-8, nullable TX/error after lost ACK,
+  durable attempt/results, and no silent retry.
+- Real evidence/store coverage proves tail attach without historical replay,
+  bounded one-record pages and opaque next-cursor round trips, exact raw bytes,
+  omission fields, explicit recent-log session selection, v2 list/detail and
+  pagination, profile/quality metadata, intentional gap and two segments after
+  release/reacquire, and actual HTTP 410 after a terminal cursor cannot continue
+  into a new ownership session. The store remains exclusively service/runtime
+  infrastructure in the test directory; MCP owns no journal/session truth.
+- Actual service errors cover invalid opaque cursor (`invalid_argument`),
+  missing role (`not_configured`), absent capability and disabled TX policy
+  (`unsupported_capability`), active Interact (`operation_active`), invalid
+  release/reacquire state, expired cursor, and backend diagnostics truncated to
+  the canonical UTF-8 bound. Detail/truncation/context survive unchanged.
+  `invalid_session_state` is an explicitly injected runtime-boundary case:
+  the active-session baseline guard in the real store supplies the failure to
+  the real route/error handler. The twelve tools do not naturally invoke that
+  guard; no baseline tool or artificial production contract was introduced.
+- Modern cancellation reaches the real ASGI bounded Interact and Device Core
+  cancellation event. The native terminal record retains the same operation ID
+  with `cancelled`, while the dispatched TX keeps one successful audit/result;
+  a blocked competing send is never dispatched, and a subsequent send succeeds
+  after exclusivity releases. Event barriers replace timing guesses. MCP EOF
+  cleans up the protocol while service ownership remains connected; ambient
+  UART published afterward is still recorded. Fixture teardown closes runtime
+  resources. There is no rollback claim or MCP-owned operation state machine.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_protocol_integration.py -k actual_service --tb=short` | 12 passed in 1.45 s; existing behavior satisfied the new integration cases |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | 323 passed in 4.88 s, including unchanged ordered twelve-tool catalog, retired-tool absence, SDK metadata/cache/cancellation/EOF and installed stdio/launcher coverage |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,850 passed in 49.21 s |
+  | `git diff --check` | Passed |
+
+- Complete diff and documentation links/preservation checks passed. Four files
+  changed: protocol integration tests, the new test-support fixture, status and
+  this history addition. Prior history/dated validation evidence and hardware
+  acceptance/checklist remain intact. No production imports, module ownership,
+  shared ports or dependency direction changed; no architecture document or
+  Graphify update was needed for this test-only slice. No real serial hardware,
+  physical HIL, TCP listener, second service process, commit or push was used.
+- Recorded Slice 3 complete in status; overall MCP migration remains incomplete.
+  Stage 8, Phase 1B and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical acceptance. Existing EAGLE functional-HIL policy and
+  unresolved historical electrical gaps are unchanged.
+
 ## MCP v2 Slice 2 — Public Catalog and Retired-Path Removal — 2026-10-30
 
 - Implemented only [MCP plan Slice 2](mcp_integration_plan.md#independently-testable-implementation-sequence),
