@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility.
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 HOST_VERSION_AUTHORITY = REPOSITORY_ROOT / "pyproject.toml"
-APACHE_LICENSE = REPOSITORY_ROOT / "LICENSES/Apache-2.0.txt"
+MIT_LICENSE = REPOSITORY_ROOT / "LICENSE"
 EXPECTED_AUTHOR = [{"name": "Nahit Pawar"}]
 EXPECTED_URLS = {
     "Homepage": "https://github.com/leonahi/DUTchMate",
@@ -115,12 +115,12 @@ def test_installed_metadata_exposes_mcp_entrypoints_and_runtime_dependencies() -
     assert metadata.version("mcp").split(".", 1)[0] == "2"
 
 
-def test_all_host_distributions_publish_apache_license_and_owner_metadata() -> None:
-    canonical_license = APACHE_LICENSE.read_text(encoding="utf-8")
+def test_all_host_distributions_publish_mit_license_and_owner_metadata() -> None:
+    canonical_license = MIT_LICENSE.read_text(encoding="utf-8")
 
     for path in DISTRIBUTIONS.values():
         project = _project(path)
-        assert project["license"] == "Apache-2.0"
+        assert project["license"] == "MIT"
         assert project["license-files"] == ["LICENSE"]
         assert project["authors"] == EXPECTED_AUTHOR
         assert project["urls"] == EXPECTED_URLS
@@ -134,15 +134,16 @@ def test_workspace_root_remains_unlicensed_as_one_distribution() -> None:
     assert "license-files" not in project
 
 
-def test_repository_license_policy_preserves_hardware_design_gate() -> None:
+def test_repository_license_policy_preserves_hardware_and_third_party_exceptions() -> None:
     policy = (REPOSITORY_ROOT / "LICENSE.md").read_text(encoding="utf-8")
 
-    assert "Apache-2.0" in policy
-    assert "CC-BY-4.0" in policy
+    assert "[MIT](LICENSE)" in policy
+    assert "CERN-OHL-P-2.0" in policy
     assert "hardware/pcb/debug-helper/legacy-eagle/" in policy
     assert "hardware/pcb/debug-helper/rev-a/" in policy
     assert "not covered" in policy.lower()
     assert "KiCad" in policy
+    assert "THIRD_PARTY_NOTICES.md" in policy
 
 
 def test_repository_requires_future_dco_sign_off() -> None:

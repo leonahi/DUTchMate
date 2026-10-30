@@ -9,6 +9,73 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MIT Licensing Migration — 2026-10-30
+
+- Started clean at `55c4dd1b09bfc0d83dace5725e1d746cb1687966`. This is a
+  licensing/metadata/documentation migration only. No commit, push,
+  publication, runtime/API change, hardware design edit, firmware behavior
+  change, or new hardware/HIL acceptance occurred.
+- Audited tracked license declarations, package metadata, firmware headers,
+  protocol schemas/examples, READMEs, CAD sources, third-party notices, and
+  historical licensing references before changing declarations. The existing
+  scope map establishes Copyright 2026 Nahit Pawar and DUTchMate contributors;
+  relevant first-party Git history identifies Nahit Pawar. No company or
+  registered trademark claim was introduced.
+- Added canonical MIT text as root `LICENSE`; retained `LICENSE.md` as the
+  scope map. Changed the six package-local Apache license files and their
+  `pyproject.toml` expressions to MIT in `core`, `apps/cli`, `apps/service`,
+  `apps/mcp_server`, `apps/debug_agent`, and `packages/dutchmate`. Package
+  versions, dependency constraints, entrypoints, and the lockfile are unchanged.
+  Updated only license expectations in distribution tests and artifact smoke
+  validation; smoke now verifies complete license-text equality.
+- MIT now covers DUTchMate-authored software, firmware, protocol definitions,
+  documentation (previously CC-BY-4.0), scripts, examples, and supporting tools.
+  Updated root licensing prose, both firmware READMEs, the distribution plan,
+  and hardware scope documentation. Branding is excluded from the grants and
+  derivative products receive no permission to present themselves as official
+  DUTchMate products.
+- Added the unmodified SPDX CERN-OHL-P-2.0 text and explicitly licensed
+  DUTchMate-authored `hardware/pcb/` designs/metadata, including current KiCad
+  source and the symbol library identified as project-owned by its README.
+  Embedded/referenced third-party CAD data retains its own terms. The legacy
+  EAGLE directory remains excluded: SparkFun, Adafruit, RpiPico,
+  SnapEDA-linked and Ultra Librarian material has unresolved provenance and
+  redistribution terms. Existing CC-BY-SA links and copyright notices remain.
+  A complete per-asset CAD and manufacturing-output provenance audit is not
+  claimed. Licensing does not establish physical acceptance.
+- Added `THIRD_PARTY_NOTICES.md`. Verified the copied Agent Plugins schemas
+  retain upstream Apache-2.0 (the local MCP schema's title differs from current
+  upstream); retained the Apache text for these and Graphify 0.9.48 tooling.
+  Preserved Graphify's upstream NOTICE and retained MIT text with Safi Shamsi's
+  copyright in `LICENSES/Graphify-MIT.txt`. DCO and its Linux Foundation notice
+  are unchanged. External Zephyr/dependency licenses are unchanged; no vendored
+  Zephyr source tree was found. Ignored generated/build/evidence/manufacturing
+  files and Graphify outputs were left unchanged.
+- No existing tracked SPDX-License-Identifier headers were found; zero source
+  headers changed. Remaining Apache/CC-BY declarations are third-party notices,
+  retained license texts, or historical records/release notes. No unintended
+  current DUTchMate-owned Apache declaration remains. Historical release notes
+  and all older development-history entries are preserved verbatim.
+- Validation used `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Check/command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q tests/packaging --tb=short` | 25 passed |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=short` | 1,872 passed in 54.70 s |
+  | `uv lock --check --offline` | Passed; 66 packages |
+  | `uv build --all-packages --no-sources --no-create-gitignore --offline --out-dir /tmp/dutchmate-mit-dist` | All six wheel/sdist pairs built |
+  | Artifact metadata/text inspection | All 12 artifacts report `License-Expression: MIT`, `License-File: LICENSE`, and the complete root MIT text |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-mit-dist` | Passed, exit 0; isolated wheel installs, commands, optional Debug Agent, and installed MCP discovery; declared dependency downloads used sandbox escalation |
+  | Relative Markdown links/anchors | Passed across project documentation, including new license/notices links |
+  | Canonical license comparison, source/evidence preservation, stale-reference search, final diff and `git diff --check` | Passed; 219 production/firmware/protocol/CAD/third-party/evidence/release/lock files byte-identical |
+
+- Status records only this uncommitted baseline and validation. MCP v2 and
+  Phase 1A remain Complete; Phase 1B, Stage 8 and Phase 1 remain incomplete.
+  The milestone, next implementation steps, hardware acceptance evidence,
+  optional named-host gaps and existing follow-ups are unchanged.
+
 ## Repository Documentation Consistency Audit — 2026-10-30
 
 - Started clean at merged cleanup `a4707f3` (PR #6, code commit `d11cb1a`) on

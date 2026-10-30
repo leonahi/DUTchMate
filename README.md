@@ -147,11 +147,19 @@ uv run ruff check .
 
 ## Licensing and contributions
 
-DUTchMate uses licenses appropriate to each kind of material: Apache-2.0 for
-host software and firmware, CC-BY-4.0 for general documentation, and a future
-CERN-OHL-P-2.0 grant for audited KiCad hardware-design material. The legacy
-EAGLE files are excluded from the new grants. See [LICENSE.md](LICENSE.md) for
-the authoritative scope map.
+Unless otherwise noted, DUTchMate software, firmware, protocol definitions,
+documentation, scripts, and supporting tools are licensed under the
+[MIT License](LICENSE).
+
+DUTchMate-authored hardware design files under `hardware/pcb/` are licensed
+under [CERN-OHL-P-2.0](LICENSES/CERN-OHL-P-2.0.txt). Third-party components
+retain their respective licenses. The legacy EAGLE files and third-party CAD
+assets retain their existing terms; see [LICENSE.md](LICENSE.md) for the scope
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+The DUTchMate name, logo, and associated branding are excluded from these
+grants. The MIT License and CERN-OHL-P-2.0 do not grant permission to use them
+to identify or promote derivative products as official DUTchMate products.
 
 Future pull-request commits require DCO 1.1 sign-off. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution and validation workflow.

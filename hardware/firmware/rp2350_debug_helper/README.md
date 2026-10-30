@@ -275,3 +275,11 @@ current-board acceptance requires the manufactured KiCad campaign under
 EVENT pins remain safely initialized and reserved, with no capture implementation
 or advertised capability. GP28 voltage sensing is also unimplemented; the
 hardware-defined TMUX2819 isolation does not imply firmware ADC measurements.
+
+## Licensing
+
+DUTchMate-authored firmware and supporting tools use the
+[MIT License](../../../LICENSE). Zephyr and other third-party components
+retain their respective licenses; see the
+[repository scope](../../../LICENSE.md) and
+[third-party notices](../../../THIRD_PARTY_NOTICES.md).

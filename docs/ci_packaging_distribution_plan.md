@@ -362,17 +362,18 @@ submission path expects a remote HTTPS MCP endpoint.
 ## Public Release Gate and Publication Order
 
 CI, private artifacts, firmware builds, and the local plugin proceed before a
-public release. The owner approved Nahit Pawar as the public publisher and a
-mixed-license repository policy on 2026-09-23. Apache-2.0 covers all six Python
-distributions and both firmware projects; CC-BY-4.0 covers general
-documentation. Future KiCad hardware design material may use CERN-OHL-P-2.0
-only after a provenance audit. The legacy EAGLE design under
-`hardware/pcb/debug-helper/legacy-eagle/` remains outside the new license grants
-and all public release artifacts; `hardware/pcb/debug-helper/rev-a/` is reserved
-for the future KiCad source.
+public release. The owner approved Nahit Pawar as the public publisher on
+2026-09-23. The current [licensing policy](../LICENSE.md) applies MIT to all six
+Python distributions, DUTchMate-authored firmware, protocol definitions,
+documentation, scripts, and supporting tools. DUTchMate-authored hardware
+design files under `hardware/pcb/`, including the current Rev-A KiCad source,
+use CERN-OHL-P-2.0. Third-party assets retain their own terms. The legacy EAGLE
+design under `hardware/pcb/debug-helper/legacy-eagle/` remains outside the new
+grants and all public release artifacts; unresolved CAD provenance is recorded
+in the [third-party notices](../THIRD_PARTY_NOTICES.md).
 
 The root `LICENSE.md` is the authoritative scope map. Each publishable Python
-project declares the SPDX expression `Apache-2.0` and includes its own complete
+project declares the SPDX expression `MIT` and includes its own complete
 license text in wheels and source distributions. The non-published workspace
 root does not declare one project license because the repository is mixed
 license. Future pull-request commits require DCO 1.1 sign-off; the repository
