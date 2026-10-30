@@ -9,6 +9,130 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 5 — Scoped External Acceptance and Registration — 2026-10-30
+
+- Started clean at pushed Slice 4 `71a43f0` on `mcp/v2-service-client`.
+  Completed the [existing scoped acceptance policy](mcp_integration_plan.md#test-and-acceptance-matrix)
+  without changing its required/excluded checks. This record accepts the twelve
+  v2 tools, independently of earlier nine-tool host/protocol evidence. Changed
+  only the developer guide, current status and this history addition. No
+  production, test, package, service, Device Core, firmware or hardware change.
+- Verified current official documentation before external commands:
+  [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md)
+  and its [read-only config-file form](https://github.com/modelcontextprotocol/inspector/blob/main/docs/mcp-server-configuration.md),
+  [conformance requirements](https://github.com/modelcontextprotocol/conformance#conformance-requirements),
+  [VS Code MCP configuration](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)
+  and [connection destinations](https://code.visualstudio.com/docs/agent-customization/mcp-servers),
+  and [Claude Code local stdio](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server).
+  Official npm metadata reported Inspector 2.13.0 with Node >=22.19.0. Installed
+  acceptance tools under `/tmp` with
+  `npm install --prefix /tmp/dutchmate-mcp-slice5-tools --no-audit --no-fund node@22.19.0 @modelcontextprotocol/inspector@2.13.0 @modelcontextprotocol/conformance@0.2.0-alpha.11`
+  (`npm_config_cache=/tmp/dutchmate-mcp-slice5-npm`, sandbox escalation for
+  downloads). The system Node 22.18.0 emitted install-time engine warnings;
+  actual acceptance used the downloaded **Node v22.19.0**, verified with
+  `--version`. Runner `--version` returned **0.2.0-alpha.11**; Inspector
+  `--version` returned **2.13.0**. No global npm or project dependency changed.
+- Exact Inspector command (read-only session config avoids launcher-option
+  parsing ambiguity):
+
+  ```bash
+  /tmp/dutchmate-mcp-slice5-tools/node_modules/node/bin/node /tmp/dutchmate-mcp-slice5-tools/node_modules/@modelcontextprotocol/inspector/clients/launcher/build/index.js --cli --config /tmp/dutchmate-mcp-slice5/inspector.json --server dutchmate --method tools/list --strict
+  ```
+
+  The temporary `mcpServers.dutchmate` entry used `type: stdio`, `protocolEra:
+  modern`, an absolute installed `dutchmate-mcp` resolved from the workspace's
+  `.venv/bin`, `args: ["--service-url", "http://127.0.0.1:0"]` and stripped
+  child PATH `/usr/bin:/bin`. No repository-relative module launch, actual
+  Device Core access, or machine-specific config was committed. Exit **0**,
+  empty stderr (no schema-portability findings), and exactly this returned order:
+  `get_status`, `monitor`, `interact`, `send_uart`, `reset_dut`,
+  `set_dut_boot_mode`, `get_evidence`, `get_recent_logs`, `list_sessions`,
+  `get_session`, `release_connection`, `reacquire_connection`.
+  Captured stdout SHA-256:
+  `e99782a888c69f17ffa95080aa3daaf760ae045255549f656cd6fb290e5c112f`.
+- Conformance used a disposable `/tmp` harness around the unchanged
+  `create_server("http://127.0.0.1:0")` and SDK
+  `streamable_http_app(stateless_http=True, json_response=True)`, served by
+  uvicorn on **127.0.0.1:51527**. Only the runner's explicitly permitted
+  loopback test projection was exposed; no product transport, service process,
+  hardware, evidence store or fixture tools were added. Exact invocations below
+  use these literal executable/script paths:
+
+  ```bash
+  N=/tmp/dutchmate-mcp-slice5-tools/node_modules/node/bin/node
+  C=/tmp/dutchmate-mcp-slice5-tools/node_modules/@modelcontextprotocol/conformance/dist/index.js
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --requirements 2026-07-28 --output-dir /tmp/dutchmate-mcp-slice5/requirements --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario server-stateless --output-dir /tmp/dutchmate-mcp-slice5/stateless --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario tools-list --output-dir /tmp/dutchmate-mcp-slice5/tools-list --verbose
+  "$N" "$C" server --url http://127.0.0.1:51527/mcp --spec-version 2026-07-28 --scenario caching --output-dir /tmp/dutchmate-mcp-slice5/caching --verbose
+  ```
+
+  `--requirements` selects the complete frozen set; separate scoped probes use
+  `--spec-version`/`--scenario`, as required by the current official CLI.
+
+  | Run | Actual result and disposition |
+  |---|---|
+  | Frozen requirements | Exit 1; 50 scenarios, 104 checks passed/61 failed; 13 unscored scenarios, 11 failing. Optional prompts/resources/media/progress/sampling/HTTP/task/MRTR fixtures are outside the approved tools-only stdio gate, not passes. |
+  | `server-stateless` | Exit 1; 23 successes, 2 documented exclusions, 5 subscription checks skipped. Only `sep-2575-server-rejects-undeclared-capability` and `sep-2575-missing-capability-http-400` fail: both require the absent synthetic `test_missing_capability` sampling tool. All applicable checks pass. |
+  | `tools-list` | Exit 0; all 3 pass: `tools-list`, `tools-name-format`, `wire-schema-valid`. |
+  | `caching` | Exit 1; all 4 required checks pass: `sep-2549-tools-list-caching-hints`, `sep-2549-ttl-non-negative`, `sep-2549-cache-scope-valid`, `wire-schema-valid`. Three optional prompt/resource/template cache checks fail with METHOD_NOT_FOUND; resource-read cache skipped. |
+
+  Verified applicable checks in both the frozen run and the scoped reports.
+  Behavior matches the plan and historical runner investigation; no policy or
+  version was silently changed. Raw outputs and `checks.json` were captured
+  only under `/tmp/dutchmate-mcp-slice5` (temporary diagnostics, not permanent
+  evidence locations). The projection received SIGTERM after all probes;
+  uvicorn shutdown logged and connection refusal confirmed port 51527 closed.
+- **VS Code disposition:** installed CLI **1.141.0**, commit
+  `2a59476c9bfcb90b3ddc372c36762471b7dfad1c`, arm64. Ran
+  `code --user-data-dir /tmp/dutchmate-mcp-slice5/vscode-profile --add-mcp '<JSON>'`,
+  with JSON `name: dutchmate-slice5`, `type: stdio`, the same absolute installed
+  launcher and unreachable service arguments above. Exit **0**, stdout
+  `Added MCP servers: dutchmate-slice5`; parsed the temporary profile's
+  `User/mcp.json` and confirmed its `servers` entry. Electron also printed a
+  codesign `task_name_for_pid` error; registration persistence was independently
+  verified. No user profile or repository host config was edited. Authenticated
+  host UI/session was unavailable: startup, exact twelve-tool discovery and
+  read-only `get_status` through VS Code were **not performed**, not accepted
+  from registration/Inspector evidence. No agent host was started.
+- **Claude Code disposition:** absent from PATH and checked local install
+  locations; no authenticated Claude Code session was available. Registration,
+  discovery and read-only call were **not performed/unavailable**. No inference
+  from VS Code, Inspector or Claude API connector support. The plan explicitly
+  permits named-host checks only when available; these optional gaps do not
+  change the scoped migration disposition or become historical host passes.
+- Updated developer registration examples to installed `dutchmate-mcp` with
+  machine-independent placeholders and optional service URL/environment; kept
+  `dutchmate mcp` as the supported sibling launcher alternative. Distinguished
+  VS Code `.vscode/mcp.json`/user-profile `servers` from portable `.mcp.json`
+  `mcpServers`, documented current Claude separator syntax, and linked the
+  authoritative twelve-tool catalog. Service startup remains explicit and
+  separate, logs stderr-only, and no hosted endpoint is documented. No
+  superseded temporary working plan was present; the normative MCP mapping/
+  acceptance document remains authoritative.
+- Fresh repository validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py tests/architecture tests/packaging --tb=short` | 372 passed in 11.35 s; includes installed commands, packaging/metadata, boundaries and Slice 3 actual-service tests |
+  | `uv build --all-packages --no-sources --no-create-gitignore --offline --out-dir /tmp/dutchmate-mcp-slice5/dist` | All six wheel/sdist pairs built |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-mcp-slice5/dist` | Passed, exit 0; actual wheel installations in isolated tool environments, both installed MCP commands and existing metadata/command checks; downloads used sandbox escalation |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,872 passed in 58.24 s |
+  | `git diff --check` | Passed |
+
+- Reviewed the complete documentation-only diff, registration JSON examples,
+  local links and unchanged twelve-tool/retired-tool boundaries. Prior history,
+  dated validation evidence, production/test/package files and hardware gates
+  are preserved. No architecture, dependency, source ownership or product
+  transport change; no Graphify update was needed. No hardware/HIL, serial
+  access, commit or push. MCP v2 migration is complete under the approved
+  scoped policy. Phase 1B, Stage 8 and Phase 1 remain incomplete until fresh
+  manufactured KiCad Rev-A physical/electrical acceptance; historical EAGLE
+  gaps and functional-HIL evidence boundaries remain unchanged.
+
 ## MCP v2 Slice 4 — Installed Launch and Boundary Regressions — 2026-10-30
 
 - Implemented only [MCP plan Slice 4](mcp_integration_plan.md#independently-testable-implementation-sequence),

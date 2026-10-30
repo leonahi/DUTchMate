@@ -140,25 +140,29 @@ so stdin and stdout remain dedicated to MCP stdio; process logs go to stderr.
 
 ### Register MCP with a coding agent
 
-Install the workspace with `uv sync --all-packages`, start the Device Core
-Service separately, then resolve the absolute launcher path with
-`realpath .venv/bin/dutchmate`.
-Use that absolute path in a host that does not inherit the shell's virtual
-environment. The launcher finds the aggregator-owned sibling `dutchmate-mcp`
-executable in the same environment. Each host launches its own stdio process;
-there is no MCP HTTP endpoint to configure.
+The Device Core Service must already be running and reachable; registering or
+starting MCP does not start it. With the installed DUTchMate distribution, use
+`command -v dutchmate-mcp` to locate the launcher. For a workspace installation,
+run `uv sync --all-packages` and `realpath .venv/bin/dutchmate-mcp`.
+Use the absolute installed executable in hosts that do not inherit your shell's
+PATH. The examples below use `/absolute/path/to/bin/dutchmate-mcp` as a placeholder;
+replace it locally, without committing machine-specific configuration.
+
+`dutchmate mcp` is also supported: use the absolute `dutchmate` command with
+`"args": ["mcp"]`; it finds its installed sibling `dutchmate-mcp` without a venv
+on PATH. Each host launches its own stdio process. Logs go to stderr and stdout
+is reserved for MCP messages. There is no hosted HTTP MCP endpoint to configure.
 
 For [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration),
-put this in `.vscode/mcp.json` and replace the example command path with the
-resolved path on that machine:
+put this in the VS Code-specific `.vscode/mcp.json` (or user-profile `mcp.json`):
 
 ```json
 {
   "servers": {
     "dutchmate": {
       "type": "stdio",
-      "command": "/absolute/path/to/DUTchMate/.venv/bin/dutchmate",
-      "args": ["mcp"],
+      "command": "/absolute/path/to/bin/dutchmate-mcp",
+      "args": [],
       "env": {
         "DUTCHMATE_SERVICE_URL": "http://127.0.0.1:2040"
       }
@@ -167,18 +171,49 @@ resolved path on that machine:
 }
 ```
 
-For [Claude Code](https://code.claude.com/docs/en/mcp), register the same
-absolute launcher as a local stdio server:
+VS Code's format uses `servers`. Portable workspace-root `.mcp.json` and
+Copilot global MCP configurations use `mcpServers`; they are separate formats.
+Choose the destination supported by your VS Code harness using
+[the current connection guidance](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+After registration, use **MCP: List Servers** to start/inspect the server, check
+the tool list and make a read-only `get_status` call in an available agent
+session. Configuration being saved alone is not a host/tool-call acceptance pass.
+
+For [Claude Code's local stdio support](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server),
+register the same absolute launcher; this is separate from Claude API remote
+MCP connectors:
 
 ```bash
 claude mcp add --transport stdio dutchmate -- \
-  /absolute/path/to/DUTchMate/.venv/bin/dutchmate mcp
+  /absolute/path/to/bin/dutchmate-mcp --service-url http://127.0.0.1:2040
+claude mcp get dutchmate
 ```
 
-The default service URL is `http://127.0.0.1:2040`. For a different address,
-add `--service-url URL` after `mcp` in either registration. A host can list the
-nine fixed tools while Device Core is stopped; calls that need the service then
-return structured errors.
+The `--` separates Claude options from launcher arguments. In an authenticated
+Claude Code session, inspect `/mcp`, verify the twelve tools and call `get_status`.
+An optional project `.mcp.json` uses the portable shape:
+
+```json
+{
+  "mcpServers": {
+    "dutchmate": {
+      "type": "stdio",
+      "command": "/absolute/path/to/bin/dutchmate-mcp",
+      "args": ["--service-url", "http://127.0.0.1:2040"]
+    }
+  }
+}
+```
+
+The default service URL remains `http://127.0.0.1:2040`. `--service-url URL`
+overrides `DUTCHMATE_SERVICE_URL`, which overrides the default; remove the flag
+from an example to use environment/default selection. A stopped service does
+not prevent discovery of the twelve tools in the
+[authoritative catalog](mcp_integration_plan.md#target-tool-catalog); dependent
+calls return a bounded, actionable `service_unavailable` tool error. No service
+startup is attempted. Host UI acceptance is separate from configuration syntax
+or Inspector evidence; current dispositions live only in
+[development status](development_status.md).
 
 `dutchmate start` requires `--backend basic|enhanced` or `[backend].mode`.
 Basic also requires an explicit/configured serial port and opens it directly as
