@@ -9,6 +9,84 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Repository Stale/Dead-Code Audit and Cleanup — 2026-10-30
+
+- Started clean on `refactor/stale-code-cleanup` at merged `main` `5c517ad`
+  (PR #5, MCP acceptance commit `664615a`). Read the product/specification and
+  architecture boundaries before editing. Audited host production packages,
+  tests/support, CI helpers, imports, package exports and entrypoints. One
+  budgeted Graphify query supplied dependency context; its truncated output was
+  not treated as a complete caller inventory. Repository-wide AST/name/import
+  searches and direct source/test/contract checks supplied deletion evidence.
+  All production modules have static import consumers; a separate scan of 112
+  production/support/CI modules found no literal dead conditionals or statements
+  after unconditional terminal statements. These are candidate-discovery
+  checks, not proof about arbitrary dynamic Python behavior.
+- Performed two independently validated removal groups, without changing test
+  cases, interfaces, ownership, persistence formats or execution semantics:
+
+  | Removal | Caller/export/contract evidence and safety |
+  |---|---|
+  | `validation.WELL_KNOWN_GPIO_ROLES` | Only its definition remained across source/tests/scripts; no facade export, packaging or documented identifier contract. Actual role validation remains free-form with exact reset/boot semantics, covered by existing GPIO/custom-role tests. |
+  | CLI lifecycle test `basic_profile` | No caller/importer/fixture registration; the active profile factories and lifecycle cases remain. |
+  | Service reconnect fake `wait_for_idle_waits` | No caller or source-owner protocol requirement; active condition/event waits and reconnect tests remain. |
+  | Service startup test `AdvancingClock` | Entire class unreferenced, not a registered fixture; no production clock was changed. |
+  | Runtime test support `AdvancingMonotonicClock` | Entire class unreferenced across all consumers; active fake clocks and capture sources remain. |
+  | Legacy fixture private `_record_segment_timestamp` | No direct/dynamic-name reference or inherited production hook. Used admission methods still call `_record_metadata_segment_timestamp` directly; the helper itself supplied no v0/v1 fixture data. Read-only compatibility and Debug Agent cases remain. |
+
+  Deletions were followed by focused tests before continuing. No additional
+  tests were needed to mirror unreachable definitions; all existing regression
+  cases were retained, including schema-v0/v1 compatibility and deferred Debug
+  Agent behavior.
+- Retained intentionally supported or uncertain candidates: CLI/service
+  capture/wait aliases still have live consumers and expose Monitor semantics;
+  native-v1 models, readers/replay/baseline and legacy fixture builders support
+  historical evidence and Debug Agent. Low-level `uart_send_text_command` and
+  `prepare_uart_send_payload` retain their tested wire-encoder behavior; they
+  are not retired MCP request paths. `BackendInputError.with_context` has no
+  current repository caller, but its class is in the supported backend facade:
+  retained rather than assuming permission to remove a public method. Serial
+  `fileno`/async transport hooks and HTTP transport overrides are framework
+  callbacks, not dead code. No obsolete distribution/entrypoint or retired MCP
+  production path was found. Any public-method retirement needs a separate
+  compatibility decision; the planned Debug Agent v2 work remains separate.
+- Corrected the retained low-level text helper's obsolete MCP docstring and
+  the architecture sentence still referring to deferred MCP text helpers.
+  These are description corrections only. No architecture/module ownership,
+  shared port, dependency direction or wire/API contract changed; no Graphify
+  update or structural redesign was warranted for these localized removals.
+- Captured before/after interface snapshots in `/tmp` without opening a backend
+  or starting a service: recursive Typer command/option/default/help shapes,
+  full FastAPI OpenAPI from a supplied inert runtime, ordered MCP tool schemas,
+  all package `pyproject.toml` contents and explicit Python facade exports/
+  signatures/public methods. All five comparisons were identical. Production
+  backend/runtime/session/service/CLI/MCP implementation and package entrypoints
+  are unchanged apart from the unused validation constant and corrected
+  docstring. No test case was removed; full suite count remains 1,872.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q tests/unit/test_validation.py tests/unit/gpio_config tests/unit/profile tests/unit/protocol/test_host_command_encoder.py --tb=short` | 184 passed in 0.47 s |
+  | `uv run --frozen --offline pytest -q apps/cli/tests/test_lifecycle.py apps/service/tests/test_backend_reconnect.py apps/service/tests/test_startup_config.py tests/unit/runtime tests/unit/session_store apps/debug_agent/tests --tb=short` | 450 passed in 9.40 s |
+  | `uv run --frozen --offline pytest -q tests/architecture tests/packaging --tb=short` | 30 passed in 1.22 s |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,872 passed in 59.66 s |
+  | `uv build --all-packages --no-sources --no-create-gitignore --offline --out-dir /tmp/dutchmate-stale-cleanup-dist` | All six wheel/sdist pairs built |
+  | `uv run --frozen --offline python scripts/ci/smoke_installed_distribution.py --dist /tmp/dutchmate-stale-cleanup-dist` | Passed, exit 0; isolated actual wheel installs and installed stdio/command/metadata checks; declared dependency downloads used sandbox escalation |
+  | `git diff --check` | Passed |
+
+- Reviewed the complete nine-file diff and local documentation links. Current
+  status reconciles the merged MCP baseline and records cleanup validation;
+  previous history, dated validation evidence, hardware checklists and Phase 1/
+  MCP acceptance dispositions are preserved. MCP remains complete under its
+  scoped policy with optional named-host gaps; Phase 1A stays complete, Phase
+  1B/Stage 8/Phase 1 stay incomplete pending manufactured KiCad Rev-A physical
+  validation. No firmware/hardware/historical evidence changes, physical HIL,
+  service startup, commit or push.
+
 ## MCP v2 Slice 5 — Scoped External Acceptance and Registration — 2026-10-30
 
 - Started clean at pushed Slice 4 `71a43f0` on `mcp/v2-service-client`.

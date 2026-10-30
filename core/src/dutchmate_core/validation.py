@@ -25,7 +25,6 @@ ALL_CONTROL_CHANNELS: Final[tuple[GpioControlChannel, ...]] = (
 VALID_GPIO_CONTROL_CHANNELS: Final = frozenset(ALL_CONTROL_CHANNELS)
 VALID_GPIO_MODES: Final = frozenset({"open_drain", "push_pull"})
 VALID_GPIO_LEVELS: Final = frozenset({"low", "high"})
-WELL_KNOWN_GPIO_ROLES: Final = frozenset({"reset", "boot", "power_enable", "wake"})
 
 MAX_GPIO_IDENTIFIER_BYTES: Final = 64
 MAX_SERIAL_PORT_BYTES: Final = 4096
@@ -217,7 +216,7 @@ def prepare_uart_tx_payload(
 
 
 def prepare_uart_send_payload(cmd: object, *, append_newline: object = True) -> bytes:
-    """Legacy protocol/MCP text helper; live Device Core TX uses the byte-first contract."""
+    """Enhanced wire-encoder text helper; public TX uses the byte-first contract."""
 
     if not isinstance(cmd, str):
         raise UartSendValidationError("UART send cmd must be a string")

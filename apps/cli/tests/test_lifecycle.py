@@ -59,16 +59,6 @@ def enhanced_profile(serial_port: str | None = None) -> DutProfile:
     )
 
 
-def basic_profile(
-    serial_port: str = "/dev/ttyUSB0",
-    baudrate: int = 115200,
-) -> DutProfile:
-    return resolve_dut_profile(
-        DutProfileConfig(mode="basic", serial_port=serial_port),
-        baudrate=baudrate,
-    )
-
-
 def test_start_service_spawns_background_process_and_writes_pid(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -78,16 +78,6 @@ class FakeMonotonicClock:
         self.value += seconds
 
 
-class AdvancingMonotonicClock:
-    def __init__(self, *, step_s: float = 0.1) -> None:
-        self.value = 0.0
-        self._step_s = step_s
-
-    def __call__(self) -> float:
-        self.value += self._step_s
-        return self.value
-
-
 class FakeCaptureSource:
     def __init__(
         self,

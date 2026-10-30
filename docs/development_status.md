@@ -24,7 +24,8 @@
 > Accepted MCP Slice 2: `6497f85` (pushed on `mcp/v2-service-client`); original implementation base `22cbd11`
 > Accepted MCP Slice 3: `c119532` (pushed on `mcp/v2-service-client`); original implementation base `6497f85`
 > Accepted MCP Slice 4: `71a43f0` (pushed on `mcp/v2-service-client`); original implementation base `c119532`
-> MCP Slice 5 source base: `71a43f0`; current branch `mcp/v2-service-client`, Slice 5 uncommitted
+> Accepted MCP Slice 5: `664615a`; merged into `main` via PR #5 at `5c517ad`; original implementation base `71a43f0`
+> Cleanup source base: `5c517ad`; current branch `refactor/stale-code-cleanup`, cleanup uncommitted
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
@@ -37,7 +38,7 @@
 Read this document first whenever development resumes.
 
 - **Current milestone:** MCP v2 migration **Complete** under the approved scoped
-  acceptance policy; all five slices complete, with optional host UI gaps below.
+  policy; repository stale-code cleanup validated, with optional host UI gaps below.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -65,8 +66,8 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Inspector 2.13.0/scoped conformance pass; focused 372 / full 1,872;
-  build/install smoke, Ruff, mypy/103 and links/diff passed; no hardware/HIL.
+- **Validation:** Cleanup focused 184/450, architecture/packaging 30, full 1,872;
+  build/install smoke, Ruff, mypy/103, interfaces and links/diff pass; no hardware/HIL.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -172,6 +173,20 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 | Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
 
 ## Current Validation Requirements
+
+Repository stale/dead-code audit, 2026-10-30: removed one unreferenced internal
+GPIO-role constant and five uncalled test helpers after mapping source, test,
+packaging, export and compatibility consumers. Corrected stale deferred-MCP
+wording in the retained wire-encoder helper and architecture description. No
+test cases or supported paths removed. Before/after CLI commands/options,
+service OpenAPI, MCP twelve-tool schemas/order, package metadata and facade
+exports/signatures are unchanged. Schema-v0/v1 readers/fixtures, deferred Debug
+Agent behavior, capture/wait compatibility aliases and public backend methods
+remain intact. Focused groups: **184 passed in 0.47 s**, **450 passed in 9.40 s**;
+architecture/packaging: **30 passed in 1.22 s**; full pytest: **1,872 passed in
+59.66 s**; Ruff, mypy/103, six wheel/sdist builds, isolated installed smoke,
+links/preservation and `git diff --check` passed. No hardware/HIL, commit or push.
+MCP/Phase 1 acceptance and optional host gaps are unchanged; details are in history.
 
 MCP v2 Slice 5, 2026-10-30: MCP migration **Complete under the approved scoped
 policy**. Current Inspector **2.13.0**, supported Node **22.19.0**, strict modern
