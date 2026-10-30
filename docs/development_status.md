@@ -19,7 +19,8 @@
 > Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (pushed code/HIL baseline on `fix/enhanced-terminal-read-cleanup`)
 > Pushed evidence-audit baseline: `9ff33c10858d5e040688e895b9d201cae70bcf71` (automatic USB reconnect HIL documentation; independently verified by HTTPS remote lookup)
 > Revision A pull-up validation base: `4c87383038377401da785fdf22a5527031e8f97c` (updated pushed `main`); working branch `validation/phase1b-revision-a`
-> Authoritative merged baseline: `f1c61d1` (`main`/`origin/main`); KiCad corrections and source-review cleanup merged via PR #3 (correction commit `a837f4b`)
+> MCP readiness-audit baseline: `2b7c89a0830c32da5ea9bbc293d8f4b6fc83e243` (current pushed `main`, independently verified over HTTPS)
+> KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -30,20 +31,21 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** KiCad Rev-A corrections/source review are merged into
-  authoritative `main` at `f1c61d1`; manufactured-board acceptance is pending.
+- **Current milestone:** MCP v2 start prerequisites **Satisfied** at pushed
+  `main` `2b7c89a`; plan remapped to v2. MCP implementation has not started.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
 - **Development policy:** [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
   permits continued software/behavioral work with the legacy EAGLE board as a
   functional Enhanced HIL fixture. Historical electrical gaps remain unresolved.
-- **MCP sequencing:** Migration may begin once the required Device Core/service/
-  CLI software baseline is accepted and functional Enhanced HIL is available;
-  PCB manufacturing alone does not block it. MCP remains a thin service client.
-- **Next step:** Continue Phase 1 behavioral work using functional Enhanced HIL;
-  confirm the software-baseline prerequisites and begin MCP v2 migration when
-  met. Separately, run fresh corrected-design physical/electrical validation
+- **MCP readiness:** Accepted Device Core/service/CLI baseline and available
+  functional Enhanced HIL verified from committed source/tests and retained
+  evidence; see the audit below. MCP remains a thin service client.
+- **Next software step:** Implement MCP plan slice 1: v2 HTTP service-client
+  mappings/error projection and focused tests; retain the existing SDK/stdio/CLI
+  foundation and leave public tool registration for slice 2.
+- **Hardware step:** Run fresh corrected-design physical/electrical validation
   once manufactured KiCad Rev-A boards are available.
 - **Hardware gate:** Phase 1A stays Complete; Phase 1B, Stage 8 and Phase 1 stay
   incomplete until required manufactured KiCad Rev-A physical validation passes.
@@ -60,8 +62,8 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Documentation checks:** Scope/evidence preservation, local links/anchors,
-  policy consistency and `git diff --check` passed; no software or hardware run.
+- **Audit checks:** 75 focused software tests passed; source/contract, local
+  links, evidence preservation and diff checks passed; no physical HIL rerun.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 paused; MCP not started.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -86,7 +88,7 @@ demonstrated again against the new normative done criteria.
 | Interact and audited actions | Exact-byte audited send, exclusive bounded Interact, and audited reset/boot/GPIO Control; higher-level reset/observe procedures are client-composed | Stage 5 complete at `857261b`; live boot-test removed |
 | Follow and console | Durable cursor API plus HTTP-only follow and audited line console | Stage 6 complete at `5643c65` |
 | Release and reacquire | Explicit ownership lifecycle, durable gaps, Basic line provenance, and safe USB identity matching | Stage 7 Complete |
-| MCP target-contract migration | Existing MCP integration exposes pre-v2 service semantics | Not started; may begin after accepted Device Core/service/CLI software baseline + available functional Enhanced HIL (§4.1), independently of PCB lead time |
+| MCP target-contract migration | Existing MCP code remains pre-v2; integration plan now maps the accepted v2 service API | Start prerequisites Satisfied; implementation not started; first slice is HTTP client mappings/error projection + tests |
 
 Historical sessions and validation records must not be rewritten as though they
 never existed. Schema-v0/v1 evidence remains read-only compatibility data under
@@ -105,7 +107,7 @@ the new contract.
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
 | 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Phase 1B awaits fresh manufactured KiCad Rev-A physical validation, including UART oscilloscope evidence; legacy EAGLE UART gap remains historically unresolved |
-| MCP v2 migration | Not started | Accepted Device Core/service/CLI software baseline + available functional Enhanced HIL (§4.1); full hardware acceptance is not a start prerequisite |
+| MCP v2 migration | Not started; prerequisites Satisfied | Integration plan slice 1: v2 service-client mappings/error projection + focused tests; retain existing protocol/launch foundation |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
 only in the migration plan and normative specification. This checklist records
@@ -131,6 +133,23 @@ progress; it does not redefine either document.
 | Phase 1B — Enhanced | Incomplete until required manufactured KiCad Rev-A physical validation is performed and accepted; includes fresh UART electrical/oscilloscope evidence under existing criteria; legacy EAGLE functional HIL cannot satisfy this hardware gate |
 | Phase 1 shared done criteria | Shared §35 behavioral evidence is retained; Phase 1 remains incomplete pending accepted current-board physical validation, without transferring EAGLE acceptance to KiCad |
 
+## MCP v2 Start Prerequisite Audit
+
+**Disposition: Satisfied**, audited 2026-10-30 at pushed `main` `2b7c89a`.
+
+| Prerequisite | Disposition/evidence |
+|---|---|
+| Required Device Core/service/CLI software baseline accepted | Satisfied: Stage 8 software acceptance and subsequent lifecycle fixes/gates are committed; `core/`, `apps/`, `tests/`, `uv.lock` and root `pyproject.toml` are unchanged from accepted `14e6717` |
+| Functional Enhanced HIL available | Satisfied: retained EAGLE functional runs cover v2 operations/evidence, explicit handoff/control and automatic USB reconnect; no physical rerun needed under §4.1 |
+
+Evidence references and limits are in the
+[dated audit](development_history.md#mcp-v2-start-prerequisite-and-contract-audit--2026-10-30).
+The [MCP plan](mcp_integration_plan.md#independently-testable-implementation-sequence)
+defines five testable implementation slices. Existing MCP code/tests still
+expose pre-v2 tools; passing their mocked mappings does not accept v2 migration.
+This readiness finding does not start/complete MCP implementation or alter the
+outstanding manufactured KiCad Rev-A acceptance gates above.
+
 ## Current Rev-A KiCad Source Checklist
 
 | Check | Result |
@@ -146,6 +165,15 @@ progress; it does not redefine either document.
 | Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
 
 ## Current Validation Requirements
+
+MCP readiness/contract audit, 2026-10-30: three documentation files only.
+Existing committed software/HIL evidence establishes start readiness under
+specification §4.1; no physical HIL or electrical acceptance was rerun/inferred.
+Focused offline service/CLI/MCP checks: **75 passed in 3.31 s**, including modern
+protocol baseline and installed stdio launch. Local links/anchors, source/tool
+mapping, evidence preservation, documentation-only scope and `git diff --check`
+passed. No production code, tests, firmware, hardware design or historical
+validation changes; no commit/push. Detailed evidence/commands are in history.
 
 The [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
 owns the functional-HIL and MCP sequencing policy. While manufactured boards
