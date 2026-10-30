@@ -1,6 +1,6 @@
 # Development Status
 
-> Active phase: Phase 1 v2 semantic migration — Phase 1A Complete; Stage 8/Phase 1B incomplete
+> Active phase: MCP v2 migration — Slice 1 Complete; Phase 1A Complete; Stage 8/Phase 1B/Phase 1 incomplete
 > Stage 8 base: `9a228fcc37d746241c4624469cf3d18b4a7fab4a` (pushed Stage 7)
 > Reviewed fixture baseline: `746121a35633c070f4e7112010ce26b656d8ef1d` (pushed)
 > Basic HIL code baseline: `31b14a4de28c3713fbb8451f31520600917616dc` (pushed; Phase 1A accepted after contract audit)
@@ -19,7 +19,8 @@
 > Enhanced cleanup fix base: `df8e7a6b45a5a92d8e1a545c04d893c8e87df34d`; accepted fix/automatic USB HIL baseline: `14e6717554e76444a6b9bc21dbf257a0e51d1efe` (pushed code/HIL baseline on `fix/enhanced-terminal-read-cleanup`)
 > Pushed evidence-audit baseline: `9ff33c10858d5e040688e895b9d201cae70bcf71` (automatic USB reconnect HIL documentation; independently verified by HTTPS remote lookup)
 > Revision A pull-up validation base: `4c87383038377401da785fdf22a5527031e8f97c` (updated pushed `main`); working branch `validation/phase1b-revision-a`
-> MCP readiness-audit baseline: `2b7c89a0830c32da5ea9bbc293d8f4b6fc83e243` (current pushed `main`, independently verified over HTTPS)
+> MCP readiness-audit baseline: `2b7c89a0830c32da5ea9bbc293d8f4b6fc83e243` (pushed `main` at the readiness audit, independently verified over HTTPS)
+> MCP Slice 1 source base: `9c0e0f9` (merged PR #4/current branch base); implementation on `mcp/v2-service-client`, uncommitted
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > Documentation state reviewed: 2026-10-30
 > Authority: the only source for current progress, active phase, blockers, and
@@ -31,8 +32,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** MCP v2 start prerequisites **Satisfied** at pushed
-  `main` `2b7c89a`; plan remapped to v2. MCP implementation has not started.
+- **Current milestone:** MCP v2 **Slice 1 complete**: twelve HTTP client
+  mappings and error projection validated; overall migration remains incomplete.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -42,9 +43,9 @@ Read this document first whenever development resumes.
 - **MCP readiness:** Accepted Device Core/service/CLI baseline and available
   functional Enhanced HIL verified from committed source/tests and retained
   evidence; see the audit below. MCP remains a thin service client.
-- **Next software step:** Implement MCP plan slice 1: v2 HTTP service-client
-  mappings/error projection and focused tests; retain the existing SDK/stdio/CLI
-  foundation and leave public tool registration for slice 2.
+- **Next software step:** Slice 2 — v2 tool catalog and retired-path removal:
+  register the twelve planned tools (including `set_dut_boot_mode`), migrate
+  catalog-dependent tests and remove old client paths after consumers migrate.
 - **Hardware step:** Run fresh corrected-design physical/electrical validation
   once manufactured KiCad Rev-A boards are available.
 - **Hardware gate:** Phase 1A stays Complete; Phase 1B, Stage 8 and Phase 1 stay
@@ -62,9 +63,9 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Audit checks:** 75 focused software tests passed; source/contract, local
-  links, evidence preservation and diff checks passed; no physical HIL rerun.
-- **Other boundaries:** Basic anomaly non-blocking; Phase 4 paused; MCP not started.
+- **Validation:** Client 155 / MCP+launch 182 / full pytest 1,709 passed; Ruff,
+  mypy (103 files), local links, preservation and diff checks passed; no HIL.
+- **Other boundaries:** Basic anomaly non-blocking; Phase 4 paused; catalog pre-v2.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -88,7 +89,7 @@ demonstrated again against the new normative done criteria.
 | Interact and audited actions | Exact-byte audited send, exclusive bounded Interact, and audited reset/boot/GPIO Control; higher-level reset/observe procedures are client-composed | Stage 5 complete at `857261b`; live boot-test removed |
 | Follow and console | Durable cursor API plus HTTP-only follow and audited line console | Stage 6 complete at `5643c65` |
 | Release and reacquire | Explicit ownership lifecycle, durable gaps, Basic line provenance, and safe USB identity matching | Stage 7 Complete |
-| MCP target-contract migration | Existing MCP code remains pre-v2; integration plan now maps the accepted v2 service API | Start prerequisites Satisfied; implementation not started; first slice is HTTP client mappings/error projection + tests |
+| MCP target-contract migration | V2 HTTP client supports all twelve operations; public server catalog remains pre-v2 | Slice 1 complete; overall migration incomplete; next: Slice 2 catalog and retired-path removal |
 
 Historical sessions and validation records must not be rewritten as though they
 never existed. Schema-v0/v1 evidence remains read-only compatibility data under
@@ -107,7 +108,7 @@ the new contract.
 | 6 — durable cursor, follow, console | Complete | Durable snapshots, cursor continuity, and HTTP-only client views reviewed and validated |
 | 7 — release/reacquire, DTR/RTS, native USB | Complete | Lifecycle arbitration, cleanup certainty, provenance, and selector behavior reviewed and validated |
 | 8 — Enhanced parity, cleanup, CLI/HIL acceptance | Incomplete | Phase 1A Complete; Phase 1B awaits fresh manufactured KiCad Rev-A physical validation, including UART oscilloscope evidence; legacy EAGLE UART gap remains historically unresolved |
-| MCP v2 migration | Not started; prerequisites Satisfied | Integration plan slice 1: v2 service-client mappings/error projection + focused tests; retain existing protocol/launch foundation |
+| MCP v2 migration | In progress; prerequisites Satisfied; Slice 1 complete | Slice 2: register v2 catalog/update dependent tests, then remove obsolete client methods once their consumers migrate |
 
 Implementation details, invariants, tests, and exit criteria for each stage live
 only in the migration plan and normative specification. This checklist records
@@ -139,16 +140,16 @@ progress; it does not redefine either document.
 
 | Prerequisite | Disposition/evidence |
 |---|---|
-| Required Device Core/service/CLI software baseline accepted | Satisfied: Stage 8 software acceptance and subsequent lifecycle fixes/gates are committed; `core/`, `apps/`, `tests/`, `uv.lock` and root `pyproject.toml` are unchanged from accepted `14e6717` |
+| Required Device Core/service/CLI software baseline accepted | Satisfied at readiness-audit base `2b7c89a`: Stage 8 software acceptance and subsequent lifecycle fixes/gates were committed; `core/`, `apps/`, `tests/`, `uv.lock` and root `pyproject.toml` were unchanged from accepted `14e6717` |
 | Functional Enhanced HIL available | Satisfied: retained EAGLE functional runs cover v2 operations/evidence, explicit handoff/control and automatic USB reconnect; no physical rerun needed under §4.1 |
 
 Evidence references and limits are in the
 [dated audit](development_history.md#mcp-v2-start-prerequisite-and-contract-audit--2026-10-30).
 The [MCP plan](mcp_integration_plan.md#independently-testable-implementation-sequence)
-defines five testable implementation slices. Existing MCP code/tests still
-expose pre-v2 tools; passing their mocked mappings does not accept v2 migration.
-This readiness finding does not start/complete MCP implementation or alter the
-outstanding manufactured KiCad Rev-A acceptance gates above.
+defines five testable implementation slices. Slice 1 client mappings are now
+complete; public registration/tests still expose pre-v2 tools until Slice 2.
+Readiness and client tests do not accept the complete v2 tool migration or alter
+the outstanding manufactured KiCad Rev-A acceptance gates above.
 
 ## Current Rev-A KiCad Source Checklist
 
@@ -165,6 +166,17 @@ outstanding manufactured KiCad Rev-A acceptance gates above.
 | Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
 
 ## Current Validation Requirements
+
+MCP v2 Slice 1, 2026-10-30: twelve service-client operations implemented with
+exact request forwarding, shared validation, operation/evidence-aware timeouts
+and canonical error/context preservation, including HTTP 410. Noncanonical
+service diagnostic text is rejected as a bounded protocol error. Public server,
+CLI/entrypoints, service API and Device Core semantics are unchanged. Retained
+old client methods serve the pre-v2 catalog until Slice 2. Client tests:
+**155 passed**; MCP/server/protocol/launch: **182 passed in 2.40 s**; full pytest:
+**1,709 passed in 47.24 s**; Ruff, mypy/103 files, documentation links,
+preservation and `git diff --check` passed. No hardware/HIL, commit or push.
+Detailed commands, retained consumers and scope are in development history.
 
 MCP readiness/contract audit, 2026-10-30: three documentation files only.
 Existing committed software/HIL evidence establishes start readiness under

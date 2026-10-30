@@ -9,6 +9,82 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## MCP v2 Slice 1 — Service-Client Mappings and Error Projection — 2026-10-30
+
+- Implemented only [MCP plan Slice 1](mcp_integration_plan.md#independently-testable-implementation-sequence)
+  on `mcp/v2-service-client`, starting clean at merged `9c0e0f9` (PR #4).
+  Added HTTP client support for all twelve planned operations, including
+  MCP-facing `set_dut_boot_mode` calling unchanged `POST /dut/boot-mode`.
+  `reset_dut` and underlying service/Device Core Control semantics are unchanged.
+- Client request bodies retain exact base64 or text plus explicit line endings,
+  duration/conditions modes, optional argument omission and opaque cursor strings.
+  Shared core validators enforce bounds before dispatch without importing service
+  schemas or transport implementations. Responses, operation outcomes/IDs,
+  ranges, provenance, schema compatibility, omission counts and canonical errors
+  pass through unchanged. HTTP 410 and bounded error context are preserved.
+- Ordinary requests retain the 2-second timeout; Monitor/Interact use accepted
+  bounds + 2 seconds transport grace; evidence uses `wait_s` + 2 seconds;
+  release/reacquire use bodyless POSTs with the existing CLI's 65-second HTTP
+  allowance. No retries, reconnect/polling loops, local lifecycle or evidence
+  truth, service startup or hardware ownership were added. HTTP timeouts retain
+  unknown-outcome wording, not rollback/non-dispatch guarantees.
+- Malformed/non-object responses keep bounded protocol errors. New regression
+  cases exposed that noncanonical service diagnostic detail could previously
+  leak unbounded/control/invalid-Unicode text. The shared diagnostic projector
+  now validates that peer detail already meets the canonical contract; invalid
+  detail is rejected with a fixed protocol diagnostic, while valid service
+  detail/truncation/context remain exact. This follows the plan's bounded-error
+  contract; no API or semantic deviation was required.
+- Kept the old public catalog and all registration/launch source unchanged.
+  Temporary client consumers retained for Slice 2:
+
+  | Retained client method | Remaining production consumer in `server.py` |
+  |---|---|
+  | `set_boot_mode` | Existing `set_boot_mode` tool handler; delegates to `set_dut_boot_mode` |
+  | `capture_uart` | Existing `capture_uart` tool handler |
+  | `wait_for_uart_pattern` | Existing `wait_for_uart_pattern` tool handler |
+  | `run_boot_test` | Existing `run_boot_test` tool handler |
+  | `send_uart_command` | Existing `send_uart_command` tool handler |
+  | `get_recent_uart_log` | Existing `get_recent_uart_log` tool handler; delegates to `get_recent_logs` |
+  | `get_debug_session` | Existing `get_debug_session` tool handler; delegates to `get_session` |
+  | `list_debug_sessions` | Existing `list_debug_sessions` tool handler; delegates to `list_sessions` |
+
+  Existing client/server/protocol tests also exercise those paths. Their removal
+  is deferred until registration and dependent fixtures migrate in Slice 2;
+  no service compatibility endpoint was added. Passing the pre-v2 catalog does
+  not accept the complete MCP v2 migration.
+- TDD evidence: initial client run **121 failed, 20 passed**, with failures on
+  missing v2 methods; first implementation **141 passed**. Added direct
+  no-implicit-LF coverage and regressions for non-sequence conditions and unsafe
+  peer diagnostics: **4 failed, 151 passed** before correction; then **155
+  passed in 0.24 s**. Tests cover all twelve routes/bodies/queries, optional
+  defaults, path-safe encoded session IDs, explicit endings, finite operation
+  and long-poll/mutation timeouts, cursor round trips, outcomes/compatibility,
+  capability/policy/lifecycle/schema/backend/persistence errors, HTTP 410,
+  unavailable service, malformed responses and single dispatch on failure.
+- Fresh validation using
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests/test_service_client.py --tb=line` | 155 passed in 0.24 s |
+  | `uv run --frozen --offline pytest -q apps/mcp_server/tests apps/cli/tests/test_mcp.py --tb=line` | Final focused run: 182 passed in 2.40 s, including unchanged nine-tool catalog, modern metadata/cancellation/EOF, real installed stdio launch and CLI tests |
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=line` | 1,709 passed in 47.24 s |
+  | `git diff --check` | Passed |
+
+- Final diff, documentation links, retained-consumer inventory, unchanged
+  registration/service/firmware/hardware and historical evidence preservation
+  checks passed. Four files changed: client, its tests, status and this history
+  addition. This is a localized client extension with no new module, shared core
+  port or architectural ownership change; no architecture document or Graphify
+  update was needed. No physical HIL/hardware access, commit or push.
+- Recorded Slice 1 complete in status; overall MCP migration remains incomplete.
+  Phase 1B, Stage 8 and Phase 1 remain incomplete pending manufactured KiCad
+  Rev-A physical/electrical validation. Legacy EAGLE functional HIL permission
+  does not close its historical UART electrical gap or accept KiCad hardware.
+
 ## MCP v2 Start Prerequisite and Contract Audit — 2026-10-30
 
 - Documentation/design audit only, starting with a clean working tree on
