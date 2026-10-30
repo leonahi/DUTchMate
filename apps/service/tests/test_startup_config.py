@@ -129,19 +129,6 @@ class ScriptedBasicSerial:
             self._condition.notify_all()
 
 
-class AdvancingClock:
-    def __init__(self, step_s: float = 0.01) -> None:
-        self.value = 0.0
-        self._step_s = step_s
-
-    def __call__(self) -> float:
-        self.value += self._step_s
-        return self.value
-
-    def sleep(self, seconds: float) -> None:
-        self.value += seconds
-
-
 class FakeEnhancedAsyncHost:
     """Synchronous test double for the service-owned async Enhanced host."""
 

@@ -473,8 +473,8 @@ The service-owned `BackendReconnectCoordinator` continues to reopen and validate
 replacement sources and publish stable control/TX ports. The core continuous
 recorder owns evidence and connection generations. New v2 runtime actions use
 explicit payload transformations; the public send API and CLI have no `force`
-or implicit newline append. Low-level protocol and deferred MCP text helpers are
-unchanged and do not restore the retired service request contract.
+or implicit newline append. Low-level Enhanced text-encoder behavior remains
+unchanged; CLI, service and MCP v2 TX use the explicit payload contract.
 
 The coordinator has no finite-workflow callable/retry path. Its continuous worker
 and explicit release/reacquire share one attempt claim. Adapter and host APIs

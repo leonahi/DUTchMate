@@ -976,24 +976,6 @@ class LegacySessionFixtureBuilder(SessionStore):
             _require_metadata_capacity(serialized_metadata)
             _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
 
-    def _record_segment_timestamp(
-        self,
-        handle: SessionHandle,
-        *,
-        segment_id: int,
-        timestamp_us: int,
-    ) -> None:
-        metadata = _persistence.read_json_object(handle.paths.metadata)
-        _metadata._record_metadata_segment_timestamp(
-            metadata,
-            segment_id=segment_id,
-            timestamp_us=timestamp_us,
-        )
-        _persistence.refresh_storage_accounting(metadata, handle.paths)
-        serialized_metadata = _persistence.serialize_json(metadata)
-        _require_metadata_capacity(serialized_metadata)
-        _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
-
     def _terminalize_session_locked(
         self,
         handle: SessionHandle,

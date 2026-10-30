@@ -113,13 +113,6 @@ class FakeSourceOwner:
             self.idle_disconnect_observed.set()
         return disconnected
 
-    def wait_for_idle_waits(self, count: int, timeout_s: float = 1.0) -> bool:
-        with self._condition:
-            return self._condition.wait_for(
-                lambda: self.idle_wait_calls >= count,
-                timeout=timeout_s,
-            )
-
     def close_current_source_for_reconnect(self, *, idle: bool = False) -> None:
         with self._condition:
             if idle:
