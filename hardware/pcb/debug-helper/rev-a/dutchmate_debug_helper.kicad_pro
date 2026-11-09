@@ -270,6 +270,10 @@
           ""
         ],
         [
+          "silk_overlap|124625000|128980000|b7239c16-34ae-4881-b4ac-5ae5f918a56e|f2a026fb-10f0-4da8-8de2-a57449d07e39",
+          ""
+        ],
+        [
           "silk_overlap|137270000|99468182|6aea2493-eba6-478b-bb44-24fb46f3325c|896a7111-c7e9-4b22-ae1b-5b424e604874",
           ""
         ]
@@ -797,31 +801,31 @@
           "group_by": true,
           "label": "DNP",
           "name": "${DNP}",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
           "label": "Exclude from BOM",
           "name": "${EXCLUDE_FROM_BOM}",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
           "label": "Exclude from Board",
           "name": "${EXCLUDE_FROM_BOARD}",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
           "label": "Exclude from Simulation",
           "name": "${EXCLUDE_FROM_SIM}",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
           "label": "Exclude from Position Files",
           "name": "${EXCLUDE_FROM_POS_FILES}",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
@@ -833,7 +837,7 @@
           "group_by": false,
           "label": "Datasheet",
           "name": "Datasheet",
-          "show": true
+          "show": false
         },
         {
           "group_by": false,

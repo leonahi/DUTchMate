@@ -1,3 +1,15 @@
+<p align="center">
+  <img
+    src="assets/branding/dutchmate_rectangle_logo_web.svg"
+    alt="DUTchMate"
+    width="600"
+  />
+</p>
+
+<p align="center">
+  AI-assisted embedded debugging and UART evidence capture.
+</p>
+
 # DUTchMate
 
 DUTchMate helps embedded developers turn UART output and hardware-control

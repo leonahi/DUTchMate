@@ -26,10 +26,11 @@
 > Accepted MCP Slice 4: `71a43f0` (pushed on `mcp/v2-service-client`); original implementation base `c119532`
 > Accepted MCP Slice 5: `664615a`; merged into `main` via PR #5 at `5c517ad`; original implementation base `71a43f0`
 > Accepted cleanup: `d11cb1a`; merged into `main` via PR #6 at `a4707f3`; original source base `5c517ad`
-> Documentation audit base: `a4707f3`; current branch `docs/repository-consistency-audit`, documentation uncommitted
-> Licensing migration base: `55c4dd1b09bfc0d83dace5725e1d746cb1687966`; metadata/documentation changes uncommitted
+> Documentation audit: merged into `main` via PR #7 at `55c4dd1`; original base `a4707f3`
+> Licensing migration: `58d7838`, merged into `main` via PR #8 at `3544b2f`; original base `55c4dd1`
+> KiCad/branding review base: `3544b2f`; reviewed source and evidence committed together under `Update Rev-A KiCad design and add DUTchMate branding`
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
-> Documentation state reviewed: 2026-10-30
+> Documentation state reviewed: 2026-11-09
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -40,7 +41,7 @@
 Read this document first whenever development resumes.
 
 - **Current milestone:** MCP v2 migration **Complete** under the approved scoped
-  policy; documentation consistency audited, with optional host UI gaps unchanged.
+  policy; Rev-A source/branding update reviewed, with optional host UI gaps unchanged.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -68,8 +69,9 @@ Read this document first whenever development resumes.
   must disable the digital-input buffer. Firmware remains unchanged.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Licensing: packaging 25/full 1,872; Ruff, mypy/103, lock,
-  six wheel/sdist pairs, isolated install, links and preservation pass; no hardware/HIL.
+- **Validation:** Rev-A/branding: full 1,872, Ruff, mypy/103 and diff checks pass;
+  ERC 0 errors/1 known warning; schematic/PCB pin nets match. Initial full run
+  hit the documented reconnect-test race; isolated/full reruns pass. No hardware/HIL.
 - **Follow-up:** Legacy load-profile script and reconnect-test synchronization; see audit below.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 
@@ -167,8 +169,8 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 |---|---|
 | TMUX2819 hardware-defined isolation, divider and GNDA | Verified from schematic/netlist; powered-off behavior cross-checked against datasheet |
 | UART bias, control defaults and A2-safe enable biasing | Agreed resistor values and connections verified |
-| Single J1 mapping, fixed directions and PCB pad-net consistency | Verified; no placement/routing change during review |
-| Symbols, metadata and intentional unused pins | Verified; reusable TMUX metadata completed |
+| Single J1 mapping, fixed directions and PCB pad-net consistency | Verified after the U6-to-U9 protection-symbol/footprint replacement; all schematic pin-net assignments match the PCB |
+| Symbols, metadata and intentional unused pins | Verified; local SnapEDA TPD4E05U06DQAR symbol/footprint registered, with its default footprint reference corrected |
 | ERC | 0 errors, 1 reviewed warning: bidirectional analog SA on an externally supplied power net; no exclusions added |
 | GP28 ADC input-buffer setting | Not applicable to an active ADC path: sensing is not implemented; firmware unchanged |
 | Source/schematic review | Complete; no hardware validation or fabrication acceptance established |

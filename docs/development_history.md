@@ -9,6 +9,47 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Rev-A KiCad Source and Branding Review — 2026-11-09
+
+- Reviewed user changes against `main` at `3544b2f`: updated Rev-A schematic,
+  PCB layout/project settings, TMUX metadata positions, local SnapEDA symbol
+  and footprint libraries, and README branding with two SVG logo assets.
+- Compared KiCad 10.0.5 XML netlists: 47 components and 63 nets in both
+  versions. The sole component replacement is `U6 TPD4E05U06DQA` to
+  `U9 TPD4E05U06DQAR`; all ten protection-device pin assignments are preserved.
+  Every exported schematic pin-net assignment matches its PCB pad net.
+- Corrected the README logo filename, restored the portable
+  `${PROJECTNAME}.csv` BOM export path, and adapted the imported symbol's
+  default footprint reference to `snapeda:TPD4E05U06DQAR` in both library and
+  embedded copies. Final netlist connectivity is unchanged by that correction.
+- Updated the Rev-A README's protection reference and library inventory, and
+  recorded the imported CAD assets and local footprint-reference adaptation
+  in third-party notices. No new upstream license grant is asserted.
+- KiCad ERC: **0 errors, 1 warning**, the previously reviewed TMUX2819 SA
+  bidirectional/power-output connection. Existing check settings are retained.
+  Both SVGs parse, the README logo exists, project JSON parses, and all local
+  symbol/footprint table paths resolve. Scratch exports stayed outside the repo.
+- Software checks used
+  `rtk proxy env UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache`:
+
+  | Command suffix | Result |
+  |---|---|
+  | `uv run --frozen --offline ruff check .` | Passed |
+  | `uv run --frozen --offline mypy` | Passed; 103 source files |
+  | `uv run --frozen --offline pytest -q --tb=short` | Initial run: 1 failed, 1,871 passed in 68.79 s; fresh full rerun: 1,872 passed in 62.43 s |
+  | `uv run --frozen --offline pytest -q apps/service/tests/test_enhanced_transport_reconnect.py --tb=short` | 4 passed in 0.39 s |
+
+- The initial failure was the already documented reconnect-test observation
+  race at line 131, this time in the `unknown` variant:
+  `KeyError: 'connection_error'`. The test exits its polling loop on recorder
+  `faulted` before the coordinator diagnostic is necessarily published.
+  `git diff --exit-code HEAD -- core apps tests pyproject.toml uv.lock` passed;
+  runtime code and tests remain unchanged. The reruns do not establish a fix
+  for this existing synchronization follow-up.
+- `git diff --check` passed. Layout/DFM, Gerber/manufacturing review and physical
+  electrical/HIL acceptance were not performed; the existing manual-designer
+  boundary and manufactured-board Phase 1B gate remain in force.
+
 ## MIT Licensing Migration — 2026-10-30
 
 - Started clean at `55c4dd1b09bfc0d83dace5725e1d746cb1687966`. This is a

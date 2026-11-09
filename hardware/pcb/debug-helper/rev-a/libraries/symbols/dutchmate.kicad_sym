@@ -403,7 +403,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tmux2819.pdf"
-			(at 0 0 0)
+			(at 0.254 -12.954 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(hide yes)
@@ -414,7 +414,7 @@
 			)
 		)
 		(property "Description" "1-channel 2:1 SPDT CMOS analog switch with ±5.5 V beyond-supply signal support, powered-off protection, 0.16 Ω typical on-resistance, fail-safe logic, and 1.2 V/1.8 V compatible control inputs."
-			(at 0 0 0)
+			(at 0.508 -10.922 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(hide yes)

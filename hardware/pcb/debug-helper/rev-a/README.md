@@ -14,6 +14,9 @@ implementation.
 - `dutchmate_debug_helper.kicad_dru`: project design rules.
 - `libraries/symbols/dutchmate.kicad_sym`: project-owned logic and analog-switch
   symbol definitions, resolved through `sym-lib-table` using `${KIPRJMOD}`.
+- `libraries/symbols/third_party/snapeda.kicad_sym` and
+  `libraries/footprints/third_party/snapeda.pretty/`: imported TPD4E05U06DQAR
+  symbol and footprint, resolved through `sym-lib-table` and `fp-lib-table`.
 
 The sources use KiCad 10 format. Standard KiCad symbols and footprints must be
 installed alongside the project-owned library. Keep editable sources and any
@@ -35,7 +38,7 @@ output for powering the DUT.
 | Four event inputs | `U5 TXU0104PWR`, VCCA=`DUT_VIO`, VCCB=`+3.3V`; `R5=4.7 kΩ` pulls `DBG_INPUT_IF_EN` low |
 | UART | `U2 TXU0202DCUR`, VCCA=`+3.3V`, VCCB=`DUT_VIO`; `R12=4.7 kΩ` pulls `DBG_UART_IF_EN` low |
 | Series resistance | `RN3/RN4=180 Ω` for control/event channels; `RN5=22 Ω` for UART |
-| Protection | `U6` on connector-side controls, `U4` on connector-side events/UART, `D1` between `DUT_VIO` and GND |
+| Protection | `U9 TPD4E05U06DQAR` on connector-side controls, `U4` on connector-side events/UART, `D1` between `DUT_VIO` and GND |
 
 The 4.7 kΩ enable pull-downs retain compatibility with older RP2350 A2
 silicon; the design does not require A4-only modules. Control data pull-downs

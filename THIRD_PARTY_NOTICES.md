@@ -46,6 +46,14 @@ unchanged.
 
 ## CAD assets and unresolved provenance
 
+- Rev-A's `libraries/symbols/third_party/snapeda.kicad_sym` and
+  `libraries/footprints/third_party/snapeda.pretty/TPD4E05U06DQAR.kicad_mod`
+  contain imported TPD4E05U06DQAR library data. The symbol records SnapEDA
+  source links and Texas Instruments manufacturer metadata; its default
+  footprint reference is adapted to the project's `snapeda` library. These
+  files and their embedded design copies retain upstream terms; no separate license
+  notice is included in the imported files, and this record does not establish
+  redistribution permissions or include them in DUTchMate's license grants.
 - `hardware/pcb/debug-helper/legacy-eagle/` remains excluded from both new
   grants. Its `.brd` and `.sch` files embed SparkFun, Adafruit, RpiPico,
   SnapEDA-linked, and Ultra Librarian material. SparkFun-Connectors carries a
