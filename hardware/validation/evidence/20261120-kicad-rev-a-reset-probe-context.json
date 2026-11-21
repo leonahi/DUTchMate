@@ -1,0 +1,9 @@
+{
+  "operator_date": "2026-11-20",
+  "original_log": "20261120-kicad-rev-a-dut-reset-bench.jsonl",
+  "original_log_sha256": "c8dc068bc87896d60f2c5fa9b004ee312aaf4fdb1bf045f528f1af20369024df",
+  "operator_reply": "Probe or wiring contact may have disturbed RUN",
+  "interpretation": "Possible measurement/contact involvement; not a confirmed causal explanation or board/firmware diagnosis.",
+  "prepared_repeat": "With probes removed and wiring/power unchanged, configure only CTRL0 open-drain idle, command one 250 ms reset, then collect 30 seconds without further commands.",
+  "repeat_state": "Awaiting operator confirmation that probes are removed and setup will remain untouched; no repeat run yet."
+}

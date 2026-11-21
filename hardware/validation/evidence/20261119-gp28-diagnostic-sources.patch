@@ -1,0 +1,282 @@
+diff --git a/hardware/firmware/rp2350_debug_helper/Kconfig b/hardware/firmware/rp2350_debug_helper/Kconfig
+index 90892ba..860d14b 100644
+--- a/hardware/firmware/rp2350_debug_helper/Kconfig
++++ b/hardware/firmware/rp2350_debug_helper/Kconfig
+@@ -27,6 +27,30 @@ config DUTCHMATE_PRODUCTION_BUILD
+ 
+ endmenu
+ 
++config DUTCHMATE_SENSE_PIN_PROBE
++	bool "Disconnect GP28 digital functions for voltage-sense diagnosis"
++	help
++	  Diagnostic build only. Program GP28/ADC2 disabled-input/output/pull
++	  controls using GPIO_DISCONNECTED. RP2350 ISO latches may retain earlier
++	  physical pull states; this setting alone does not prove analog Hi-Z.
++	  It does not enable ADC or change the hardware-defined TMUX2819 enable.
++
++config DUTCHMATE_SENSE_PAD_REPORT
++	bool "Report live GP28 pad control in the diagnostic hello identifier"
++	depends on DUTCHMATE_SENSE_PIN_PROBE && !DUTCHMATE_STACK_PROBE
++	help
++	  Diagnostic build only. Each USB epoch reads the GP28 pad-control register
++	  and appends -p plus eight hex digits to the existing firmware identifier.
++	  This reads actual pad settings without ADC sampling or new wire fields.
++
++config DUTCHMATE_SENSE_RELEASE_ISOLATION
++	bool "Release GP28 isolation after configuring disabled digital controls"
++	depends on DUTCHMATE_SENSE_PAD_REPORT
++	help
++	  Diagnostic build only. After successful GPIO_DISCONNECTED configuration,
++	  clear only GP28 ISO so the configured disabled pull/output controls reach
++	  the pad. Retain live pad readback; do not enable ADC or other GPIO outputs.
++
+ config DUTCHMATE_STACK_PROBE
+ 	bool "Expose post-epoch stack high-water measurements in hello"
+ 	depends on THREAD_ANALYZER && THREAD_NAME
+diff --git a/hardware/firmware/rp2350_debug_helper/README.md b/hardware/firmware/rp2350_debug_helper/README.md
+index 8e29119..44fcfa5 100644
+--- a/hardware/firmware/rp2350_debug_helper/README.md
++++ b/hardware/firmware/rp2350_debug_helper/README.md
+@@ -161,6 +161,90 @@ The UF2 image is written to:
+ /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
+ ```
+ 
++### GP28 external-meter diagnostic builds
++
++The opt-in `sense_probe.conf` image reports firmware `senseprobe-1` and configures
++GP28/ADC2 (Pico physical pin 34) with Zephyr `GPIO_DISCONNECTED` during safe
++initialization. The pinned driver programs disabled pull/input/output controls
++and sets pad isolation. RP2350 isolation latches can retain earlier physical
++pull states, so these register settings alone do not establish analog Hi-Z.
++It does not enable ADC sampling or change the hardware-defined TMUX2819 enable.
++The normal build leaves GP28 untouched. A matched `sense_baseline.conf` image reports `sensebase-1`
++and retains that normal pin behavior.
++
++Build both from the same source with Zephyr 4.4.2 and SDK 1.0.1. From the pinned
++west workspace, with `repo_root` set as above:
++
++```bash
++for sense_variant in baseline probe; do
++  ZEPHYR_BASE=/path/to/zephyrproject/zephyr-4.4.2 west build \
++    -b rpi_pico2/rp2350a/m33 \
++    -s "$repo_root/hardware/firmware/rp2350_debug_helper" \
++    -d "$repo_root/build/dutchmate-rp2350-sense-$sense_variant" \
++    --pristine -- \
++    "-DEXTRA_CONF_FILE=$repo_root/hardware/firmware/rp2350_debug_helper/sense_$sense_variant.conf" \
++    '-DZEPHYR_MODULES=/path/to/zephyrproject/modules/hal/cmsis_6;/path/to/zephyrproject/modules/hal/rpi_pico' \
++    "-DUSER_CACHE_DIR=$repo_root/build/zephyr-cache"
++done
++```
++
++Each image is at its build directory's `zephyr/zephyr.uf2`. Retain both hashes
++and verify each USB firmware label after flashing. Disconnect DUT_VIO power
++and the DUT before entering BOOTSEL or flashing. For an A/B measurement, use
++the same board, meter, wiring and 1.8 V DUT_VIO supply with helper USB powered;
++record DUT_VIO, helper 3V3, GP28 voltage and DUT_VIO current for each image.
++The unloaded 47 kΩ/47 kΩ divider predicts 0.9 V, but the measurement must account
++for meter loading and actual component/pin behavior. A changed voltage after
++the diagnostic supports configuration-dependent loading; it does not establish
++ADC accuracy, TMUX isolation acceptance, or all board acceptance criteria.
++
++The [manufactured-board record](../../validation/phase1_kicad_rev_a.md) keeps
++operator measurements distinct from build and USB observations. Current next
++steps belong only in [development status](../../../docs/development_status.md).
++
++#### Live GP28 pad-control readback
++
++`sense_state_probe.conf` keeps the first probe's pin initialization and adds
++default-off `DUTCHMATE_SENSE_PAD_REPORT`. Each USB epoch reads GP28's live pad
++control and reports `sensepad-1-pXXXXXXXX` in the existing firmware identifier,
++where `XXXXXXXX` is the eight-digit hexadecimal register value. The value is
++read before the epoch starts UART acquisition. ADC remains disabled; there
++are no new protocol fields, commands or capabilities. Stack and pad reporting
++are separate diagnostic configurations.
++
++Build with the same pinned workspace/toolchain/module arguments above, using
++`-d "$repo_root/build/dutchmate-rp2350-sense-state-probe"` and
++`"-DEXTRA_CONF_FILE=$repo_root/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf"`.
++The image is that directory's `zephyr/zephyr.uf2`. Keep the earlier baseline and
++`senseprobe-1` images and hashes for comparison.
++
++Relevant pad masks are ISO=`0x100`, output-disable=`0x80`, input-enable=`0x40`,
++pull-up=`0x08` and pull-down=`0x04`. A reported cleared pull bit is not proof
++that the physical pull changed while ISO remains set. The
++[RP2350 datasheet §9.7](https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline)
++describes how isolation latches hold pad controls until ISO is cleared.
++This corrects the earlier assumption that `GPIO_DISCONNECTED` alone guarantees
++an unloaded analog input; actual pad readback and a controlled ISO-release
++measurement are separate evidence steps.
++
++#### Controlled GP28 isolation-release comparison
++
++`sense_iso_probe.conf` adds default-off `DUTCHMATE_SENSE_RELEASE_ISOLATION`
++to the readback configuration. After the same successful GPIO-disconnect
++configuration, it clears only GP28's ISO bit so the disabled pull/output
++controls can reach the pad. Failed GPIO configuration returns before this
++write. Each epoch reports `senseiso-1-pXXXXXXXX`; with the other observed
++controls unchanged, the register is expected to change from `0x192` to `0x92`.
++That expectation is not a physical voltage or acceptance result.
++
++Build with the same arguments, using
++`-d "$repo_root/build/dutchmate-rp2350-sense-iso-probe"` and
++`"-DEXTRA_CONF_FILE=$repo_root/hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf"`.
++Retain the readback-only image and physical baseline. Flash with Pico isolated
++from the helper and DUT_VIO off, verify the reported raw controls, then repeat
++the same off-board GP28-connected divider measurements. This experiment does
++not implement ADC sampling or change the default normal-firmware behavior.
++
+ ### USB-only stack measurement build
+ 
+ The production image has no console. For Phase 1 ring-buffer acceptance, use
+diff --git a/hardware/firmware/rp2350_debug_helper/src/platform_io.c b/hardware/firmware/rp2350_debug_helper/src/platform_io.c
+index 5e31ee9..2afd561 100644
+--- a/hardware/firmware/rp2350_debug_helper/src/platform_io.c
++++ b/hardware/firmware/rp2350_debug_helper/src/platform_io.c
+@@ -7,6 +7,12 @@
+ #include <zephyr/drivers/gpio.h>
+ #include <zephyr/sys/util.h>
+ 
++#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
++#include <stdio.h>
++
++#include <hardware/structs/pads_bank0.h>
++#endif
++
+ #define DUTCHMATE_IO_NODE DT_NODELABEL(dutchmate_io)
+ #define DUTCHMATE_CHANNEL_COUNT 4U
+ 
+@@ -16,6 +22,28 @@ BUILD_ASSERT(DT_PROP_LEN(DUTCHMATE_IO_NODE, ctrl_data_gpios) == DUTCHMATE_CHANNE
+ BUILD_ASSERT(DT_PROP_LEN(DUTCHMATE_IO_NODE, event_input_gpios) == DUTCHMATE_CHANNEL_COUNT);
+ BUILD_ASSERT(DMH_CONTROL_CHANNEL_COUNT == DUTCHMATE_CHANNEL_COUNT);
+ 
++#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
++/* Reserve ten version bytes for "-p" and eight raw-register hex digits. */
++BUILD_ASSERT(sizeof(CONFIG_DUTCHMATE_FIRMWARE_VERSION) <= 55U);
++
++int dutchmate_platform_sense_probe_firmware(char *output, size_t capacity)
++{
++	int length;
++
++	if (output == NULL) {
++		return -EINVAL;
++	}
++	length = snprintf(
++		output, capacity, "%s-p%08lx", CONFIG_DUTCHMATE_FIRMWARE_VERSION,
++		(unsigned long)pads_bank0_hw->io[28]
++	);
++	if (length < 0) {
++		return -EIO;
++	}
++	return (size_t)length >= capacity ? -ENOSPC : 0;
++}
++#endif
++
+ static const struct gpio_dt_spec uart_interface_enable =
+ 	GPIO_DT_SPEC_GET(DUTCHMATE_IO_NODE, uart_interface_enable_gpios);
+ static const struct gpio_dt_spec event_interface_enable =
+@@ -137,6 +165,20 @@ int dutchmate_platform_io_initialize_safe(void)
+ 		}
+ 	}
+ 
++	if (IS_ENABLED(CONFIG_DUTCHMATE_SENSE_PIN_PROBE)) {
++		/* Request GP28 digital disconnect; ISO latches need separate verification. */
++		result = gpio_pin_configure(
++			DEVICE_DT_GET(DT_NODELABEL(gpio0)), 28U, GPIO_DISCONNECTED
++		);
++		if (result != 0) {
++			return result;
++		}
++#ifdef CONFIG_DUTCHMATE_SENSE_RELEASE_ISOLATION
++		/* Apply the configured pull/output controls through RP2350's latches. */
++		hw_clear_bits(&pads_bank0_hw->io[28], PADS_BANK0_GPIO28_ISO_BITS);
++#endif
++	}
++
+ 	result = gpio_pin_configure_dt(&uart_interface_enable, GPIO_OUTPUT_INACTIVE);
+ 	if (result != 0) {
+ 		return result;
+diff --git a/hardware/firmware/rp2350_debug_helper/src/platform_io.h b/hardware/firmware/rp2350_debug_helper/src/platform_io.h
+index 017d6b5..be6f0ea 100644
+--- a/hardware/firmware/rp2350_debug_helper/src/platform_io.h
++++ b/hardware/firmware/rp2350_debug_helper/src/platform_io.h
+@@ -4,10 +4,15 @@
+ #include "control_state.h"
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ 
+ int dutchmate_platform_io_initialize_safe(void);
+ int dutchmate_platform_io_force_safe(void);
+ int dutchmate_platform_uart_interface_set(bool active);
+ struct dmh_control_port dutchmate_platform_control_port(void);
+ 
++#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
++int dutchmate_platform_sense_probe_firmware(char *output, size_t capacity);
++#endif
++
+ #endif
+diff --git a/hardware/firmware/rp2350_debug_helper/src/usb_connection.c b/hardware/firmware/rp2350_debug_helper/src/usb_connection.c
+index 6d72cf5..f95502f 100644
+--- a/hardware/firmware/rp2350_debug_helper/src/usb_connection.c
++++ b/hardware/firmware/rp2350_debug_helper/src/usb_connection.c
+@@ -264,13 +264,20 @@ int dutchmate_usb_connection_run(void)
+ 			time_us_64()
+ 		);
+ 		if (transition == DMH_EPOCH_STARTED) {
+-#ifdef CONFIG_DUTCHMATE_STACK_PROBE
++#if defined(CONFIG_DUTCHMATE_STACK_PROBE) || defined(CONFIG_DUTCHMATE_SENSE_PAD_REPORT)
+ 			char firmware[65];
+ 
++#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
++			if (dutchmate_platform_sense_probe_firmware(
++				    firmware, sizeof(firmware)) != 0) {
++				return -EINVAL;
++			}
++#else
+ 			if (dutchmate_stack_probe_firmware(
+ 				    firmware, sizeof(firmware)) != 0) {
+ 				return -EINVAL;
+ 			}
++#endif
+ 			result = dmh_hello_encode(
+ 				firmware,
+ 				hello_frame,
+diff --git a/hardware/firmware/rp2350_debug_helper/sense_baseline.conf b/hardware/firmware/rp2350_debug_helper/sense_baseline.conf
+new file mode 100644
+index 0000000..93ff6ce
+--- /dev/null
++++ b/hardware/firmware/rp2350_debug_helper/sense_baseline.conf
+@@ -0,0 +1,3 @@
++# Matched baseline for the GP28 diagnostic; preserve existing pin behavior.
++CONFIG_DUTCHMATE_SENSE_PIN_PROBE=n
++CONFIG_DUTCHMATE_FIRMWARE_VERSION="sensebase-1"
+diff --git a/hardware/firmware/rp2350_debug_helper/sense_probe.conf b/hardware/firmware/rp2350_debug_helper/sense_probe.conf
+new file mode 100644
+index 0000000..70e5ecb
+--- /dev/null
++++ b/hardware/firmware/rp2350_debug_helper/sense_probe.conf
+@@ -0,0 +1,3 @@
++# Opt-in GP28 digital-disconnect measurement image. No ADC sensing.
++CONFIG_DUTCHMATE_SENSE_PIN_PROBE=y
++CONFIG_DUTCHMATE_FIRMWARE_VERSION="senseprobe-1"
+diff --git a/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf b/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf
+new file mode 100644
+index 0000000..130d32a
+--- /dev/null
++++ b/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf
+@@ -0,0 +1,4 @@
++# Opt-in live GP28 pad readback. Preserves senseprobe-1 pin initialization.
++CONFIG_DUTCHMATE_SENSE_PIN_PROBE=y
++CONFIG_DUTCHMATE_SENSE_PAD_REPORT=y
++CONFIG_DUTCHMATE_FIRMWARE_VERSION="sensepad-1"
+diff --git a/hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf b/hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf
+new file mode 100644
+index 0000000..65c48e7
+--- /dev/null
++++ b/hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf
+@@ -0,0 +1,5 @@
++# Controlled comparison: release only GP28 ISO after disconnected configuration.
++CONFIG_DUTCHMATE_SENSE_PIN_PROBE=y
++CONFIG_DUTCHMATE_SENSE_PAD_REPORT=y
++CONFIG_DUTCHMATE_SENSE_RELEASE_ISOLATION=y
++CONFIG_DUTCHMATE_FIRMWARE_VERSION="senseiso-1"

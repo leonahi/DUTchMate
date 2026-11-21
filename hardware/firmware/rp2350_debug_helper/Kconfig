@@ -27,6 +27,14 @@ config DUTCHMATE_PRODUCTION_BUILD
 
 endmenu
 
+config DUTCHMATE_SENSE_PAD_REPORT
+	bool "Report live GP28 pad control in the diagnostic hello identifier"
+	depends on !DUTCHMATE_STACK_PROBE
+	help
+	  Diagnostic build only. Each USB epoch reads the GP28 pad-control register
+	  and appends -p plus eight hex digits to the existing firmware identifier.
+	  This reads actual pad settings without ADC sampling or new wire fields.
+
 config DUTCHMATE_STACK_PROBE
 	bool "Expose post-epoch stack high-water measurements in hello"
 	depends on THREAD_ANALYZER && THREAD_NAME

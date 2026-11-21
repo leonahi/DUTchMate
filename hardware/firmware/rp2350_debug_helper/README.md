@@ -13,6 +13,8 @@ states, and exposes its initial USB CDC identity:
 - UART and EVENT translator enables are inactive;
 - `EVENT0` through `EVENT3` are inputs without internal pulls;
 - EVENT interrupt capture is absent and `gpio_events` is not advertised;
+- GP28/ADC2 has digital input/output and pulls disabled before releasing its
+  pad-isolation latch; ADC voltage sampling is unimplemented;
 - the development USB identity is VID/PID `2E8A:000A`, manufacturer
   `DUTchMate`, and product `Debug Helper`;
 - the USB serial descriptor uses the stable board identifier supplied by
@@ -160,6 +162,56 @@ The UF2 image is written to:
 ```text
 /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
 ```
+
+### GP28 sense-pin initialization
+
+Every successful startup configures GP28/ADC2 (Pico physical pin 34) with digital
+input, output and internal pulls disabled, then clears the RP2350 ISO bit.
+The order matters: the pinned Zephyr `GPIO_DISCONNECTED` path programs the
+controls while setting ISO, whose latches can retain the reset pull-down until
+released. The [RP2350 datasheet §9.7](https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline)
+explains those latches. This initialization keeps the DUT_VIO divider unloaded;
+it does not configure an ADC channel, sample voltage or advertise a new capability.
+A GPIO configuration error returns before ISO release.
+
+#### Optional live pad-control readback
+
+Normal builds use `prj.conf` without extra diagnostic configuration. The optional
+`sense_state_probe.conf` enables default-off `DUTCHMATE_SENSE_PAD_REPORT`, which
+reads pad 28 before each USB epoch starts UART acquisition. It reports
+`sensepad-2-pXXXXXXXX` in the existing firmware identifier, where `XXXXXXXX` is
+the raw eight-digit hexadecimal register value. Stack and pad reporting remain
+separate diagnostics. There are no new protocol fields or commands.
+
+Build from the same pinned west workspace/toolchain as above, with `repo_root`
+set to the repository:
+
+```bash
+ZEPHYR_BASE=/path/to/zephyrproject/zephyr-4.4.2 west build \
+  -b rpi_pico2/rp2350a/m33 \
+  -s "$repo_root/hardware/firmware/rp2350_debug_helper" \
+  -d "$repo_root/build/dutchmate-rp2350-gp28-safe-readback" \
+  --pristine -- \
+  "-DEXTRA_CONF_FILE=$repo_root/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf" \
+  '-DZEPHYR_MODULES=/path/to/zephyrproject/modules/hal/cmsis_6;/path/to/zephyrproject/modules/hal/rpi_pico' \
+  "-DUSER_CACHE_DIR=$repo_root/build/zephyr-cache"
+```
+
+The image is at that directory's `zephyr/zephyr.uf2`. Relevant masks are
+ISO=`0x100`, output-disable=`0x80`, input-enable=`0x40`, pull-up=`0x08` and
+pull-down=`0x04`. Successful initialization leaves ISO/input/pull bits clear
+and output-disable set; with the other reset controls retained, the expected
+word is `0x92`. A register read alone is not an electrical acceptance result.
+
+For reproduction of the earlier baseline and experimental pin modes, use the
+[archived diagnostic source patch](../../validation/evidence/20261119-gp28-diagnostic-sources.patch)
+on the base commit recorded in its
+[archive manifest](../../validation/evidence/20261119-gp28-diagnostic-source-archive.json).
+The temporary mode switches and their obsolete configuration files have been
+removed from current firmware. Earlier UF2 hashes and measurements remain in
+[manufactured-board evidence](../../validation/phase1_kicad_rev_a.md); current
+progress and next actions belong only in
+[development status](../../../docs/development_status.md).
 
 ### USB-only stack measurement build
 

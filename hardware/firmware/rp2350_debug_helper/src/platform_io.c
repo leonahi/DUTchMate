@@ -2,6 +2,11 @@
 
 #include <stddef.h>
 
+#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
+#include <stdio.h>
+#endif
+
+#include <hardware/structs/pads_bank0.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -15,6 +20,28 @@ BUILD_ASSERT(DT_PROP_LEN(DUTCHMATE_IO_NODE, ctrl_enable_gpios) == DUTCHMATE_CHAN
 BUILD_ASSERT(DT_PROP_LEN(DUTCHMATE_IO_NODE, ctrl_data_gpios) == DUTCHMATE_CHANNEL_COUNT);
 BUILD_ASSERT(DT_PROP_LEN(DUTCHMATE_IO_NODE, event_input_gpios) == DUTCHMATE_CHANNEL_COUNT);
 BUILD_ASSERT(DMH_CONTROL_CHANNEL_COUNT == DUTCHMATE_CHANNEL_COUNT);
+
+#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
+/* Reserve ten version bytes for "-p" and eight raw-register hex digits. */
+BUILD_ASSERT(sizeof(CONFIG_DUTCHMATE_FIRMWARE_VERSION) <= 55U);
+
+int dutchmate_platform_sense_probe_firmware(char *output, size_t capacity)
+{
+	int length;
+
+	if (output == NULL) {
+		return -EINVAL;
+	}
+	length = snprintf(
+		output, capacity, "%s-p%08lx", CONFIG_DUTCHMATE_FIRMWARE_VERSION,
+		(unsigned long)pads_bank0_hw->io[28]
+	);
+	if (length < 0) {
+		return -EIO;
+	}
+	return (size_t)length >= capacity ? -ENOSPC : 0;
+}
+#endif
 
 static const struct gpio_dt_spec uart_interface_enable =
 	GPIO_DT_SPEC_GET(DUTCHMATE_IO_NODE, uart_interface_enable_gpios);
@@ -136,6 +163,16 @@ int dutchmate_platform_io_initialize_safe(void)
 			return -ENODEV;
 		}
 	}
+
+	/* Keep GP28/ADC2 unloaded even though ADC sampling is not implemented. */
+	result = gpio_pin_configure(
+		DEVICE_DT_GET(DT_NODELABEL(gpio0)), 28U, GPIO_DISCONNECTED
+	);
+	if (result != 0) {
+		return result;
+	}
+	/* Release the reset pull latch only after disabling pulls, input and output. */
+	hw_clear_bits(&pads_bank0_hw->io[28], PADS_BANK0_GPIO28_ISO_BITS);
 
 	result = gpio_pin_configure_dt(&uart_interface_enable, GPIO_OUTPUT_INACTIVE);
 	if (result != 0) {

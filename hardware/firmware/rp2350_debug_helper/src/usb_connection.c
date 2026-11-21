@@ -264,13 +264,20 @@ int dutchmate_usb_connection_run(void)
 			time_us_64()
 		);
 		if (transition == DMH_EPOCH_STARTED) {
-#ifdef CONFIG_DUTCHMATE_STACK_PROBE
+#if defined(CONFIG_DUTCHMATE_STACK_PROBE) || defined(CONFIG_DUTCHMATE_SENSE_PAD_REPORT)
 			char firmware[65];
 
+#ifdef CONFIG_DUTCHMATE_SENSE_PAD_REPORT
+			if (dutchmate_platform_sense_probe_firmware(
+				    firmware, sizeof(firmware)) != 0) {
+				return -EINVAL;
+			}
+#else
 			if (dutchmate_stack_probe_firmware(
 				    firmware, sizeof(firmware)) != 0) {
 				return -EINVAL;
 			}
+#endif
 			result = dmh_hello_encode(
 				firmware,
 				hello_frame,

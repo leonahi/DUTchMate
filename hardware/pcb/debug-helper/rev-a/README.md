@@ -73,11 +73,15 @@ Pico's AGND pin 33. `DUT_VIO_SENSE` reaches GP28/ADC2, module pin 34. The Pico
 module supplies the internal analog/common-ground connection; these are
 distinct carrier-board net names, not galvanically isolated domains.
 
-GP28 ADC sensing is provisioned in hardware but is not implemented in the
-current helper firmware: there is no ADC channel setup or digital-input-buffer
-configuration for GP28. Any future sensing implementation must disable its
-digital input buffer. Do not infer measured voltage monitoring from this
-schematic or from the hardware-defined switch enable.
+Normal helper startup disables GP28 digital input/output and internal pulls,
+then releases the RP2350 pad-isolation latch so the reset pull cannot load the
+divider. GP28 ADC sensing remains unimplemented: there is no ADC channel setup
+or sampled voltage monitoring. The optional
+[pad readback](../../../firmware/rp2350_debug_helper/README.md#gp28-sense-pin-initialization)
+reports control bits without implementing sensing. Future ADC use must retain
+the appropriate analog pin configuration. MCU pad isolation and U3's
+hardware-defined powered-off isolation are separate paths; neither the
+schematic nor the switch enable establishes firmware voltage measurements.
 
 ### UART receive bias
 

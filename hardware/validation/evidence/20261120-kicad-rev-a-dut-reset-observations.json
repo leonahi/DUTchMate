@@ -1,0 +1,198 @@
+{
+  "operator_date": "2026-11-20",
+  "device_serial": "FA63A4D787572B33",
+  "firmware_hello": "gp28safe-1",
+  "fixture_boot_and_info": "board=rpi_pico build=phase1-enhanced-460800-001 protocol=1",
+  "wiring": "CTRL0/J1.3 to RUN/30; external 10 kΩ J1.14-to-J1.3; DUT 3V3 to J1.14; UART pins 7/8 connected to fixture TX/RX, not looped; PPK2 off/VOUT removed",
+  "operator_measurements": {
+    "dut_vio_v": 3.3,
+    "held_run_v": 0.0,
+    "released_run_v": 3.277
+  },
+  "expected_exercise": {
+    "initial_exact_trace_bytes": 216,
+    "boot_count": 2,
+    "info_count": 1,
+    "pong_count": 2,
+    "commanded_reset_pulse_ms": 250,
+    "physical_pulse_width_measured": false
+  },
+  "complete_capture": {
+    "uart_bytes": 836,
+    "boot_count": 12,
+    "additional_boot_count": 10,
+    "additional_boots": [
+      {
+        "utc": "2026-11-20T17:31:54.352670+00:00",
+        "paris_time": "2026-11-20T18:31:54.352670+01:00",
+        "first_uart_timestamp_us": 5461315446,
+        "last_uart_timestamp_us": 5461316517
+      },
+      {
+        "utc": "2026-11-20T17:31:56.124622+00:00",
+        "paris_time": "2026-11-20T18:31:56.124622+01:00",
+        "first_uart_timestamp_us": 5463084509,
+        "last_uart_timestamp_us": 5463085576
+      },
+      {
+        "utc": "2026-11-20T17:31:56.158146+00:00",
+        "paris_time": "2026-11-20T18:31:56.158146+01:00",
+        "first_uart_timestamp_us": 5463121360,
+        "last_uart_timestamp_us": 5463122426
+      },
+      {
+        "utc": "2026-11-20T17:31:58.394638+00:00",
+        "paris_time": "2026-11-20T18:31:58.394638+01:00",
+        "first_uart_timestamp_us": 5465354090,
+        "last_uart_timestamp_us": 5465355156
+      },
+      {
+        "utc": "2026-11-20T17:31:59.145613+00:00",
+        "paris_time": "2026-11-20T18:31:59.145613+01:00",
+        "first_uart_timestamp_us": 5466111446,
+        "last_uart_timestamp_us": 5466112513
+      },
+      {
+        "utc": "2026-11-20T17:31:59.856424+00:00",
+        "paris_time": "2026-11-20T18:31:59.856424+01:00",
+        "first_uart_timestamp_us": 5466815375,
+        "last_uart_timestamp_us": 5466816441
+      },
+      {
+        "utc": "2026-11-20T17:32:00.072238+00:00",
+        "paris_time": "2026-11-20T18:32:00.072238+01:00",
+        "first_uart_timestamp_us": 5467038514,
+        "last_uart_timestamp_us": 5467039596
+      },
+      {
+        "utc": "2026-11-20T17:32:00.317482+00:00",
+        "paris_time": "2026-11-20T18:32:00.317482+01:00",
+        "first_uart_timestamp_us": 5467282095,
+        "last_uart_timestamp_us": 5467283161
+      },
+      {
+        "utc": "2026-11-20T17:32:00.391653+00:00",
+        "paris_time": "2026-11-20T18:32:00.391653+01:00",
+        "first_uart_timestamp_us": 5467353471,
+        "last_uart_timestamp_us": 5467354537
+      },
+      {
+        "utc": "2026-11-20T17:32:00.506386+00:00",
+        "paris_time": "2026-11-20T18:32:00.506386+01:00",
+        "first_uart_timestamp_us": 5467473285,
+        "last_uart_timestamp_us": 5467474352
+      }
+    ],
+    "extra_helper_reset_commands": false,
+    "operator_context_pending": true
+  },
+  "commands": [
+    {
+      "utc": "2026-11-20T17:19:46.232183+00:00",
+      "command": {
+        "cmd": "configure_gpio_mode",
+        "channel": "CTRL0",
+        "mode": "open_drain",
+        "active_level": "low"
+      }
+    },
+    {
+      "utc": "2026-11-20T17:19:46.242629+00:00",
+      "command": {
+        "cmd": "set_control_state",
+        "channel": "CTRL0",
+        "state": "active"
+      }
+    },
+    {
+      "utc": "2026-11-20T17:23:15.997659+00:00",
+      "command": {
+        "cmd": "set_control_state",
+        "channel": "CTRL0",
+        "state": "idle"
+      }
+    },
+    {
+      "utc": "2026-11-20T17:25:09.852655+00:00",
+      "command": {
+        "cmd": "uart_send",
+        "data_b64": "SU5GTwo="
+      }
+    },
+    {
+      "utc": "2026-11-20T17:25:13.547835+00:00",
+      "command": {
+        "cmd": "uart_send",
+        "data_b64": "UElORwo="
+      }
+    },
+    {
+      "utc": "2026-11-20T17:25:19.072873+00:00",
+      "command": {
+        "cmd": "pulse_control",
+        "channel": "CTRL0",
+        "pulse_ms": 250
+      }
+    },
+    {
+      "utc": "2026-11-20T17:29:11.532234+00:00",
+      "command": {
+        "cmd": "uart_send",
+        "data_b64": "UElORwo="
+      }
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "timestamp_us": 4733203787
+    },
+    {
+      "ok": true,
+      "timestamp_us": 4733213885
+    },
+    {
+      "ok": true,
+      "timestamp_us": 4942969157
+    },
+    {
+      "ok": true,
+      "timestamp_us": 5056826230,
+      "bytes_accepted": 5
+    },
+    {
+      "ok": true,
+      "timestamp_us": 5060521048,
+      "bytes_accepted": 5
+    },
+    {
+      "ok": true,
+      "timestamp_us": 5066295592
+    },
+    {
+      "ok": true,
+      "timestamp_us": 5298505819,
+      "bytes_accepted": 5
+    }
+  ],
+  "final_status": {
+    "type": "buffer_status",
+    "timestamp_us": 5495704143,
+    "uart_rx_size_bytes": 32768,
+    "uart_rx_used_bytes": 0,
+    "uart_rx_high_water_bytes": 256,
+    "dropped_bytes_total": 0,
+    "overflow_events": 0
+  },
+  "log": {
+    "file": "20261120-kicad-rev-a-dut-reset-bench.jsonl",
+    "sha256": "c8dc068bc87896d60f2c5fa9b004ee312aaf4fdb1bf045f528f1af20369024df",
+    "records": 862,
+    "source_sha256": "b82732749ef68d435820536b422805b3c76f7324ea3c730312cba87b61d444ee",
+    "source_hash_verified": true,
+    "port_closed": true,
+    "dtr_deasserted": true,
+    "closed_utc": "2026-11-20T17:32:29.151009+00:00"
+  },
+  "scope": "Expected direct bench reset/boot/INFO/PING sequence verified; ten later boot banners require operator context. No restart-cause diagnosis, stability acceptance, physical pulse waveform or v2 service/HIL acceptance."
+}

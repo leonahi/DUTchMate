@@ -30,7 +30,8 @@
 > Licensing migration: `58d7838`, merged into `main` via PR #8 at `3544b2f`; original base `55c4dd1`
 > KiCad/branding review base: `3544b2f`; reviewed source and evidence committed together under `Update Rev-A KiCad design and add DUTchMate branding`
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
-> Documentation state reviewed: 2026-11-09
+> GP28 fix source base: `9914d6298479b116c4b797e6cf4cfdb1e4788ec0`; included in this firmware slice; normal gp28safe-1 flashed/USB/electrically verified at recorded setup
+> Documentation state reviewed: 2026-11-21
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -40,40 +41,40 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** MCP v2 migration **Complete** under the approved scoped
-  policy; Rev-A source/branding update reviewed, with optional host UI gaps unchanged.
-- **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
-  uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
-  and corrected bias networks. Source review establishes no physical acceptance.
-- **Development policy:** [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
-  permits continued software/behavioral work with the legacy EAGLE board as a
-  functional Enhanced HIL fixture. Historical electrical gaps remain unresolved.
-- **MCP acceptance:** Strict Inspector and applicable pinned conformance pass;
-  VS Code registration saved; VS Code tool use and Claude Code host checks unavailable.
-- **Next software step:** Optional named-host discovery/read-only call checks when
-  authenticated sessions are available; no required MCP implementation slice remains.
-- **Hardware step:** Run fresh corrected-design physical/electrical validation
-  once manufactured KiCad Rev-A boards are available.
-- **Hardware gate:** Phase 1A stays Complete; Phase 1B, Stage 8 and Phase 1 stay
-  incomplete until required manufactured KiCad Rev-A physical validation passes.
-- **Manual hardware work:** Layout/routing, DFM, fabrication preparation, Gerber
-  review and manufacturing submission remain hardware-designer activities
-  outside the agent workflow; no repository-driven PCB/DFM task or gate.
-- **Historical prototype:** Pull-up blocker #1 stays **Satisfied**: nominal
-  10 kΩ axial resistor/jumper, approximately 9.9 kΩ, from DUT_VIO (J3 pin 8)
-  to DUT_UART_TX (J1 pin 4), before historical R16. UART electrical/oscilloscope
-  evidence remains unresolved; functional HIL does not close that gap.
-- **Evidence boundary:** Legacy functional HIL, historical EAGLE validation,
-  KiCad source review and manufactured-board acceptance remain distinct (§4.1).
-- **GP28 firmware boundary:** ADC sensing is not implemented; future ADC use
-  must disable the digital-input buffer. Firmware remains unchanged.
-- **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
-- **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Rev-A/branding: full 1,872, Ruff, mypy/103 and diff checks pass;
-  ERC 0 errors/1 known warning; schematic/PCB pin nets match. Initial full run
-  hit the documented reconnect-test race; isolated/full reruns pass. No hardware/HIL.
-- **Follow-up:** Legacy load-profile script and reconnect-test synchronization; see audit below.
-- **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
+- **Current milestone:** Normal GP28 startup corrected; manufactured-board
+  electrical observations and initial Device Core sessions preserved.
+- **Next software step:** Investigate v2 admission lag from the retained trace:
+  8.606 s source output took about 20 s to persist; 500 ms profile not yet run.
+- **Hardware step:** Last confirmed UART/reset/boot wiring and 10 kΩ pull-up
+  fitted, both USB on, PPK2 off/VOUT removed. Reconfirm before resumption.
+  No scope/analyzer; helper pin 36 probe-only. Loaded 3V3 isolation and UART
+  waveform/remaining sequencing checks stay open.
+- **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md).
+  Source review, legacy EAGLE evidence and manufactured-board acceptance stay
+  distinct under [specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries).
+- **GP28 boundary:** Digital controls disabled before ISO release; normal
+  gp28safe-1 verified electrically. Optional raw-pad diagnostic retained;
+  earlier experiments archived. No ADC voltage sampling implemented.
+- **Physical evidence:** Controls, rail/sense observations, four UART loopbacks,
+  real-DUT reset/UART, v2 operations, boot roles, handoff and automatic reconnect
+  recorded in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  Prior extra BOOTs did not recur in 30.05 s probes-off repeat; cause unproven.
+- **Load evidence:** SUSTAIN exact; deliberate BURST received+dropped accounting
+  exact. 255 ms pause byte-exact/zero drops but END admitted after Monitor timeout.
+- **Ownership:** Prior services closed; no active test. DELAYFAULT unavailable
+  in retained fixture; synthetic E_INIT_001 boot output is intentional.
+- **Hardware gate:** Phase 1A Complete; Stage 8/Phase 1B/Phase 1 incomplete
+  pending required manufactured-board physical/electrical validation.
+- **Manual hardware work:** Layout/routing/DFM/fabrication remain designer work
+  outside this repository-driven task.
+- **MCP:** Migration Complete under scoped policy; optional named-host UI gaps
+  retained. Phase 4 paused; EVENT capture deferred to Phase 5.
+- **Historical prototype:** Pull-up blocker satisfied; old UART scope gap
+  remains unresolved and does not transfer acceptance to the KiCad board.
+- **Validation:** Isolated first-commit snapshot: 1,877 tests/51.77 s, Ruff,
+  mypy103 pass. Normal/readback/stack build checks pass; UF2 hashes unchanged.
+- **Follow-up:** Legacy load-profile script and reconnect-test synchronization;
+  Basic anomaly remains non-blocking. No other software slice selected.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add
@@ -124,9 +125,9 @@ progress; it does not redefine either document.
 
 ## Deferred Work Outside the Active Slice
 
-- Final current-hardware physical/electrical acceptance awaits manufactured
-  KiCad Rev-A boards. This does not defer legacy EAGLE functional Enhanced HIL
-  or independent MCP software work permitted by specification §4.1. The
+- Final current-hardware physical/electrical acceptance requires the remaining
+  manufactured KiCad Rev-A campaign after initial bring-up. This does not defer
+  legacy EAGLE functional Enhanced HIL or independent MCP software work permitted by specification §4.1. The
   historical EAGLE electrical/oscilloscope gap remains unresolved.
 - Phase 4 Debug Agent evidence packaging remains paused after VS Code host
   acceptance; authenticated Claude Code host validation remains unavailable.
@@ -172,10 +173,10 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 | Single J1 mapping, fixed directions and PCB pad-net consistency | Verified after the U6-to-U9 protection-symbol/footprint replacement; all schematic pin-net assignments match the PCB |
 | Symbols, metadata and intentional unused pins | Verified; local SnapEDA TPD4E05U06DQAR symbol/footprint registered, with its default footprint reference corrected |
 | ERC | 0 errors, 1 reviewed warning: bidirectional analog SA on an externally supplied power net; no exclusions added |
-| GP28 ADC input-buffer setting | Not applicable to an active ADC path: sensing is not implemented; firmware unchanged |
+| GP28 ADC input-buffer setting | Normal `gp28safe-1` startup fix verified at prior setup. VIO-first repeat gives GP28 0.907 V at VIO 1.855 V; earlier 0 V report not reproduced, cause unassigned. USB-first 0.911 V retained; no new firmware change justified. Experiments archived; ADC sensing unimplemented |
 | Source/schematic review | Complete; no hardware validation or fabrication acceptance established |
 | PCB/DFM/fabrication preparation | Manual hardware-designer work outside the agent workflow; no repository review task or acceptance gate |
-| Manufactured KiCad Rev-A validation | Waiting for physical boards; fresh evidence required using the README's adapted validation categories |
+| Manufactured KiCad Rev-A validation | Initial observations, static controls, rail/sense points, four UART loopbacks, real-DUT reset/UART, Device Core operations, deliberate BURST accounting, handoff, boot roles and automatic reconnect recorded. Prior 255 ms pause byte-exact/zero drops; END admitted after 20 s Monitor timeout, host admission lag unresolved. No scope/analyzer or secure helper3V3 load connection; remaining electrical acceptance open. Services closed. |
 
 ## Current Validation Requirements
 
