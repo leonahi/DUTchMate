@@ -17,6 +17,14 @@ class CaptureEventSource(Protocol):
         """Return the next normalized event, or ``None`` after read inactivity."""
 
 
+@runtime_checkable
+class BufferedCaptureEventSource(CaptureEventSource, Protocol):
+    """Optional polling boundary for opportunistic durable admission batches."""
+
+    def read_event_nowait(self) -> BackendEvent | None:
+        """Take an already queued event without waiting for additional input."""
+
+
 @dataclass(frozen=True, slots=True)
 class CaptureSourceHealth:
     """Immutable current-source connection, integrity, and replacement projection."""

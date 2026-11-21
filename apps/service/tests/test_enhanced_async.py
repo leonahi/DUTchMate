@@ -565,3 +565,24 @@ def test_calls_after_close_raise_the_closed_host_error() -> None:
 
     with pytest.raises(RuntimeError, match="^Enhanced async host is closed$"):
         host.read_event()
+
+
+def test_nonblocking_receive_uses_zero_timeout_on_the_owner_loop() -> None:
+    event = UartReceiveEvent(0, 1, 0, b"READY\n")
+
+    class PollAdapter(FakeAsyncEnhancedAdapter):
+        async def receive_event(self, timeout_s: float | None = None) -> BackendEvent | None:
+            assert timeout_s == 0
+            return await super().receive_event(timeout_s)
+
+    fake = PollAdapter(info=_info(), segment_id=0, event_outcomes=[event])
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0,
+        open_adapter=OpenAdapterFake(fake),
+    )
+    try:
+        assert host.read_event_nowait() == event
+        assert host.read_event_nowait() is None
+        assert fake.operation_thread_ids == [host.owner_thread_id, host.owner_thread_id]
+    finally:
+        host.close()
