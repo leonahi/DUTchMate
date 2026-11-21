@@ -2644,3 +2644,71 @@ firmware rebuild/flash, commit or push occurred in these Nov-20 functional
 checks. Scope/analyzer unavailable; UART waveform/signal-integrity, loaded
 helper-rail isolation, remaining physical sequencing and full board/Phase 1B
 acceptance remain unresolved.
+
+
+## Host admission fix and fresh baseline/250/500 ms profiles — 2026-11-21
+
+Offline replay isolated yesterday's downstream delay to per-event session
+transactions: 11,992 tiny UART events/94,299 bytes took 20.282077 s without
+hardware. Bounded transaction batching preserves each event and its timestamp,
+raw offsets and sequence, with existing crash recovery and whole-unit rollover.
+Final identical replay took 0.466631 s. The before/after scripts, profiler and
+host patch are in [replay evidence](evidence/20261121-v2-admission-replay-summary.json).
+Old physical evidence and its Monitor timeout remain unchanged.
+
+Before live startup, 1,893 tests passed in 52.37 s; Ruff, mypy/103 files,
+offline lock/66 packages and diff check passed. Tested source hashes remained
+unchanged before and after the live interval. Code remains an uncommitted
+working-tree change on base `9914d62`, alongside the earlier GP28 fix and
+operator-owned CAD edits. No firmware change, rebuild or flash occurred.
+
+The operator reconfirmed the loose 10 kΩ J1.14-to-J1.3 reset pull-up and
+UART/GND/VIO, CTRL0-to-RUN, CTRL1-to-GP2 wiring, initially with both USB supplies
+off and PPK2 off/VOUT removed. Helper USB alone was connected first. Known
+serial `FA63A4D787572B33`/`gp28safe-1` verified; startup configured both roles,
+then actual CLI selected normal while DUT remained unpowered. After operator
+DUT USB confirmation, exact 62-byte BOOT OK and reviewed-build INFO matched.
+
+Sole service PID 3395 owned fresh session `20261121T174635Z-56780735` with
+3.3 V declaration, 460800 8-N-1/no flow control, explicit TX enable and the
+same reset/boot roles. Each profile started a condition Monitor before one
+standalone audited SUSTAIN send. The **20 s deadline was unchanged**.
+
+| Profile | Measured service signal interval | Exact UART output | Monitor | Reported drops/overflows | Boot-cumulative high-water observed within window |
+|---|---|---|---|---|---|
+| Baseline | No pause | 94,299 bytes; all 4,096 sequence lines, checksum 8,386,560 | Matched | 0 / 0 | 684 bytes |
+| 250 ms request | 255.169375 ms | Identical exact stream | Matched | 0 / 0 | 697 bytes |
+| 500 ms request | 505.060750 ms | Identical exact stream | Matched | 0 / 0 | 966 bytes |
+
+
+These intervals measure SIGSTOP/SIGCONT of the service, not an independently
+measured USB bus stall or analog waveform. Every full END line was durable
+before its Monitor terminal. All three streams have SHA-256
+`efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`.
+A later audited PING matched PONG, showing post-stress responsiveness.
+
+Graceful stop completed the session as `completed/service_shutdown`; PID,
+TCP 2040 and serial ownership were verified absent. Independent native audit
+reconciled all **283,040 raw bytes** to **36,116 contiguous records**, including
+35,922 individually retained RX records, five UART attempt/result pairs, three
+control pairs and five terminal operations. Whole raw trace is exactly BOOT,
+INFO, three SUSTAIN outputs, PONG. One uninterrupted timestamp segment, zero
+reported drops/overflows and complete local recording. All **930** pre-existing
+local files hashed before the live run remain unchanged.
+
+[Live summary](evidence/20261121-kicad-rev-a-live-admission-summary.json) and
+[closed archive](evidence/20261121-kicad-rev-a-live-admission-evidence.tar.gz)
+retain configuration, native journal, exact API/CLI traces, executed harness
+source, outcomes and manifest. Archive: 1,301,656 bytes, SHA-256
+`cf9251411313d03b70208fc614ff37eb419a00f54dae963af1301b528c7b059a`;
+all 18 member hashes verified. The software patch separately reconstructs all
+12 intended files cleanly from HEAD. No code tests ran during physical ownership.
+
+The operator reports no scope or logic analyzer today and helper pin 36 still
+accessible only to a meter probe. Board source inspection found +3.3 V on A1.36
+and small IC/decoupling pads, with no separate connector/test point; no secure
+alternative load connection was established. Thus UART waveform/signal-integrity,
+loaded helper-rail isolation and remaining physical sequencing are not accepted
+by these functional results. No full manufactured-board/Phase 1B completion
+is claimed. Both USB supplies were last reported on, normal GP2 retained,
+PPK2 off/VOUT disconnected; actual power must be reconfirmed on resumption.

@@ -177,13 +177,21 @@ class EnhancedAsyncHost:
         return self._submit(lambda: sender.send_uart(data))
 
     def read_event(self) -> BackendEvent | None:
+        return self._read_event(DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S)
+
+    def read_event_nowait(self) -> BackendEvent | None:
+        """Poll queued evidence on its owner loop without waiting for input."""
+
+        return self._read_event(0)
+
+    def _read_event(self, timeout_s: float) -> BackendEvent | None:
         with self._state_lock:
             if self._drained_events:
                 return self._drained_events.popleft()
             if self._closed:
                 raise BackendDisconnectedError("Enhanced async host is closed")
         adapter = self._adapter_for_operation()
-        event, segment = self._submit(lambda: self._receive_event(adapter))
+        event, segment = self._submit(lambda: self._receive_event(adapter, timeout_s))
         with self._state_lock:
             self._segment = segment
         return event
@@ -310,8 +318,9 @@ class EnhancedAsyncHost:
     async def _receive_event(
         self,
         adapter: _AsyncEnhancedAdapter,
+        timeout_s: float,
     ) -> tuple[BackendEvent | None, SegmentContext | None]:
-        event = await adapter.receive_event(DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S)
+        event = await adapter.receive_event(timeout_s)
         return event, adapter.segment
 
     def _install(self, opened: _OpenedHost) -> None:

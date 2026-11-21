@@ -9,6 +9,19 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Host Recorder Commit Preparation Verification — 2026-11-21
+
+- After the isolated firmware commit, ran the full combined suite again:
+  1,893 passed in 51.04 s. Ruff, mypy (103 files), offline lock check
+  (66 packages) and diff check passed. No physical service or serial owner.
+- Verified staged firmware commit matches its independently tested snapshot
+  exactly. Current host source hashes match the replay/live evidence; four
+  archive hashes and all member manifests verified. Historical raw artifacts
+  were not rewritten to change their recorded source bases or outcomes.
+- Reviewed the second slice's exact 19-file scope: host code/tests, architecture,
+  Nov-21 evidence and status/history updates. Separate PCB layout/project edits
+  remain unstaged, their hashes unchanged. No push or hardware actuation.
+
 ## GP28 Commit Preparation Verification — 2026-11-21
 
 - Exported HEAD plus only the intended firmware/initial evidence slice to an
@@ -21,6 +34,65 @@ their completion chronology after the detailed validation record.
   intentional context whitespace inside archived unified diffs.
 - Initial physical evidence remains limited; host admission lag is retained in
   its original failed capture. No full manufactured-board acceptance inferred.
+
+## KiCad Rev-A Live Admission Fix Verification — 2026-11-21
+
+- Operator confirmed reset pull-up/wiring and helper-only USB before normal
+  selection; DUT then powered with setup untouched. Known gp28safe-1 identity,
+  exact BOOT and INFO verified. No firmware change/rebuild/flash.
+- Fresh session `20261121T174635Z-56780735`, sole PID 3395: baseline, measured
+  255.169375 ms and 505.060750 ms service pauses each retained exact 94,299-byte
+  SUSTAIN/all 4,096 sequence lines/checksum 8,386,560. All Monitors matched the
+  unchanged 20 s deadline; zero reported drops/overflows. Post-stress PING passed.
+- Source hashes checked against the prior 1,893-test software gate before and
+  after live use; no tests ran during ownership. Old failed timeout preserved.
+- Native audit: 283,040 exact raw bytes, 36,116 contiguous records, five UART
+  pairs, three control pairs, five terminal operations, one uninterrupted
+  segment. All 930 pre-existing local files unchanged. Graceful shutdown
+  verified PID/listener/serial free.
+- [Live evidence](../hardware/validation/evidence/20261121-kicad-rev-a-live-admission-summary.json)
+  archive SHA-256 `cf9251411313d03b70208fc614ff37eb419a00f54dae963af1301b528c7b059a`,
+  18 member hashes verified. Host patch reconstructs 12 files from HEAD.
+  Architecture decisions retained; temporary working plan removed.
+- Operator reports no scope/analyzer and pin 36 still probe-only. CAD/net
+  inspection found no separate helper 3.3 V test point/connector; no secure
+  alternate load connection established. Electrical acceptance remains open.
+  Detailed scope and limits in [board record](../hardware/validation/phase1_kicad_rev_a.md).
+
+## Host V2 Admission Lag Reproduction and Bounded Transactions — 2026-11-21
+
+- Replayed frozen SUSTAIN from physical session `20261120T180241Z-21d9dc70`
+  into isolated stores, no serial/hardware access: 11,992 events/94,299 bytes,
+  source span8.606316s. Unprofiled20.282077s reproduces prior admission delay.
+  Profiled24.173s: append RX22.073s, 11,992 transactions; file opens/replacements/
+  links dominate, fsync1.485s alone does not explain the delay.
+- Optional nonblocking source poll and bounded groups of queued normal UART
+  units now share one existing crash-recoverable transaction. Records, timestamps,
+  raw offsets, schema, durability, quotas and configured deadlines preserved.
+  Pattern/line-limit/quota units fall back to existing per-unit processing;
+  already-read UART commits before deferred terminal input is handled.
+- TDD: six store failures then green; recorder reproduced1025transactions for
+  1024tiny events, then bounded work/commit publication green. New post-reacquire
+  quota regression caught stale logical segment mapping in the first batch
+  integration; refresh per fallback unit fixed it. Tests also cover telemetry,
+  error drains, pattern state, rollback and source polling.
+- Basic release tests initially observed only the blocking public read and
+  missed EOF consumed by the new poll. Gate moved to shared FIFO; final RX
+  durability, late wakeup, cancellation and concurrent shutdown still asserted.
+- Final replay0.466631s, exact deterministic SHA256
+  `efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`;
+  old source files and both physical evidence archives unchanged.
+- Full gate:1893passed/52.37s, Ruff, mypy103, offline lock66, diff check passed.
+  Architecture documented; code graph refreshed with existing C-header partial
+  extraction/community-label warnings. No source-module ownership changes.
+- [Replay evidence/patch](../hardware/validation/evidence/20261121-v2-admission-replay-summary.json)
+  retains before/after scripts, timings, profiler and reproducible patch against
+  dirty-workspace base9914d62. Archive10member hashes verified, SHA256
+  `f9f491550bdc72e65126e691778dcb538d5ac3be1e417a9b52ee65b5eead95a2`.
+  No firmware change/rebuild/flash or live hardware result in this record.
+- Operator asked which resistor was the reset pull-up; explained loose10kΩ
+  J1.14→J1.3. Operator then confirmed resistor/wiring fitted, both USB off and
+  PPK2 off/VOUT disconnected. Helper-only USB connection requested for live setup.
 
 ## KiCad Rev-A Boot/USB Reconnect and Operator Stop Checkpoint — 2026-11-20
 

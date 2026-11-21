@@ -29,12 +29,17 @@ from dutchmate_core.operations.monitor import (
 )
 from dutchmate_core.profile import DutProfile
 from dutchmate_core.session_store.models import (
+    MAX_V2_UART_BATCH_EVENTS,
     SessionHandle,
     SessionPersistenceError,
     V2EvidenceAdmission,
 )
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
-from dutchmate_core.workflows.capture import CaptureEventSource, CaptureSourceHealth
+from dutchmate_core.workflows.capture import (
+    BufferedCaptureEventSource,
+    CaptureEventSource,
+    CaptureSourceHealth,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +129,14 @@ class EvidenceRecorderStore(Protocol):
         capture_result: UartCaptureResult | None = None,
         rollover_capture_result: UartCaptureResult | None = None,
     ) -> V2EvidenceAdmission: ...
+
+    def try_append_v2_uart_receive_batch(
+        self,
+        handle: SessionHandle,
+        *,
+        events: Sequence[UartReceiveEvent],
+        capture_results: Sequence[UartCaptureResult],
+    ) -> V2EvidenceAdmission | None: ...
 
     def v2_uart_receive_will_rollover(
         self,
@@ -1142,6 +1155,9 @@ class ContinuousEvidenceRecorder:
             raise close_error
 
     def _ingest(self) -> None:
+        event: BackendEvent | None
+        pending_event: BackendEvent | None = None
+        pending_error: Exception | None = None
         while True:
             with self._condition:
                 while self._source is None and not self._closing and self._fault is None:
@@ -1150,11 +1166,16 @@ class ContinuousEvidenceRecorder:
                     return
                 source = self._source
                 physical_segment_id = self._source_segment_id
-                stored_segment_id = self._stored_segment_id
             if source is None:
                 continue
             try:
-                event = source.read_event()
+                if pending_error is not None:
+                    error, pending_error = pending_error, None
+                    raise error
+                if pending_event is not None:
+                    event, pending_event = pending_event, None
+                else:
+                    event = source.read_event()
             except BackendDisconnectedError as exc:
                 if self._finish_release_drain(source) or self._finish_shutdown_drain(source):
                     continue
@@ -1195,14 +1216,54 @@ class ContinuousEvidenceRecorder:
                     source=source,
                 )
                 return
-            normalized = replace(event, segment_id=stored_segment_id)
+            events = [event]
+            if isinstance(event, UartReceiveEvent) and isinstance(
+                source, BufferedCaptureEventSource
+            ):
+                while len(events) < MAX_V2_UART_BATCH_EVENTS:
+                    try:
+                        following = source.read_event_nowait()
+                    except Exception as exc:
+                        # Commit already-read UART before publishing terminal input.
+                        pending_error = exc
+                        break
+                    if following is None:
+                        break
+                    if (
+                        not isinstance(following, UartReceiveEvent)
+                        or following.segment_id != physical_segment_id
+                    ):
+                        pending_event = following
+                        break
+                    events.append(following)
             try:
                 with self._admission_lock:
-                    admission = self._record_event(normalized)
-                    self._publish_admission(admission)
+                    self._record_events(events)
             except BaseException as exc:
                 self._record_fatal(exc, end_reason="persistence_error", source=source)
                 return
+
+    def _record_events(self, events: Sequence[BackendEvent]) -> None:
+        if len(events) > 1:
+            # Collection only groups consecutive UART, never telemetry/segments.
+            uart_events = [
+                replace(event, segment_id=self._stored_segment_id)
+                for event in events if isinstance(event, UartReceiveEvent)
+            ]
+            candidate = self._processor.clone()
+            results = [candidate.process_event(event) for event in uart_events]
+            admission = self._session_store.try_append_v2_uart_receive_batch(
+                self._handle, events=uart_events, capture_results=results
+            )
+            if admission is not None:
+                self._processor = candidate
+                self._publish_admission(admission)
+                return
+        # Pattern/line-limit/quota units retain the existing whole-unit path.
+        for event in events:
+            # A previous unit or concurrent action can have rolled the journal.
+            normalized = replace(event, segment_id=self._stored_segment_id)
+            self._publish_admission(self._record_event(normalized))
 
     def _record_event(self, event: BackendEvent) -> V2EvidenceAdmission:
         if isinstance(event, UartReceiveEvent):

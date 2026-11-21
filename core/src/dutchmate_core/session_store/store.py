@@ -44,6 +44,7 @@ from dutchmate_core.session_store.log_replay import (
     replay_recent_logs as _replay_recent_logs,
 )
 from dutchmate_core.session_store.models import (
+    MAX_V2_UART_BATCH_EVENTS,
     BaselineError,
     BaselineMutationResult,
     BaselinePointer,
@@ -741,6 +742,87 @@ class SessionStore:
                 next_evidence_seq=evidence_seq + 1 + len(hardware_event_bytes),
             )
 
+    def try_append_v2_uart_receive_batch(
+        self,
+        handle: SessionHandle,
+        *,
+        events: Sequence[UartReceiveEvent],
+        capture_results: Sequence[UartCaptureResult],
+    ) -> V2EvidenceAdmission | None:
+        """Commit queued UART units together, or leave single-unit fallback untouched.
+
+        Each RX event retains its own primary record. Pattern/line-limit units
+        and groups crossing the quota use the existing per-unit admission path.
+        No write or rollover occurs when returning ``None``.
+        """
+
+        if not 2 <= len(events) <= MAX_V2_UART_BATCH_EVENTS:
+            raise ValueError("v2 UART group must contain 2..64 events")
+        if len(events) != len(capture_results):
+            raise ValueError("v2 UART group requires one capture result per event")
+        for event, result in zip(events, capture_results, strict=True):
+            if not event.data or len(event.data) > 32768:
+                raise ValueError("v2 UART RX payload must contain 1..32768 bytes")
+            _require_matching_capture_result(event, result)
+        if any(
+            result.matches or result.oversized_lines or result.newly_oversized_line_count
+            for result in capture_results
+        ):
+            return None
+
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            first_sequence = _v2_next_sequence(metadata)
+            try:
+                raw_start = handle.paths.uart_raw.stat().st_size
+            except OSError as exc:
+                raise SessionPersistenceError(
+                    operation="read UART offset", path=handle.paths.uart_raw, detail=str(exc)
+                ) from exc
+            records: list[bytes] = []
+            raw_parts: list[bytes] = []
+            for event, result in zip(events, capture_results, strict=True):
+                record, unit_bytes, patterns, hardware = self._v2_uart_unit(
+                    handle,
+                    metadata=metadata,
+                    event=event,
+                    detected_patterns=(),
+                    capture_result=result,
+                    raw_offset_start=raw_start,
+                )
+                if patterns is not None or hardware or not self._v2_unit_fits(
+                    metadata, unit_bytes=unit_bytes
+                ):
+                    return None
+                records.append(_persistence.serialize_jsonl(record))
+                raw_parts.append(event.data)
+                raw_start += len(event.data)
+                metadata["next_evidence_seq"] = cast(int, record["evidence_seq"]) + 1
+                storage = cast(dict[str, int], metadata["storage"])
+                storage["evidence_bytes_written"] += unit_bytes
+                _metadata._record_metadata_segment_timestamp(
+                    metadata, segment_id=event.segment_id, timestamp_us=event.timestamp_us
+                )
+            serialized_metadata = _persistence.serialize_compact_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            try:
+                with _transactions.evidence_transaction(
+                    handle.paths, append_paths=[handle.paths.uart_raw, handle.paths.uart_events]
+                ) as transaction:
+                    _persistence.append_serialized(handle.paths.uart_raw, b"".join(raw_parts))
+                    _persistence.append_serialized(handle.paths.uart_events, b"".join(records))
+                    transaction.prepare_metadata(serialized_metadata)
+                    _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+            except SessionPersistenceError as exc:
+                self._fail_active_v2_persistence_locked(handle, cause=exc)
+                raise
+            return V2EvidenceAdmission(
+                handle=handle,
+                evidence_seq=first_sequence,
+                rolled_over=False,
+                next_evidence_seq=_v2_next_sequence(metadata),
+            )
+
     def v2_uart_receive_will_rollover(
         self,
         handle: SessionHandle,
@@ -820,6 +902,7 @@ class SessionStore:
         event: UartReceiveEvent,
         detected_patterns: Sequence[dict[str, object]],
         capture_result: UartCaptureResult | None,
+        raw_offset_start: int | None = None,
     ) -> tuple[dict[str, object], int, bytes | None, tuple[bytes, ...]]:
         segments = metadata.get("segments")
         if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
@@ -829,14 +912,17 @@ class SessionStore:
         evidence_seq = metadata.get("next_evidence_seq")
         if isinstance(evidence_seq, bool) or not isinstance(evidence_seq, int):
             raise ValueError("v2 next_evidence_seq must be a non-negative integer")
-        try:
-            raw_start = handle.paths.uart_raw.stat().st_size
-        except OSError as exc:
-            raise SessionPersistenceError(
-                operation="read UART offset",
-                path=handle.paths.uart_raw,
-                detail=str(exc),
-            ) from exc
+        if raw_offset_start is None:
+            try:
+                raw_start = handle.paths.uart_raw.stat().st_size
+            except OSError as exc:
+                raise SessionPersistenceError(
+                    operation="read UART offset",
+                    path=handle.paths.uart_raw,
+                    detail=str(exc),
+                ) from exc
+        else:
+            raw_start = raw_offset_start
         record: dict[str, object] = {
             "evidence_seq": evidence_seq,
             "type": "uart_rx",

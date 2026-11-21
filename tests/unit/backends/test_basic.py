@@ -430,3 +430,19 @@ def test_basic_send_rejects_invalid_serial_write_progress(
         connection.send_uart(b"reboot")
 
     assert exc_info.value.bytes_accepted == 0
+
+
+def test_basic_nonblocking_poll_leaves_an_empty_source_available() -> None:
+    raw = ScriptedRawSerial()
+    source = BasicBackendEventSource(
+        BasicBackendConnection(serial_port=raw, settings=_settings()), segment_id=0,
+    )
+    try:
+        assert source.read_event_nowait() is None
+        raw.add_read(b"READY\n")
+        event = source.read_event()
+        assert isinstance(event, UartReceiveEvent)
+        assert event.data == b"READY\n"
+        assert source.read_event_nowait() is None
+    finally:
+        source.close()

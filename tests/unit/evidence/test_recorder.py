@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
-from threading import Condition
+from threading import Condition, Event
 
 import pytest
 
 import dutchmate_core.session_store.persistence as persistence
+import dutchmate_core.session_store.transactions as transactions
 from dutchmate_core.backends import (
     BackendCapabilityPolicy,
     BackendDisconnectedError,
@@ -853,3 +855,176 @@ def test_shutdown_terminalizes_after_source_close_error(tmp_path: Path) -> None:
     metadata = store.load_metadata(session_id)
     assert metadata["state"] == "completed"
     assert metadata["end_reason"] == "service_shutdown"
+
+
+class BufferedControlledSource(ControlledSource):
+    def read_event_nowait(self) -> BackendEvent | None:
+        with self._condition:
+            if not self._outcomes:
+                return None
+            outcome = self._outcomes.popleft()
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+def test_fragmented_queued_uart_avoids_one_transaction_per_callback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The captured regression is excess durable bookkeeping per tiny RX event.
+    source = BufferedControlledSource()
+    for index in range(1024):
+        source.publish(UartReceiveEvent(0, index, 0, b"x\n"))
+    transaction_count = 0
+    original = transactions.evidence_transaction
+
+    @contextmanager
+    def counted(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal transaction_count
+        transaction_count += 1
+        with original(*args, **kwargs) as transaction:
+            yield transaction
+
+    monkeypatch.setattr(transactions, "evidence_transaction", counted)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=SessionStore(root=tmp_path),
+        profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    session_id = recorder.durable_tail().session_id
+    recorder.close()
+
+    root = tmp_path / session_id
+    assert (root / "uart_raw.log").read_bytes() == b"x\n" * 1024
+    records = _read_jsonl(root / "uart_events.jsonl")
+    assert len(records) == 1024
+    assert [r["timestamp_us"] for r in records] == list(range(1024))
+    assert transaction_count < 100
+
+
+@pytest.mark.parametrize("terminal", [BackendDisconnectedError, ValueError])
+def test_group_flushes_queued_uart_before_a_source_terminal(
+    tmp_path: Path, terminal: type[Exception],
+) -> None:
+    source = BufferedControlledSource()
+    source.publish(UartReceiveEvent(0, 1, 0, b"one\n"))
+    source.publish(UartReceiveEvent(0, 2, 0, b"two\n"))
+    source.publish(terminal("source ended"))
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=SessionStore(root=tmp_path),
+        profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    session_id = recorder.durable_tail().session_id
+    recorder.close()
+    assert (tmp_path / session_id / "uart_raw.log").read_bytes() == b"one\ntwo\n"
+
+
+def test_group_keeps_telemetry_between_its_neighboring_rx_events(tmp_path: Path) -> None:
+    source = BufferedControlledSource()
+    source.publish(UartReceiveEvent(0, 1, 0, b"one\n"))
+    source.publish(UartReceiveEvent(0, 2, 0, b"two\n"))
+    source.publish(BufferStatusEvent(0, 3, 32768, 0, 8, 0, 0))
+    source.publish(UartReceiveEvent(0, 4, 0, b"three\n"))
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=SessionStore(root=tmp_path),
+        profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    session_id = recorder.durable_tail().session_id
+    recorder.close()
+    root = tmp_path / session_id
+    records = sorted(
+        _read_jsonl(root / "uart_events.jsonl") + _read_jsonl(root / "hardware_events.jsonl"),
+        key=lambda r: r["evidence_seq"],
+    )
+    assert [r["type"] for r in records] == ["uart_rx", "uart_rx", "buffer_status", "uart_rx"]
+    assert (root / "uart_raw.log").read_bytes() == b"one\ntwo\nthree\n"
+
+
+def test_group_does_not_publish_before_metadata_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = BufferedControlledSource()
+    source.publish(UartReceiveEvent(0, 1, 0, b"a\n"))
+    source.publish(UartReceiveEvent(0, 2, 0, b"b\n"))
+    entered = Event()
+    resume = Event()
+    original = persistence.write_serialized
+
+    def gated_write(path: Path, data: bytes) -> None:
+        if path.name == "metadata.json" and path.with_name("uart_raw.log").stat().st_size == 4:
+            entered.set()
+            assert resume.wait(5)
+        original(path, data)
+
+    monkeypatch.setattr(persistence, "write_serialized", gated_write)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=SessionStore(root=tmp_path),
+        profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    try:
+        assert entered.wait(5)
+        assert recorder.durable_tail().next_evidence_seq == 1
+    finally:
+        resume.set()
+        recorder.close()
+
+
+@pytest.mark.parametrize("segment_id", [0, 7])
+def test_queued_group_rolls_over_at_whole_event_boundaries(
+    tmp_path: Path, segment_id: int,
+) -> None:
+    source = BufferedControlledSource(segment_id=segment_id)
+    payload = b"x" * 15999 + b"\n"
+    for index in range(40):
+        source.publish(UartReceiveEvent(segment_id, index, 0, payload))
+    store = SessionStore(root=tmp_path, evidence_budget_bytes=1048576)
+    recorder = ContinuousEvidenceRecorder(
+        source=source if segment_id == 0 else ControlledSource(),
+        session_store=store, profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    if segment_id:
+        recorder.release()
+        recorder.begin_reacquire()
+        recorder.accept_reacquired_source(source, backend_snapshot=_snapshot(segment_id))
+    recorder.close()
+    sessions = sorted(tmp_path.iterdir())
+    assert len(sessions) == 2
+    metadata = [json.loads((p / "metadata.json").read_text()) for p in sessions]
+    predecessor = next(p for p, m in zip(sessions, metadata, strict=True)
+                       if m["end_reason"] == "rollover_size")
+    successor = next(p for p, m in zip(sessions, metadata, strict=True)
+                     if m["predecessor_session_id"] is not None)
+    assert (
+        (predecessor / "uart_raw.log").read_bytes()
+        + (successor / "uart_raw.log").read_bytes()
+    ) == payload * 40
+    for p in sessions:
+        data = (p / "uart_raw.log").read_bytes()
+        assert len(data) % 16000 == 0
+        m = json.loads((p / "metadata.json").read_text())
+        assert m["storage"]["evidence_bytes_written"] <= 1048576
+    records = (
+        _read_jsonl(predecessor / "uart_events.jsonl")
+        + _read_jsonl(successor / "uart_events.jsonl")
+    )
+    assert len(records) == 40
+    assert [r["timestamp_us"] for r in records] == list(range(40))
+
+
+def test_queued_pattern_group_processes_derived_state_once(tmp_path: Path) -> None:
+    source = BufferedControlledSource()
+    for index, data in enumerate([b"READY\nHard", b"Fault at pc=0x1000\n"]):
+        source.publish(UartReceiveEvent(0, index, 0, data))
+    store = SessionStore(root=tmp_path)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=store, profile=_profile(), backend_snapshot=_snapshot(),
+    )
+    session_id = recorder.durable_tail().session_id
+    recorder.close()
+    detail = store.get_session_detail(session_id)
+    assert isinstance(detail, V2SessionDetail)
+    assert detail.first_error is not None and detail.first_error.pattern == "HardFault"
+    assert (tmp_path / session_id / "uart_raw.log").read_bytes() == (
+        b"READY\nHardFault at pc=0x1000\n"
+    )
+    patterns = json.loads((tmp_path / session_id / "detected_patterns.json").read_text())
+    assert len(patterns) == 1

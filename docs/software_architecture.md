@@ -268,6 +268,17 @@ and faults and closes physical ownership when authoritative persistence cannot
 continue. Clean shutdown first stops physical input, drains already-normalized
 source events, and then terminalizes the active v2 session.
 
+Sources may implement `BufferedCaptureEventSource.read_event_nowait` to let
+the same recorder opportunistically collect up to 64 already-queued UART
+events. It never waits to fill a group or crosses a telemetry/segment boundary.
+The store commits a fitting group in one existing crash-recoverable transaction,
+preserving each event's record, timestamp, bytes and raw offsets. The durable
+tail and processor state advance only after commit. Pattern/line-limit units
+and groups that cannot fit retain per-unit admission and rollover; logical
+segment mapping is refreshed after each rollover. Terminal source errors are
+handled after already-read UART is committed. Action admission remains serialized
+with the whole bounded transaction. Ordinary blocking sources remain supported.
+
 It also serializes bounded-operation lifecycle and TX/Control attempt/result
 admissions with receive/connection admissions, snapshots the operation start cursor and pre-cursor partial-line
 state in the final start session, flushes continuous line state before a
