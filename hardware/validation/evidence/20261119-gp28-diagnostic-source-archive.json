@@ -1,0 +1,19 @@
+{
+  "campaign_date": "2026-11-19",
+  "base_commit": "9914d6298479b116c4b797e6cf4cfdb1e4788ec0",
+  "patch": "hardware/validation/evidence/20261119-gp28-diagnostic-sources.patch",
+  "patch_sha256": "d7542d6481429665bb1a3e62de6759ceeed03d118880a5b3f1da650ef6060aae",
+  "scope": "Firmware-only diagnostic source/config snapshot before normal GP28 startup promotion; PCB and project settings excluded",
+  "source_sha256": {
+    "hardware/firmware/rp2350_debug_helper/Kconfig": "988ed0e4ef3e19dea55761e81c5bd82fc68e4f7d3be016e332df8de035de7003",
+    "hardware/firmware/rp2350_debug_helper/README.md": "922059f754e75235a956c73844355ead10d81e2331aadf2e5f3c661666ce91b1",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.c": "9a12f4418367bd4741d183c48bd87e621f2ad1975d796ed1ee0e71d427f362b1",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.h": "524748e41b730e5902131c0e5e37dbae0ed883ed9ce763cee144387befa828c9",
+    "hardware/firmware/rp2350_debug_helper/src/usb_connection.c": "6ed909002d17016644438e74478da5fc46615554c84bed493ae8acc420b18a9c",
+    "hardware/firmware/rp2350_debug_helper/sense_baseline.conf": "6e32fb3935d960dd2a106f2f6c36ee5ed1a9ba5c018978daa00e0804311d8cff",
+    "hardware/firmware/rp2350_debug_helper/sense_probe.conf": "18e0d04a47f1d167b07eb2d31eb58583619298f2545630c150e5cd42ace27124",
+    "hardware/firmware/rp2350_debug_helper/sense_state_probe.conf": "9db0bf4806cb9aa9f30e20f4309ea00a8e156611a16132d58c0fc0904cbe9f57",
+    "hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf": "0a0499936c2bf6573aa799a012f09979c557f69201fb49ac9bb20991f0f73d0b"
+  },
+  "reproduction": "Apply the patch to the recorded base commit using git apply, then use the pinned Zephyr/SDK builds recorded in development_history.md. Existing UF2 images remain separately hash-identified."
+}

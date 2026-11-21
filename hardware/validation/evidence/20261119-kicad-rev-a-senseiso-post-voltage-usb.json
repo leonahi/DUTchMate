@@ -1,0 +1,24 @@
+{
+  "campaign_date": "2026-11-19",
+  "scope": "USB identity and live GP28 control after operator-reported off-board voltage test",
+  "port": "/dev/cu.usbmodem101",
+  "usb_serial": "FA63A4D787572B33",
+  "hello": {
+    "type": "hello",
+    "v": 1,
+    "firmware": "senseiso-1-p00000092",
+    "device": "dutchmate-rp2350",
+    "capabilities": [
+      "uart_receive",
+      "gpio_control",
+      "uart_send",
+      "device_timestamp",
+      "overflow_telemetry"
+    ]
+  },
+  "gp28_pad_register_hex": "0x00000092",
+  "protocol_commands_sent": 0,
+  "port_closed": true,
+  "dtr_deasserted_before_close": true,
+  "voltage_measured_by_host": false
+}

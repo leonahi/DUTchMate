@@ -1,0 +1,2 @@
+# Archived unified diffs retain context prefixes and original source whitespace.
+hardware/validation/evidence/*.patch -whitespace

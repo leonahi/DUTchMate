@@ -1,0 +1,27 @@
+{
+  "campaign_date": "2026-11-18",
+  "image": "build/dutchmate-rp2350-sense-baseline/zephyr/zephyr.uf2",
+  "image_bytes": 104448,
+  "image_sha256": "4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4",
+  "bootloader_volume": "/Volumes/RP2350",
+  "bootloader_volume_removed": true,
+  "port": "/dev/cu.usbmodem11401",
+  "usb_vid_pid": "2E8A:000A",
+  "usb_serial": "FA63A4D787572B33",
+  "hello": {
+    "type": "hello",
+    "v": 1,
+    "firmware": "sensebase-1",
+    "device": "dutchmate-rp2350",
+    "capabilities": [
+      "uart_receive",
+      "gpio_control",
+      "uart_send",
+      "device_timestamp",
+      "overflow_telemetry"
+    ]
+  },
+  "protocol_commands_sent": 0,
+  "port_closed": true,
+  "dtr_deasserted_before_close": true
+}

@@ -1,0 +1,181 @@
+{
+  "utc": "2026-11-20T18:13:48.461053+00:00",
+  "session": "20261120T180241Z-21d9dc70",
+  "state": "completed",
+  "end_reason": "service_shutdown",
+  "raw_bytes": 94644,
+  "raw_sha256": "6d1c18da08e3da5228cd1ec00c695bab064b867d8324c130f0d66df7c0c3d5dd",
+  "whole_expected_trace_verified": true,
+  "evidence_records": 12662,
+  "contiguous_sequences": true,
+  "record_types": {
+    "connected": 1,
+    "control_attempt": 7,
+    "buffer_status": 610,
+    "control_result": 7,
+    "uart_rx": 12021,
+    "operation_started": 3,
+    "uart_tx_attempt": 3,
+    "uart_tx_result": 3,
+    "operation_terminal": 3,
+    "unexpected_disconnect": 1,
+    "reconnect_started": 1,
+    "segment_opened": 1,
+    "reconnect_succeeded": 1
+  },
+  "operation_summary": {
+    "active": 0,
+    "completed": 3,
+    "failed": 0,
+    "started": 3
+  },
+  "boot_role": {
+    "selections": "bootloader then normal, both only with operator-confirmed DUT USB off",
+    "alternate_exact_bytes": 81,
+    "normal_exact_bytes": 62,
+    "ambient_capture": true,
+    "synthetic_error": "E_INIT_001 is intended fixture test output, not an unexpected failure"
+  },
+  "automatic_reconnect": {
+    "same_session": true,
+    "segments": 2,
+    "observation_gaps": 1,
+    "policy_timeout_s": 5.0,
+    "observed_reconnecting_to_connected_s": 4.518491333001293,
+    "timing_scope": "Observer response difference; not exact driver or USB-wire latency",
+    "control_modes_reapplied": [
+      "CTRL0 reset",
+      "CTRL1 boot"
+    ],
+    "post_reconnect_reset_info": true,
+    "segments_metadata": [
+      {
+        "backend": {
+          "backend_capabilities": [
+            "device_timestamp",
+            "gpio_control",
+            "overflow_telemetry",
+            "uart_receive",
+            "uart_send"
+          ],
+          "capabilities": [
+            "device_timestamp",
+            "gpio_control",
+            "overflow_telemetry",
+            "uart_receive",
+            "uart_send"
+          ],
+          "capability_policy": {
+            "uart_send": {
+              "source": "hardware.uart.tx_enabled",
+              "tx_policy_enabled": true
+            }
+          },
+          "device": "dutchmate-rp2350",
+          "firmware": "gp28safe-1",
+          "mode": "enhanced",
+          "port": "/dev/cu.usbmodem11401"
+        },
+        "end_reason": "unexpected_disconnect",
+        "ended_at": "2026-11-20T18:08:30Z",
+        "first_timestamp_us": 0,
+        "last_timestamp_us": 348224698,
+        "segment_id": 0,
+        "started_at": "2026-11-20T18:02:41Z",
+        "timestamp": {
+          "clock": "rp2350_timer",
+          "event_granularity": "uart_event",
+          "observation_point": "debug_helper_uart_receive",
+          "origin": "segment_start",
+          "source": "device",
+          "source_origin_us": 7308948557,
+          "unit": "us"
+        }
+      },
+      {
+        "backend": {
+          "backend_capabilities": [
+            "device_timestamp",
+            "gpio_control",
+            "overflow_telemetry",
+            "uart_receive",
+            "uart_send"
+          ],
+          "capabilities": [
+            "device_timestamp",
+            "gpio_control",
+            "overflow_telemetry",
+            "uart_receive",
+            "uart_send"
+          ],
+          "capability_policy": {
+            "uart_send": {
+              "source": "hardware.uart.tx_enabled",
+              "tx_policy_enabled": true
+            }
+          },
+          "device": "dutchmate-rp2350",
+          "firmware": "gp28safe-1",
+          "mode": "enhanced",
+          "port": "/dev/cu.usbmodem11401"
+        },
+        "end_reason": "service_shutdown",
+        "ended_at": "2026-11-20T18:12:56Z",
+        "first_timestamp_us": 0,
+        "last_timestamp_us": 260284629,
+        "segment_id": 1,
+        "start_reason": "reconnect",
+        "started_at": "2026-11-20T18:08:35Z",
+        "timestamp": {
+          "clock": "rp2350_timer",
+          "event_granularity": "uart_event",
+          "observation_point": "debug_helper_uart_receive",
+          "origin": "segment_start",
+          "source": "device",
+          "source_origin_us": 3087525,
+          "unit": "us"
+        }
+      }
+    ]
+  },
+  "backpressure": {
+    "requested_service_pause_s": 0.25,
+    "measured_signal_interval_s": 0.25507291599933524,
+    "bytes": 94299,
+    "count": 4096,
+    "checksum": 8386560,
+    "raw_sha256": "efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8",
+    "exact": true,
+    "reported_dropped_bytes": 0,
+    "reported_overflow_events": 0,
+    "ring_high_water_bytes": 6604,
+    "monitor": {
+      "outcome": "timeout",
+      "deadline_s": 20.0,
+      "terminal_evidence_seq": 12345,
+      "end_marker_last_evidence_seq": 12512,
+      "end_marker_admitted_after_terminal": true,
+      "source_stream_span_s": 8.606316,
+      "host_recorded_span_approximately_s": 20,
+      "interpretation": "Exact bytes arrive durably after bounded deadline. Observed downstream admission lag; no matcher defect inferred. Per-event recorder transactions are a candidate, not profiled root cause."
+    },
+    "500ms_profile": "Not run after the observed admission lag; original timeout and harness source preserved"
+  },
+  "evidence_quality": {
+    "backend_integrity": {
+      "dropped_bytes": 0,
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer"
+    },
+    "local_recording": "complete"
+  },
+  "prior_files_verified_unchanged": 843,
+  "shutdown_ownership_verified": true,
+  "remaining_boundary": "UART waveform/signal-integrity and loaded debugger rail isolation/remaining physical sequencing remain open; no scope/analyzer today. Admission performance requires investigation; no code fix made.",
+  "archive": {
+    "file": "20261120-kicad-rev-a-boot-reconnect-evidence.tar.gz",
+    "bytes": 224181,
+    "sha256": "b9184d7407d37e52a4984f0ca62dc4d7220dfcb40362a28b908c05e14a93eb8f",
+    "member_hashes_verified": 20
+  }
+}

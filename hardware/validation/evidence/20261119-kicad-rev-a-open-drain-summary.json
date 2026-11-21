@@ -1,0 +1,98 @@
+{
+  "operator_date": "2026-11-19",
+  "board": "operator-identified manufactured KiCad Rev-A",
+  "firmware_hello": "gp28safe-1",
+  "device_serial": "FA63A4D787572B33",
+  "method": "Direct electrical bench, open-drain active-low, nominal 10 kΩ external VIO-to-control pull-up; USB powered; PPK2 Source Meter setting 1875 mV; Fluke 115 DC volts; fresh 10-second current averages with probes removed; DUT absent",
+  "measurements": [
+    {
+      "channel": "CTRL0",
+      "j1_pin": 3,
+      "asserted": {
+        "dut_vio_v": 1.868,
+        "control_v": 0.037,
+        "average_current_uA": 690
+      },
+      "released": {
+        "dut_vio_v": 1.855,
+        "control_v": 1.838,
+        "average_current_uA": 20
+      }
+    },
+    {
+      "channel": "CTRL1",
+      "j1_pin": 4,
+      "asserted": {
+        "dut_vio_v": 1.868,
+        "control_v": 0.037,
+        "average_current_uA": 690
+      },
+      "released": {
+        "dut_vio_v": 1.856,
+        "control_v": 1.834,
+        "average_current_uA": 20
+      }
+    },
+    {
+      "channel": "CTRL2",
+      "j1_pin": 5,
+      "asserted": {
+        "dut_vio_v": 1.868,
+        "control_v": 0.037,
+        "average_current_uA": 690
+      },
+      "released": {
+        "dut_vio_v": 1.856,
+        "control_v": 1.835,
+        "average_current_uA": 20
+      }
+    },
+    {
+      "channel": "CTRL3",
+      "j1_pin": 6,
+      "asserted": {
+        "dut_vio_v": 1.868,
+        "control_v": 0.037,
+        "average_current_uA": 690
+      },
+      "released": {
+        "dut_vio_v": 1.857,
+        "control_v": 1.834,
+        "average_current_uA": 20
+      }
+    }
+  ],
+  "corrections": [
+    "CTRL0 initial 0.37 V explicitly corrected by operator to 0.037 V; original report preserved in Markdown evidence."
+  ],
+  "scope": "Static assertion/release at recorded supply/load points only; not all-voltage, transient, calibrated leakage, v2 service/HIL or full board acceptance.",
+  "logs": [
+    {
+      "file": "20261119-kicad-rev-a-control-bench.jsonl",
+      "sha256": "21247ee39a836635d0e55f9dd812c129a52720225309542b2678a46246310fa5",
+      "records": 1443,
+      "commands_with_successful_responses": 11,
+      "source_sha256": "0fa5e7d51fa915eaaec7d9107053fe87a367be852889a64ca93c113af45a42c2",
+      "source_hash_verified": true,
+      "closed_utc": "2026-11-19T21:15:42.577330+00:00",
+      "port_closed": true,
+      "dtr_deasserted": true
+    },
+    {
+      "file": "20261119-kicad-rev-a-control-bench-2.jsonl",
+      "sha256": "ea2499eb5ab9d8390ee1ca41ec95303c208f12e608d4334b3a47a7272becd7e4",
+      "records": 627,
+      "commands_with_successful_responses": 6,
+      "source_sha256": "e5779c730ac067ec34a41633acb7c6443b987db02e9037af71df678a370e154e",
+      "source_hash_verified": true,
+      "closed_utc": "2026-11-19T21:26:05.745686+00:00",
+      "port_closed": true,
+      "dtr_deasserted": true
+    }
+  ],
+  "host_cleanup": {
+    "serial_owner_after_close": false,
+    "tcp_2040_listener_after_close": false
+  },
+  "physical_shutdown": "PPK2 output off then USB disconnect requested from operator; not yet confirmed"
+}

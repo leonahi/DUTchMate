@@ -1,0 +1,70 @@
+{
+  "operator_date": "2026-11-20",
+  "board": "operator-identified manufactured KiCad Rev-A",
+  "firmware_hello": "gp28safe-1",
+  "device_serial": "FA63A4D787572B33",
+  "channel": "CTRL0",
+  "j1_pin": 3,
+  "method": "Direct USB bench, push_pull active high/idle low, nominal external 10 kΩ signal-to-GND load, USB connected, DUT absent, Fluke 115 DC volts and fresh 10-second probes-removed PPK2 averages.",
+  "points": [
+    {
+      "requested_ppk2_mV": 2575,
+      "high": {
+        "dut_vio_v": 2.55,
+        "control_v": 2.5,
+        "average_current_uA": 900
+      },
+      "low": {
+        "dut_vio_v": 2.56,
+        "control_v": 0.0,
+        "average_current_uA": 665
+      }
+    },
+    {
+      "requested_ppk2_mV": 3325,
+      "high": {
+        "dut_vio_v": 3.31,
+        "control_v": 3.24,
+        "average_current_uA": 1140,
+        "reported_current": "1.14 mA"
+      },
+      "low": {
+        "dut_vio_v": 3.31,
+        "control_v": 0.0,
+        "average_current_uA": 832
+      }
+    },
+    {
+      "requested_ppk2_mV": 5000,
+      "high": {
+        "dut_vio_v": 4.94,
+        "control_v": 4.84,
+        "pico_3v3_v": 3.277,
+        "average_current_uA": 1730,
+        "reported_current": "1.73 mA"
+      },
+      "low": {
+        "dut_vio_v": 4.95,
+        "control_v": 0.0,
+        "average_current_uA": 1200,
+        "reported_current": "1.20 mA"
+      }
+    }
+  ],
+  "scope": "Representative static HIGH/LOW observations at recorded actual supply/load points only; not exact 2.500/3.300/5.000 V endpoints, calibrated leakage, pull-up-loaded LOW, transient, all-channel voltage/load/temperature, v2 service/HIL or complete board acceptance.",
+  "log": {
+    "file": "20261120-kicad-rev-a-push-pull-bench-5.jsonl",
+    "sha256": "4b6de4a3641f71c9cb2f898eb5bc028b5192e2c4ac9d11b458cf70dfb09bb71b",
+    "records": 1073,
+    "commands_with_successful_responses": 7,
+    "source_sha256": "e5aa889523fefd71316e85e0e4079234bedd5d750cac914e26f739d1666c1f8b",
+    "source_hash_verified": true,
+    "port_closed": true,
+    "dtr_deasserted": true,
+    "closed_utc": "2026-11-20T16:43:34.201962+00:00"
+  },
+  "cleanup_at_end_of_range_sweep": {
+    "serial_owner_after_close": false,
+    "tcp_2040_listener_after_close": false
+  }
+}
