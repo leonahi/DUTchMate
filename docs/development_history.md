@@ -9,6 +9,23 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Committed Validation Baselines Reconciled — 2026-11-21
+
+- GP28 firmware/initial board evidence committed locally as `f761c40cdc0d584332f46ea858e2e8e1373de0af`.
+  Its exact staged snapshot passed 1,877 tests/51.77 s, Ruff and mypy103;
+  normal/readback/stack build checks and retained UF2 hashes verified.
+- Host transaction batching and Nov-21 evidence committed locally as `0e483340565e3bd76f8559f6bba57e302b4a1820`.
+  Fresh full gate passed 1,893 tests/51.04 s, Ruff, mypy103, offline lock66 and
+  diff check. Replay and prior live baseline/250/500 ms results are retained.
+- Current status now references those code commits. Original capture/build
+  manifests keep their historical source bases and working-tree provenance;
+  raw evidence and archives were not rewritten after commit creation.
+- Separate operator PCB layout/project files remain unstaged and byte-for-byte
+  unchanged. No push, flash, service startup or new hardware actuation.
+  Phase 1B/full manufactured-board electrical acceptance remains incomplete.
+- This final reconciliation changes status/history only; whitespace checks
+  passed and code hashes remain identical to the verified software/live slice.
+
 ## Host Recorder Commit Preparation Verification — 2026-11-21
 
 - After the isolated firmware commit, ran the full combined suite again:

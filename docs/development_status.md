@@ -31,7 +31,7 @@
 > KiCad/branding review base: `3544b2f`; reviewed source and evidence committed together under `Update Rev-A KiCad design and add DUTchMate branding`
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
-> Host admission fix base: same `9914d62`; bounded UART transactions included in this host-fix slice, software/replay and live baseline/250/500 ms verified 2026-11-21; commit reference reconciled after creation
+> Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
 > Documentation state reviewed: 2026-11-21
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -42,32 +42,29 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Recording delay fixed and verified live. Baseline,
-  255/505 ms pauses all byte-exact, matched within unchanged 20 s, zero drops.
+- **Current milestone:** GP28 startup and host recording fixes committed locally.
+  Live baseline/255/505 ms pauses byte-exact, matched within 20 s, zero drops.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
-- **Development policy:** [Phase 1 specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
-  permits continued software/behavioral work with the legacy EAGLE board as a
-  functional Enhanced HIL fixture. Historical electrical gaps remain unresolved.
+- **Development policy:** [Specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
+  permits legacy EAGLE functional HIL; its electrical gaps remain unresolved.
 - **MCP acceptance:** Strict Inspector and applicable pinned conformance pass;
   VS Code registration saved; VS Code tool use and Claude Code host checks unavailable.
 - **Next step:** Resume remaining electrical checks when a secure helper 3.3 V
   load connection and oscilloscope are available; no further software fix selected.
 - **Hardware step:** Last confirmed both USB on, GP2 normal, UART/reset/boot
   wiring and 10 kΩ reset pull-up fitted; PPK2 off/VOUT removed. Reconfirm before
-  resuming. Pin 36 remains probe-only; no scope/analyzer today or separate 3.3 V test point.
+  resuming. No scope/analyzer at the Nov-21 session; pin 36 remains probe-only
+  and there is no separate helper 3.3 V test point.
   [Board evidence](../hardware/validation/phase1_kicad_rev_a.md) retains prior
   extra boots and no recurrence in the 30.05 s probes-off repeat; cause unproven.
 - **Hardware gate:** Phase 1A stays Complete; Phase 1B, Stage 8 and Phase 1 stay
   incomplete until required manufactured KiCad Rev-A physical validation passes.
-- **Manual hardware work:** Layout/routing, DFM, fabrication preparation, Gerber
-  review and manufacturing submission remain hardware-designer activities
-  outside the agent workflow; no repository-driven PCB/DFM task or gate.
-- **Historical prototype:** Pull-up blocker #1 stays **Satisfied**: nominal
-  10 kΩ axial resistor/jumper, approximately 9.9 kΩ, from DUT_VIO (J3 pin 8)
-  to DUT_UART_TX (J1 pin 4), before historical R16. UART electrical/oscilloscope
-  evidence remains unresolved; functional HIL does not close that gap.
+- **Manual hardware work:** Layout, DFM and fabrication remain designer work
+  outside the agent workflow; no repository-driven PCB/DFM gate.
+- **Historical prototype:** Pull-up blocker #1 stays **Satisfied**; its original
+  EAGLE UART oscilloscope gap remains open and gives no KiCad electrical acceptance.
 - **Evidence boundary:** Legacy functional HIL, historical EAGLE validation,
   KiCad source review and manufactured-board acceptance remain distinct (§4.1).
 - **GP28 firmware boundary:** Normal source now always disables digital controls
@@ -184,7 +181,7 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 | GP28 ADC input-buffer setting | Normal `gp28safe-1` startup fix verified at prior setup. VIO-first repeat gives GP28 0.907 V at VIO 1.855 V; earlier 0 V report not reproduced, cause unassigned. USB-first 0.911 V retained; no new firmware change justified. Experiments archived; ADC sensing unimplemented |
 | Source/schematic review | Complete; no hardware validation or fabrication acceptance established |
 | PCB/DFM/fabrication preparation | Manual hardware-designer work outside the agent workflow; no repository review task or acceptance gate |
-| Manufactured KiCad Rev-A validation | Nov-21 host recording delay fixed, full 1,893-test gate passed. Live baseline/255/505 ms service pauses all retain exact 94,299-byte SUSTAIN/4,096 sequence lines/checksum, matched within unchanged 20 s and zero drops; BOOT/INFO/post-stress PING passed. Prior controls, UART loopbacks, overflow accounting, handoff, boot roles and automatic reconnect retained. Both old failures and fresh archives preserved; service closed. No scope/analyzer; pin 36 probe-only and no separate helper 3.3 V test point. UART waveforms, loaded helper-rail isolation and remaining sequencing await instrument/load access. No full board acceptance |
+| Manufactured KiCad Rev-A validation | GP28 fix `f761c40` and host fix `0e48334` committed locally. Nov-21 host recording delay fixed, full 1,893-test gate passed. Live baseline/255/505 ms service pauses all retain exact 94,299-byte SUSTAIN/4,096 sequence lines/checksum, matched within unchanged 20 s and zero drops; BOOT/INFO/post-stress PING passed. Prior controls, UART loopbacks, overflow accounting, handoff, boot roles and automatic reconnect retained. Both old failures and fresh archives preserved; service closed. No scope/analyzer; pin 36 probe-only and no separate helper 3.3 V test point. UART waveforms, loaded helper-rail isolation and remaining sequencing await instrument/load access. No full board acceptance |
 
 ## Current Validation Requirements
 
