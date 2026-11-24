@@ -9,6 +9,29 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Report-Only DUT_VIO Contract Draft — 2026-11-24
+
+- User approved report-only sensing and the in-chat design after software fixes
+  were committed. Authored `docs/dut_vio_sensing_contract.md` as the focused
+  extension contract and linked it from the documentation index. No additional
+  Phase 1 done criterion, output gating, EVENT capture or Debug Agent work.
+- Verified the GP28/ADC2 divider against the KiCad mapping and the pinned Zephyr
+  4.4.2 ADC driver/pinctrl sources. The default board ADC group includes GP26,
+  which owns CTRL2 enable; the contract therefore requires GP28-only pinctrl and
+  the existing digital-disable-before-ISO-release sequence. Checked integer
+  scaling against Zephyr's 12-bit denominator and hand-derived conversion vectors.
+- Specified nominal versus measured ADC-reference provenance, asynchronous
+  sampling/deadline/late-completion behavior, opt-in per-epoch telemetry, strict
+  wire fields and compatibility, transactional hardware evidence, segment-bound
+  live state, receipt-age semantics and stale/error reporting. Source inspection
+  confirmed generic v2 primary record counting/order/tail behavior; compatibility
+  remains an implementation acceptance test, not a newly claimed test pass.
+- Self-review covered scope, ambiguity, failure states, existing control/UART
+  invariants and acceptance criteria. Local links/anchors, source consistency,
+  CAD hash preservation and `git diff --check` passed. Documentation only; no
+  code suite rerun, build, flash, service/serial access or hardware acceptance.
+  Prior 1,899-test code gate remains the last executed software gate.
+
 ## Committed Software Follow-Up Baseline — 2026-11-24
 
 - Reconnect-test synchronization and load-profile CLI migration committed locally
