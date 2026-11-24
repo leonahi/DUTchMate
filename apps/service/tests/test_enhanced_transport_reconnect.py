@@ -3,6 +3,7 @@
 import json
 import time
 from contextlib import suppress
+from threading import Event
 
 import pytest
 from enhanced_serial_fixture import PipeSerial
@@ -73,6 +74,19 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
     client = TestClient(create_app(runtime=runtime, profile=profile))
     recorder = runtime._evidence_recorder
     session = recorder.active_session_id
+    failure_pending = Event()
+    allow_failure_publication = Event()
+    owner = runtime._backend_reconnect
+    original_retain_close_error = owner._retain_close_error
+
+    def retain_close_error_after_status_read(error):
+        # Hold the real coordinator at the known recorder/diagnostic handoff.
+        failure_pending.set()
+        assert allow_failure_publication.wait(2), "test did not release diagnostic publication"
+        original_retain_close_error(error)
+
+    if close_mode != "closed":
+        monkeypatch.setattr(owner, "_retain_close_error", retain_close_error_after_status_read)
 
     def records(artifact):
         return [
@@ -81,14 +95,25 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
 
     try:
         resources[0].disconnect()
+        if close_mode != "closed":
+            assert failure_pending.wait(2), "cleanup failure did not reach coordinator"
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             status = client.get("/status").json()
-            if status["connection_state"] == "faulted":
+            if failure_pending.is_set() and not allow_failure_publication.is_set():
+                assert status["connection_state"] == "faulted"
+                assert status.get("connection_error") is None
+                allow_failure_publication.set()
+            if (
+                status["connection_state"] == "faulted"
+                and status.get("connection_error") is not None
+            ):
                 break
             if status["connected"] and status["timestamp_provenance"]["segment_id"] == 1:
                 break
             time.sleep(0.001)
+        else:
+            pytest.fail(f"Reconnect did not publish a complete terminal outcome: {status}")
         connection = records("connection_events.jsonl")
         assert [r["type"] for r in connection[:3]] == [
             "connected",
@@ -141,6 +166,7 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
                     runtime.close()
                 assert cleanup.value is resources[0].read_error
     finally:
+        allow_failure_publication.set()
         client.close()
         with suppress(Exception):
             runtime.close()

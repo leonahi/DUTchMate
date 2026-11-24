@@ -32,7 +32,7 @@
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
-> Documentation state reviewed: 2026-11-21
+> Documentation state reviewed: 2026-11-24
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -42,8 +42,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** GP28 startup and host recording fixes committed locally.
-  Live baseline/255/505 ms pauses byte-exact, matched within 20 s, zero drops.
+- **Current milestone:** Reconnect-test synchronization and load-profile CLI
+  migration ready for commit on `8841ffa`; fresh 1,899-test gate passes.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -51,8 +51,9 @@ Read this document first whenever development resumes.
   permits legacy EAGLE functional HIL; its electrical gaps remain unresolved.
 - **MCP acceptance:** Strict Inspector and applicable pinned conformance pass;
   VS Code registration saved; VS Code tool use and Claude Code host checks unavailable.
-- **Next step:** Resume remaining electrical checks when a secure helper 3.3 V
-  load connection and oscilloscope are available; no further software fix selected.
+- **Next software step:** Define the selected DUT_VIO voltage-sensing slice and its contract.
+- **Hardware step prerequisite:** Secure helper 3V3 load access and an oscilloscope
+  are still needed for the remaining electrical checks.
 - **Hardware step:** Last confirmed both USB on, GP2 normal, UART/reset/boot
   wiring and 10 kΩ reset pull-up fitted; PPK2 off/VOUT removed. Reconfirm before
   resuming. No scope/analyzer at the Nov-21 session; pin 36 remains probe-only
@@ -71,14 +72,13 @@ Read this document first whenever development resumes.
   before ISO release. Old experiments archived; optional readback only. No ADC sensing.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation:** Fresh pre-commit 1,893 tests/51.04 s, Ruff, mypy103, lock66
-  and diff pass.
-  Replay 20.282→0.467 s; live 283,040 bytes/36,116 records reconciled; archives
-  and patch verified. Code graph refreshed (existing C-header extraction warning).
+- **Validation (Nov 24):** Pre-commit 1,899 tests/52.47 s; load-runner/CLI focused 9 pass.
+  Reconnect repeats/80 cases retained. Ruff, mypy/103, offline lock/66 and diff pass.
 - **Ownership:** Live session `20261121T174635Z-56780735` closed normally;
   PID 3395/listener/serial released. Prior failed timeout retained, firmware unchanged.
   DELAYFAULT unsupported in old fixture. Full physical/electrical gate remains open.
-- **Follow-up:** Legacy load-profile script and reconnect-test synchronization; see audit below.
+- **Follow-up checklist:** Reconnect-test synchronization and load-profile CLI
+  migration complete. Original observations retained in the audit below.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 
 Update the review date, current milestone, next step, checklist, and concise
@@ -193,9 +193,10 @@ release records received scope banners only; their original bodies and all
 prior history remain unchanged. Product/Phase 1 requirements, acceptance tables,
 MCP catalog/acceptance policy and hardware design are unchanged. Verified 53
 documented commands with inert callbacks, route/catalog/status shapes and local
-links/anchors. Current known follow-ups: historical `run_load_profile.py` uses
-retired `send --force`; a reconnect test can sample recorder `faulted` before
-coordinator `connection_error` publication. Neither code/test issue was changed.
+links/anchors. At that audit, historical `run_load_profile.py` used retired
+`send --force`, and a reconnect test could sample recorder `faulted` before
+coordinator `connection_error` publication. Neither issue was changed by that
+documentation audit; the current disposition is recorded in Resume Here.
 Focused tests: **533 passed in 12.77 s**; isolated reconnect variants **4 passed
 in 0.40 s**. Initial full run: **1 failed/1,871 passed in 58.35 s** at that
 publication window; temporary instrumentation reproduced it. Unmodified full

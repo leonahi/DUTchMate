@@ -9,6 +9,71 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Reconnect and Load-Profile Commit Verification — 2026-11-24
+
+- User requested committing both verified fixes before moving to DUT_VIO sensing.
+  Fresh full pytest: **1,899 passed in 52.47 s**; Ruff, mypy (103 source files),
+  offline lock check (66 packages) and `git diff --check` passed.
+- Reviewed the six-file software/test/documentation scope. Separate operator
+  KiCad PCB/project files retain their recorded SHA-256 hashes and are excluded.
+  No service startup, serial access, firmware flash or push.
+- DUT_VIO sensing is selected for contract/scope review after the commit;
+  sensing implementation has not started and hardware acceptance remains open.
+
+## Load-Profile Runner CLI Migration — 2026-11-24
+
+- Source base: local `main` at `8841ffa`, retaining the preceding uncommitted
+  reconnect-test slice. Updated `run_load_profile.py` to send SUSTAIN/BURST with
+  explicit `--line-ending lf` instead of retired `--force`. UART TX remains
+  governed by the running service's DUT Profile; no policy/configuration change.
+- Added six hardware-free regression cases that run the script's entrypoint and
+  real CLI/client against an HTTP test transport, replacing the slow capture
+  subprocess. Both commands are checked for the explicit LF request; policy
+  rejection and capture failure must retain their result codes/output and make
+  the runner exit nonzero. The old command failed all six cases because the CLI
+  rejected `--force` before sending a request (6 failed in 0.28 s).
+- After correction, runner/CLI focused tests: **9 passed in 0.52 s**. Full pytest:
+  **1,899 passed in 52.43 s**. Ruff, mypy (103 source files), offline lock check
+  (66 packages), script `--help` and `git diff --check` passed. Existing measured
+  pause logic, deadlines and result schema are unchanged.
+- Updated the firmware README with the local-service/TX prerequisite, controlled
+  pause invocation and result limits. Successful process completion alone does
+  not establish byte/sequence/checksum or loss acceptance. Historical evidence
+  remains unchanged; no service startup, pause signal, serial access or physical
+  validation was performed during this slice.
+- Separate operator PCB/project files retain their captured SHA-256 hashes;
+  preceding reconnect changes are preserved. Changes remain uncommitted; no push.
+  Phase 1B/Stage 8/Phase 1 hardware gates remain incomplete and Phase 4 paused.
+
+## Reconnect Test Publication Synchronization — 2026-11-24
+
+- Source base: local `main` at `8841ffa`. The existing Enhanced transport test
+  could observe recorder `faulted` before the reconnect coordinator published
+  `connection_error`, then raise `KeyError` while inspecting the diagnostic.
+  Confirmed the separate publication paths in recorder, coordinator and runtime;
+  production behavior did not require a change.
+- Added an event gate to the existing parametrized integration test in
+  `apps/service/tests/test_enhanced_transport_reconnect.py`. It pauses the real
+  coordinator immediately before diagnostic publication, verifies an actual
+  HTTP status snapshot with `faulted` and no diagnostic, then releases it.
+  The original wait predicate reproduced the exact failure deterministically:
+  **3 failed/1 passed in 0.52 s**, covering failed/incomplete/unknown cleanup.
+- Corrected the poll to wait for both fault state and a published diagnostic,
+  with an explicit timeout failure. The successful reconnect path, original
+  2-second poll deadline, configured 5-second reconnect timeout, cleanup/error
+  identity assertions, replacement-ownership checks and profile ACK ordering
+  remain intact. The gate is released during teardown even after assertion failure.
+- Focused transport/control/connection lifecycle tests: **34 passed in 6.24 s**.
+  Twenty fresh-process repeats: **80 parameter cases passed**, including 60
+  deliberately delayed failure publications. Full pytest: **1,893 passed in
+  50.03 s**. Ruff, mypy (103 source files), offline lock check (66 packages),
+  and `git diff --check` passed.
+- Scope is the test and status/history documentation. No production, protocol,
+  firmware, dependency or architecture change; no physical hardware access.
+  Separate operator PCB/project edits retain their captured SHA-256 hashes.
+  Changes remain uncommitted; no push. Existing hardware acceptance boundaries
+  and the paused Phase 4 are unchanged.
+
 ## Committed Validation Baselines Reconciled — 2026-11-21
 
 - GP28 firmware/initial board evidence committed locally as `f761c40cdc0d584332f46ea858e2e8e1373de0af`.
