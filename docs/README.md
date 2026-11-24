@@ -17,7 +17,7 @@ its pre-v2 baseline as the current implementation.
 | [Development history](development_history.md) | Append-only completed-slice and validation record; not a progress tracker. |
 | [Project context](project_context.md) | Durable product scope, safety, invariants, and phase definitions. |
 | [Phase 1 implementation specification](phase1_implementation_spec.md) | Normative Phase 1 backend, API, session, protocol, test, and done criteria. |
-| [DUT_VIO sensing contract](dut_vio_sensing_contract.md) | Proposed report-only voltage extension: ADC/reference provenance, negotiated protocol, durable evidence, status and acceptance criteria. |
+| [DUT_VIO sensing contract](dut_vio_sensing_contract.md) | Report-only voltage extension: ADC/reference provenance, negotiated protocol, durable evidence, status and acceptance criteria. |
 | [Phase 1 v2 migration plan](dutchmate_phase1_v2_coding_agent_plan.md) | Migration-time baseline, staged acceptance scenarios and implementation rationale; current progress belongs only in status. |
 | [Software architecture](software_architecture.md) | Python data flow, module ownership, and dependency boundaries. |
 | [Developer guide](developer_guide.md) | Workspace setup, commands, package boundaries, and contribution workflow. |

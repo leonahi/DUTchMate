@@ -9,6 +9,27 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## DUT_VIO Written Contract Approval and Implementation Planning — 2026-11-24
+
+- User approved the written report-only contract committed at `4880590`.
+  Marked that contract as approved without changing its behavior, and authored
+  the temporary `docs/dut_vio_sensing_implementation_plan.md` from actual callers,
+  firmware thread/ACK handoff, source initialization and store/tail consumers.
+- Seven coherent tasks cover typed protocol/value contracts, ADC state and pin
+  setup, firmware negotiation/output, durable storage, host lifecycle, delivery
+  and integrated verification/artifacts. Durable support precedes enabling host
+  negotiation; actual current/staged sources receive initialization after profile
+  controls, avoiding stale initial-host callbacks and an extra serial owner.
+- Review cases include same-read ACK/sample dispatch, late ADC completion across
+  timeout/epoch boundaries, delayed admission/rollover age, ordered UART drain,
+  strict old/new compatibility and preserved historical evidence. The plan
+  references the approved contract rather than restating its wire/status tables.
+- Self-review checked contract coverage, shared interface/type names, source paths,
+  step ordering and plan size. Documentation links/anchors, whitespace, execution
+  commands and operator CAD hashes verified; no code suite, firmware build/flash,
+  service startup, hardware access or delegated agent work occurred. Implementation
+  and physical acceptance were not claimed. Last code gate remains 1,899 tests.
+
 ## Report-Only DUT_VIO Contract Draft — 2026-11-24
 
 - User approved report-only sensing and the in-chat design after software fixes

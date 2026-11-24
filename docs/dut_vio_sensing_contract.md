@@ -1,6 +1,6 @@
 # DUT_VIO Voltage-Sensing Contract
 
-> Proposed contract for the approved report-only design, 2026-11-24.
+> Approved report-only design contract, 2026-11-24.
 > This document defines the extension, not its implementation or acceptance status.
 > Current progress and review state belong only in [Development Status](development_status.md).
 
