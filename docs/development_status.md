@@ -43,8 +43,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Reconnect-test/load-profile fixes committed as `81ab6f8`;
-  selected DUT_VIO sensing is in scope/contract review; implementation not started.
+- **Current milestone:** Report-only DUT_VIO concept approved; written sensing
+  contract drafted for review. Implementation has not started; code base `81ab6f8`.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
@@ -52,7 +52,8 @@ Read this document first whenever development resumes.
   permits legacy EAGLE functional HIL; its electrical gaps remain unresolved.
 - **MCP acceptance:** Strict Inspector and applicable pinned conformance pass;
   VS Code registration saved; VS Code tool use and Claude Code host checks unavailable.
-- **Next software step:** Define the selected DUT_VIO voltage-sensing slice and its contract.
+- **Next software step:** Review the [sensing contract](dut_vio_sensing_contract.md),
+  then prepare the implementation plan after written-contract approval.
 - **Hardware step prerequisite:** Secure helper 3V3 load access and an oscilloscope
   are still needed for the remaining electrical checks.
 - **Hardware step:** Last confirmed both USB on, GP2 normal, UART/reset/boot
@@ -73,13 +74,12 @@ Read this document first whenever development resumes.
   before ISO release. Old experiments archived; optional readback only. No ADC sensing.
 - **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
 - **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation (Nov 24):** Pre-commit 1,899 tests/52.47 s; load-runner/CLI focused 9 pass.
-  Reconnect repeats/80 cases retained. Ruff, mypy/103, offline lock/66 and diff pass.
+- **Validation (Nov 24):** Contract/source consistency, local links and diff checked;
+  no code tests rerun for prose. Prior code gate: 1,899 tests/52.47 s, Ruff/mypy/lock pass.
 - **Ownership:** Live session `20261121T174635Z-56780735` closed normally;
   PID 3395/listener/serial released. Prior failed timeout retained, firmware unchanged.
   DELAYFAULT unsupported in old fixture. Full physical/electrical gate remains open.
-- **Follow-up checklist:** Reconnect-test synchronization and load-profile CLI
-  migration complete. Original observations retained in the audit below.
+- **Follow-up checklist:** Reconnect/load-runner fixes complete; sensing contract awaiting review.
 - **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
 
 Update the review date, current milestone, next step, checklist, and concise
