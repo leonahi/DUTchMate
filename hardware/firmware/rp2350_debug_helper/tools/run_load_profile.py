@@ -1,4 +1,7 @@
-"""Run a 15 s Pico 1 synthetic UART profile with an optional host pause."""
+"""Run a 15 s Pico 1 synthetic UART profile with an optional host pause.
+
+The running service's DUT Profile must already enable UART TX.
+"""
 
 import argparse
 import json
@@ -39,7 +42,7 @@ def main() -> None:
     try:
         time.sleep(0.5)
         send_result = subprocess.run(
-            [str(cli), "send", args.command, "--force"],
+            [str(cli), "send", args.command, "--line-ending", "lf"],
             cwd=repo_root,
             env=environment,
             capture_output=True,

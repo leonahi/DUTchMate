@@ -268,10 +268,22 @@ bounded Interact with explicit LF against the already-running Enhanced service:
 
 These commands do not perform a host-stall experiment. Backpressure acceptance
 still requires controlled, measured pauses and the recorded provenance below.
-The retained `tools/run_load_profile.py` is historical tooling: it invokes the
-retired `send --force` option and cannot drive the current CLI. Updating that
-tool is separate code work; do not treat its command as a working v2 procedure.
-The historical load/stack measurements remain unchanged.
+For a controlled host pause, use `tools/run_load_profile.py` with the local
+service already running and `hardware.uart.tx_enabled = true` in its DUT Profile:
+
+```bash
+"$repo_root/.venv/bin/python" \
+  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
+  SUSTAIN --stall-ms 250 --out "$repo_root/build/sustain-pause-250.json"
+```
+
+The runner starts a 15-second capture, sends `SUSTAIN` or `BURST` once with
+explicit LF, and pauses/resumes the service PID recorded in `.dutchmate`.
+It records measured pause duration and both CLI results; a rejected send or
+failed capture exits nonzero. It does not override TX policy. A successful exit
+alone does not establish byte/sequence/checksum or loss acceptance; inspect the
+session evidence against the profile criteria. Historical load/stack measurements
+remain unchanged; updating the runner does not establish fresh physical validation.
 
 Keeping the build at this repository-relative path also supplies the
 `compile_commands.json` used by the root `.clangd` configuration. After the
