@@ -9,6 +9,15 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## Committed Software Follow-Up Baseline — 2026-11-24
+
+- Reconnect-test synchronization and load-profile CLI migration committed locally
+  as `81ab6f8` after the fresh 1,899-test gate. Commit contains exactly the six
+  reviewed software/test/documentation files; operator KiCad files are excluded.
+- Reconciled the code-baseline reference in status after commit creation.
+  Whitespace checks passed; verified software is unchanged. No push or hardware
+  action. DUT_VIO sensing contract review follows as separately selected work.
+
 ## Reconnect and Load-Profile Commit Verification — 2026-11-24
 
 - User requested committing both verified fixes before moving to DUT_VIO sensing.

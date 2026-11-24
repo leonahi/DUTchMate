@@ -32,6 +32,7 @@
 > KiCad corrections/source review: merged into `main` via PR #3 at `f1c61d1` (correction commit `a837f4b`)
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
+> Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
 > Documentation state reviewed: 2026-11-24
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -42,8 +43,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Reconnect-test synchronization and load-profile CLI
-  migration ready for commit on `8841ffa`; fresh 1,899-test gate passes.
+- **Current milestone:** Reconnect-test/load-profile fixes committed as `81ab6f8`;
+  selected DUT_VIO sensing is in scope/contract review; implementation not started.
 - **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
   uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
   and corrected bias networks. Source review establishes no physical acceptance.
