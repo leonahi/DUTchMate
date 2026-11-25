@@ -22,6 +22,14 @@ def test_status_returns_disconnected_runtime_state() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "connected": False,
+        "dut_vio": {
+            "state": "unavailable",
+            "reason": "disconnected",
+            "voltage_mv": None,
+            "age_ms": None,
+            "sample": None,
+            "evidence": None,
+        },
         "connection_state": "disconnected",
         "backend_mode": "enhanced",
         "profile_name": None,
@@ -206,3 +214,31 @@ def test_status_returns_connected_gpio_mapping_state() -> None:
     assert payload["control_channels"]["CTRL0"]["mode"] == "open_drain"
     assert payload["control_channels"]["CTRL0"]["source"] == "config"
     assert payload["control_channels"]["CTRL0"]["device_timestamp_us"] == 123
+
+
+def test_status_preserves_voltage_null_fields_and_evidence():
+    from dataclasses import replace
+
+    from dutchmate_core.dut_vio import DutVioObservation, DutVioSample, project_dut_vio_status
+    from dutchmate_service.schemas import status_payload
+
+    sample = DutVioSample("ok", 0, 0, 3300, "nominal")
+    voltage = project_dut_vio_status(
+        connection_state="connected",
+        capable=True,
+        setup_rejected=False,
+        observation=DutVioObservation(sample, 1, 0.0, "session", 2, 3),
+        now_monotonic=0.125,
+    )
+    status = replace(disconnected_status(), dut_vio=voltage)
+    response = TestClient(create_app(FakeRuntime(status))).get("/status").json()
+    import json
+
+    assert response == json.loads(json.dumps(status_payload(status)))
+    assert response["dut_vio"]["voltage_mv"] == 0
+    assert response["dut_vio"]["reason"] is None
+    assert response["dut_vio"]["evidence"] == {
+        "session_id": "session",
+        "segment_id": 2,
+        "evidence_seq": 3,
+    }

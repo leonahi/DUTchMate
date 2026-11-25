@@ -132,6 +132,84 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
+def test_voltage_health_publishes_only_after_commit_and_clears_on_disconnect(tmp_path, monkeypatch):
+    from dutchmate_core.backends import DutVioEvent
+    from dutchmate_core.dut_vio import DutVioSample
+
+    source = ControlledSource()
+    store = SessionStore(root=tmp_path)
+    entered, release = Event(), Event()
+    original = persistence.append_serialized
+
+    def block(path, data):
+        original(path, data)
+        if path.name == "hardware_events.jsonl":
+            entered.set()
+            assert release.wait(2)
+
+    monkeypatch.setattr(persistence, "append_serialized", block)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=store, profile=_profile(), backend_snapshot=_snapshot()
+    )
+    before = recorder.durable_tail()
+    try:
+        source.publish(DutVioEvent(0, 25, DutVioSample("ok", 2048, 3300, 3300, "nominal"), 1.5))
+        assert entered.wait(1)
+        assert recorder.capture_source_health().dut_vio_observation is None
+        assert recorder.durable_tail() == before
+        release.set()
+        tail = recorder.wait_for_durable_tail(before, timeout_s=1)
+        assert tail is not None
+        sample = recorder.capture_source_health().dut_vio_observation
+        assert sample.sample.voltage_mv == 3300
+        assert sample.received_at_monotonic == 1.5
+        assert sample.session_id == tail.session_id
+        assert sample.evidence_seq == tail.next_evidence_seq - 1
+        source.publish(BackendDisconnectedError("gone"))
+        assert recorder.wait_for_idle_disconnect(1)
+        assert recorder.capture_source_health().dut_vio_observation is None
+        assert source.max_concurrent_reads == 1
+    finally:
+        release.set()
+        recorder.close()
+
+
+def test_voltage_rollover_preserves_receipt_marker_and_current_evidence(tmp_path, monkeypatch):
+    from dutchmate_core.backends import DutVioEvent
+    from dutchmate_core.dut_vio import DutVioSample
+
+    source = ControlledSource()
+    store = SessionStore(root=tmp_path)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=store, profile=_profile(), backend_snapshot=_snapshot()
+    )
+    before = recorder.durable_tail()
+    original = store._v2_unit_fits
+
+    def fits(metadata, *, unit_bytes):
+        return metadata["session_id"] != before.session_id and original(
+            metadata, unit_bytes=unit_bytes
+        )
+
+    monkeypatch.setattr(store, "_v2_unit_fits", fits)
+    try:
+        source.publish(DutVioEvent(0, 25, DutVioSample("ok", 2048, 3300, 3300, "nominal"), 1.5))
+        tail = recorder.wait_for_durable_tail(before, timeout_s=1)
+        assert tail is not None and tail.session_id != before.session_id
+        sample = recorder.capture_source_health().dut_vio_observation
+        assert sample.session_id == tail.session_id
+        assert sample.segment_id == 0
+        assert sample.received_at_monotonic == 1.5
+        record = next(
+            x
+            for x in _read_jsonl(tmp_path / tail.session_id / "hardware_events.jsonl")
+            if x["evidence_seq"] == sample.evidence_seq
+        )
+        assert record["voltage_mv"] == 3300
+    finally:
+        recorder.close()
+
+
 def test_idle_uart_is_durable_and_pattern_projected_without_a_workflow(
     tmp_path: Path,
 ) -> None:
@@ -392,11 +470,14 @@ def test_rollover_does_not_join_partial_lines_across_sessions(
         detail = store.get_session_detail(after_rollover.session_id)
         assert isinstance(detail, V2SessionDetail)
         assert detail.first_error is None
-        assert json.loads(
-            (tmp_path / after_rollover.session_id / "detected_patterns.json").read_text(
-                encoding="utf-8"
+        assert (
+            json.loads(
+                (tmp_path / after_rollover.session_id / "detected_patterns.json").read_text(
+                    encoding="utf-8"
+                )
             )
-        ) == []
+            == []
+        )
     finally:
         recorder.close()
 
@@ -1002,9 +1083,8 @@ def test_queued_group_rolls_over_at_whole_event_boundaries(
         assert len(data) % 16000 == 0
         m = json.loads((p / "metadata.json").read_text())
         assert m["storage"]["evidence_bytes_written"] <= 1048576
-    records = (
-        _read_jsonl(predecessor / "uart_events.jsonl")
-        + _read_jsonl(successor / "uart_events.jsonl")
+    records = _read_jsonl(predecessor / "uart_events.jsonl") + _read_jsonl(
+        successor / "uart_events.jsonl"
     )
     assert len(records) == 40
     assert [r["timestamp_us"] for r in records] == list(range(40))

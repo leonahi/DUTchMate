@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
+from collections.abc import Callable
 from contextlib import suppress
 from typing import Protocol
 
@@ -21,10 +23,12 @@ from dutchmate_core.backends.enhanced import (
     normalize_enhanced_hello,
     normalize_enhanced_message,
 )
+from dutchmate_core.device_connection.commands import ConfigurePowerSenseCommand
 from dutchmate_core.device_connection.errors import ProtocolError
 from dutchmate_core.device_connection.messages import (
     CommandErrorMessage,
     CommandSuccessMessage,
+    DutVioMessage,
     HelloMessage,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
@@ -67,6 +71,7 @@ class AsyncEnhancedSerialAdapter:
         port: str,
         segment_id: int,
         parser: NdjsonStreamParser | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
         read_size: int = DEFAULT_ASYNC_READ_SIZE,
         event_queue_capacity: int = DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY,
     ) -> None:
@@ -80,6 +85,9 @@ class AsyncEnhancedSerialAdapter:
             or event_queue_capacity <= 0
         ):
             raise ValueError("Enhanced event queue capacity must be a positive integer")
+        self._clock = monotonic_clock
+        self._power_sense_enabled = False
+        self._pending_sense_enabled: bool | None = None
         self._reader = reader
         self._writer = writer
         self._port = port
@@ -189,7 +197,7 @@ class AsyncEnhancedSerialAdapter:
                 except ProtocolError as exc:
                     self._set_terminal(backend_input_error_from_protocol(exc))
                     return
-                await self._dispatch_batch(messages)
+                await self._dispatch_batch(messages, received_at_monotonic=self._clock())
                 if self._terminal_error is not None:
                     return
                 if self._parser.terminal_error is not None:
@@ -208,7 +216,9 @@ class AsyncEnhancedSerialAdapter:
         finally:
             await self._close_resource()
 
-    async def _dispatch_batch(self, messages: list[DeviceMessage]) -> None:
+    async def _dispatch_batch(
+        self, messages: list[DeviceMessage], *, received_at_monotonic: float
+    ) -> None:
         info = self._info
         segment = self._segment
         received_hello = False
@@ -230,6 +240,15 @@ class AsyncEnhancedSerialAdapter:
                 info = normalize_enhanced_hello(message, port=self._port)
                 received_hello = True
                 continue
+            if isinstance(message, DutVioMessage) and (
+                "power_sense" not in info.capabilities or not self._power_sense_enabled
+            ):
+                self._set_terminal(
+                    BackendInputError(
+                        "Enhanced voltage observation is not enabled", backend_mode="enhanced"
+                    )
+                )
+                return
             timestamp_us = enhanced_message_timestamp_us(message)
             if timestamp_us is not None:
                 if segment is None:
@@ -243,6 +262,7 @@ class AsyncEnhancedSerialAdapter:
                     message,
                     segment_id=self._segment_id,
                     source_origin_us=segment.timestamp.source_origin_us,
+                    received_at_monotonic=received_at_monotonic,
                 )
                 assert event is not None
                 self._segment = segment
@@ -265,6 +285,18 @@ class AsyncEnhancedSerialAdapter:
                         )
                     )
                     break
+                if self._pending_sense_enabled is not None and isinstance(
+                    message, CommandSuccessMessage
+                ):
+                    if message.timestamp_us is None or message.bytes_accepted is not None:
+                        self._set_terminal(
+                            BackendInputError(
+                                "Enhanced voltage configuration ACK is ambiguous",
+                                backend_mode="enhanced",
+                            )
+                        )
+                        break
+                    self._power_sense_enabled = self._pending_sense_enabled
                 pending.set_result(message)
                 continue
             if self._parser.terminal_error is not None:
@@ -300,6 +332,8 @@ class AsyncEnhancedSerialAdapter:
                     return None
                 info = normalize_enhanced_hello(message, port=self._port)
                 continue
+            if isinstance(message, DutVioMessage):
+                return None
             timestamp_us = enhanced_message_timestamp_us(message)
             if timestamp_us is None:
                 return None
@@ -316,15 +350,29 @@ class AsyncEnhancedSerialAdapter:
     async def request(self, command: bytes, timeout_s: float) -> DeviceMessage:
         """Write one command and wait for the sole reader to route its response."""
 
+        return await self._request(command, timeout_s)
+
+    async def configure_power_sense(self, *, enabled: bool, timeout_s: float) -> bool:
+        """Negotiate observations under the existing serialized command owner."""
+        command = ConfigurePowerSenseCommand(enabled).to_ndjson()
+        if "power_sense" not in self.info.capabilities:
+            raise BackendInputError(
+                "Enhanced helper does not advertise power_sense", backend_mode="enhanced"
+            )
+        response = await self._request(command, timeout_s, sense_enabled=enabled)
+        return isinstance(response, CommandSuccessMessage)
+
+    async def _request(
+        self, command: bytes, timeout_s: float, *, sense_enabled: bool | None = None
+    ) -> DeviceMessage:
         validate_host_command_frame(command)
         _validate_timeout(timeout_s, field="Enhanced command timeout")
         async with self._command_lock:
             self._raise_if_terminal()
-            response: asyncio.Future[DeviceMessage] = (
-                asyncio.get_running_loop().create_future()
-            )
+            response: asyncio.Future[DeviceMessage] = asyncio.get_running_loop().create_future()
             response.add_done_callback(_consume_response_waiter_exception)
             self._pending_response = response
+            self._pending_sense_enabled = sense_enabled
             try:
                 write_task = asyncio.create_task(
                     self._writer.write_frame(command),
@@ -368,6 +416,7 @@ class AsyncEnhancedSerialAdapter:
             finally:
                 if self._pending_response is response:
                     self._pending_response = None
+                    self._pending_sense_enabled = None
 
     def _complete_hello_waiter(self) -> None:
         info = self._info

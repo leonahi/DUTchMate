@@ -27,6 +27,19 @@ config DUTCHMATE_PRODUCTION_BUILD
 
 endmenu
 
+config DUTCHMATE_ADC_REFERENCE_MV
+	int "DUT VIO ADC reference in millivolts"
+	range 2500 3600
+	default 3300
+	help
+	  Voltage at ADC_VREF, not an independently measured internal reference.
+
+config DUTCHMATE_ADC_REFERENCE_MEASURED
+	bool "ADC reference value comes from a retained pin-35 measurement"
+	default n
+	help
+	  Enable only with a retained ADC_VREF measurement and image/board provenance.
+
 config DUTCHMATE_SENSE_PAD_REPORT
 	bool "Report live GP28 pad control in the diagnostic hello identifier"
 	depends on !DUTCHMATE_STACK_PROBE

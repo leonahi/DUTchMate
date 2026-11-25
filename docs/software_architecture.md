@@ -651,3 +651,26 @@ is defined in `docs/mcp_integration_plan.md`.
 
 Testing commands live in `docs/developer_guide.md`; Phase 1 acceptance coverage
 lives in `docs/phase1_implementation_spec.md`.
+
+
+## DUT interface-voltage observations
+
+`core/dut_vio.py` owns immutable sample invariants and pure status policy under
+[the report-only sensing contract](dut_vio_sensing_contract.md). Enhanced protocol
+parsing validates exact integer conversion; the single async serial owner enables
+telemetry after profile controls and marks receipt before bounded event admission.
+`workflows.capture.BackendObservationInitializer` is the optional per-source setup
+boundary. It is independent of device control and is invoked on each staged
+replacement before connection success, including profiles without controls.
+
+The recorder persists `DutVioEvent` as a native-v2 hardware record and publishes
+its sample, original receipt marker and evidence reference in synchronized health
+only after commit. Physical boundaries clear it. An unrelated journal rollover
+also clears the old live reference; an observation that triggers rollover is
+published with its successor reference without refreshing receipt age. Store detail
+and tail validate known voltage fields while older readers retain generic retrieval.
+
+Runtime projects receipt age with its existing injected monotonic clock. Service
+serialization, CLI formatting and the existing MCP `get_status` tool consume this
+one projection. ADC errors, staleness and measured values never change control
+policy, UART integrity, pattern matching or declared `hardware.dut_io_voltage`.

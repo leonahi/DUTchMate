@@ -14,7 +14,7 @@ states, and exposes its initial USB CDC identity:
 - `EVENT0` through `EVENT3` are inputs without internal pulls;
 - EVENT interrupt capture is absent and `gpio_events` is not advertised;
 - GP28/ADC2 has digital input/output and pulls disabled before releasing its
-  pad-isolation latch; ADC voltage sampling is unimplemented;
+  pad-isolation latch; negotiated ADC2 observations report DUT_VIO;
 - the development USB identity is VID/PID `2E8A:000A`, manufacturer
   `DUTchMate`, and product `Debug Helper`;
 - the USB serial descriptor uses the stable board identifier supplied by
@@ -170,9 +170,38 @@ input, output and internal pulls disabled, then clears the RP2350 ISO bit.
 The order matters: the pinned Zephyr `GPIO_DISCONNECTED` path programs the
 controls while setting ISO, whose latches can retain the reset pull-down until
 released. The [RP2350 datasheet §9.7](https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline)
-explains those latches. This initialization keeps the DUT_VIO divider unloaded;
-it does not configure an ADC channel, sample voltage or advertise a new capability.
+explains those latches. This initialization keeps the DUT_VIO divider unloaded.
+ADC initialization follows that safe sequence; the ADC pinctrl override assigns
+only GP28, leaving GP26 (CTRL2 enable) untouched.
 A GPIO configuration error returns before ISO release.
+
+#### Negotiated DUT_VIO observations
+
+The report-only extension follows [the sensing contract](../../../docs/dut_vio_sensing_contract.md).
+Normal firmware advertises `power_sense`; `configure_power_sense` enables or
+stops observations only after its complete ACK. An older host receives no new
+frames. Epoch/DTR loss requires new negotiation. UART and control decisions
+never depend on measured voltage.
+
+The USB owner advances one asynchronous 12-bit ADC2 conversion per second with
+a 20 ms deadline. A timed-out conversion keeps its static buffer until actual
+driver completion, including across disable/reconnect. Late results are discarded.
+Completion timestamps and UART observation barriers preserve source ordering.
+ADC errors and saturation produce explicit observations with no voltage value.
+
+`CONFIG_DUTCHMATE_ADC_REFERENCE_MV` defaults to 3300 (range 2500–3600), and
+`CONFIG_DUTCHMATE_ADC_REFERENCE_MEASURED` defaults off. The integer divider
+conversion is `(raw * reference_mv * 2 + 2048) / 4096`. A measured-reference
+build requires retained measurement of ADC_VREF, physical pin 35, plus image
+provenance. A measurement at pin 36 alone is insufficient. Nominal values are
+approximate; software tests establish no accuracy tolerance.
+
+For the physical campaign, retain source commit, firmware identity/image hash,
+helper identity and reference provenance. At zero and approximately 1.8, 2.5,
+3.3 and 5.0 V, measure actual DUT_VIO with the Fluke, then remove GP28 probes
+before capturing ADC/mV observations with UART active. Use actual measured VIO,
+not a PPK2 setpoint. Confirm the existing wiring and operator access before
+flashing. Physical sensing validation and remaining board acceptance are separate.
 
 #### Optional live pad-control readback
 
@@ -337,8 +366,8 @@ remain scoped to their recorded fixture/build in the validation records;
 current-board acceptance requires the manufactured KiCad campaign under
 [Phase 1 sections 34–35](../../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
 EVENT pins remain safely initialized and reserved, with no capture implementation
-or advertised capability. GP28 voltage sensing is also unimplemented; the
-hardware-defined TMUX2819 isolation does not imply firmware ADC measurements.
+or advertised capability. GP28 observations establish no physical calibration
+or acceptance of TMUX2819 isolation beyond the recorded electrical evidence.
 
 ## Licensing
 

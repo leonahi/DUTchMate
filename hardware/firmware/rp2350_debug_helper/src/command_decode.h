@@ -14,6 +14,7 @@ enum dmh_command_kind {
 	DMH_COMMAND_PULSE_CONTROL,
 	DMH_COMMAND_SET_CONTROL_STATE,
 	DMH_COMMAND_UART_SEND,
+	DMH_COMMAND_CONFIGURE_POWER_SENSE,
 };
 
 enum dmh_command_decode_failure {
@@ -41,6 +42,7 @@ struct dmh_command {
 		uint32_t pulse_ms;
 		enum dmh_control_state control_state;
 		struct dmh_uart_send_command uart_send;
+		bool sense_enabled;
 	} value;
 };
 

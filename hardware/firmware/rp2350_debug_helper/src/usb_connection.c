@@ -48,6 +48,25 @@ BUILD_ASSERT(DMH_UART_EVENT_FRAME_CAPACITY <= DMH_CDC_TX_MAX_FRAME_BYTES);
 static const struct device *const cdc = DEVICE_DT_GET(DUTCHMATE_CDC_NODE);
 static uint8_t uart_staging[DMH_UART_EVENT_MAX_DATA_BYTES];
 static char evidence_frame[DMH_UART_EVENT_FRAME_CAPACITY];
+static struct dmh_vio_sense vio_sense;
+static struct dmh_vio_observation pending_vio;
+static uint64_t vio_observation_sequence;
+static bool vio_pending;
+
+static void stage_vio(void)
+{
+	bool enabled;
+	if (dutchmate_command_runtime_take_sense_configuration(&enabled)) {
+		(void)dmh_vio_sense_configure(&vio_sense, enabled, time_us_64());
+		if (!enabled) vio_pending = false;
+	}
+	dmh_vio_sense_poll(&vio_sense, time_us_64());
+	if (dmh_vio_sense_take_observation(&vio_sense, &pending_vio)) {
+		struct dmh_uart_rx_snapshot snapshot;
+		dutchmate_uart_rx_snapshot_observation(&snapshot, &vio_observation_sequence);
+		vio_pending = true;
+	}
+}
 
 static int publish_host_ready(void)
 {
@@ -119,6 +138,10 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 {
 	const struct dmh_buffer_status_observation *status =
 		dmh_telemetry_pending_status(schedule);
+	bool send_vio = vio_pending && (status == NULL ||
+		vio_observation_sequence < status->observation_sequence ||
+		(vio_observation_sequence == status->observation_sequence &&
+		 pending_vio.timestamp_us <= status->timestamp_us));
 	struct dmh_uart_rx_chunk chunk;
 	struct dmh_uart_rx_overflow overflow;
 	enum dmh_uart_rx_observation_kind kind;
@@ -126,8 +149,8 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 	int result;
 
 	result = dutchmate_uart_rx_take_before(
-		status != NULL,
-		status != NULL ? status->observation_sequence : 0U,
+		send_vio || status != NULL,
+		send_vio ? vio_observation_sequence : status != NULL ? status->observation_sequence : 0U,
 		uart_staging,
 		sizeof(uart_staging),
 		&kind,
@@ -156,6 +179,8 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 			sizeof(evidence_frame),
 			&frame_length
 		);
+	} else if (send_vio) {
+		result = dmh_dut_vio_encode(&pending_vio, evidence_frame, sizeof(evidence_frame), &frame_length);
 	} else if (status != NULL) {
 		result = dmh_buffer_status_encode(
 			status->timestamp_us,
@@ -175,7 +200,8 @@ static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 		return result;
 	}
 	if (kind == DMH_UART_RX_OBSERVATION_NONE) {
-		dmh_telemetry_schedule_status_sent(schedule);
+		if (send_vio) vio_pending = false;
+		else dmh_telemetry_schedule_status_sent(schedule);
 	}
 	return 1;
 }
@@ -194,6 +220,8 @@ static int drain_one_output(struct dmh_telemetry_schedule *schedule)
 			return result;
 		}
 		dutchmate_command_runtime_response_sent();
+		/* Apply an acknowledged disable before any subsequent telemetry frame. */
+		stage_vio();
 		return 1;
 	}
 	return drain_one_evidence(schedule);
@@ -209,6 +237,8 @@ static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
 	int result;
 
 	dmh_telemetry_schedule_stop(schedule);
+	dmh_vio_sense_end_epoch(&vio_sense);
+	vio_pending = false;
 	dutchmate_cdc_tx_cancel();
 	result = dutchmate_command_runtime_end_epoch();
 	dutchmate_uart_rx_stop();
@@ -223,12 +253,15 @@ static int end_active_epoch(struct dmh_telemetry_schedule *schedule)
 
 int dutchmate_usb_connection_run(void)
 {
+	struct dmh_vio_adc_port vio_adc = dutchmate_platform_vio_port();
 	struct dmh_connection_epoch epoch;
 	struct dmh_telemetry_schedule telemetry_schedule;
 	struct dmh_output_drain_result drain_result;
 	char hello_frame[DMH_HELLO_FRAME_CAPACITY];
 	size_t hello_length;
 	int result;
+	dmh_vio_sense_init(&vio_sense, &vio_adc, CONFIG_DUTCHMATE_ADC_REFERENCE_MV,
+			   IS_ENABLED(CONFIG_DUTCHMATE_ADC_REFERENCE_MEASURED));
 
 	if (!device_is_ready(cdc)) {
 		return -ENODEV;
@@ -340,6 +373,7 @@ int dutchmate_usb_connection_run(void)
 			return -EIO;
 		}
 		if (epoch.active) {
+			stage_vio();
 			stage_status_if_due(&telemetry_schedule);
 			result = dmh_output_drain_batch(
 				drain_one_output_adapter,

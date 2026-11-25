@@ -15,11 +15,13 @@ from dutchmate_core.backends import (
     BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DutVioEvent,
     SegmentContext,
     UartIntegrity,
     UartReceiveEvent,
 )
 from dutchmate_core.connection import ConnectionLifecycleError
+from dutchmate_core.dut_vio import DutVioObservation
 from dutchmate_core.operations.monitor import (
     EvidenceCursor,
     EvidenceRange,
@@ -36,6 +38,7 @@ from dutchmate_core.session_store.models import (
 )
 from dutchmate_core.uart_capture.processor import UartCaptureProcessor, UartCaptureResult
 from dutchmate_core.workflows.capture import (
+    BackendObservationInitializer,
     BufferedCaptureEventSource,
     CaptureEventSource,
     CaptureSourceHealth,
@@ -173,11 +176,15 @@ class EvidenceRecorderStore(Protocol):
         rollover_reported_loss: bool | None = None,
     ) -> V2EvidenceAdmission: ...
 
+    def append_v2_dut_vio(
+        self, handle: SessionHandle, *, event: DutVioEvent
+    ) -> V2EvidenceAdmission: ...
+
     def v2_telemetry_will_rollover(
         self,
         handle: SessionHandle,
         *,
-        event: BufferOverflowEvent | BufferStatusEvent,
+        event: BufferOverflowEvent | BufferStatusEvent | DutVioEvent,
     ) -> bool: ...
 
     def append_v2_connection_event(
@@ -372,6 +379,28 @@ class ContinuousEvidenceRecorder:
     def active_session_id(self) -> str:
         with self._condition:
             return self._handle.session_id
+
+    @staticmethod
+    def _initialize_source_observation(source: CaptureEventSource) -> bool:
+        if not isinstance(source, BackendObservationInitializer):
+            return False
+        try:
+            return not source.initialize_observation()
+        except (BackendInputError, BackendDisconnectedError) as exc:
+            raise ConnectionLifecycleError(
+                "backend_input_error", str(exc), reason="observation_initialization_failed"
+            ) from exc
+
+    def initialize_observation(self) -> None:
+        """Set up the currently owned source without holding the admission lock."""
+        with self._condition:
+            source = self._source
+        if source is None:
+            return
+        rejected = self._initialize_source_observation(source)
+        with self._condition:
+            if self._source is source and self._health.connected:
+                self._health = replace(self._health, dut_vio_setup_rejected=rejected)
 
     def set_connection_initializer(
         self,
@@ -685,9 +714,9 @@ class ContinuousEvidenceRecorder:
 
         with self._condition:
             changed = self._condition.wait_for(
-                lambda: _tail_is_after(self._tail, previous)
-                or self._fault is not None
-                or self._closed,
+                lambda: (
+                    _tail_is_after(self._tail, previous) or self._fault is not None or self._closed
+                ),
                 timeout=timeout_s,
             )
             return self._tail if changed and _tail_is_after(self._tail, previous) else None
@@ -696,19 +725,25 @@ class ContinuousEvidenceRecorder:
         """Wait until the current source has durably entered reconnecting state."""
 
         with self._condition:
-            return self._condition.wait_for(
-                lambda: self._state in {"reconnecting", "faulted", "closed"},
-                timeout=timeout_s,
-            ) and self._state == "reconnecting"
+            return (
+                self._condition.wait_for(
+                    lambda: self._state in {"reconnecting", "faulted", "closed"},
+                    timeout=timeout_s,
+                )
+                and self._state == "reconnecting"
+            )
 
     def wait_for_fault(self, *, timeout_s: float) -> bool:
         """Wait until authoritative recording has faulted."""
 
         with self._condition:
-            return self._condition.wait_for(
-                lambda: self._state in {"faulted", "closed"},
-                timeout=timeout_s,
-            ) and self._state == "faulted"
+            return (
+                self._condition.wait_for(
+                    lambda: self._state in {"faulted", "closed"},
+                    timeout=timeout_s,
+                )
+                and self._state == "faulted"
+            )
 
     def wait_for_idle_disconnect(self, timeout_s: float) -> bool:
         """Reconnect-owner compatibility: wait for a detached-ready disconnect."""
@@ -789,7 +824,12 @@ class ContinuousEvidenceRecorder:
             with self._condition:
                 self._state = "released"
                 self._releasing = False
-                self._health = replace(self._health, connected=False)
+                self._health = replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
                 self._condition.notify_all()
 
     def cleanup_unconfirmed(self) -> None:
@@ -823,7 +863,12 @@ class ContinuousEvidenceRecorder:
             with self._condition:
                 if self._fault is not None:
                     self._state = "faulted"
-                    self._health = replace(self._health, connected=False)
+                    self._health = replace(
+                        self._health,
+                        connected=False,
+                        dut_vio_observation=None,
+                        dut_vio_setup_rejected=False,
+                    )
                     self._condition.notify_all()
                     return
             metadata = self._session_store.load_metadata(self._handle.session_id)
@@ -837,7 +882,12 @@ class ContinuousEvidenceRecorder:
                     if metadata.get("state") == "active"
                     else "disconnected"
                 )
-                self._health = replace(self._health, connected=False)
+                self._health = replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
                 self._condition.notify_all()
 
     def accept_reacquired_source(
@@ -946,6 +996,7 @@ class ContinuousEvidenceRecorder:
             try:
                 if self._connection_initializer is not None:
                     self._connection_initializer(normalized_snapshot, before_connected)
+                setup_rejected = self._initialize_source_observation(replacement)
                 with self._admission_lock:
                     if before_connected is not None:
                         before_connected()
@@ -999,6 +1050,7 @@ class ContinuousEvidenceRecorder:
                                     segment=self._segment,
                                 ),
                                 connection_generation=self._connection_generation,
+                                dut_vio_setup_rejected=setup_rejected,
                             )
                             self._tail = DurableEvidenceTail(
                                 connected.handle.session_id,
@@ -1082,7 +1134,12 @@ class ContinuousEvidenceRecorder:
             )
             self._state = "disconnected"
             self._replacement_allowed = False
-            self._health = replace(self._health, connected=False)
+            self._health = replace(
+                self._health,
+                connected=False,
+                dut_vio_observation=None,
+                dut_vio_setup_rejected=False,
+            )
             self._condition.notify_all()
 
     def read_event(self) -> BackendEvent | None:
@@ -1147,7 +1204,12 @@ class ContinuousEvidenceRecorder:
                 self._source = None
                 self._state = "closed"
                 self._closed = True
-                self._health = replace(self._health, connected=False)
+                self._health = replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
                 self._close_error = close_error
                 self._condition.notify_all()
             self._close_complete.set()
@@ -1263,9 +1325,22 @@ class ContinuousEvidenceRecorder:
         for event in events:
             # A previous unit or concurrent action can have rolled the journal.
             normalized = replace(event, segment_id=self._stored_segment_id)
-            self._publish_admission(self._record_event(normalized))
+            self._publish_admission(
+                self._record_event(normalized),
+                vio_event=normalized if isinstance(normalized, DutVioEvent) else None,
+            )
 
     def _record_event(self, event: BackendEvent) -> V2EvidenceAdmission:
+        if isinstance(event, DutVioEvent):
+            if self._session_store.v2_telemetry_will_rollover(self._handle, event=event):
+                self._flush_line_state()
+                event = replace(event, segment_id=self._stored_segment_id)
+            admission = self._session_store.append_v2_dut_vio(self._handle, event=event)
+            if admission.rolled_over:
+                self._processor = UartCaptureProcessor()
+                with self._condition:
+                    self._reset_integrity_after_rollover()
+            return admission
         if isinstance(event, UartReceiveEvent):
             candidate = self._processor.clone()
             result = candidate.process_event(event)
@@ -1389,12 +1464,30 @@ class ContinuousEvidenceRecorder:
             return admission
         raise TypeError("unsupported backend event")
 
-    def _publish_admission(self, admission: V2EvidenceAdmission) -> None:
+    def _publish_admission(
+        self,
+        admission: V2EvidenceAdmission,
+        *,
+        vio_event: DutVioEvent | None = None,
+    ) -> None:
         with self._condition:
             self._handle = admission.handle
             if admission.rolled_over:
                 self._stored_segment_id = 0
                 self._segment = replace(self._segment, segment_id=0)
+                self._health = replace(self._health, dut_vio_observation=None)
+            if vio_event is not None and self._state == "connected" and not self._closing:
+                self._health = replace(
+                    self._health,
+                    dut_vio_observation=DutVioObservation(
+                        sample=vio_event.sample,
+                        timestamp_us=vio_event.timestamp_us,
+                        received_at_monotonic=vio_event.received_at_monotonic,
+                        session_id=admission.handle.session_id,
+                        segment_id=self._stored_segment_id,
+                        evidence_seq=admission.evidence_seq,
+                    ),
+                )
             self._tail = DurableEvidenceTail(
                 admission.handle.session_id,
                 _next_sequence(admission),
@@ -1450,7 +1543,12 @@ class ContinuousEvidenceRecorder:
                 reconnect_started.handle.session_id,
                 _next_sequence(reconnect_started),
             )
-            self._health = replace(self._health, connected=False)
+            self._health = replace(
+                self._health,
+                connected=False,
+                dut_vio_observation=None,
+                dut_vio_setup_rejected=False,
+            )
             self._state = "reconnecting"
             self._replacement_allowed = True
             self._condition.notify_all()
@@ -1496,7 +1594,12 @@ class ContinuousEvidenceRecorder:
             self._fault = error
             self._state = "faulted"
             self._source = None
-            self._health = replace(self._health, connected=False)
+            self._health = replace(
+                self._health,
+                connected=False,
+                dut_vio_observation=None,
+                dut_vio_setup_rejected=False,
+            )
             self._condition.notify_all()
         if current is not None:
             with suppress(BaseException):

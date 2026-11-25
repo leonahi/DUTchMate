@@ -12,6 +12,98 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/util.h>
 
+#ifdef CONFIG_ADC
+#include <hardware/timer.h>
+#include <zephyr/drivers/adc.h>
+#include <zephyr/kernel.h>
+
+static const struct device *const vio_adc = DEVICE_DT_GET(DT_NODELABEL(adc));
+static struct k_poll_signal vio_signal;
+static uint16_t vio_buffer;
+static uint64_t vio_completed_us;
+static bool vio_initialized;
+static bool vio_active;
+
+static enum adc_action vio_complete(const struct device *dev,
+				  const struct adc_sequence *sequence, uint16_t index)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(sequence);
+	ARG_UNUSED(index);
+	vio_completed_us = time_us_64();
+	return ADC_ACTION_CONTINUE;
+}
+
+int dutchmate_platform_vio_initialize(void)
+{
+	const struct adc_channel_cfg channel = {
+		.gain = ADC_GAIN_1, .reference = ADC_REF_VDD_1,
+		.acquisition_time = ADC_ACQ_TIME_DEFAULT, .channel_id = 2U,
+	};
+	int result;
+
+	if (!device_is_ready(vio_adc)) return -ENODEV;
+	result = adc_channel_setup(vio_adc, &channel);
+	if (result != 0) return result;
+	k_poll_signal_init(&vio_signal);
+	vio_initialized = true;
+	return 0;
+}
+
+bool dutchmate_platform_vio_ready(void)
+{
+	return vio_initialized;
+}
+
+static int vio_start(void *context)
+{
+	static const struct adc_sequence_options options = {.callback = vio_complete};
+	const struct adc_sequence sequence = {
+		.options = &options, .channels = BIT(2), .buffer = &vio_buffer,
+		.buffer_size = sizeof(vio_buffer), .resolution = 12U,
+	};
+	int result;
+
+	ARG_UNUSED(context);
+	if (!vio_initialized || vio_active) return -EBUSY;
+	k_poll_signal_reset(&vio_signal);
+	vio_completed_us = 0U;
+	vio_active = true;
+	result = adc_read_async(vio_adc, &sequence, &vio_signal);
+	if (result != 0) vio_active = false;
+	return result;
+}
+
+static enum dmh_vio_adc_result vio_poll(void *context, uint16_t *raw, uint64_t *done)
+{
+	unsigned int signaled;
+	int result;
+
+	ARG_UNUSED(context);
+	if (!vio_active) return DMH_VIO_ADC_ERROR;
+	k_poll_signal_check(&vio_signal, &signaled, &result);
+	if (!signaled) return DMH_VIO_ADC_PENDING;
+	/* Completion signal publishes the ISR's buffer and completion timestamp. */
+	vio_active = false;
+	if (result != 0) return DMH_VIO_ADC_ERROR;
+	*raw = vio_buffer;
+	*done = vio_completed_us;
+	return DMH_VIO_ADC_COMPLETE;
+}
+
+struct dmh_vio_adc_port dutchmate_platform_vio_port(void)
+{
+	return (struct dmh_vio_adc_port) {.start = vio_start, .poll = vio_poll};
+}
+#else
+int dutchmate_platform_vio_initialize(void) { return -ENOTSUP; }
+bool dutchmate_platform_vio_ready(void) { return false; }
+struct dmh_vio_adc_port dutchmate_platform_vio_port(void)
+{
+	return (struct dmh_vio_adc_port){0};
+}
+#endif
+
 #define DUTCHMATE_IO_NODE DT_NODELABEL(dutchmate_io)
 #define DUTCHMATE_CHANNEL_COUNT 4U
 
@@ -164,7 +256,7 @@ int dutchmate_platform_io_initialize_safe(void)
 		}
 	}
 
-	/* Keep GP28/ADC2 unloaded even though ADC sampling is not implemented. */
+	/* Keep GP28/ADC2 unloaded before any negotiated ADC sampling. */
 	result = gpio_pin_configure(
 		DEVICE_DT_GET(DT_NODELABEL(gpio0)), 28U, GPIO_DISCONNECTED
 	);

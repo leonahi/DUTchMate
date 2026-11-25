@@ -33,7 +33,7 @@
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
 > Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
-> Documentation state reviewed: 2026-11-24
+> Documentation state reviewed: 2026-11-25
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -43,44 +43,38 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Written DUT_VIO contract approved; seven-task implementation
-  plan drafted for review. Implementation has not started; code base `81ab6f8`.
-- **Design authority:** [Current KiCad source](../hardware/pcb/debug-helper/rev-a/README.md)
-  uses one 2×8 J1, TMUX2819 sense isolation, an after-RN5A 10 kΩ UART pull-up
-  and corrected bias networks. Source review establishes no physical acceptance.
-- **Development policy:** [Specification §4.1](phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
-  permits legacy EAGLE functional HIL; its electrical gaps remain unresolved.
-- **MCP acceptance:** Strict Inspector and applicable pinned conformance pass;
-  VS Code registration saved; VS Code tool use and Claude Code host checks unavailable.
-- **Next software step:** Review the [implementation plan](dut_vio_sensing_implementation_plan.md)
-  and select execution method; native execution in this session is recommended.
-- **Hardware step prerequisite:** Secure helper 3V3 load access and an oscilloscope
-  are still needed for the remaining electrical checks.
-- **Hardware step:** Last confirmed both USB on, GP2 normal, UART/reset/boot
-  wiring and 10 kΩ reset pull-up fitted; PPK2 off/VOUT removed. Reconfirm before
-  resuming. No scope/analyzer at the Nov-21 session; pin 36 remains probe-only
-  and there is no separate helper 3.3 V test point.
-  [Board evidence](../hardware/validation/phase1_kicad_rev_a.md) retains prior
-  extra boots and no recurrence in the 30.05 s probes-off repeat; cause unproven.
-- **Hardware gate:** Phase 1A stays Complete; Phase 1B, Stage 8 and Phase 1 stay
-  incomplete until required manufactured KiCad Rev-A physical validation passes.
-- **Manual hardware work:** Layout, DFM and fabrication remain designer work
-  outside the agent workflow; no repository-driven PCB/DFM gate.
-- **Historical prototype:** Pull-up blocker #1 stays **Satisfied**; its original
-  EAGLE UART oscilloscope gap remains open and gives no KiCad electrical acceptance.
-- **Evidence boundary:** Legacy functional HIL, historical EAGLE validation,
-  KiCad source review and manufactured-board acceptance remain distinct (§4.1).
-- **GP28 firmware boundary:** Normal source now always disables digital controls
-  before ISO release. Old experiments archived; optional readback only. No ADC sensing.
-- **Closed evidence:** Existing Basic/Enhanced workflow acceptance is unchanged.
-- **Deferred:** Phase 5 EVENT capture remains deferred under existing criteria.
-- **Validation (Nov 24):** Plan/source consistency, local links and diff checked;
-  no code tests rerun for prose. Prior code gate: 1,899 tests/52.47 s, Ruff/mypy/lock pass.
-- **Ownership:** Live session `20261121T174635Z-56780735` closed normally;
-  PID 3395/listener/serial released. Prior failed timeout retained, firmware unchanged.
-  DELAYFAULT unsupported in old fixture. Full physical/electrical gate remains open.
-- **Follow-up checklist:** Fixes committed; sensing contract approved; plan awaiting review.
-- **Other boundaries:** Basic anomaly non-blocking; Phase 4 remains paused.
+- **Current milestone:** Report-only DUT_VIO software implemented on
+  `feature/dut-vio-sensing`; final independent review in progress.
+- **Sensing authority:** [Contract](dut_vio_sensing_contract.md). GP28/ADC2 only,
+  negotiated observations, durable native-v2 evidence and receipt-age status;
+  measured voltage does not change control policy or declared interface voltage.
+- **Next step:** Finish independent software review, then reconfirm operator setup
+  before the separate Fluke/actual-VIO campaign. No firmware has been flashed.
+- **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
+  retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
+  ADC accuracy and diagnostic runtime stack results remain unmeasured.
+- **Validation (Nov 25):** 2,008 tests/53.22 s; Ruff, mypy (104 source files),
+  offline lock (66 packages), diff check pass. Code Graphify updated; C parsing
+  warnings for hello.c/fixture_protocol.h, semantic documentation graph unchanged.
+- **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
+  remain needed for outstanding electrical checks; pin 36 remains probe-only.
+- **Last hardware state:** Both USB on, GP2 normal, UART/reset/boot wiring and
+  10 kΩ reset pull-up fitted; PPK2 off/VOUT removed. Reconfirm before live use.
+  [Board evidence](../hardware/validation/phase1_kicad_rev_a.md) retains extra boots
+  with no recurrence in the 30.05 s probes-off repeat; cause unproven.
+- **Acceptance boundary:** Phase 1A Complete; manufactured KiCad Rev-A acceptance,
+  Phase 1B, Stage 8 and Phase 1 incomplete. Legacy EAGLE functional evidence,
+  source review and software tests establish no KiCad electrical acceptance.
+- **Design authority:** [KiCad source](../hardware/pcb/debug-helper/rev-a/README.md);
+  layout, DFM and fabrication remain designer work. Existing local CAD edits preserved.
+- **MCP boundary:** Twelve tools retained. Strict Inspector/applicable conformance
+  passed previously; VS Code tool use and Claude Code host UI checks unavailable.
+- **Closed live ownership:** Nov-21 session `20261121T174635Z-56780735` closed;
+  PID/listener/serial released. No live service was opened for this software slice.
+- **Follow-up checklist:** Reconnect/load-profile fixes committed; sensing code and
+  three images built; final review active; physical sensing/board gates pending.
+- **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
+  Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
 
 Update the review date, current milestone, next step, checklist, and concise
 validation result in the same commit as each completed development slice. Add

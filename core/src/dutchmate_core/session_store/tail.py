@@ -8,9 +8,10 @@ import heapq
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import BinaryIO, cast
 
+from dutchmate_core.dut_vio import DutVioSample
 from dutchmate_core.evidence.tail import (
     MAX_EVIDENCE_RESPONSE_BYTES,
     EvidenceCursorExpired,
@@ -122,6 +123,8 @@ class EvidenceSnapshot:
             "evidence_seq": record["evidence_seq"],
             "type": record["type"],
         }
+        if record["type"] == "dut_vio":
+            projection.update(asdict(DutVioSample.from_fields(record)))
         for key in (
             "recorded_at",
             "segment_id",

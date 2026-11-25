@@ -67,6 +67,9 @@ class RuntimeProvider(Protocol):
         self, *, cursor: str | None = None, limit: int = 100, wait_s: float = 1.0,
     ) -> EvidencePage: ...
 
+    def initialize_backend_observation(self) -> None:
+        """Initialize optional observations after startup configuration."""
+
     def status(self) -> DeviceCoreStatus:
         """Return the current Device Core status."""
 
@@ -189,14 +192,15 @@ def create_app(
     effective_hardware_config = (
         profile.hardware_gpio_config if profile is not None else hardware_config
     )
-    if effective_hardware_config is not None:
-        try:
+    try:
+        if effective_hardware_config is not None:
             apply_startup_hardware_config(runtime_provider, effective_hardware_config)
-        except BaseException:
-            if owns_runtime:
-                with suppress(BaseException):
-                    _close_runtime(runtime_provider)
-            raise
+        runtime_provider.initialize_backend_observation()
+    except BaseException:
+        if owns_runtime:
+            with suppress(BaseException):
+                _close_runtime(runtime_provider)
+        raise
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

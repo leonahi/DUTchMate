@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
+from dutchmate_core.dut_vio import DutVioSample
+
 BackendMode: TypeAlias = Literal["basic", "enhanced"]
 ControlState: TypeAlias = Literal["active", "idle"]
 BackendInputKind: TypeAlias = Literal[
@@ -88,7 +90,17 @@ class BufferStatusEvent:
     overflow_events: int
 
 
-BackendEvent: TypeAlias = UartReceiveEvent | BufferOverflowEvent | BufferStatusEvent
+@dataclass(frozen=True, slots=True)
+class DutVioEvent:
+    """Voltage observation and its host receipt marker within one physical segment."""
+
+    segment_id: int
+    timestamp_us: int
+    sample: DutVioSample
+    received_at_monotonic: float
+
+
+BackendEvent: TypeAlias = UartReceiveEvent | BufferOverflowEvent | BufferStatusEvent | DutVioEvent
 LossStatus: TypeAlias = Literal["none_reported", "loss_reported", "not_observable"]
 
 

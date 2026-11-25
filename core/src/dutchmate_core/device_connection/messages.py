@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from dutchmate_core.dut_vio import DutVioSample
+
 PROTOCOL_VERSION = 1
 
 KNOWN_CAPABILITIES = frozenset(
@@ -47,6 +49,14 @@ class UartMessage:
     timestamp_us: int
     data: bytes
     text: str
+
+
+@dataclass(frozen=True, slots=True)
+class DutVioMessage:
+    """Timestamped interface-voltage observation from a negotiated helper."""
+
+    timestamp_us: int
+    sample: DutVioSample
 
 
 @dataclass(frozen=True, slots=True)

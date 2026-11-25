@@ -1,0 +1,76 @@
+{
+  "review_date": "2026-11-25",
+  "source_base": "466a4c2128d3a76de7322635ee9526a3334985db",
+  "source_branch": "feature/dut-vio-sensing",
+  "toolchain": "Zephyr 4.4.2 / SDK 1.0.1",
+  "images": [
+    {
+      "variant": "normal",
+      "identity": "viosense-1",
+      "bytes": 113664,
+      "sha256": "827a2b9f72dcae105bb7e303fa197ede3c6361507bbbedb87e46aca9c7f674b5",
+      "path": "build/dut-vio-normal/zephyr/zephyr.uf2",
+      "config_sha256": "a4161d48c8ae1631fad880c0d710068366a3670e972bbc4951a8e445d662e3c8",
+      "adc_pinctrl": {
+        "pins": [
+          "GP28/ADC2"
+        ],
+        "pinmux_hex": "0x39f",
+        "oe_override": 2,
+        "bias_disabled": true,
+        "input_enable": false
+      },
+      "adc_reference_mv": 3300,
+      "reference_source": "nominal",
+      "flash_bytes": 56656,
+      "ram_bytes": 81776,
+      "stack_runtime_result": null
+    },
+    {
+      "variant": "readback",
+      "identity": "viosense-pad-1",
+      "bytes": 118272,
+      "sha256": "51d850076321960fe1a368466ec913ed3432ed68ec666d5b2dd21d516f0a81fd",
+      "path": "build/dut-vio-readback/zephyr/zephyr.uf2",
+      "config_sha256": "604b20a1c1570b696b8f0710b91d803528496454f3c15a5957af5140385275ef",
+      "adc_pinctrl": {
+        "pins": [
+          "GP28/ADC2"
+        ],
+        "pinmux_hex": "0x39f",
+        "oe_override": 2,
+        "bias_disabled": true,
+        "input_enable": false
+      },
+      "adc_reference_mv": 3300,
+      "reference_source": "nominal",
+      "flash_bytes": 58996,
+      "ram_bytes": 81776,
+      "stack_runtime_result": null
+    },
+    {
+      "variant": "stack",
+      "identity": "viosense-stack-1",
+      "bytes": 120320,
+      "sha256": "cc8fb258acbbc17593b20bc5b4e717cedbc93fff1cec79d0caaecf177b07cb82",
+      "path": "build/dut-vio-stack/zephyr/zephyr.uf2",
+      "config_sha256": "332773d32cf287514c7dc4d655539b133c7cbeb2365d4dfdb64c5056d5e9bb51",
+      "adc_pinctrl": {
+        "pins": [
+          "GP28/ADC2"
+        ],
+        "pinmux_hex": "0x39f",
+        "oe_override": 2,
+        "bias_disabled": true,
+        "input_enable": false
+      },
+      "adc_reference_mv": 3300,
+      "reference_source": "nominal",
+      "flash_bytes": 60084,
+      "ram_bytes": 82880,
+      "stack_runtime_result": null
+    }
+  ],
+  "physical_validation": "pending; no flash or live measurement",
+  "stack_runtime_result": "not measured; diagnostic image build only"
+}

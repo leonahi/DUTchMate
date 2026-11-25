@@ -1,4 +1,22 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2350a-pinctrl.h>
+
+&pinctrl {
+	dutchmate_adc: dutchmate_adc {
+		group1 {
+			pinmux = <ADC_CH2_P28>;
+			/* input-enable is absent: the Pico binding defaults it to false. */
+			raspberrypi,oe-override = <2>;
+			bias-disable;
+		};
+	};
+};
+
+&adc {
+	pinctrl-0 = <&dutchmate_adc>;
+	pinctrl-names = "default";
+	status = "okay";
+};
 
 / {
 	dutchmate_io: dutchmate-io {

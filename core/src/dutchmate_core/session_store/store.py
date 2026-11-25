@@ -6,7 +6,7 @@ import json
 import unicodedata
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
@@ -23,6 +23,7 @@ from dutchmate_core.backends.contracts import (
     BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DutVioEvent,
     SegmentContext,
     SegmentTimestamp,
     UartIntegrity,
@@ -790,8 +791,10 @@ class SessionStore:
                     capture_result=result,
                     raw_offset_start=raw_start,
                 )
-                if patterns is not None or hardware or not self._v2_unit_fits(
-                    metadata, unit_bytes=unit_bytes
+                if (
+                    patterns is not None
+                    or hardware
+                    or not self._v2_unit_fits(metadata, unit_bytes=unit_bytes)
                 ):
                     return None
                 records.append(_persistence.serialize_jsonl(record))
@@ -1995,7 +1998,7 @@ class SessionStore:
         self,
         handle: SessionHandle,
         *,
-        event: BufferOverflowEvent | BufferStatusEvent,
+        event: BufferOverflowEvent | BufferStatusEvent | DutVioEvent,
     ) -> bool:
         """Return whether this exact telemetry record requires a successor."""
 
@@ -2010,6 +2013,13 @@ class SessionStore:
                     "timestamp_us": event.timestamp_us,
                     "channel": event.channel,
                     "dropped_bytes": event.dropped_bytes,
+                }
+            elif isinstance(event, DutVioEvent):
+                record_type = "dut_vio"
+                fields = {
+                    "segment_id": event.segment_id,
+                    "timestamp_us": event.timestamp_us,
+                    **asdict(event.sample),
                 }
             else:
                 record_type = "buffer_status"
@@ -2033,6 +2043,34 @@ class SessionStore:
             return not self._v2_unit_fits(
                 metadata,
                 unit_bytes=len(serialized_record),
+            )
+
+    def append_v2_dut_vio(
+        self, handle: SessionHandle, *, event: DutVioEvent
+    ) -> V2EvidenceAdmission:
+        """Admit a whole voltage observation using the existing journal transaction."""
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if event.segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 voltage observation must reference the current segment")
+
+            def record_time(updated: dict[str, object], admission: V2EvidenceAdmission) -> None:
+                _metadata._record_metadata_segment_timestamp(
+                    updated,
+                    segment_id=_current_v2_segment_id(updated),
+                    timestamp_us=event.timestamp_us,
+                )
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="dut_vio",
+                fields=lambda _handle, updated, _seq: {
+                    "segment_id": _current_v2_segment_id(updated),
+                    "timestamp_us": event.timestamp_us,
+                    **asdict(event.sample),
+                },
+                metadata_mutator=record_time,
             )
 
     def append_v2_buffer_overflow(
@@ -2296,9 +2334,7 @@ class SessionStore:
         fields: dict[str, object]
         | Callable[[SessionHandle, dict[str, object], int], dict[str, object]],
     ) -> dict[str, object]:
-        record_fields = (
-            fields(handle, metadata, evidence_seq) if callable(fields) else fields
-        )
+        record_fields = fields(handle, metadata, evidence_seq) if callable(fields) else fields
         return {
             "evidence_seq": evidence_seq,
             "type": record_type,
@@ -3073,11 +3109,7 @@ def _v2_pending_attempts(
         if not isinstance(session_id, str):
             raise ValueError("v2 pending attempt session ID is invalid")
         _metadata._validate_session_id(session_id)
-        if (
-            isinstance(evidence_seq, bool)
-            or not isinstance(evidence_seq, int)
-            or evidence_seq < 0
-        ):
+        if isinstance(evidence_seq, bool) or not isinstance(evidence_seq, int) or evidence_seq < 0:
             raise ValueError("v2 pending attempt evidence sequence is invalid")
     return cast(dict[str, dict[str, object]], raw_pending)
 

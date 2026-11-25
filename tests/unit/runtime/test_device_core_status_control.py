@@ -389,3 +389,13 @@ def _recording_runtime(**kwargs):
     runtime = DeviceCoreRuntime(**kwargs, evidence_recorder=recorder)
     _RECORDING_RUNTIMES.append(runtime)
     return runtime
+
+
+def test_connected_older_helper_reports_voltage_unsupported(tmp_path):
+    runtime = DeviceCoreRuntime(
+        device_control=FakeDeviceControl(), session_store=SessionStore(root=tmp_path)
+    )
+    assert runtime.status().dut_vio.reason == "disconnected"
+    runtime.record_backend_connection(enhanced_info())
+    assert runtime.status().dut_vio.state == "unsupported"
+    assert runtime.status().dut_vio.reason == "capability_missing"

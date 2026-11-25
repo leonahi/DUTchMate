@@ -40,6 +40,7 @@ target_sources(app PRIVATE
     src/uart_tx.c
     src/uart_tx_state.c
     src/usb_connection.c
+    src/vio_sense.c
 )
 
 target_sources_ifdef(CONFIG_DUTCHMATE_STACK_PROBE app PRIVATE

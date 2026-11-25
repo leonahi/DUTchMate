@@ -29,6 +29,9 @@ class FakeRuntime:
         self.uart_send_requests: list[dict[str, object]] = []
         self.hardware_configs: list[HardwareGpioConfig] = []
 
+    def initialize_backend_observation(self) -> None:
+        pass
+
     def status(self) -> DeviceCoreStatus:
         return self._status
 

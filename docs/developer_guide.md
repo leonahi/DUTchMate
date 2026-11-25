@@ -398,3 +398,23 @@ passes through fake backends.
   implementation step; completed progress belongs in
   `docs/development_history.md`.
 - Keep links and protocol examples valid when moving or renaming content.
+
+
+## Reading DUT_VIO status
+
+`dutchmate status` displays the helper's optional, report-only voltage estimate,
+reference provenance and age since host receipt. HTTP `/status` and MCP
+`get_status` expose the same `dut_vio` object, including the original sample and
+its durable session/segment/evidence reference. No additional serial port is opened.
+
+A supported helper is enabled after startup control configuration and again for
+each physical reconnect/reacquisition. An older helper reports `unsupported`.
+No sample, explicit setup rejection, ADC error and saturation report `unavailable`.
+A successful sample becomes `stale` after integer receipt age exceeds 3000 ms;
+its public voltage is then null. Connection loss clears live sample references.
+Receipt age does not guarantee physical measurement age when traffic is buffered.
+
+Nominal reference readings are approximate. A measured reference label describes
+ADC_VREF provenance rather than full calibration. The declaration
+`hardware.dut_io_voltage` still defines the intended interface level. See the
+[sensing contract](dut_vio_sensing_contract.md) for fields and physical validation.

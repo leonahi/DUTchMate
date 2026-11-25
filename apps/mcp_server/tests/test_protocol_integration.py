@@ -833,3 +833,60 @@ async def test_actual_service_cancellation_keeps_dispatched_tx_and_releases_excl
         assert service.runtime.status().active_operations == ()
     # EOF is protocol cleanup, not service shutdown or action rollback.
     assert service.runtime.status().connected and not service.source.closed
+
+
+async def test_voltage_status_matches_service_and_durable_evidence(service_factory):
+    from dataclasses import asdict
+
+    from dutchmate_core.backends import DutVioEvent
+    from dutchmate_core.dut_vio import DutVioSample
+    from dutchmate_service.schemas import status_payload
+
+    now = [0.125]
+    service = service_factory(power_sense=True, clock=lambda: now[0])
+    async with Client(InMemoryTransport(service.server), mode="auto", cache=None) as client:
+        initial = await service_call(service, client, "get_status")
+        assert initial["dut_vio"]["reason"] == "awaiting_sample"
+        for sample in [
+            DutVioSample("ok", 0, 0, 3300, "nominal"),
+            DutVioSample("ok", 2048, 3277, 3277, "measured"),
+            DutVioSample("adc_error", None, None, 3300, "nominal"),
+            DutVioSample("saturated", 4095, None, 3300, "nominal"),
+        ]:
+            tail = service.recorder.durable_tail()
+            service.source.publish(DutVioEvent(0, 100, sample, 0.0))
+            assert await asyncio.to_thread(
+                service.recorder.wait_for_durable_tail, tail, timeout_s=2
+            )
+            status = await service_call(service, client, "get_status")
+            assert status == json.loads(json.dumps(status_payload(service.runtime.status())))
+            voltage = status["dut_vio"]
+            assert voltage["age_ms"] == 125
+            assert voltage["voltage_mv"] == sample.voltage_mv
+            assert voltage["sample"] == {"type": "dut_vio", "timestamp_us": 100, **asdict(sample)}
+            record = next(
+                r
+                for r in service.records("hardware")
+                if r["evidence_seq"] == voltage["evidence"]["evidence_seq"]
+            )
+            assert record["segment_id"] == voltage["evidence"]["segment_id"]
+            assert record["voltage_mv"] == sample.voltage_mv
+        tail = service.recorder.durable_tail()
+        service.source.publish(
+            DutVioEvent(0, 101, DutVioSample("ok", 2048, 3300, 3300, "nominal"), 0.0)
+        )
+        assert await asyncio.to_thread(service.recorder.wait_for_durable_tail, tail, timeout_s=2)
+        now[0] = 3.001
+        stale = (await service_call(service, client, "get_status"))["dut_vio"]
+        assert stale["state"] == "stale" and stale["voltage_mv"] is None
+        await service_call(service, client, "release_connection")
+        released = (await service_call(service, client, "get_status"))["dut_vio"]
+        assert released == {
+            "state": "unavailable",
+            "reason": "released",
+            "voltage_mv": None,
+            "age_ms": None,
+            "sample": None,
+            "evidence": None,
+        }
+        assert service.profile.hardware_gpio_config.dut_io_voltage == 3.3

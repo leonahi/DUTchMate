@@ -11,7 +11,11 @@ import serial_asyncio
 class PipeSerial:
     """Substitute the OS serial resource, retaining the installed transport logic."""
 
-    def __init__(self, *, origin_us=1000, close_mode="closed"):
+    def __init__(
+        self, *, origin_us=1000, close_mode="closed", power_sense=False, sense_response="ok"
+    ):
+        self.power_sense = power_sense
+        self.sense_response = sense_response
         self.origin_us = origin_us
         self.close_mode = close_mode
         self.fd, self.write_fd = os.pipe()
@@ -35,6 +39,42 @@ class PipeSerial:
     def write(self, data):
         command = json.loads(data)
         self.commands.append(command)
+        if command["cmd"] == "configure_power_sense":
+            if self.sense_response == "timeout":
+                return len(data)
+            if self.sense_response == "reject":
+                response = {"ok": False, "error": "hardware_fault", "detail": "ADC unavailable"}
+            else:
+                response = {"ok": True, "timestamp_us": self.origin_us + len(self.commands)}
+            payload = json.dumps(response).encode() + b"\n"
+            if self.sense_response == "ok":
+                payload += (
+                    json.dumps(
+                        {
+                            "type": "dut_vio",
+                            "timestamp_us": self.origin_us + 100,
+                            "status": "ok",
+                            "adc_raw": 2048,
+                            "voltage_mv": 3300,
+                            "adc_reference_mv": 3300,
+                            "reference_source": "nominal",
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+                payload += (
+                    json.dumps(
+                        {
+                            "type": "uart",
+                            "channel": 0,
+                            "timestamp_us": self.origin_us + 101,
+                            "data_b64": "/wAK",
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+            self.loop.call_soon_threadsafe(self.protocol.data_received, payload)
+            return len(data)
         if command["cmd"] == "configure_gpio_mode":
             self.configured.add(command["channel"])
         elif command["channel"] not in self.configured:
@@ -92,6 +132,7 @@ class PipeSerial:
                         "gpio_control",
                         "device_timestamp",
                         "overflow_telemetry",
+                        *(["power_sense"] if self.power_sense else []),
                     ],
                 }
             ).encode()
