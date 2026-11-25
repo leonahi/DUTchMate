@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
@@ -73,6 +74,7 @@ class OpenAsyncEnhancedAdapter(Protocol):
         port: str,
         segment_id: int,
         baudrate: int,
+        monotonic_clock: Callable[[], float],
     ) -> Coroutine[Any, Any, _AsyncEnhancedAdapter]: ...
 
 
@@ -380,11 +382,13 @@ async def _open_host_on_owner_loop(
     baudrate: int,
     segment_id: int,
     open_adapter: OpenAsyncEnhancedAdapter,
+    monotonic_clock: Callable[[], float],
 ) -> _OpenedHost:
     adapter = await open_adapter(
         port=port,
         baudrate=baudrate,
         segment_id=segment_id,
+        monotonic_clock=monotonic_clock,
     )
     try:
         return _OpenedHost(
@@ -411,6 +415,7 @@ def open_enhanced_async_host(
     baudrate: int,
     segment_id: int,
     open_adapter: OpenAsyncEnhancedAdapter = open_async_enhanced_serial_adapter,
+    monotonic_clock: Callable[[], float] = time.monotonic,
 ) -> EnhancedAsyncHost:
     """Open one ready Enhanced adapter on its permanent owner loop."""
 
@@ -422,6 +427,7 @@ def open_enhanced_async_host(
                 baudrate=baudrate,
                 segment_id=segment_id,
                 open_adapter=open_adapter,
+                monotonic_clock=monotonic_clock,
             )
         )
         host._install(opened)

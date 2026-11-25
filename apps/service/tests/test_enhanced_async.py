@@ -161,6 +161,7 @@ class OpenAdapterFake:
         port: str,
         segment_id: int,
         baudrate: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeAsyncEnhancedAdapter:
         self.thread_id = threading.get_ident()
         assert port == "/dev/ttyACM0"

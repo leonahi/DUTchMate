@@ -44,8 +44,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Report-only DUT_VIO software complete on
-  `feature/dut-vio-sensing`; independent review findings fixed and verified.
+- **Current milestone:** Report-only DUT_VIO software and injected-clock fix
+  verified; the same clock timestamps receipts and computes status age.
 - **Sensing authority:** [Contract](dut_vio_sensing_contract.md). GP28/ADC2 only,
   negotiated observations, durable native-v2 evidence and receipt-age status;
   measured voltage does not change control policy or declared interface voltage.
@@ -54,11 +54,11 @@ Read this document first whenever development resumes.
 - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
   ADC accuracy and diagnostic runtime stack results remain unmeasured.
-- **Validation (Nov 25):** 2,028 tests/52.65 s; Ruff, mypy (104 source files),
+- **Validation (Nov 25):** 2,030 tests/57.68 s; Ruff, mypy (104 source files),
   offline lock (66 packages), diff check pass. Three corrected images build;
   code Graphify refreshed, semantic documentation graph unchanged.
-- **Deferred minor:** Injected service test clocks may differ from real adapter
-  receipt-clock origin; default production clocks both use `time.monotonic`.
+- **Clock fix:** Initial open, automatic reconnect and release/reacquire share
+  the service's configured monotonic clock; the deferred limitation is closed.
 - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
   remain needed for outstanding electrical checks; pin 36 remains probe-only.
 - **Last hardware state:** Both USB on, GP2 normal, UART/reset/boot wiring and
@@ -75,7 +75,7 @@ Read this document first whenever development resumes.
 - **Closed live ownership:** Nov-21 session `20261121T174635Z-56780735` closed;
   PID/listener/serial released. No live service was opened for this software slice.
 - **Follow-up checklist:** Reconnect/load-profile fixes committed; sensing code and
-  three corrected images built; review fixes verified; physical/board gates pending.
+  three corrected images built; review/clock fixes verified; physical gates pending.
 - **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
   Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
 

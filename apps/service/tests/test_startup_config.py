@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from threading import Condition
 from threading import Event as ThreadEvent
@@ -424,6 +425,7 @@ def test_enhanced_startup_selects_one_async_host(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         opened.append((port, baudrate, segment_id))
         return host
@@ -534,6 +536,7 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         opened.append((port, baudrate, segment_id))
         host = hosts.pop(0)
@@ -1063,6 +1066,7 @@ def test_enhanced_startup_recorder_reopens_with_async_host(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         assert port == "/dev/ttyACM0"
         assert baudrate == 460800
@@ -1163,6 +1167,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         del port, baudrate
         if not hosts:
