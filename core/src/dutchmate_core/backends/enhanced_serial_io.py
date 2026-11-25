@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import time
 from collections.abc import Awaitable, Callable
 from typing import Protocol, cast
 
@@ -219,6 +220,7 @@ async def open_async_enhanced_serial_adapter(
     hello_timeout_s: float = DEFAULT_ASYNC_HELLO_TIMEOUT_SECONDS,
     event_queue_capacity: int = DEFAULT_ENHANCED_EVENT_QUEUE_CAPACITY,
     open_connection: OpenSerialConnection | None = None,
+    monotonic_clock: Callable[[], float] = time.monotonic,
 ) -> AsyncEnhancedSerialAdapter:
     """Open, hello-validate, and return one production Enhanced adapter."""
 
@@ -246,6 +248,7 @@ async def open_async_enhanced_serial_adapter(
             port=port,
             segment_id=segment_id,
             event_queue_capacity=event_queue_capacity,
+            monotonic_clock=monotonic_clock,
         )
         await adapter.start(hello_timeout_s)
         return adapter

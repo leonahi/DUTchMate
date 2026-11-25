@@ -411,3 +411,75 @@ def test_staged_observation_setup_drains_more_than_serial_fifo_capacity(tmp_path
         client.close()
         for resource in resources:
             resource.dispose()
+
+
+@pytest.mark.parametrize("boundary", ["automatic_reconnect", "release_reacquire"])
+def test_injected_clock_ages_real_voltage_across_connection_boundaries(
+    tmp_path, monkeypatch, boundary
+):
+    # Missing any clock handoff must make a real receipt use the wrong origin,
+    # rather than merely changing a mock's observed constructor arguments.
+    resources = []
+    now = [0.0]
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    def open_host(**kwargs):
+        return open_enhanced_async_host(**kwargs, open_adapter=open_adapter)
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", open_host)
+    profile = resolve_dut_profile(parse_dut_profile_config({
+        "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+        "hardware": {"dut_io_voltage": 3.3},
+    }))
+    runtime = startup.build_startup_runtime(
+        session_root=tmp_path, profile=profile, monotonic_clock=lambda: now[0]
+    )
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+
+    def wait_voltage(segment_id):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            payload = client.get("/status").json()
+            vio = payload["dut_vio"]
+            if (payload["connected"] and vio["evidence"] is not None
+                    and vio["evidence"]["segment_id"] == segment_id):
+                return vio
+            time.sleep(.001)
+        pytest.fail(f"no admitted voltage for segment {segment_id}: {payload}")
+
+    try:
+        first = wait_voltage(0)
+        assert first["state"] == "valid" and first["age_ms"] == 0
+        now[0] = 3.0
+        at_boundary = client.get("/status").json()["dut_vio"]
+        assert (at_boundary["state"], at_boundary["age_ms"]) == ("valid", 3000)
+        now[0] = 3.001
+        stale = client.get("/status").json()["dut_vio"]
+        assert (stale["state"], stale["age_ms"], stale["voltage_mv"]) == ("stale", 3001, None)
+        assert stale["evidence"] == first["evidence"]
+
+        now[0] = 10.0
+        if boundary == "release_reacquire":
+            assert client.post("/connection/release").status_code == 200
+            assert client.post("/connection/reacquire").status_code == 200
+        else:
+            resources[0].disconnect()
+        fresh = wait_voltage(1)
+        assert fresh["age_ms"] == 0 and fresh["state"] == "valid"
+        now[0] = 10.5
+        assert client.get("/status").json()["dut_vio"]["age_ms"] == 500
+        now[0] = 13.125
+        again = client.get("/status").json()["dut_vio"]
+        assert (again["state"], again["age_ms"], again["voltage_mv"]) == ("stale", 3125, None)
+        assert again["evidence"] == fresh["evidence"]
+    finally:
+        client.close()
+        runtime.close()
+        for resource in resources:
+            resource.dispose()

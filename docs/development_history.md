@@ -9,6 +9,31 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-25 — Shared monotonic clock for DUT_VIO receipt and status
+
+Closed the injected test-clock limitation from the sensing review. Service startup
+now configures one Enhanced host factory with its selected monotonic clock and
+uses that factory for initial open and every replacement. The async host and
+concrete serial-adapter factory explicitly forward the same callable to receipt
+stamping; runtime status already uses that injected clock. Default production
+behavior and existing request/cleanup ownership are preserved, with no clock
+abstraction or firmware/protocol change.
+
+Two real pyserial-asyncio pipe regressions failed RED with age 0 rather than
+3000 ms. They now pass through startup, automatic reconnect and release/reacquire,
+checking valid age 3000, stale age 3001 with null public voltage, fresh age 0,
+then ages 500 and 3125 on the new segment while retaining the correct evidence
+reference. Test factory doubles were migrated to the explicit clock argument;
+there is no compatibility branch that drops injected clocks.
+
+Focused host/startup/serial/transport/parity gate: 72 passed in 5.52 s before the
+final parity fixture forwarded the clock explicitly. Fresh complete gate:
+**2,030 tests passed in 57.68 s**; Ruff, mypy (104 source files), offline lock
+(66 packages), and diff check passed. Firmware inputs and built image hashes
+remain unchanged, so no firmware rebuild, flash or live hardware test occurred.
+Local feature integration follows the verified fix; physical validation remains
+the next sensing step.
+
 ## 2026-11-25 — DUT_VIO independent review and verified corrections
 
 Verified correction code baseline `55cd7c71f306ae03cd848f0cd2e22b705b15db7a` (local feature branch).
