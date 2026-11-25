@@ -35,7 +35,7 @@
 > Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
 > DUT_VIO verified code baseline: `283f0ddab4f8966c03f305911a9f3dd07f2050cf` (merged locally into `main`)
 > Firmware image source: `55cd7c7`; its immutable firmware tree is unchanged
-> Documentation state reviewed: 2026-11-25
+> Documentation state reviewed: 2026-11-26
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
 > History: completed slices and dated validation live in
@@ -45,8 +45,8 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Nominal sensing sweep, reconnect and sampled power order
-  recorded; GP28 meter loading reverses. Campaign meter confirmed Mastech MAS830L.
+- **Current milestone:** MCP startup test guards hardened: 15 s discovery/20 s
+  whole process; later requests/explicit shutdown retain 5 s. Tests-only change.
 - **Sensing authority:** [Contract](dut_vio_sensing_contract.md). GP28/ADC2 only,
   negotiated observations, durable native-v2 evidence and receipt-age status;
   measured voltage does not change control policy or declared interface voltage.
@@ -55,9 +55,9 @@ Read this document first whenever development resumes.
 - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
   ADC accuracy tolerance and diagnostic runtime stack results remain unestablished.
-- **Commit gate (Nov 25):** 2,030 tests/200.48 s; Ruff, mypy (104 files), lock
-  (66 packages), evidence/diff checks pass. One initial MCP startup timeout did
-  not recur in unchanged focused/full repeats; no timing fix claimed.
+- **Validation (Nov 26):** Controlled slow startup failed at the old 5 s guard,
+  passed after the test change; 29 focused/2,030 full tests (59.25 s), Ruff,
+  mypy (104 files), lock (66 packages) and diff checks pass. No production change.
 - **Clock fix:** Initial open, automatic reconnect and release/reacquire share
   the service's configured monotonic clock; the deferred limitation is closed.
 - **Integration:** Sensing and clock fix fast-forwarded into local `main` at

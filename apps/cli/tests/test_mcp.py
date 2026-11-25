@@ -135,7 +135,9 @@ def test_absolute_cli_launches_sibling_mcp_executable_without_venv_on_path() -> 
         text=True,
         capture_output=True,
         env=environment,
-        timeout=5,
+        # Includes a second interpreter and MCP SDK imports, not just EOF shutdown.
+        # Allow 15 s for startup plus the existing 5 s shutdown allowance.
+        timeout=20,
         check=False,
     )
 
