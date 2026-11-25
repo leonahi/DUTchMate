@@ -1,0 +1,92 @@
+{
+  "prepared_at_utc": "2026-11-25T21:16:49.388585+00:00",
+  "operator_reply": "RP2350 drive appears",
+  "preparation_requested": [
+    "PPK2 OFF/VOUT disconnected",
+    "both Pico USB supplies unplugged before rewiring",
+    "external DUT and reset pull-up disconnected",
+    "helper GNDA jumper retained"
+  ],
+  "boot_volume": "/Volumes/RP2350",
+  "info_uf2": "UF2 Bootloader v1.0\nModel: Raspberry Pi RP2350\nBoard-ID: RP2350\n",
+  "image": {
+    "variant": "normal",
+    "identity": "viosense-2",
+    "bytes": 114176,
+    "sha256": "86d9f8becccf26202b95fd4f64b478ea109eea0a766936a07895bade49cfefc9",
+    "path": "build/dut-vio-normal-v2/zephyr/zephyr.uf2",
+    "config_sha256": "ac3e1e371fb89466c73896586e3d16cabe9775896f978ea4f8bd812394680445",
+    "adc_pinctrl": {
+      "default_state": "dutchmate_adc",
+      "child_groups": 0,
+      "pad_writes": 0,
+      "pad_owner": "ordered GPIO_DISCONNECTED then ISO release on GP28 only",
+      "channel": 2
+    },
+    "adc_reference_mv": 3300,
+    "reference_source": "nominal",
+    "flash_bytes": 56916,
+    "ram_bytes": 81800,
+    "stack_runtime_result": null
+  },
+  "firmware_source_commit": "55cd7c71f306ae03cd848f0cd2e22b705b15db7a",
+  "firmware_source_git_tree": "f4cc5cf22497e86d9fdc13052846034436a1e6ff",
+  "service_head": "01ea070cbd5b1b6ec0e0533bcc368de7c6989372",
+  "diskutil": {
+    "returncode": 1,
+    "stderr": "Unable to run because unable to use the DiskManagement framework.\nCommon reasons include, but are not limited to, the DiskArbitration\nframework being unavailable due to being booted in single-user mode.\n"
+  },
+  "copy_started_at_utc": "2026-11-25T21:16:53.912736+00:00",
+  "copy_completed_at_utc": "2026-11-25T21:16:54.822711+00:00",
+  "destination": "/Volumes/RP2350/DUTchMate-viosense-2.uf2",
+  "copied_bytes": 114176,
+  "usb": {
+    "port": "/dev/cu.usbmodem11401",
+    "vid": 11914,
+    "pid": 10,
+    "serial_number": "FA63A4D787572B33",
+    "description": "Debug Helper"
+  },
+  "verification_started_at_utc": "2026-11-25T21:18:01.320192+00:00",
+  "hello": {
+    "type": "hello",
+    "v": 1,
+    "firmware": "viosense-2",
+    "device": "dutchmate-rp2350",
+    "capabilities": [
+      "power_sense",
+      "uart_receive",
+      "gpio_control",
+      "uart_send",
+      "device_timestamp",
+      "overflow_telemetry"
+    ]
+  },
+  "verification_result": "matched live USB hello",
+  "dtr_deasserted": true,
+  "port_closed": true,
+  "startup_frames": [
+    {
+      "type": "hello",
+      "v": 1,
+      "firmware": "viosense-2",
+      "device": "dutchmate-rp2350",
+      "capabilities": [
+        "power_sense",
+        "uart_receive",
+        "gpio_control",
+        "uart_send",
+        "device_timestamp",
+        "overflow_telemetry"
+      ]
+    }
+  ],
+  "verification_finished_at_utc": "2026-11-25T21:18:01.704190+00:00",
+  "limitations": [
+    "No physical voltage measurement yet",
+    "No flash readback",
+    "ADC reference is nominal 3300 mV",
+    "No board electrical acceptance"
+  ],
+  "commands_sent": []
+}

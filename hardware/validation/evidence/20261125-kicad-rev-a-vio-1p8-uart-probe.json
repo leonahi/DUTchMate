@@ -1,0 +1,303 @@
+{
+  "observed_at_utc": "2026-11-25T21:41:27.620497+00:00",
+  "operator": {
+    "recorded_at_utc": "2026-11-25T21:38:30.699183+00:00",
+    "operator_reply": "1.780V and loopback jumper is fitted",
+    "fluke_dut_vio_v": 1.78,
+    "meter": "Fluke 115, DC volts",
+    "measurement": "J1 pin 14 DUT_VIO relative to J1 pin 1 GND",
+    "ppk2_setting_mv": 1800,
+    "loopback": "J1 pin 7 to J1 pin 8, operator confirmed",
+    "requested_setup": "helper USB on; external DUT disconnected; GP28 unprobed"
+  },
+  "start_status": {
+    "connected": true,
+    "dut_vio": {
+      "state": "valid",
+      "reason": null,
+      "voltage_mv": 1818,
+      "age_ms": 256,
+      "sample": {
+        "status": "ok",
+        "adc_raw": 1128,
+        "voltage_mv": 1818,
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "timestamp_us": 26027205,
+        "type": "dut_vio"
+      },
+      "evidence": {
+        "session_id": "20261125T214101Z-3f27f1be",
+        "segment_id": 0,
+        "evidence_seq": 53
+      }
+    },
+    "connection_state": "connected",
+    "backend_mode": "enhanced",
+    "profile_name": "kicad-rev-a-vio-sensing-20261125",
+    "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87",
+    "effective_profile": {
+      "name": "kicad-rev-a-vio-sensing-20261125",
+      "backend": {
+        "mode": "enhanced",
+        "topology": "external_uart",
+        "selector": {
+          "strategy": "exact_path",
+          "exact_path": "/dev/cu.usbmodem11401"
+        },
+        "current_serial_port": "/dev/cu.usbmodem11401",
+        "reconnect_timeout_s": 5.0
+      },
+      "hardware": {
+        "dut_io_voltage": 3.3,
+        "uart": {
+          "baudrate": 460800,
+          "data_bits": 8,
+          "parity": "none",
+          "stop_bits": 1,
+          "rtscts": false,
+          "xonxoff": false,
+          "tx_enabled": true,
+          "default_line_ending": "none",
+          "control_lines": {
+            "dtr_on_open": "driver_default",
+            "rts_on_open": "driver_default"
+          }
+        },
+        "control": []
+      }
+    },
+    "port": "/dev/cu.usbmodem11401",
+    "firmware": "viosense-2",
+    "device": "dutchmate-rp2350",
+    "backend_identity": {
+      "port": "/dev/cu.usbmodem11401",
+      "firmware": "viosense-2",
+      "device": "dutchmate-rp2350"
+    },
+    "backend_capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capability_policy": {
+      "uart_send": {
+        "tx_policy_enabled": true,
+        "source": "hardware.uart.tx_enabled"
+      }
+    },
+    "timestamp_provenance": {
+      "segment_id": 0,
+      "timestamp": {
+        "source": "device",
+        "clock": "rp2350_timer",
+        "unit": "us",
+        "origin": "segment_start",
+        "source_origin_us": 1445947007,
+        "observation_point": "debug_helper_uart_receive",
+        "event_granularity": "uart_event"
+      }
+    },
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "active_session_id": "20261125T214101Z-3f27f1be",
+    "active_operations": [],
+    "commanded_boot_mode": null,
+    "reconnect_remaining_s": null,
+    "retention": {
+      "enabled": false,
+      "max_count": null,
+      "session_count": 0,
+      "protected_session_ids": [],
+      "deleted_session_ids": [],
+      "diagnostic": null,
+      "detail": null
+    },
+    "control_channels": {
+      "CTRL0": {
+        "channel": "CTRL0",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL1": {
+        "channel": "CTRL1",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL2": {
+        "channel": "CTRL2",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL3": {
+        "channel": "CTRL3",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      }
+    }
+  },
+  "request": {
+    "text": "VIO_SENSE_1P8_PROBE",
+    "line_ending": "lf",
+    "conditions": [
+      {
+        "pattern": "VIO_SENSE_1P8_PROBE"
+      }
+    ],
+    "timeout_s": 2
+  },
+  "result": {
+    "ok": true,
+    "operation_id": "interact-20dd8b62-912e-47d5-8410-cf6f5da980b6",
+    "outcome": "matched",
+    "mode": "conditions",
+    "duration_s": null,
+    "conditions": [
+      {
+        "pattern": "VIO_SENSE_1P8_PROBE",
+        "name": null
+      }
+    ],
+    "timeout_s": 2.0,
+    "start_cursor": {
+      "session_id": "20261125T214101Z-3f27f1be",
+      "next_evidence_seq": 56
+    },
+    "end_cursor": {
+      "session_id": "20261125T214101Z-3f27f1be",
+      "next_evidence_seq": 79
+    },
+    "evidence_ranges": [
+      {
+        "session_id": "20261125T214101Z-3f27f1be",
+        "start_evidence_seq": 55,
+        "end_evidence_seq_exclusive": 79
+      }
+    ],
+    "matched_condition": {
+      "condition_index": 0,
+      "condition": {
+        "pattern": "VIO_SENSE_1P8_PROBE",
+        "name": null
+      },
+      "source": {
+        "session_id": "20261125T214101Z-3f27f1be",
+        "evidence_seq": 77,
+        "segment_id": 0,
+        "timestamp_us": 26292210,
+        "channel": 0
+      },
+      "line": {
+        "start_evidence_seq": 58,
+        "start_event_offset": 0,
+        "end_evidence_seq": 77,
+        "end_event_offset": 1,
+        "total_bytes": 20
+      },
+      "match_start_byte": 0,
+      "match_end_byte": 19,
+      "excerpt": {
+        "start_byte": 0,
+        "end_byte": 20,
+        "raw_b64": "VklPX1NFTlNFXzFQOF9QUk9CRQo=",
+        "text": "VIO_SENSE_1P8_PROBE\n",
+        "truncated": false
+      }
+    },
+    "line_processing_limited": false,
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "timestamp_provenance": [
+      {
+        "session_id": "20261125T214101Z-3f27f1be",
+        "segment": {
+          "segment_id": 0,
+          "timestamp": {
+            "source": "device",
+            "clock": "rp2350_timer",
+            "unit": "us",
+            "origin": "segment_start",
+            "source_origin_us": 1445947007,
+            "observation_point": "debug_helper_uart_receive",
+            "event_granularity": "uart_event"
+          }
+        }
+      }
+    ],
+    "data_b64": "VklPX1NFTlNFXzFQOF9QUk9CRQo=",
+    "transformation": {
+      "input_form": "text",
+      "line_ending": "lf",
+      "resolved_line_ending": "lf"
+    },
+    "tx": {
+      "ok": true,
+      "performed_at": "2026-11-25T21:41:27.597738Z",
+      "device_timestamp_us": 1472240347,
+      "attempt_id": "2cc0286f-53f8-4283-b944-b64b9ea27c0e",
+      "data_b64": "VklPX1NFTlNFXzFQOF9QUk9CRQo=",
+      "accepted_bytes": 20,
+      "status": "success",
+      "audit_status": "recorded",
+      "transformation": {
+        "input_form": "text",
+        "line_ending": "lf",
+        "resolved_line_ending": "lf"
+      },
+      "attempt_session_id": "20261125T214101Z-3f27f1be",
+      "attempt_evidence_seq": 56,
+      "result_session_id": "20261125T214101Z-3f27f1be",
+      "result_evidence_seq": 57
+    },
+    "tx_error": null
+  }
+}

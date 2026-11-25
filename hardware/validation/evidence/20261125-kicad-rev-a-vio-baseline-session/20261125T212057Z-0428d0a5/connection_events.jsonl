@@ -1,0 +1,5 @@
+{"evidence_seq":0,"type":"connected","recorded_at":"2026-11-25T21:20:57Z","segment_id":0,"detail":{"connection_generation":0}}
+{"evidence_seq":1705,"type":"unexpected_disconnect","recorded_at":"2026-11-25T21:35:09Z","segment_id":0,"detail":{"error":"Enhanced serial read failed"}}
+{"evidence_seq":1706,"type":"reconnect_started","recorded_at":"2026-11-25T21:35:09Z","segment_id":0,"detail":{"timeout_s":5.0}}
+{"evidence_seq":1707,"type":"segment_opened","recorded_at":"2026-11-25T21:35:11Z","segment_id":1}
+{"evidence_seq":1709,"type":"reconnect_succeeded","recorded_at":"2026-11-25T21:35:11Z","segment_id":1,"detail":{"connection_generation":1}}

@@ -1,0 +1,37 @@
+{
+  "recorded_at_utc": "2026-11-25T22:13:40.978772+00:00",
+  "operator_reply": "4.96V, 0.0V, 0.0V, 1.10uA",
+  "requested_sequence": [
+    "PPK2 output OFF",
+    "Disconnect helper USB",
+    "Enable PPK2 at existing 5000 mV setting",
+    "Measure DUT_VIO, helper 3V3 and GP28 relative to common GND",
+    "Remove probes and take fresh 10-second average current"
+  ],
+  "requested_setup": {
+    "helper_usb": "disconnected",
+    "external_dut": "disconnected",
+    "ppk2_setting_mv": 5000,
+    "uart_loopback": "J1 pins 7 to 8 fitted",
+    "control_channels": "unmapped"
+  },
+  "operator_measurements": {
+    "dut_vio_v": 4.96,
+    "helper_3v3_v": 0.0,
+    "gp28_v": 0.0,
+    "ppk2_average_current_ua": 1.1,
+    "requested_current_window_s": 10,
+    "requested_probes_removed_for_current": true
+  },
+  "meter": "Fluke 115, DC volts",
+  "precision": "As supplied; 0.0 V is a reported display reading, not proof of zero leakage",
+  "flashed_image_provenance": {
+    "firmware": "viosense-2",
+    "helper_usb_serial": "FA63A4D787572B33",
+    "uf2_sha256": "86d9f8becccf26202b95fd4f64b478ea109eea0a766936a07895bade49cfefc9",
+    "reference_mv": 3300,
+    "reference_source": "nominal"
+  },
+  "host_state": "Capture service stopped; no live UART or ADC telemetry while helper USB disconnected",
+  "interpretation": "No observable rise on helper 3V3 or GP28 at reported meter resolution with DUT_VIO present. Does not establish loaded isolation, transient behavior or complete power-order/board acceptance."
+}

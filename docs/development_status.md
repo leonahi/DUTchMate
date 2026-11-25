@@ -45,29 +45,29 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Report-only DUT_VIO software and injected-clock fix
-  verified; the same clock timestamps receipts and computes status age.
+- **Current milestone:** Nominal sensing sweep, reconnect and sampled power order
+  recorded; GP28 meter loading reverses. Campaign meter confirmed Mastech MAS830L.
 - **Sensing authority:** [Contract](dut_vio_sensing_contract.md). GP28/ADC2 only,
   negotiated observations, durable native-v2 evidence and receipt-age status;
   measured voltage does not change control policy or declared interface voltage.
-- **Next step:** Reconfirm operator setup for the separate Fluke/actual-VIO campaign.
-  Use the retained `viosense-2` image provenance; no firmware has been flashed.
+- **Next step:** With the lab meter available, remeasure DUT_VIO and ADC_VREF,
+  then choose any board-specific reference build; retain nominal reference meanwhile.
 - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
-  ADC accuracy and diagnostic runtime stack results remain unmeasured.
-- **Validation (Nov 25):** 2,030 tests/53.45 s; Ruff, mypy (104 source files),
-  offline lock (66 packages), diff check pass. Three corrected images build;
-  code Graphify refreshed, semantic documentation graph unchanged.
+  ADC accuracy tolerance and diagnostic runtime stack results remain unestablished.
+- **Commit gate (Nov 25):** 2,030 tests/200.48 s; Ruff, mypy (104 files), lock
+  (66 packages), evidence/diff checks pass. One initial MCP startup timeout did
+  not recur in unchanged focused/full repeats; no timing fix claimed.
 - **Clock fix:** Initial open, automatic reconnect and release/reacquire share
   the service's configured monotonic clock; the deferred limitation is closed.
 - **Integration:** Sensing and clock fix fast-forwarded into local `main` at
   `283f0dd`; existing CAD edits and verified image provenance preserved.
 - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
   remain needed for outstanding electrical checks; pin 36 remains probe-only.
-- **Last hardware state:** Both USB on, GP2 normal, UART/reset/boot wiring and
-  10 kΩ reset pull-up fitted; PPK2 off/VOUT removed. Reconfirm before live use.
-  [Board evidence](../hardware/validation/phase1_kicad_rev_a.md) retains extra boots
-  with no recurrence in the 30.05 s probes-off repeat; cause unproven.
+- **Bench handoff:** External DUT isolated, J1.7↔8 loop fitted; PPK2 5000 mV.
+  Last known USB/PPK2 ON, probes removed; request PPK2 OFF then disconnect USB.
+  [Flash/startup evidence](../hardware/validation/phase1_kicad_rev_a.md#dut_vio-sensing-flash-and-live-usb-telemetry--2026-11-25)
+  records the known helper; it establishes no physical voltage accuracy.
 - **Acceptance boundary:** Phase 1A Complete; manufactured KiCad Rev-A acceptance,
   Phase 1B, Stage 8 and Phase 1 incomplete. Legacy EAGLE functional evidence,
   source review and software tests establish no KiCad electrical acceptance.
@@ -75,10 +75,11 @@ Read this document first whenever development resumes.
   layout, DFM and fabrication remain designer work. Existing local CAD edits preserved.
 - **MCP boundary:** Twelve tools retained. Strict Inspector/applicable conformance
   passed previously; VS Code tool use and Claude Code host UI checks unavailable.
-- **Closed live ownership:** Nov-21 session `20261121T174635Z-56780735` closed;
-  PID/listener/serial released. No live service was opened for this software slice.
-- **Follow-up checklist:** Reconnect/load-profile fixes committed; sensing code and
-  three corrected images built; review/clock fixes verified; physical gates pending.
+- **Capture closed:** Service stopped, listener/serial released; power-order session
+  `20261125T221457Z-bec57e67` completed/service_shutdown, 3,521 contiguous records
+  archived/hash-verified; previous 147,031-record campaign and CAD unchanged.
+- **Follow-up checklist:** Nominal sweep/reconnect/power-order and meter effect
+  recorded/corrected; calibrated accuracy and independent physical gates remain open.
 - **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
   Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
 

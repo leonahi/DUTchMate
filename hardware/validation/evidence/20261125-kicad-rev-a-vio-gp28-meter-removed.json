@@ -1,0 +1,759 @@
+{
+  "point": "gp28-meter-removed",
+  "operator": {
+    "recorded_at_utc": "2026-11-25T22:42:41.933331+00:00",
+    "operator_reply": "Yes for both questions",
+    "confirmation": {
+      "both_probes_removed": true,
+      "earlier_sweep_and_3p22_adc_vref_used_mastech": true
+    },
+    "meter": "Mastech MAS830L",
+    "requested_setup": "USB and PPK2 output ON at 5000 mV; wiring unchanged; external DUT isolated; probes removed",
+    "measurement_kind": "Probe-removal recovery diagnostic; no new operator DUT_VIO measurement in this reply",
+    "prior_dut_vio_v": 4.96,
+    "prior_adc_vref_v": 3.22
+  },
+  "capture_started_at_utc": "2026-11-25T22:42:44.576770+00:00",
+  "capture_finished_at_utc": "2026-11-25T22:42:54.810496+00:00",
+  "start_status": {
+    "connected": true,
+    "dut_vio": {
+      "state": "valid",
+      "reason": null,
+      "voltage_mv": 5060,
+      "age_ms": 766,
+      "sample": {
+        "status": "ok",
+        "adc_raw": 3140,
+        "voltage_mv": 5060,
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "timestamp_us": 1666028310,
+        "type": "dut_vio"
+      },
+      "evidence": {
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": 3384
+      }
+    },
+    "connection_state": "connected",
+    "backend_mode": "enhanced",
+    "profile_name": "kicad-rev-a-vio-sensing-20261125",
+    "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87",
+    "effective_profile": {
+      "name": "kicad-rev-a-vio-sensing-20261125",
+      "backend": {
+        "mode": "enhanced",
+        "topology": "external_uart",
+        "selector": {
+          "strategy": "exact_path",
+          "exact_path": "/dev/cu.usbmodem11401"
+        },
+        "current_serial_port": "/dev/cu.usbmodem11401",
+        "reconnect_timeout_s": 5.0
+      },
+      "hardware": {
+        "dut_io_voltage": 3.3,
+        "uart": {
+          "baudrate": 460800,
+          "data_bits": 8,
+          "parity": "none",
+          "stop_bits": 1,
+          "rtscts": false,
+          "xonxoff": false,
+          "tx_enabled": true,
+          "default_line_ending": "none",
+          "control_lines": {
+            "dtr_on_open": "driver_default",
+            "rts_on_open": "driver_default"
+          }
+        },
+        "control": []
+      }
+    },
+    "port": "/dev/cu.usbmodem11401",
+    "firmware": "viosense-2",
+    "device": "dutchmate-rp2350",
+    "backend_identity": {
+      "port": "/dev/cu.usbmodem11401",
+      "firmware": "viosense-2",
+      "device": "dutchmate-rp2350"
+    },
+    "backend_capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capability_policy": {
+      "uart_send": {
+        "tx_policy_enabled": true,
+        "source": "hardware.uart.tx_enabled"
+      }
+    },
+    "timestamp_provenance": {
+      "segment_id": 0,
+      "timestamp": {
+        "source": "device",
+        "clock": "rp2350_timer",
+        "unit": "us",
+        "origin": "segment_start",
+        "source_origin_us": 50084186,
+        "observation_point": "debug_helper_uart_receive",
+        "event_granularity": "uart_event"
+      }
+    },
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "active_session_id": "20261125T221457Z-bec57e67",
+    "active_operations": [],
+    "commanded_boot_mode": null,
+    "reconnect_remaining_s": null,
+    "retention": {
+      "enabled": false,
+      "max_count": null,
+      "session_count": 0,
+      "protected_session_ids": [],
+      "deleted_session_ids": [],
+      "diagnostic": null,
+      "detail": null
+    },
+    "control_channels": {
+      "CTRL0": {
+        "channel": "CTRL0",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL1": {
+        "channel": "CTRL1",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL2": {
+        "channel": "CTRL2",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL3": {
+        "channel": "CTRL3",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      }
+    }
+  },
+  "end_status": {
+    "connected": true,
+    "dut_vio": {
+      "state": "valid",
+      "reason": null,
+      "voltage_mv": 5058,
+      "age_ms": 5,
+      "sample": {
+        "status": "ok",
+        "adc_raw": 3139,
+        "voltage_mv": 5058,
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "timestamp_us": 1677023535,
+        "type": "dut_vio"
+      },
+      "evidence": {
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": 3406
+      }
+    },
+    "connection_state": "connected",
+    "backend_mode": "enhanced",
+    "profile_name": "kicad-rev-a-vio-sensing-20261125",
+    "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87",
+    "effective_profile": {
+      "name": "kicad-rev-a-vio-sensing-20261125",
+      "backend": {
+        "mode": "enhanced",
+        "topology": "external_uart",
+        "selector": {
+          "strategy": "exact_path",
+          "exact_path": "/dev/cu.usbmodem11401"
+        },
+        "current_serial_port": "/dev/cu.usbmodem11401",
+        "reconnect_timeout_s": 5.0
+      },
+      "hardware": {
+        "dut_io_voltage": 3.3,
+        "uart": {
+          "baudrate": 460800,
+          "data_bits": 8,
+          "parity": "none",
+          "stop_bits": 1,
+          "rtscts": false,
+          "xonxoff": false,
+          "tx_enabled": true,
+          "default_line_ending": "none",
+          "control_lines": {
+            "dtr_on_open": "driver_default",
+            "rts_on_open": "driver_default"
+          }
+        },
+        "control": []
+      }
+    },
+    "port": "/dev/cu.usbmodem11401",
+    "firmware": "viosense-2",
+    "device": "dutchmate-rp2350",
+    "backend_identity": {
+      "port": "/dev/cu.usbmodem11401",
+      "firmware": "viosense-2",
+      "device": "dutchmate-rp2350"
+    },
+    "backend_capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capability_policy": {
+      "uart_send": {
+        "tx_policy_enabled": true,
+        "source": "hardware.uart.tx_enabled"
+      }
+    },
+    "timestamp_provenance": {
+      "segment_id": 0,
+      "timestamp": {
+        "source": "device",
+        "clock": "rp2350_timer",
+        "unit": "us",
+        "origin": "segment_start",
+        "source_origin_us": 50084186,
+        "observation_point": "debug_helper_uart_receive",
+        "event_granularity": "uart_event"
+      }
+    },
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "active_session_id": "20261125T221457Z-bec57e67",
+    "active_operations": [],
+    "commanded_boot_mode": null,
+    "reconnect_remaining_s": null,
+    "retention": {
+      "enabled": false,
+      "max_count": null,
+      "session_count": 0,
+      "protected_session_ids": [],
+      "deleted_session_ids": [],
+      "diagnostic": null,
+      "detail": null
+    },
+    "control_channels": {
+      "CTRL0": {
+        "channel": "CTRL0",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL1": {
+        "channel": "CTRL1",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL2": {
+        "channel": "CTRL2",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL3": {
+        "channel": "CTRL3",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      }
+    }
+  },
+  "start_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzODYsODU2Myw0MTYzLDc2NzI1OCwxMjdd",
+  "end_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDcsODU2Myw0MTYzLDc3MjExNSwxMjdd",
+  "pages": [
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3386,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3141,
+          "voltage_mv": 5061,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:44Z",
+          "segment_id": 0,
+          "timestamp_us": 1667030315
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzODcsODU2Myw0MTYzLDc2NzQ3NSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3387,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:45Z",
+          "segment_id": 0,
+          "timestamp_us": 1667577156
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzODgsODU2Myw0MTYzLDc2NzcyMiwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3388,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3140,
+          "voltage_mv": 5060,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:45Z",
+          "segment_id": 0,
+          "timestamp_us": 1668022417
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzODksODU2Myw0MTYzLDc2NzkzOSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3389,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:46Z",
+          "segment_id": 0,
+          "timestamp_us": 1668579351
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTAsODU2Myw0MTYzLDc2ODE4NiwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3390,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3138,
+          "voltage_mv": 5056,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:46Z",
+          "segment_id": 0,
+          "timestamp_us": 1669025120
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTEsODU2Myw0MTYzLDc2ODQwMywxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3391,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:47Z",
+          "segment_id": 0,
+          "timestamp_us": 1669581956
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTIsODU2Myw0MTYzLDc2ODY1MCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3392,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3139,
+          "voltage_mv": 5058,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:47Z",
+          "segment_id": 0,
+          "timestamp_us": 1670027725
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTMsODU2Myw0MTYzLDc2ODg2NywxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3393,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:48Z",
+          "segment_id": 0,
+          "timestamp_us": 1670584561
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTQsODU2Myw0MTYzLDc2OTExNCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3394,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3140,
+          "voltage_mv": 5060,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:48Z",
+          "segment_id": 0,
+          "timestamp_us": 1671030328
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTUsODU2Myw0MTYzLDc2OTMzMSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3395,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:49Z",
+          "segment_id": 0,
+          "timestamp_us": 1671586357
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTYsODU2Myw0MTYzLDc2OTU3OCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3396,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3138,
+          "voltage_mv": 5056,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:49Z",
+          "segment_id": 0,
+          "timestamp_us": 1672021523
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTcsODU2Myw0MTYzLDc2OTc5NSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3397,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:50Z",
+          "segment_id": 0,
+          "timestamp_us": 1672588563
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTgsODU2Myw0MTYzLDc3MDA0MiwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3398,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3141,
+          "voltage_mv": 5061,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:50Z",
+          "segment_id": 0,
+          "timestamp_us": 1673024237
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDMzOTksODU2Myw0MTYzLDc3MDI1OSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3399,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:51Z",
+          "segment_id": 0,
+          "timestamp_us": 1673590663
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDAsODU2Myw0MTYzLDc3MDUwNiwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3400,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3141,
+          "voltage_mv": 5061,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:51Z",
+          "segment_id": 0,
+          "timestamp_us": 1674026328
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDEsODU2Myw0MTYzLDc3MDcyMywxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3401,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:52Z",
+          "segment_id": 0,
+          "timestamp_us": 1674593266
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDIsODU2Myw0MTYzLDc3MDk3MCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3402,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3140,
+          "voltage_mv": 5060,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:52Z",
+          "segment_id": 0,
+          "timestamp_us": 1675028943
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDMsODU2Myw0MTYzLDc3MTE4NywxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3403,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:53Z",
+          "segment_id": 0,
+          "timestamp_us": 1675595366
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDQsODU2Myw0MTYzLDc3MTQzNCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3404,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3139,
+          "voltage_mv": 5058,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:53Z",
+          "segment_id": 0,
+          "timestamp_us": 1676031033
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDUsODU2Myw0MTYzLDc3MTY1MSwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3405,
+          "type": "buffer_status",
+          "recorded_at": "2026-11-25T22:42:54Z",
+          "segment_id": 0,
+          "timestamp_us": 1676597972
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDYsODU2Myw0MTYzLDc3MTg5OCwxMjdd",
+      "omitted_records": 0
+    },
+    {
+      "ok": true,
+      "records": [
+        {
+          "session_id": "20261125T221457Z-bec57e67",
+          "evidence_seq": 3406,
+          "type": "dut_vio",
+          "status": "ok",
+          "adc_raw": 3139,
+          "voltage_mv": 5058,
+          "adc_reference_mv": 3300,
+          "reference_source": "nominal",
+          "recorded_at": "2026-11-25T22:42:54Z",
+          "segment_id": 0,
+          "timestamp_us": 1677023535
+        }
+      ],
+      "next_cursor": "WzEsIjIwMjYxMTI1VDIyMTQ1N1otYmVjNTdlNjciLDM0MDcsODU2Myw0MTYzLDc3MjExNSwxMjdd",
+      "omitted_records": 0
+    }
+  ],
+  "summary": {
+    "samples": 11,
+    "duration_s": 10.233378542000537,
+    "voltage_mv": {
+      "min": 5056,
+      "max": 5061,
+      "mean": 5059
+    },
+    "adc_raw": {
+      "min": 3138,
+      "max": 3141,
+      "mean": 3139.6363636363635
+    },
+    "adc_reference_mv": 3300,
+    "reference_source": "nominal",
+    "session_id": "20261125T221457Z-bec57e67",
+    "segment_id": 0,
+    "evidence_seq": [
+      3386,
+      3406
+    ]
+  },
+  "comparison": "Characterization against the operator reading; no finer meter precision or accuracy tolerance inferred"
+}

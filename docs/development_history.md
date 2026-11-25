@@ -9,6 +9,363 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-25 — Physical characterization evidence commit verification
+
+Reviewed three documents and **42** new evidence files, including the zero and
+powered sweep, UART load/loopback checks, USB reconnect, sampled power-order
+transitions, reversible GP28 meter effect and definitive Mastech MAS830L
+attribution correction. Firmware/source baselines remain unchanged: verified
+code `283f0dd`, image source `55cd7c7`, nominal reference 3300 mV. Preexisting
+KiCad PCB/project edits are excluded and retain their recorded hashes.
+
+Fresh [evidence audit](../hardware/validation/evidence/20261125-kicad-rev-a-vio-evidence-audit.json)
+reconciled **152,957** contiguous records across three completed sessions:
+147,031 powered/UART, 3,521 power-order and 2,405 baseline records. All raw
+UART bytes and compressed archive members match their descriptors/hashes.
+Ten sample windows were recomputed against the integer conversion; all samples
+retain 3300 mV/nominal provenance. The 21 original artifacts covered by the
+meter correction still match their recorded hashes. Documentation links resolve,
+older history is preserved and Resume Here remains 39 lines. Capture services
+were stopped before software checks; no physical hardware action occurred.
+
+Fresh required software gate: Ruff passed; mypy passed for **104** source files;
+offline lock check passed for **66** packages. Initial full pytest reported
+**1 failed/2,029 passed in 231.14 s**: the unchanged absolute CLI-to-MCP launch
+test exceeded its existing five-second subprocess timeout. Its focused module
+then passed **6 tests in 4.08 s**, the launch case taking 3.66 s. The unchanged
+fresh full rerun passed **2,030 tests in 200.48 s**. No application/test code or
+timeout was changed; cause of the initial timing failure remains unassigned,
+and no timing fix is claimed. The first offline lock attempt lacked sandbox
+access to the existing uv cache; the same offline check passed with read access.
+Final diff checks passed. No Graphify update was required for this data/document
+slice; no calibrated accuracy or full manufactured-board acceptance is claimed.
+
+## 2026-11-25 — GP28 probe-removal recovery and archived power-order campaign
+
+Operator answered **“Yes for both questions”**, confirming both probes removed
+and that the earlier sensing sweep/3.22 V ADC_VREF reading used **Mastech MAS830L**.
+The [provenance correction](../hardware/validation/evidence/20261125-kicad-rev-a-vio-meter-provenance-correction.json)
+records this explicitly and hashes 21 original artifacts containing carried-forward
+Fluke labels/field names. Original values, records and hashes remain preserved;
+these sensing results are Mastech comparisons, not Fluke-verified accuracy.
+Older historical tests where Fluke was explicitly identified are unaffected.
+
+A fresh **10.233 s** [probes-removed window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-removed.json)
+retained 11 successful samples: raw **3138–3141**, mean **3139.636**; reported
+VIO **5056–5061 mV**, mean **5059 mV**, reference **3300 mV/nominal**.
+Same session `20261125T221457Z-bec57e67`, segment 0, voltage evidence **3386–3406**,
+zero cursor omissions. The [three-window recovery analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-recovery.json)
+verifies raw means **3139.8 → 3067.727 → 3139.636** as the meter was connected
+then removed. Return is within **0.164 ADC code** of the initial mean. This
+reversible effect strongly supports meter loading of the divider; the earlier
+inferred approximately 1 MΩ load is a model, not a manufacturer specification.
+No firmware/reference correction or new calibrated image was introduced.
+
+Service PID **4315** then stopped cleanly; process, listener and serial ownership
+release were verified. Session ended **completed/service_shutdown**. Its
+[archive manifest](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-session-manifest.json)
+verifies **19** archived native/campaign files, **3,521** contiguous evidence
+records (0–3520), and all **46** raw UART bytes against RX descriptors. Archive
+size **53,972 bytes**; every decompressed member matched its source hash. All
+seven prior powered-session native files and both preexisting dirty CAD files
+retain their recorded hashes. No pytest, production source/firmware change or
+timeout increase occurred; `git diff --check` passed. These scoped DC/sampled
+results leave calibrated accuracy, transient/scope and loaded-rail acceptance open.
+
+## 2026-11-25 — Meter-connected GP28 capture and meter attribution correction
+
+Operator reported GP28 **2.42 V** while requested to hold probes on physical
+pin 34/GND. The following **10.914 s** [meter-connected capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-connected.json)
+retained 11 successful samples: ADC **3066–3069**, mean **3067.727**, reported
+VIO **4940–4945 mV**, mean **4943.182 mV**, reference **3300 mV/nominal**.
+Same session `20261125T221457Z-bec57e67`, segment 0, voltage evidence **2908–2928**,
+zero cursor omissions. This is intentionally probed diagnostic data, not an
+unloaded accuracy observation.
+
+Operator then explicitly clarified **“Mastech MAS830L I don't have Fluke 115
+for the moment”**. The current GP28 meter is therefore Mastech MAS830L.
+Earlier viosense-2 sweep/reference “Fluke” labels were carried forward from
+older tests, not independently reconfirmed for this campaign. Their applicability
+is unconfirmed pending operator clarification; original records remain preserved
+with this correction. This does not revise the older historical tests where the
+operator explicitly identified a Fluke.
+
+[Diagnostic analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-diagnostic.json)
+compares raw means **3139.8 unprobed → 3067.727 meter-connected**, a **2.295%**
+decrease. For nominal 47k/47k resistors, this is consistent with an added load
+of approximately **1.00 MΩ**; that value is an inference, not a verified meter
+specification. Using the prior, nonsimultaneous 3.22 V reference gives approximately
+**2.412 V** at GP28 for the loaded codes. Probe-removal recovery and earlier
+meter provenance are not yet confirmed. No firmware/reference adjustment,
+source patch, timeout increase or pytest run occurred; `git diff --check` passed.
+
+## 2026-11-25 — USB-first DUT_VIO restoration and UART recovery
+
+After requested PPK2 ON at 5000 mV/10-second settling with helper USB and wiring
+unchanged, operator reported **DUT_VIO 4.96 V, helper 3V3 3.25 V, GP28 2.42 V,
+PPK2 average current 58.50 µA**. The readings reproduce those before source-off;
+current was requested over a fresh 10-second probes-removed window.
+
+[Restoration transition](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored-transition.json)
+retains 624 records/312 successful voltage observations, zero cursor omissions,
+from **10 mV** to **5061 mV**. USB session `20261125T221457Z-bec57e67`, segment 0,
+continued unchanged. No physical-switch timestamp or transient latency is inferred.
+A fresh **10.528 s** [unprobed window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored.json)
+retained ten samples: raw **3138–3142**, reported **5056–5063 mV**, mean
+**5059.5 mV**, reference **3300 mV/nominal**, voltage evidence **1794–1812**.
+One bounded audited **24-byte** [UART probe](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-restored-uart.json)
+then echoed byte-for-byte, matching segment 0/evidence **1849**.
+
+The repeated separate GP28 meter reading (2.42 V) differs from the approximately
+2.47 V midpoint calculated offline from unloaded ADC codes and the earlier
+3.22 V reference measurement. Measurements were not simultaneous; no cause,
+calibration change or divider acceptance is assigned. No firmware/source/reference
+change, timeout increase or pytest run occurred; `git diff --check` passed.
+The sole service remains active for a simultaneous meter/ADC comparison.
+
+## 2026-11-25 — USB-on DUT_VIO source-off transition and zero window
+
+After the requested PPK2 OFF/10-second settling with helper USB/wiring unchanged,
+operator reported **DUT_VIO 0.0 V, helper 3V3 3.25 V, GP28 0.0 V, PPK2 90 nA**.
+Current was requested over a fresh 10-second window with probes removed. That
+source-off PPK2 display is not a measurement of total USB-powered helper current.
+
+[Durable transition capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off-transition.json)
+retrieved 424 records/212 voltage observations from the saved pre-switch cursor,
+with zero omissions. Reported voltage moved from **5060 mV** to **10 mV**;
+last ten observations were **6–10 mV**. Operator switching time was not timestamped,
+so no transition latency or transient waveform is claimed. The helper stayed
+connected in session `20261125T221457Z-bec57e67`, physical segment 0.
+
+A fresh **10.691 s** [unprobed zero window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off.json)
+retained 11 successful samples: raw **4–6**, reported **6–10 mV**, mean
+**8.182 mV**, reference **3300 mV/nominal**, voltage evidence **1064–1084**.
+No UART/GPIO command was sent with the DUT_VIO source off. No production
+source/firmware/reference change, pytest run or timeout increase occurred;
+`git diff --check` passed. The service remains sole serial owner for recovery.
+
+## 2026-11-25 — VIO-first powered readings and unprobed sensing window
+
+Operator reported **DUT_VIO 4.96 V, helper 3V3 3.25 V, GP28 2.42 V,
+PPK2 average current 58.5 µA**, after requested probe removal and a fresh
+10-second current average. Helper USB/PPK2 5000 mV and loopback remained
+requested unchanged, with external DUT isolated and sensing active. Voltages
+were sequential readings, not a simultaneous divider-ratio measurement.
+
+A subsequent **10.467 s** unprobed [capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on.json)
+retained ten successful nominal-reference observations: raw **3138–3143**,
+reported **5056–5064 mV**, mean **5060.1 mV**. Same session
+`20261125T221457Z-bec57e67`, segment 0, voltage evidence **525–543**;
+cursor omissions zero. The apparent difference versus Fluke VIO remains a
+nominal-reference observation; GP28's separate meter reading is retained without
+assigning a cause to its difference from the unloaded ADC-derived midpoint.
+No reference correction, source/firmware patch, timeout increase or pytest run
+occurred; `git diff --check` passed. The existing sole service continues recording.
+
+## 2026-11-25 — VIO-first helper power-up and sensing startup
+
+Operator confirmed helper USB **connected** after the requested probe removal,
+with PPK2 5000 mV ON and loopback/external DUT isolation unchanged. Read-only
+USB discovery identified serial **FA63A4D787572B33**, VID/PID **2E8A:000A**,
+at `/dev/cu.usbmodem11401`; listener and serial port were unowned before startup.
+The sole new service PID **4315** opened session **`20261125T221457Z-bec57e67`**
+in the same dedicated campaign store with unchanged profile digest
+`610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87`.
+Controls remain unmapped and no background sender is active.
+
+[Startup evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on-startup.json)
+retains USB identity, process/profile provenance and a fresh successful
+nominal-reference observation: raw **3144**, reported **5066 mV**, reference
+**3300 mV/nominal**, segment 0/evidence **2**, receipt age **102 ms**.
+A bounded audited **22-byte** [UART probe](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on-uart.json)
+echoed byte-for-byte on segment 0, matching evidence **57**. Powered operator
+voltage/current readings have not yet been paired with this startup. No
+production source/firmware change, pytest run or timeout increase occurred;
+`git diff --check` passed. Full power-order and board acceptance remain open.
+
+## 2026-11-25 — DUT_VIO present with helper USB disconnected
+
+After the requested PPK2 OFF → helper USB disconnected → PPK2 5000 mV ON
+sequence, operator reported **DUT_VIO 4.96 V, helper 3V3 0.0 V, GP28 0.0 V,
+PPK2 average current 1.10 µA**. The current was requested over a fresh
+10-second window with probes removed; the external DUT remained requested
+disconnected and J1.7↔8 loopback fitted. The installed image remains
+`viosense-2`, nominal 3300 mV reference; no image or configuration changed.
+
+[Operator evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-off.json)
+retains the reply, requested sequence, measurement precision and image identity.
+There is no observable rise on helper 3V3 or GP28 at the reported meter
+resolution. A 0.0 V display does not prove zero leakage; this is not a loaded
+isolation or transient test. The capture service remains stopped and no live
+ADC/UART observation exists while USB is disconnected. Full power-order and
+manufactured-board acceptance remain open. No pytest/source/firmware change
+occurred; `git diff --check` passed.
+
+## 2026-11-25 — Physical sensing reconnect and closed campaign archive
+
+Operator confirmed **done** for the requested helper-only USB unplug/replug,
+with PPK2 5000 mV ON, loopback unchanged and probes removed. The HTTP observer
+captured 37 disconnected status polls; each cleared voltage, age, sample and
+evidence. First disconnected observation 22:08:00.336611 UTC, first connected
+fresh valid observation 22:08:04.763316 UTC: **4.4278 s** between HTTP polls,
+not a measurement of physical cable disconnection duration. Timeout remained
+5.0 s. Same session `20261125T214101Z-3f27f1be`, fresh physical segment **1**.
+
+Durable connection evidence: disconnect **146846**, reconnect start **146847**,
+segment open **146848**, reconnect success **146850**, first observed valid
+new-segment voltage **146851**. Old observation was not reused. Fresh sensing
+retained **3300 mV/nominal** provenance. One audited post-reconnect 25-byte UART
+probe echoed byte-for-byte and matched on segment 1, evidence **146925**.
+[Reconnect record](../hardware/validation/evidence/20261125-kicad-rev-a-vio-reconnect.json)
+links the complete compressed observer capture; cursor omissions were zero.
+
+The sender had already stopped after 6,537 sends. Service PID 3141 then stopped
+normally at 22:09:20 UTC; process, listener and serial ownership released.
+Native metadata is **completed/service_shutdown**, no active/pending operations,
+one observation gap, two completed Interacts. The
+[archive manifest](../hardware/validation/evidence/20261125-kicad-rev-a-vio-powered-session-manifest.json)
+verifies all 15 archived native/campaign files against source hashes. Its native
+journals contain **147,031** contiguous evidence records (0–147030), and every
+RX record reconciles with all **130,565** bytes of `uart_raw.log`. Compressed
+archive size: **2,553,915 bytes**. No source/firmware/reference change, pytest run
+or timeout increase occurred. `git diff --check` passed. This records one
+physical reconnect trial; power-order and independent board acceptance gates
+are not closed by it.
+
+## 2026-11-25 — Measured ADC reference and offline sweep comparison
+
+In response to the requested Fluke measurement of Pico physical pin 35
+ADC_VREF against J1.1/GND, operator reported **3.22 V**, with the 5000 mV
+PPK2 setting and loopback setup requested unchanged. No additional meter digits
+are inferred. Firmware remains nominal-reference 3300 mV; original wire samples
+and paired-point records are unchanged.
+
+[Offline analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-reference-analysis.json)
+recalculates each stored raw ADC sample using `(raw * 3220 * 2 + 2048) // 4096`.
+The 1.8/2.5/3.3/5 V window means become 1.7712/2.4588/3.2458/4.9351 V,
+respectively: differences −0.494%/−0.453%/−0.129%/−0.502% against the
+operator meter readings. This assumes the single later reference measurement
+applies to earlier windows. It supports a reference-related explanation for
+most positive bias but proves neither reference stability nor total accuracy.
+It is not new firmware telemetry, a calibrated image or board acceptance.
+
+HTTP-only UART sender PID 3207 stopped normally after 6,537 sends, with no
+reported error. Sole serial service PID 3141 remains connected; HTTP observer
+PID 3906 armed for the operator reconnect. No production source/firmware change,
+pytest run, reference configuration change or timeout increase occurred.
+
+## 2026-11-25 — DUT_VIO 5 V point under ongoing UART traffic
+
+Operator Fluke actual **4.96 V**, after requested PPK2 maximum setting 5000 mV
+and settling with wiring/DUT isolation unchanged. A fresh **10.120 s** window
+retained ten successful samples: raw **3134–3140**, reported VIO
+**5.050–5.060 V**, mean **5.0581 V**, nominal reference 3300 mV. Observed mean
+difference **+98.1 mV (+1.98%)**; cause and accuracy tolerance remain unassigned.
+
+The same window contained 980 RX bytes, 50 TX attempts and 49 complete echoes;
+all 48 interior frames matched byte-exact, excluding cursor edges. Session
+`20261125T214101Z-3f27f1be`, segment 0, voltage sequences 90918–91904.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-5p0-comparison.json)
+retain the measured-point evidence. No source/firmware/reference/offset change,
+GPIO command, timeout increase or pytest run occurred. No calibration or board
+acceptance is claimed; the service and bounded sender remain live.
+
+## 2026-11-25 — DUT_VIO 3.3 V point under ongoing UART traffic
+
+Operator Fluke actual **3.25 V**, after requested PPK2 setting 3300 mV and
+settling with wiring/DUT isolation unchanged. A 10.172 s fresh window retained
+ten successful samples: raw **2061–2073**, VIO **3.321–3.340 V**, mean
+**3.3264 V**, nominal reference 3300 mV. Observed mean difference:
+**+76.4 mV (+2.35%)**; finer meter digits, cause and tolerance remain unassigned.
+
+The same window contained 1000 RX bytes, 50 TX attempts and 50 complete echoes;
+all 48 interior frames matched byte-exact, excluding cursor edges. Session
+`20261125T214101Z-3f27f1be`, segment 0, voltage sequences 75592–76578.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-3p3-comparison.json)
+retain the measured-point evidence. No source/firmware/reference/offset change,
+GPIO command, timeout increase or pytest run occurred. No calibration or board
+acceptance is claimed; the service and bounded sender remain live.
+
+## 2026-11-25 — DUT_VIO 2.5 V point under ongoing UART traffic
+
+Operator Fluke reading **2.47 V**, after requested PPK2 setting 2500 mV and
+settling, with USB/loopback/DUT isolation unchanged. HTTP sender PID 3207
+remained active. A 10.043 s fresh window retained ten successful samples:
+raw ADC 1558–1567, VIO **2.510–2.525 V**, mean **2.5198 V**, reference
+3300 mV/nominal. Observed difference **+49.8 mV (+2.02%)**; no finer meter
+precision or accuracy tolerance is inferred.
+
+The same window contained 980 RX bytes, 50 TX attempts and 49 complete echo
+frames; all 48 interior frames matched byte-exact, excluding cursor edges.
+Session `20261125T214101Z-3f27f1be`, segment 0, voltage sequences 50495–51481.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-2p5-comparison.json)
+retain the measured-point evidence. No firmware/source/reference/offset change,
+GPIO command, timeout increase or pytest run occurred; no calibration or full
+board acceptance is claimed.
+
+## 2026-11-25 — First powered DUT_VIO comparison with UART activity
+
+Operator reported PPK2 setting 1800 mV, Fluke actual DUT_VIO **1.780 V**, and
+J1.7↔8 loop fitted; rechecked **1.780 V** once traffic was active. The prior
+zero session completed normally on controlled service restart and its seven-file
+archive was hash verified. Service PID 3141/session `20261125T214101Z-3f27f1be`
+now enables TX with controls unmapped; its first audited 20-byte probe echoed.
+Sender PID 3207 uses only the HTTP audited-send API at 5 Hz, capped at one hour.
+
+A 10.146 s fresh evidence window retained ten successful samples: raw 1124–1129,
+reported VIO **1.811–1.819 V**, mean **1.8152 V**, reference 3300 mV/nominal.
+Observed mean difference: **+35.2 mV (+1.98%)** relative to the meter report.
+Within the same window, 980 RX bytes/49 complete echoes were observed and all
+48 interior TX frames matched exactly; cursor-edge frames were excluded.
+[Comparison evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-1p8-comparison.json)
+links the complete cursor/status capture with its hash. A preceding five-second
+traffic window also verified 23/23 interior frames.
+
+Cause of the voltage difference and a formal accuracy tolerance are unassigned.
+No reference/offset adjustment, source/firmware patch, GPIO command, timeout
+increase or pytest run occurred. Waveform/electrical and board acceptance remain
+separate. The service and bounded sender remain live for the operator campaign.
+
+## 2026-11-25 — DUT_VIO reported zero-point comparison
+
+Operator Fluke 115 reading: **0.0 V** between J1.14/DUT_VIO and J1.1/GND,
+under the requested USB-only helper setup with PPK2 OFF/VOUT disconnected,
+external DUT isolated and GP28 unprobed. The response's reported precision
+was preserved without inferring additional meter digits.
+
+A subsequent 10.419 s durable HTTP evidence window collected 11 successful
+voltage observations: raw ADC 4–6, VIO 6–10 mV, mean 8.727 mV, reference
+3300 mV/nominal. Session `20261125T212057Z-0428d0a5`, segment 0, voltage
+sequences 1194–1214. UART TX remained disabled and controls unmapped.
+[Zero-point evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-zero.json)
+retains the full cursor pages and start/end status. This is characterization,
+not an accuracy tolerance, offset-calibration change or full board acceptance.
+No firmware/source patch, GPIO/UART command, timeout change or pytest run occurred.
+
+## 2026-11-25 — viosense-2 physical flash and telemetry startup
+
+The operator reported the sole RP2350 BOOTSEL drive after the isolated-board
+preparation instructions. The retained normal image hash matched before its
+114,176-byte copy. Known helper serial `FA63A4D787572B33` re-enumerated and a
+bounded exclusive read verified `viosense-2`/protocol v1/`power_sense`; DTR was
+lowered and that connection closed. No flash readback was performed.
+
+A separate native-v2 campaign store was opened by the real service, PID 2632,
+localhost:2040, session `20261125T212057Z-0428d0a5`. Profile digest
+`e62b223e2f2ede70bd3cd622291067ccc1908283716705378faff0d66247d059`, UART TX
+disabled and no controls mapped. Service startup negotiated sensing and published
+a committed observation (raw 6, nominal 3300 mV reference, reported 10 mV,
+segment 0/evidence 51). Operator Fluke comparison was not yet recorded.
+
+[Board record](../hardware/validation/phase1_kicad_rev_a.md#dut_vio-sensing-flash-and-live-usb-telemetry--2026-11-25)
+links raw flash/startup provenance. No pytest, source modification, DUT command
+or physical voltage sweep occurred in this live step. Optional `diskutil` metadata
+was unavailable through DiskManagement; the filesystem UF2 board identity and
+live USB serial/firmware were observed directly. Localhost reads required the
+available external-access execution context; the service itself started normally.
+This record establishes image-copy/live identity and telemetry, not voltage
+accuracy, physical calibration or full board acceptance.
+
 ## 2026-11-25 — Local integration of DUT_VIO and the clock fix
 
 Local `main` fast-forwarded from `466a4c2` to verified code baseline
