@@ -33,7 +33,8 @@
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
 > Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
-> DUT_VIO verified code baseline: `55cd7c71f306ae03cd848f0cd2e22b705b15db7a` (local `feature/dut-vio-sensing`); initial implementation `a9b2382`
+> DUT_VIO verified code baseline: `283f0ddab4f8966c03f305911a9f3dd07f2050cf` (merged locally into `main`)
+> Firmware image source: `55cd7c7`; its immutable firmware tree is unchanged
 > Documentation state reviewed: 2026-11-25
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -54,11 +55,13 @@ Read this document first whenever development resumes.
 - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
   ADC accuracy and diagnostic runtime stack results remain unmeasured.
-- **Validation (Nov 25):** 2,030 tests/57.68 s; Ruff, mypy (104 source files),
+- **Validation (Nov 25):** 2,030 tests/53.45 s; Ruff, mypy (104 source files),
   offline lock (66 packages), diff check pass. Three corrected images build;
   code Graphify refreshed, semantic documentation graph unchanged.
 - **Clock fix:** Initial open, automatic reconnect and release/reacquire share
   the service's configured monotonic clock; the deferred limitation is closed.
+- **Integration:** Sensing and clock fix fast-forwarded into local `main` at
+  `283f0dd`; existing CAD edits and verified image provenance preserved.
 - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
   remain needed for outstanding electrical checks; pin 36 remains probe-only.
 - **Last hardware state:** Both USB on, GP2 normal, UART/reset/boot wiring and

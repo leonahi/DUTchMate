@@ -9,6 +9,25 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-25 — Local integration of DUT_VIO and the clock fix
+
+Local `main` fast-forwarded from `466a4c2` to verified code baseline
+`283f0ddab4f8966c03f305911a9f3dd07f2050cf`. The sensing feature and the injected-clock correction are integrated;
+the previously deferred clock-origin limitation is closed.
+
+Fresh validation in the merged main checkout: **2,030 tests passed in 53.45 s**;
+Ruff, mypy (104 source files), offline lock (66 packages), and diff check passed.
+Both pre-existing KiCad PCB/project file hashes match their pre-merge values.
+Three active `viosense-2` UF2 images and their `.config` files were retained in
+main's `build/` paths after verifying every hash against the committed manifest.
+The committed firmware Git tree still matches the built image source. The feature
+worktree remains available as retained build provenance.
+
+Main's code graph was refreshed for the integrated structural feature (6,515
+nodes/16,386 edges). Known extractor limitations persist for `hello.c` and
+`fixture_protocol.h`; semantic documentation relationships were not regenerated.
+No flash or physical measurement occurred during this integration.
+
 ## 2026-11-25 — Shared monotonic clock for DUT_VIO receipt and status
 
 Closed the injected test-clock limitation from the sensing review. Service startup
