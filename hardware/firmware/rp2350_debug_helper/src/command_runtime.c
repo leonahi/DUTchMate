@@ -30,6 +30,12 @@ struct queued_command {
 	struct dmh_command_request request;
 };
 
+/* USB-owner-only response metadata, copied while the worker waits for consumption. */
+static bool response_sense_pending;
+static bool response_sense_enabled;
+static bool acknowledged_sense_pending;
+static atomic_val_t response_sense_epoch;
+
 K_MSGQ_DEFINE(
 	command_queue,
 	sizeof(struct queued_command),
@@ -87,6 +93,12 @@ static void command_uart_cancel(void *context)
 {
 	ARG_UNUSED(context);
 	dutchmate_uart_tx_cancel();
+}
+
+static int command_vio_prepare(void *context, bool enabled)
+{
+	ARG_UNUSED(context);
+	return !enabled || dutchmate_platform_vio_ready() ? 0 : -ENODEV;
 }
 
 static bool epoch_matches(atomic_val_t epoch)
@@ -208,6 +220,8 @@ static void service_executor(atomic_val_t epoch)
 	if (atomic_get(&response_outstanding) != 0) {
 		if (k_sem_take(&response_consumed, K_NO_WAIT) == 0) {
 			dmh_command_executor_response_sent(&executor);
+			bool enabled;
+			(void)dmh_command_executor_take_sense_configuration(&executor, &enabled);
 			atomic_set(&response_outstanding, 0);
 		}
 		return;
@@ -301,6 +315,7 @@ K_THREAD_DEFINE(
 
 int dutchmate_command_runtime_initialize(const struct device *cdc_device)
 {
+	const struct dmh_command_vio_port vio_port = {.prepare = command_vio_prepare};
 	const struct dmh_command_uart_port uart_port = {
 		.context = NULL,
 		.start = command_uart_start,
@@ -321,7 +336,7 @@ int dutchmate_command_runtime_initialize(const struct device *cdc_device)
 	control_port = dutchmate_platform_control_port();
 	dmh_command_ingress_init(&ingress);
 	dmh_control_init(&control, &control_port);
-	dmh_command_executor_init(&executor, &control, &uart_port);
+	dmh_command_executor_init(&executor, &control, &uart_port, &vio_port);
 	return 0;
 }
 
@@ -370,6 +385,8 @@ int dutchmate_command_runtime_start_epoch(void)
 		return -EINVAL;
 	}
 	(void)atomic_inc(&epoch_number);
+	response_sense_pending = false;
+	acknowledged_sense_pending = false;
 	atomic_set(&runtime_fault, 0);
 	atomic_set(&epoch_end_result, DMH_CONTROL_OK);
 	atomic_set(&response_outstanding, 0);
@@ -396,6 +413,8 @@ int dutchmate_command_runtime_end_epoch(void)
 		return 0;
 	}
 	uart_irq_rx_disable(cdc);
+	response_sense_pending = false;
+	acknowledged_sense_pending = false;
 	if (k_sem_take(&rx_stopped, DUTCHMATE_EPOCH_STOP_TIMEOUT) != 0) {
 		result = -ETIMEDOUT;
 	}
@@ -428,12 +447,27 @@ bool dutchmate_command_runtime_take_response(
 		mark_runtime_fault();
 		return false;
 	}
+	response_sense_pending = dmh_command_executor_response_sense_configuration(
+		&executor, &response_sense_enabled
+	);
+	response_sense_epoch = atomic_get(&epoch_number);
 	return true;
 }
 
 void dutchmate_command_runtime_response_sent(void)
 {
 	if (atomic_get(&response_outstanding) != 0) {
+		acknowledged_sense_pending = response_sense_pending && epoch_matches(response_sense_epoch);
+		response_sense_pending = false;
 		k_sem_give(&response_consumed);
 	}
+}
+
+bool dutchmate_command_runtime_take_sense_configuration(bool *enabled)
+{
+	if (enabled == NULL || !acknowledged_sense_pending) return false;
+	acknowledged_sense_pending = false;
+	if (!epoch_matches(response_sense_epoch)) return false;
+	*enabled = response_sense_enabled;
+	return true;
 }

@@ -626,3 +626,21 @@ def test_interact_observation_can_resume_after_profile_reinitialization_without_
     assert hosts[0].uart_requests == [b"PING\n"]
     assert hosts[1].uart_requests == []
     assert hosts[1].configuration_requests == EXPECTED_MODES
+
+
+def test_observation_setup_follows_controls_for_initial_and_replacement(enhanced):
+    runtime, client, hosts, options = enhanced
+    # The normal test fixture has already applied its profile. Explicitly initialize
+    # a new physical epoch with observation support and inspect its desired modes.
+    observations = []
+
+    def initialize():
+        observations.append(tuple(hosts[-1].configuration_requests))
+        return False
+
+    options["initialize_observation"] = initialize
+    assert client.post("/connection/release").status_code == 200
+    assert client.post("/connection/reacquire").status_code == 200
+    assert len(observations) == 1
+    assert len(observations[0]) == 2
+    assert runtime._evidence_recorder.capture_source_health().dut_vio_setup_rejected is True

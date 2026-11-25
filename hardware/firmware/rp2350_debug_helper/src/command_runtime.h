@@ -19,5 +19,6 @@ bool dutchmate_command_runtime_take_response(
 	size_t *response_length
 );
 void dutchmate_command_runtime_response_sent(void);
+bool dutchmate_command_runtime_take_sense_configuration(bool *enabled);
 
 #endif

@@ -40,9 +40,17 @@ enum dmh_command_executor_state {
 	DMH_COMMAND_EXECUTOR_STATE_RESPONSE,
 };
 
+struct dmh_command_vio_port {
+	void *context;
+	int (*prepare)(void *context, bool enabled);
+};
+
 struct dmh_command_executor {
 	struct dmh_control *control;
 	struct dmh_command_uart_port uart;
+	struct dmh_command_vio_port vio;
+	bool sense_pending;
+	bool sense_enabled;
 	enum dmh_command_executor_state state;
 	char response[DMH_COMMAND_RESPONSE_FRAME_CAPACITY];
 	size_t response_length;
@@ -51,8 +59,13 @@ struct dmh_command_executor {
 void dmh_command_executor_init(
 	struct dmh_command_executor *executor,
 	struct dmh_control *control,
-	const struct dmh_command_uart_port *uart
+	const struct dmh_command_uart_port *uart,
+	const struct dmh_command_vio_port *vio
 );
+bool dmh_command_executor_take_sense_configuration(struct dmh_command_executor *executor,
+						 bool *enabled);
+bool dmh_command_executor_response_sense_configuration(const struct dmh_command_executor *executor,
+						     bool *enabled);
 enum dmh_command_executor_result dmh_command_executor_submit(
 	struct dmh_command_executor *executor,
 	const struct dmh_command *command,

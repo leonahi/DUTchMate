@@ -26,7 +26,13 @@
       "title": "Hello Message",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "v", "firmware", "device", "capabilities"],
+      "required": [
+        "type",
+        "v",
+        "firmware",
+        "device",
+        "capabilities"
+      ],
       "properties": {
         "type": {
           "const": "hello"
@@ -57,7 +63,12 @@
       "title": "UART Event",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "channel", "timestamp_us", "data_b64"],
+      "required": [
+        "type",
+        "channel",
+        "timestamp_us",
+        "data_b64"
+      ],
       "properties": {
         "type": {
           "const": "uart"
@@ -80,7 +91,12 @@
       "title": "Buffer Overflow Event",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "channel", "timestamp_us", "dropped_bytes"],
+      "required": [
+        "type",
+        "channel",
+        "timestamp_us",
+        "dropped_bytes"
+      ],
       "properties": {
         "type": {
           "const": "buffer_overflow"
@@ -144,7 +160,9 @@
       "title": "Command Success Response",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ok"],
+      "required": [
+        "ok"
+      ],
       "properties": {
         "ok": {
           "const": true
@@ -161,6 +179,104 @@
     },
     {
       "$ref": "errors.schema.json"
+    },
+    {
+      "title": "DUT VIO Observation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "timestamp_us",
+        "status",
+        "adc_raw",
+        "voltage_mv",
+        "adc_reference_mv",
+        "reference_source"
+      ],
+      "properties": {
+        "type": {
+          "const": "dut_vio"
+        },
+        "timestamp_us": {
+          "$ref": "#/$defs/timestamp_us"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "adc_error",
+            "saturated"
+          ]
+        },
+        "adc_raw": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "voltage_mv": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "adc_reference_mv": {
+          "type": "integer",
+          "minimum": 2500,
+          "maximum": 3600
+        },
+        "reference_source": {
+          "enum": [
+            "nominal",
+            "measured"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "ok"
+            },
+            "adc_raw": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4094
+            },
+            "voltage_mv": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7200
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "adc_error"
+            },
+            "adc_raw": {
+              "type": "null"
+            },
+            "voltage_mv": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "saturated"
+            },
+            "adc_raw": {
+              "const": 4095
+            },
+            "voltage_mv": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "$comment": "Runtime additionally validates exact integer ADC/reference/divider arithmetic."
     }
   ]
 }

@@ -9,6 +9,56 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-25 — Report-only DUT_VIO software slice
+
+Implementation base `466a4c2`, isolated `feature/dut-vio-sensing` worktree;
+final independent review pending at this checkpoint. The approved contract is
+implemented from GP28/ADC2 through negotiated protocol frames, native-v2 durable
+records and the shared runtime/HTTP/CLI/MCP status projection. No automatic
+voltage interlock, new MCP tool or metadata schema version was introduced.
+Existing declared interface voltage, UART bytes, loss and pattern semantics remain.
+
+Fresh full gate: 2,008 pytest tests passed in 53.22 s; Ruff, mypy (104 source
+files), offline lock check (66 packages), and diff check passed. Focused sampler,
+protocol, storage, lifecycle and delivery gates passed. Real pyserial-asyncio pipe
+coverage preserved 50,006 raw UART bytes and 42 voltage records through an
+automatic reconnect, contiguous evidence, one close per physical resource and
+configuration-before-sensing order. Explicit ADC rejection preserves UART;
+ambiguous ACK/timeout/close follow terminal cleanup. Initial full collection caught
+new duplicate test basenames; the storage test module was renamed before the gate.
+
+Native-v2 transaction tests cover commit-before-publication, failure rollback,
+quota, logical rollover, recovery, strict known-record validation and durable tail.
+Exported pre-extension `4880590` readers retrieved/counted the new record without
+rewriting evidence. All generated fixture hashes were unchanged by old-reader use.
+
+Three real Zephyr 4.4.2 / SDK 1.0.1 builds passed; image identities, UF2/config
+hashes and memory sizes are retained in
+[build provenance](../hardware/validation/dut_vio_software_20261125.json).
+Generated ADC pinctrl references only GP28/ADC2 (0x39f), OE override 2,
+bias disabled and digital input-enable absent/false; GP26 control enable untouched.
+The stack probe is a built diagnostic image, not a runtime stack measurement.
+Graphify code update completed (6,278 nodes/16,103 edges); extractor warnings
+remain for hello.c and fixture_protocol.h; semantic documentation graph not updated.
+
+Implementation rulings: ACK intent is snapshotted with the existing response-ready
+handshake and applied immediately in the USB owner after complete ACK transmission,
+avoiding a delayed-worker disable race. A previous live observation is cleared on
+unrelated logical rollover rather than retaining a possibly retired predecessor
+reference; a rollover-triggering sample keeps original receipt age and successor
+references. Setup timeout crosses the existing backend disconnected boundary with
+its original cause, then lifecycle cleanup. Schemas validate shape/range while the
+canonical typed parser validates exact cross-field ADC arithmetic. Focused protocol
+cases are grouped in one extension module. The isolated worktree/shared venv
+protect CAD edits; the ignored execution ledger is temporary, never a status authority.
+
+No hardware access, flash, physical calibration, scope validation or board acceptance
+occurred. Physical comparison at zero/~1.8/2.5/3.3/5.0 V with actual Fluke VIO,
+unloaded GP28, source/image/helper identity and reference provenance remains pending.
+Nominal reference is approximate; pin 36 is not ADC_VREF calibration evidence.
+Remaining electrical gates, Phase 4 pause and EVENT deferral are unchanged.
+
+
 ## DUT_VIO Written Contract Approval and Implementation Planning — 2026-11-24
 
 - User approved the written report-only contract committed at `4880590`.

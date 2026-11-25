@@ -173,3 +173,196 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
         for resource in resources:
             resource.dispose()
     assert all(resource.close_calls == 1 for resource in resources)
+
+
+@pytest.mark.parametrize(
+    "capable,response", [(False, "ok"), (True, "ok"), (True, "reject"), (True, "timeout")]
+)
+def test_observation_startup_without_controls_and_fresh_reacquire(
+    tmp_path, monkeypatch, capable, response
+):
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(
+            origin_us=(len(resources) + 1) * 1000, power_sense=capable, sense_response=response
+        )
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    def open_host(**kwargs):
+        return open_enhanced_async_host(**kwargs, open_adapter=open_adapter)
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", open_host)
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {"dut_io_voltage": 3.3},
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    try:
+        if capable and response == "timeout":
+            from dutchmate_core.connection import ConnectionLifecycleError
+
+            with pytest.raises(ConnectionLifecycleError, match="timed out"):
+                create_app(runtime=runtime, profile=profile)
+            assert resources[0].is_open is False
+            return
+        client = TestClient(create_app(runtime=runtime, profile=profile))
+        for epoch in range(2):
+            if capable:
+                assert resources[epoch].commands == [
+                    {"cmd": "configure_power_sense", "enabled": True}
+                ]
+            else:
+                assert resources[epoch].commands == []
+            deadline = time.monotonic() + 2
+            while capable and response == "ok" and time.monotonic() < deadline:
+                health = runtime._evidence_recorder.capture_source_health()
+                if health.dut_vio_observation is not None:
+                    break
+                time.sleep(0.001)
+            health = runtime._evidence_recorder.capture_source_health()
+            assert health.dut_vio_setup_rejected is (capable and response == "reject")
+            if capable and response == "ok":
+                assert health.dut_vio_observation.sample.voltage_mv == 3300
+                assert health.dut_vio_observation.segment_id == epoch
+                root = tmp_path / runtime._evidence_recorder.active_session_id
+                expected = b"\xff\x00\n" * (epoch + 1)
+                while (
+                    time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected
+                ):
+                    time.sleep(0.001)
+                assert (root / "uart_raw.log").read_bytes() == expected
+            if epoch == 0:
+                assert client.post("/connection/release").status_code == 200
+                assert (
+                    runtime._evidence_recorder.capture_source_health().dut_vio_observation is None
+                )
+                assert client.post("/connection/reacquire").status_code == 200
+        client.close()
+    finally:
+        runtime.close()
+        for resource in resources:
+            resource.dispose()
+
+
+def test_congested_uart_and_voltage_preserve_bytes_and_automatic_reconnect(tmp_path, monkeypatch):
+    import base64
+
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    monkeypatch.setattr(
+        startup,
+        "open_enhanced_async_host",
+        lambda **kw: open_enhanced_async_host(**kw, open_adapter=open_adapter),
+    )
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {
+                    "dut_io_voltage": 3.3,
+                    "control": {
+                        "reset": {
+                            "channel": "CTRL0",
+                            "dut_signal": "RUN",
+                            "mode": "open_drain",
+                            "active_level": "low",
+                        }
+                    },
+                },
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+    try:
+        resource = resources[0]
+        assert [c["cmd"] for c in resource.commands] == [
+            "configure_gpio_mode",
+            "configure_power_sense",
+        ]
+        expected = b"\xff\x00\n"
+        frames = []
+        for i in range(1000):
+            data = bytes([i % 256]) * 49 + b"\n"
+            expected += data
+            frames.append(
+                json.dumps(
+                    {
+                        "type": "uart",
+                        "channel": 0,
+                        "timestamp_us": 2000 + i,
+                        "data_b64": base64.b64encode(data).decode(),
+                    }
+                ).encode()
+                + b"\n"
+            )
+            if i % 25 == 0:
+                frames.append(
+                    json.dumps(
+                        {
+                            "type": "dut_vio",
+                            "timestamp_us": 2000 + i,
+                            "status": "ok",
+                            "adc_raw": 1024,
+                            "voltage_mv": 1650,
+                            "adc_reference_mv": 3300,
+                            "reference_source": "nominal",
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+        payload = b"".join(frames)
+        for offset in range(0, len(payload), 4096):
+            resource.loop.call_soon_threadsafe(
+                resource.protocol.data_received, payload[offset : offset + 4096]
+            )
+        root = tmp_path / runtime._evidence_recorder.active_session_id
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected:
+            time.sleep(0.001)
+        assert (root / "uart_raw.log").read_bytes() == expected
+        resource.disconnect()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if len(resources) == 2 and runtime.status().connection_state == "connected":
+                health = runtime._evidence_recorder.capture_source_health()
+                if health.dut_vio_observation is not None:
+                    break
+            time.sleep(0.001)
+        assert len(resources) == 2
+        assert resources[0].close_calls == 1
+        assert [c["cmd"] for c in resources[1].commands] == [
+            "configure_gpio_mode",
+            "configure_power_sense",
+        ]
+        assert health.dut_vio_observation.segment_id == 1
+        runtime.close()
+        assert (root / "uart_raw.log").read_bytes() == expected + b"\xff\x00\n"
+        records = []
+        for path in root.glob("*_events.jsonl"):
+            records.extend(json.loads(line) for line in path.read_text().splitlines())
+        sequences = sorted(record["evidence_seq"] for record in records)
+        assert sequences == list(range(len(sequences)))
+        assert sum(r["type"] == "dut_vio" for r in records) == 42
+        assert resources[1].close_calls == 1
+        assert not any(r.callback_errors for r in resources)
+    finally:
+        client.close()
+        runtime.close()
+        for resource in resources:
+            resource.dispose()

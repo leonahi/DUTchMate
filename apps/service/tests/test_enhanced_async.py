@@ -120,9 +120,7 @@ class FakeAsyncEnhancedAdapter:
     async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
         self.operation_thread_ids.append(threading.get_ident())
         self.wait_for_segment_timeouts.append(timeout_s)
-        outcome = (
-            self.segment_wait_outcomes.pop(0) if self.segment_wait_outcomes else None
-        )
+        outcome = self.segment_wait_outcomes.pop(0) if self.segment_wait_outcomes else None
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
@@ -584,5 +582,31 @@ def test_nonblocking_receive_uses_zero_timeout_on_the_owner_loop() -> None:
         assert host.read_event_nowait() == event
         assert host.read_event_nowait() is None
         assert fake.operation_thread_ids == [host.owner_thread_id, host.owner_thread_id]
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize("capable,result", [(False, True), (True, True), (True, False)])
+def test_host_initializes_observation_once_on_owner_loop(capable, result):
+    from dataclasses import replace
+
+    info = _info()
+    if capable:
+        info = replace(info, capabilities=info.capabilities | {"power_sense"})
+    fake = FakeAsyncEnhancedAdapter(info=info, segment_id=0)
+    calls = []
+
+    async def configure(enabled, timeout_s):
+        calls.append((enabled, timeout_s, threading.get_ident()))
+        return result
+
+    fake.configure_power_sense = configure
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0, open_adapter=OpenAdapterFake(fake)
+    )
+    try:
+        assert host.initialize_observation() is result
+        assert host.initialize_observation() is result
+        assert calls == ([(True, 1.0, host.owner_thread_id)] if capable else [])
     finally:
         host.close()

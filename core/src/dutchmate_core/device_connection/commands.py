@@ -37,6 +37,20 @@ MAX_HOST_FRAME_BYTES: Final = 2048
 
 
 @dataclass(frozen=True, slots=True)
+class ConfigurePowerSenseCommand:
+    """Opt into or stop fixed-rate interface-voltage observations."""
+
+    enabled: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("Power-sense enabled must be a boolean")
+
+    def to_ndjson(self) -> bytes:
+        return _encode_payload({"cmd": "configure_power_sense", "enabled": self.enabled})
+
+
+@dataclass(frozen=True, slots=True)
 class ConfigureGpioModeCommand:
     """Configure the electrical behavior of a physical control channel."""
 

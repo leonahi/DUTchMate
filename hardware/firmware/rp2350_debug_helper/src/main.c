@@ -15,6 +15,8 @@ int main(void)
 	if (result != 0) {
 		return result;
 	}
+	/* Sensing setup failure is reported by negotiation; UART/control remain usable. */
+	(void)dutchmate_platform_vio_initialize();
 	result = dutchmate_uart_rx_initialize();
 	if (result != 0) {
 		(void)dutchmate_platform_io_force_safe();

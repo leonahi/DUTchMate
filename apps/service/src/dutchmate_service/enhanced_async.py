@@ -21,6 +21,7 @@ from dutchmate_core.backends.contracts import (
     mark_open_cleanup,
 )
 from dutchmate_core.backends.enhanced import (
+    DEFAULT_ENHANCED_COMMAND_TIMEOUT_S,
     AsyncEnhancedDeviceControl,
     AsyncEnhancedUartSender,
 )
@@ -28,6 +29,7 @@ from dutchmate_core.backends.enhanced_serial_io import (
     open_async_enhanced_serial_adapter,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.transport import TransportTimeoutError
 
 DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S = 0.1
 T = TypeVar("T")
@@ -46,6 +48,8 @@ class _AsyncEnhancedAdapter(Protocol):
     def segment(self) -> SegmentContext | None: ...
 
     async def request(self, command: bytes, timeout_s: float) -> DeviceMessage: ...
+
+    async def configure_power_sense(self, *, enabled: bool, timeout_s: float) -> bool: ...
 
     async def receive_event(
         self,
@@ -86,6 +90,8 @@ class EnhancedAsyncHost:
     """Own one asyncio loop and expose its Enhanced adapter synchronously."""
 
     def __init__(self) -> None:
+        self._observation_lock = threading.Lock()
+        self._observation_result: bool | None = None
         self._state_lock = threading.Lock()
         self._loop_ready = threading.Event()
         self._close_complete = threading.Event()
@@ -136,6 +142,26 @@ class EnhancedAsyncHost:
     def segment(self) -> SegmentContext | None:
         with self._state_lock:
             return self._segment
+
+    def initialize_observation(self) -> bool:
+        """Enable optional telemetry once for this physical connection."""
+        with self._observation_lock:
+            if self._observation_result is None:
+                adapter = self._adapter_for_operation()
+                if "power_sense" not in self.info.capabilities:
+                    self._observation_result = True
+                else:
+                    try:
+                        self._observation_result = self._submit(
+                            lambda: adapter.configure_power_sense(
+                                enabled=True, timeout_s=DEFAULT_ENHANCED_COMMAND_TIMEOUT_S
+                            )
+                        )
+                    except TransportTimeoutError as exc:
+                        raise BackendDisconnectedError(
+                            "Enhanced observation configuration timed out"
+                        ) from exc
+            return self._observation_result
 
     def configure_gpio_mode(
         self,

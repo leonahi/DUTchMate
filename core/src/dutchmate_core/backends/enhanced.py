@@ -15,6 +15,7 @@ from dutchmate_core.backends.contracts import (
     BufferStatusEvent,
     ControlState,
     DeviceControlError,
+    DutVioEvent,
     SegmentContext,
     SegmentTimestamp,
     UartReceiveEvent,
@@ -34,6 +35,7 @@ from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
     CommandErrorMessage,
     CommandSuccessMessage,
+    DutVioMessage,
     HelloMessage,
     UartMessage,
 )
@@ -285,9 +287,19 @@ def normalize_enhanced_message(
     *,
     segment_id: int,
     source_origin_us: int,
+    received_at_monotonic: float | None = None,
 ) -> BackendEvent | None:
     """Translate one parsed Enhanced message into the shared event model."""
 
+    if isinstance(message, DutVioMessage):
+        if received_at_monotonic is None:
+            raise ValueError("DUT VIO normalization requires its original receipt marker")
+        return DutVioEvent(
+            segment_id=segment_id,
+            timestamp_us=_relative_timestamp(message.timestamp_us, source_origin_us),
+            sample=message.sample,
+            received_at_monotonic=received_at_monotonic,
+        )
     if isinstance(message, UartMessage):
         return UartReceiveEvent(
             segment_id=segment_id,
@@ -370,6 +382,8 @@ def enhanced_segment_context(
 
 
 def enhanced_message_timestamp_us(message: DeviceMessage) -> int | None:
-    if isinstance(message, (UartMessage, BufferOverflowMessage, BufferStatusMessage)):
+    if isinstance(
+        message, (UartMessage, BufferOverflowMessage, BufferStatusMessage, DutVioMessage)
+    ):
         return message.timestamp_us
     return None

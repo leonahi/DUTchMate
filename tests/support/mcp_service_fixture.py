@@ -118,7 +118,16 @@ class ObservedASGITransport(httpx.ASGITransport):
 
 
 class ServiceFixture:
-    def __init__(self, root, *, tx_enabled=True, configured=True, gpio_capable=True):
+    def __init__(
+        self,
+        root,
+        *,
+        tx_enabled=True,
+        configured=True,
+        gpio_capable=True,
+        power_sense=False,
+        clock=None,
+    ):
         controls = {}
         if configured and gpio_capable:
             controls = {
@@ -151,6 +160,8 @@ class ServiceFixture:
         capabilities = {"uart_receive", "uart_send", "device_timestamp", "overflow_telemetry"}
         if gpio_capable:
             capabilities.add("gpio_control")
+        if power_sense:
+            capabilities.add("power_sense")
         info = BackendInfo(
             "enhanced", "test-only", "test-helper", "fixture", frozenset(capabilities)
         )
@@ -181,6 +192,7 @@ class ServiceFixture:
             source_owner=self.recorder, open_replacement=reopen
         )
         self.runtime = DeviceCoreRuntime(
+            capture_clock=clock,
             device_control=self.physical,
             uart_sender=self.physical,
             session_store=self.store,

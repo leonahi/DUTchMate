@@ -23,6 +23,7 @@ from dutchmate_core.device_connection.messages import (
     BufferStatusMessage,
     CommandErrorMessage,
     CommandSuccessMessage,
+    DutVioMessage,
     HelloMessage,
     UartMessage,
 )
@@ -34,6 +35,7 @@ DeviceMessage = (
     | BufferStatusMessage
     | CommandSuccessMessage
     | CommandErrorMessage
+    | DutVioMessage
 )
 
 _HELLO_KEYS = {"type", "v", "firmware", "device", "capabilities"}
@@ -77,11 +79,35 @@ def parse_device_message(line: str | bytes) -> DeviceMessage:
         return _parse_buffer_overflow(payload)
     if message_type == "buffer_status":
         return _parse_buffer_status(payload)
+    if message_type == "dut_vio":
+        return _parse_dut_vio(payload)
 
     if isinstance(message_type, str):
         raise UnsupportedMessageTypeError(f"Unsupported device message type: {message_type}")
 
     raise ProtocolValidationError("Device message must include a string 'type' field")
+
+
+def _parse_dut_vio(payload: dict[str, Any]) -> DutVioMessage:
+    from dutchmate_core.dut_vio import DutVioSample
+
+    keys = {
+        "type",
+        "timestamp_us",
+        "status",
+        "adc_raw",
+        "voltage_mv",
+        "adc_reference_mv",
+        "reference_source",
+    }
+    if set(payload) != keys:
+        raise ProtocolValidationError("DUT VIO fields must match the voltage observation schema")
+    timestamp = _required_non_negative_int(payload, "timestamp_us", "DUT VIO")
+    try:
+        sample = DutVioSample.from_fields(payload)
+    except (TypeError, ValueError) as exc:
+        raise ProtocolValidationError(str(exc)) from exc
+    return DutVioMessage(timestamp, sample)
 
 
 def _load_json_object(line: str | bytes) -> dict[str, Any]:

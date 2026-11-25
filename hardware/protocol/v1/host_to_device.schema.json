@@ -7,65 +7,106 @@
       "title": "Configure GPIO Mode Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "channel", "mode", "active_level"],
+      "required": [
+        "cmd",
+        "channel",
+        "mode",
+        "active_level"
+      ],
       "properties": {
         "cmd": {
           "const": "configure_gpio_mode"
         },
         "channel": {
           "type": "string",
-          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+          "enum": [
+            "CTRL0",
+            "CTRL1",
+            "CTRL2",
+            "CTRL3"
+          ]
         },
         "mode": {
           "type": "string",
-          "enum": ["open_drain", "push_pull"]
+          "enum": [
+            "open_drain",
+            "push_pull"
+          ]
         },
         "active_level": {
           "type": "string",
-          "enum": ["low", "high"]
+          "enum": [
+            "low",
+            "high"
+          ]
         },
         "idle_level": {
           "type": "string",
-          "enum": ["low", "high"]
+          "enum": [
+            "low",
+            "high"
+          ]
         }
       },
       "allOf": [
         {
           "if": {
             "properties": {
-              "mode": {"const": "open_drain"}
+              "mode": {
+                "const": "open_drain"
+              }
             },
-            "required": ["mode"]
+            "required": [
+              "mode"
+            ]
           },
           "then": {
             "properties": {
-              "active_level": {"const": "low"}
+              "active_level": {
+                "const": "low"
+              }
             },
             "not": {
-              "required": ["idle_level"]
+              "required": [
+                "idle_level"
+              ]
             }
           }
         },
         {
           "if": {
             "properties": {
-              "mode": {"const": "push_pull"}
+              "mode": {
+                "const": "push_pull"
+              }
             },
-            "required": ["mode"]
+            "required": [
+              "mode"
+            ]
           },
           "then": {
-            "required": ["idle_level"],
+            "required": [
+              "idle_level"
+            ],
             "oneOf": [
               {
                 "properties": {
-                  "active_level": {"const": "low"},
-                  "idle_level": {"const": "high"}
+                  "active_level": {
+                    "const": "low"
+                  },
+                  "idle_level": {
+                    "const": "high"
+                  }
                 }
               },
               {
                 "properties": {
-                  "active_level": {"const": "high"},
-                  "idle_level": {"const": "low"}
+                  "active_level": {
+                    "const": "high"
+                  },
+                  "idle_level": {
+                    "const": "low"
+                  }
                 }
               }
             ]
@@ -77,14 +118,23 @@
       "title": "Pulse Control Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "channel", "pulse_ms"],
+      "required": [
+        "cmd",
+        "channel",
+        "pulse_ms"
+      ],
       "properties": {
         "cmd": {
           "const": "pulse_control"
         },
         "channel": {
           "type": "string",
-          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+          "enum": [
+            "CTRL0",
+            "CTRL1",
+            "CTRL2",
+            "CTRL3"
+          ]
         },
         "pulse_ms": {
           "type": "integer",
@@ -97,18 +147,30 @@
       "title": "Set Control State Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "channel", "state"],
+      "required": [
+        "cmd",
+        "channel",
+        "state"
+      ],
       "properties": {
         "cmd": {
           "const": "set_control_state"
         },
         "channel": {
           "type": "string",
-          "enum": ["CTRL0", "CTRL1", "CTRL2", "CTRL3"]
+          "enum": [
+            "CTRL0",
+            "CTRL1",
+            "CTRL2",
+            "CTRL3"
+          ]
         },
         "state": {
           "type": "string",
-          "enum": ["active", "idle"]
+          "enum": [
+            "active",
+            "idle"
+          ]
         }
       }
     },
@@ -116,7 +178,10 @@
       "title": "UART Send Command",
       "type": "object",
       "additionalProperties": false,
-      "required": ["cmd", "data_b64"],
+      "required": [
+        "cmd",
+        "data_b64"
+      ],
       "properties": {
         "cmd": {
           "const": "uart_send"
@@ -127,6 +192,23 @@
           "minLength": 4,
           "maxLength": 1368,
           "description": "Base64 for a decoded UART payload of 1 through 1024 bytes."
+        }
+      }
+    },
+    {
+      "title": "Configure Power Sense",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cmd",
+        "enabled"
+      ],
+      "properties": {
+        "cmd": {
+          "const": "configure_power_sense"
+        },
+        "enabled": {
+          "type": "boolean"
         }
       }
     }
