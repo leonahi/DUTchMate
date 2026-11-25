@@ -1108,3 +1108,93 @@ def test_queued_pattern_group_processes_derived_state_once(tmp_path: Path) -> No
     )
     patterns = json.loads((tmp_path / session_id / "detected_patterns.json").read_text())
     assert len(patterns) == 1
+
+
+def test_live_voltage_reference_is_leased_through_rollover_publication(tmp_path, monkeypatch):
+    from dutchmate_core.backends import DutVioEvent
+    from dutchmate_core.dut_vio import DutVioSample
+
+    source = ControlledSource()
+    store = SessionStore(root=tmp_path, max_count=1)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=store, profile=_profile(), backend_snapshot=_snapshot()
+    )
+    entered, resume = Event(), Event()
+    before = recorder.durable_tail()
+    try:
+        source.publish(DutVioEvent(0, 25, DutVioSample("ok", 2048, 3300, 3300, "nominal"), 1.5))
+        assert recorder.wait_for_durable_tail(before, timeout_s=1)
+        old = recorder.capture_source_health().dut_vio_observation
+        fits = store._v2_unit_fits
+        monkeypatch.setattr(
+            store,
+            "_v2_unit_fits",
+            lambda metadata, **kw: (
+                metadata["session_id"] != old.session_id and fits(metadata, **kw)
+            ),
+        )
+        append = store.append_v2_uart_receive
+
+        def paused(*args, **kwargs):
+            admission = append(*args, **kwargs)
+            entered.set()
+            assert resume.wait(2)
+            return admission
+
+        monkeypatch.setattr(store, "append_v2_uart_receive", paused)
+        previous = recorder.durable_tail()
+        source.publish(UartReceiveEvent(0, 30, 0, b"next\n"))
+        assert entered.wait(1)
+        assert recorder.capture_source_health().dut_vio_observation == old
+        assert (tmp_path / old.session_id).is_dir()
+        resume.set()
+        assert recorder.wait_for_durable_tail(previous, timeout_s=1)
+        assert recorder.capture_source_health().dut_vio_observation is None
+        store.run_retention()
+        assert not (tmp_path / old.session_id).exists()
+    finally:
+        resume.set()
+        recorder.close()
+
+
+def test_staged_setup_keeps_uart_line_state_when_candidate_becomes_live(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    source = ControlledSource()
+    store = SessionStore(root=tmp_path)
+    recorder = ContinuousEvidenceRecorder(
+        source=source, session_store=store, profile=_profile(), backend_snapshot=_snapshot()
+    )
+    replacement = BufferedControlledSource()
+    entered, resume = Event(), Event()
+
+    def initialize():
+        entered.set()
+        assert resume.wait(2)
+        return True
+
+    replacement.initialize_observation = initialize
+    try:
+        recorder.release()
+        recorder.begin_reacquire()
+        replacement.publish(UartReceiveEvent(0, 1, 0, b"Hard"))
+        previous = recorder.durable_tail()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                recorder.accept_reacquired_source, replacement, backend_snapshot=_snapshot()
+            )
+            assert entered.wait(1)
+            while (
+                not (tmp_path / previous.session_id / "uart_raw.log").read_bytes().endswith(b"Hard")
+            ):
+                assert recorder.wait_for_durable_tail(previous, timeout_s=1)
+                previous = recorder.durable_tail()
+            resume.set()
+            future.result(timeout=2)
+        replacement.publish(UartReceiveEvent(0, 2, 0, b"Fault\n"))
+        recorder.close()
+        detail = store.get_session_detail(recorder.active_session_id)
+        assert detail.first_error is not None and detail.first_error.pattern == "HardFault"
+    finally:
+        resume.set()
+        recorder.close()

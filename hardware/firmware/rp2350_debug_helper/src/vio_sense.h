@@ -13,11 +13,13 @@ enum dmh_vio_status { DMH_VIO_OK, DMH_VIO_ERROR, DMH_VIO_SATURATED };
 struct dmh_vio_adc_port {
 	void *context;
 	int (*start)(void *context);
-	enum dmh_vio_adc_result (*poll)(void *context, uint16_t *raw, uint64_t *completed_us);
+	enum dmh_vio_adc_result (*poll)(void *context, uint16_t *raw, uint64_t *completed_us,
+				       uint64_t *observation_sequence);
 };
 
 struct dmh_vio_observation {
 	uint64_t timestamp_us;
+	uint64_t observation_sequence;
 	enum dmh_vio_status status;
 	uint16_t adc_raw;
 	uint16_t voltage_mv;
@@ -41,7 +43,8 @@ struct dmh_vio_sense {
 void dmh_vio_sense_init(struct dmh_vio_sense *state, const struct dmh_vio_adc_port *adc,
 			uint16_t reference_mv, bool reference_measured);
 int dmh_vio_sense_configure(struct dmh_vio_sense *state, bool enabled, uint64_t now_us);
-void dmh_vio_sense_poll(struct dmh_vio_sense *state, uint64_t now_us);
+void dmh_vio_sense_poll(struct dmh_vio_sense *state, uint64_t now_us,
+			 uint64_t observation_sequence);
 bool dmh_vio_sense_take_observation(struct dmh_vio_sense *state, struct dmh_vio_observation *out);
 void dmh_vio_sense_end_epoch(struct dmh_vio_sense *state);
 

@@ -610,3 +610,30 @@ def test_host_initializes_observation_once_on_owner_loop(capable, result):
         assert calls == ([(True, 1.0, host.owner_thread_id)] if capable else [])
     finally:
         host.close()
+
+
+@pytest.mark.parametrize("failure", ["partial_write", "flush"])
+def test_observation_write_fault_preserves_backend_classification(failure):
+    from dataclasses import replace
+
+    from dutchmate_core.backends import BackendDisconnectedError
+    from dutchmate_core.device_connection.transport import TransportWriteError
+
+    original = TransportWriteError(failure, frame_bytes_accepted=2, error="write_failed")
+    fake = FakeAsyncEnhancedAdapter(
+        info=replace(_info(), capabilities=_info().capabilities | {"power_sense"}), segment_id=0
+    )
+
+    async def configure(**kwargs):
+        raise original
+
+    fake.configure_power_sense = configure
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0, open_adapter=OpenAdapterFake(fake)
+    )
+    try:
+        with pytest.raises(BackendDisconnectedError, match="write failed") as raised:
+            host.initialize_observation()
+        assert raised.value.__cause__ is original
+    finally:
+        host.close()

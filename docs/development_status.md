@@ -33,6 +33,7 @@
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
 > Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
+> DUT_VIO implementation checkpoint: `a9b2382`; verified review-fix baseline reconciled after commit
 > Documentation state reviewed: 2026-11-25
 > Authority: the only source for current progress, active phase, blockers, and
 > next step
@@ -43,19 +44,21 @@
 
 Read this document first whenever development resumes.
 
-- **Current milestone:** Report-only DUT_VIO software implemented on
-  `feature/dut-vio-sensing`; final independent review in progress.
+- **Current milestone:** Report-only DUT_VIO software complete on
+  `feature/dut-vio-sensing`; independent review findings fixed and verified.
 - **Sensing authority:** [Contract](dut_vio_sensing_contract.md). GP28/ADC2 only,
   negotiated observations, durable native-v2 evidence and receipt-age status;
   measured voltage does not change control policy or declared interface voltage.
-- **Next step:** Finish independent software review, then reconfirm operator setup
-  before the separate Fluke/actual-VIO campaign. No firmware has been flashed.
+- **Next step:** Reconfirm operator setup for the separate Fluke/actual-VIO campaign.
+  Use the retained `viosense-2` image provenance; no firmware has been flashed.
 - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
   ADC accuracy and diagnostic runtime stack results remain unmeasured.
-- **Validation (Nov 25):** 2,008 tests/53.22 s; Ruff, mypy (104 source files),
-  offline lock (66 packages), diff check pass. Code Graphify updated; C parsing
-  warnings for hello.c/fixture_protocol.h, semantic documentation graph unchanged.
+- **Validation (Nov 25):** 2,028 tests/52.65 s; Ruff, mypy (104 source files),
+  offline lock (66 packages), diff check pass. Three corrected images build;
+  code Graphify refreshed, semantic documentation graph unchanged.
+- **Deferred minor:** Injected service test clocks may differ from real adapter
+  receipt-clock origin; default production clocks both use `time.monotonic`.
 - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
   remain needed for outstanding electrical checks; pin 36 remains probe-only.
 - **Last hardware state:** Both USB on, GP2 normal, UART/reset/boot wiring and
@@ -72,7 +75,7 @@ Read this document first whenever development resumes.
 - **Closed live ownership:** Nov-21 session `20261121T174635Z-56780735` closed;
   PID/listener/serial released. No live service was opened for this software slice.
 - **Follow-up checklist:** Reconnect/load-profile fixes committed; sensing code and
-  three images built; final review active; physical sensing/board gates pending.
+  three corrected images built; review fixes verified; physical/board gates pending.
 - **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
   Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
 
@@ -173,7 +176,7 @@ unchanged manufactured KiCad Rev-A acceptance gates above.
 | Single J1 mapping, fixed directions and PCB pad-net consistency | Verified after the U6-to-U9 protection-symbol/footprint replacement; all schematic pin-net assignments match the PCB |
 | Symbols, metadata and intentional unused pins | Verified; local SnapEDA TPD4E05U06DQAR symbol/footprint registered, with its default footprint reference corrected |
 | ERC | 0 errors, 1 reviewed warning: bidirectional analog SA on an externally supplied power net; no exclusions added |
-| GP28 ADC input-buffer setting | Normal `gp28safe-1` startup fix verified at prior setup. VIO-first repeat gives GP28 0.907 V at VIO 1.855 V; earlier 0 V report not reproduced, cause unassigned. USB-first 0.911 V retained; no new firmware change justified. Experiments archived; ADC sensing unimplemented |
+| GP28 ADC input-buffer setting | Normal `gp28safe-1` startup fix verified at prior setup. VIO-first repeat gives GP28 0.907 V at VIO 1.855 V; earlier 0 V report not reproduced, cause unassigned. USB-first 0.911 V retained; no new firmware change justified. Experiments archived; report-only ADC software implemented, physical sensing validation pending |
 | Source/schematic review | Complete; no hardware validation or fabrication acceptance established |
 | PCB/DFM/fabrication preparation | Manual hardware-designer work outside the agent workflow; no repository review task or acceptance gate |
 | Manufactured KiCad Rev-A validation | GP28 fix `f761c40` and host fix `0e48334` committed locally. Nov-21 host recording delay fixed, full 1,893-test gate passed. Live baseline/255/505 ms service pauses all retain exact 94,299-byte SUSTAIN/4,096 sequence lines/checksum, matched within unchanged 20 s and zero drops; BOOT/INFO/post-stress PING passed. Prior controls, UART loopbacks, overflow accounting, handoff, boot roles and automatic reconnect retained. Both old failures and fresh archives preserved; service closed. No scope/analyzer; pin 36 probe-only and no separate helper 3.3 V test point. UART waveforms, loaded helper-rail isolation and remaining sequencing await instrument/load access. No full board acceptance |

@@ -171,8 +171,10 @@ The order matters: the pinned Zephyr `GPIO_DISCONNECTED` path programs the
 controls while setting ISO, whose latches can retain the reset pull-down until
 released. The [RP2350 datasheet §9.7](https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline)
 explains those latches. This initialization keeps the DUT_VIO divider unloaded.
-ADC initialization follows that safe sequence; the ADC pinctrl override assigns
-only GP28, leaving GP26 (CTRL2 enable) untouched.
+ADC's default pinctrl state has zero pin groups: the pinned generic Pico pinctrl
+would enable digital input and release ISO before applying its final flags.
+Only the ordered safe GPIO path configures GP28; ADC selects analog channel 2
+independently, leaving GP26 (CTRL2 enable) untouched.
 A GPIO configuration error returns before ISO release.
 
 #### Negotiated DUT_VIO observations

@@ -67,6 +67,8 @@ RecorderState = Literal[
 class EvidenceRecorderStore(Protocol):
     """Schema-v2 persistence used by the authoritative recorder."""
 
+    def retain_v2_evidence(self, session_id: str) -> Callable[[], None]: ...
+
     def create_v2_session(
         self,
         *,
@@ -187,6 +189,10 @@ class EvidenceRecorderStore(Protocol):
         event: BufferOverflowEvent | BufferStatusEvent | DutVioEvent,
     ) -> bool: ...
 
+    def v2_connection_will_rollover(
+        self, handle: SessionHandle, *, event_type: str, detail: dict[str, object]
+    ) -> bool: ...
+
     def append_v2_connection_event(
         self,
         handle: SessionHandle,
@@ -305,6 +311,8 @@ class ContinuousEvidenceRecorder:
         self._segment = source_segment
         self._stored_segment_id = 0
         self._connection_generation = 0
+        self._vio_retention_release: Callable[[], None] | None = None
+        self._vio_retention_session: str | None = None
         self._health = CaptureSourceHealth(
             connected=True,
             integrity=backend_snapshot.integrity,
@@ -375,6 +383,24 @@ class ContinuousEvidenceRecorder:
                 )
             raise
 
+    def _set_health(self, health: CaptureSourceHealth) -> None:
+        """Withdraw published references before releasing their retention lease."""
+        observation = health.dut_vio_observation
+        session_id = observation.session_id if observation is not None else None
+        previous_release = None
+        if session_id != self._vio_retention_session:
+            next_release = (
+                self._session_store.retain_v2_evidence(session_id)
+                if session_id is not None
+                else None
+            )
+            previous_release = self._vio_retention_release
+            self._vio_retention_session = session_id
+            self._vio_retention_release = next_release
+        self._health = health
+        if previous_release is not None:
+            previous_release()
+
     @property
     def active_session_id(self) -> str:
         with self._condition:
@@ -400,7 +426,7 @@ class ContinuousEvidenceRecorder:
         rejected = self._initialize_source_observation(source)
         with self._condition:
             if self._source is source and self._health.connected:
-                self._health = replace(self._health, dut_vio_setup_rejected=rejected)
+                self._set_health(replace(self._health, dut_vio_setup_rejected=rejected))
 
     def set_connection_initializer(
         self,
@@ -824,11 +850,13 @@ class ContinuousEvidenceRecorder:
             with self._condition:
                 self._state = "released"
                 self._releasing = False
-                self._health = replace(
-                    self._health,
-                    connected=False,
-                    dut_vio_observation=None,
-                    dut_vio_setup_rejected=False,
+                self._set_health(
+                    replace(
+                        self._health,
+                        connected=False,
+                        dut_vio_observation=None,
+                        dut_vio_setup_rejected=False,
+                    )
                 )
                 self._condition.notify_all()
 
@@ -863,11 +891,13 @@ class ContinuousEvidenceRecorder:
             with self._condition:
                 if self._fault is not None:
                     self._state = "faulted"
-                    self._health = replace(
-                        self._health,
-                        connected=False,
-                        dut_vio_observation=None,
-                        dut_vio_setup_rejected=False,
+                    self._set_health(
+                        replace(
+                            self._health,
+                            connected=False,
+                            dut_vio_observation=None,
+                            dut_vio_setup_rejected=False,
+                        )
                     )
                     self._condition.notify_all()
                     return
@@ -882,11 +912,13 @@ class ContinuousEvidenceRecorder:
                     if metadata.get("state") == "active"
                     else "disconnected"
                 )
-                self._health = replace(
-                    self._health,
-                    connected=False,
-                    dut_vio_observation=None,
-                    dut_vio_setup_rejected=False,
+                self._set_health(
+                    replace(
+                        self._health,
+                        connected=False,
+                        dut_vio_observation=None,
+                        dut_vio_setup_rejected=False,
+                    )
                 )
                 self._condition.notify_all()
 
@@ -932,6 +964,77 @@ class ContinuousEvidenceRecorder:
             backend_snapshot=backend_snapshot,
             before_connected=before_connected,
         )
+
+    def _initialize_replacement_observation(
+        self,
+        replacement: CaptureEventSource,
+        snapshot: BackendSnapshot,
+        before_connected: Callable[[], None] | None,
+    ) -> bool:
+        """Drain the staged source while its caller acknowledges desired setup.
+
+        The permanent ingest worker is detached and asleep. This recorder-owned
+        drainer is the sole candidate consumer until it joins before publication.
+        Commands stay on the caller thread, preserving runtime mutation ownership.
+        """
+        physical_segment_id = _source_segment(replacement).segment_id
+        done = Event()
+        failures: list[BaseException] = []
+
+        def drain() -> None:
+            assert isinstance(replacement, BufferedCaptureEventSource)
+            try:
+                while not done.wait(0.001):
+                    batch: list[BackendEvent] = []
+                    for _ in range(MAX_V2_UART_BATCH_EVENTS):
+                        event = replacement.read_event_nowait()
+                        if event is None:
+                            break
+                        if event.segment_id != physical_segment_id:
+                            raise BackendInputError("staged source changed its bound segment ID")
+                        if not isinstance(event, UartReceiveEvent):
+                            with self._admission_lock:
+                                if batch:
+                                    self._record_events(batch)
+                                    batch = []
+                                self._record_events((event,))
+                        else:
+                            batch.append(event)
+                    if batch:
+                        with self._admission_lock:
+                            self._record_events(batch)
+            except BaseException as exc:
+                failures.append(exc)
+
+        worker = None
+        if isinstance(replacement, BufferedCaptureEventSource):
+            worker = Thread(target=drain, name="dutchmate-staged-evidence-drain")
+            worker.start()
+        initialization_error: BaseException | None = None
+        rejected = False
+        try:
+            if self._connection_initializer is not None:
+                self._connection_initializer(snapshot, before_connected)
+            rejected = self._initialize_source_observation(replacement)
+        except BaseException as exc:
+            initialization_error = exc
+        finally:
+            done.set()
+            if worker is not None:
+                worker.join()
+        if failures and isinstance(failures[0], SessionPersistenceError):
+            # Storage failure may itself backpressure the ACK; retain that cause.
+            raise failures[0]
+        if initialization_error is not None:
+            raise initialization_error
+        if failures:
+            error = failures[0]
+            if isinstance(error, (BackendInputError, BackendDisconnectedError)):
+                raise ConnectionLifecycleError(
+                    "backend_input_error", str(error), reason="observation_initialization_failed"
+                ) from error
+            raise error
+        return rejected
 
     def _replace_source_admitted(
         self,
@@ -993,10 +1096,21 @@ class ContinuousEvidenceRecorder:
                     self._segment = replace(physical_segment, segment_id=stored_segment_id)
                     self._tail = DurableEvidenceTail(handle.session_id, next_sequence)
                     self._processor = UartCaptureProcessor()
+                    self._status_baseline = None
+                    self._set_health(
+                        replace(
+                            self._health,
+                            backend_snapshot=replace(backend_snapshot, segment=self._segment),
+                        )
+                    )
+                    if new_ownership_session or handle.session_id != previous_session_id:
+                        self._reset_integrity_after_rollover(backend_snapshot.integrity)
+                    self._connection_start_dropped_bytes = self._session_dropped_bytes
+                    self._explicit_overflow_bytes = 0
             try:
-                if self._connection_initializer is not None:
-                    self._connection_initializer(normalized_snapshot, before_connected)
-                setup_rejected = self._initialize_source_observation(replacement)
+                setup_rejected = self._initialize_replacement_observation(
+                    replacement, normalized_snapshot, before_connected
+                )
                 with self._admission_lock:
                     if before_connected is not None:
                         before_connected()
@@ -1005,11 +1119,19 @@ class ContinuousEvidenceRecorder:
                             raise ConnectionLifecycleError(
                                 "invalid_connection_state", "Evidence ownership is unavailable"
                             )
+                    ready_event = "reacquire_succeeded" if manual else "reconnect_succeeded"
+                    ready_detail: dict[str, object] = {
+                        "connection_generation": self._connection_generation + 1
+                    }
+                    if self._session_store.v2_connection_will_rollover(
+                        self._handle, event_type=ready_event, detail=ready_detail
+                    ):
+                        self._flush_line_state()
                     connected = self._session_store.append_v2_connection_event(
                         self._handle,
-                        event_type="reacquire_succeeded" if manual else "reconnect_succeeded",
+                        event_type=ready_event,
                         segment_id=self._stored_segment_id,
-                        detail={"connection_generation": self._connection_generation + 1},
+                        detail=ready_detail,
                     )
                     metadata = self._session_store.load_metadata(connected.handle.session_id)
                     segments = metadata.get("segments")
@@ -1021,36 +1143,29 @@ class ContinuousEvidenceRecorder:
                             reject = True
                         else:
                             reject = False
-                            rolled_over = (
-                                new_ownership_session
-                                or connected.handle.session_id != previous_session_id
-                            )
+                            rolled_over = connected.rolled_over
                             self._connection_generation += 1
                             self._handle = connected.handle
                             self._source = replacement
                             self._source_segment_id = physical_segment.segment_id
                             self._stored_segment_id = stored_segment_id
                             self._segment = replace(physical_segment, segment_id=stored_segment_id)
-                            self._processor = UartCaptureProcessor()
-                            self._status_baseline = None
                             if rolled_over:
-                                self._reset_integrity_after_rollover(
-                                    backend_snapshot.integrity,
+                                self._processor = UartCaptureProcessor()
+                                self._reset_integrity_after_rollover(backend_snapshot.integrity)
+                            prior_integrity = self._health.integrity
+                            self._set_health(
+                                CaptureSourceHealth(
+                                    connected=True,
+                                    integrity=prior_integrity or backend_snapshot.integrity,
+                                    backend_snapshot=replace(
+                                        backend_snapshot,
+                                        segment=self._segment,
+                                    ),
+                                    connection_generation=self._connection_generation,
+                                    dut_vio_setup_rejected=setup_rejected,
+                                    dut_vio_observation=self._health.dut_vio_observation,
                                 )
-                            self._connection_start_dropped_bytes = self._session_dropped_bytes
-                            self._explicit_overflow_bytes = 0
-                            prior_integrity = (
-                                None if new_ownership_session else self._health.integrity
-                            )
-                            self._health = CaptureSourceHealth(
-                                connected=True,
-                                integrity=prior_integrity or backend_snapshot.integrity,
-                                backend_snapshot=replace(
-                                    backend_snapshot,
-                                    segment=self._segment,
-                                ),
-                                connection_generation=self._connection_generation,
-                                dut_vio_setup_rejected=setup_rejected,
                             )
                             self._tail = DurableEvidenceTail(
                                 connected.handle.session_id,
@@ -1134,11 +1249,13 @@ class ContinuousEvidenceRecorder:
             )
             self._state = "disconnected"
             self._replacement_allowed = False
-            self._health = replace(
-                self._health,
-                connected=False,
-                dut_vio_observation=None,
-                dut_vio_setup_rejected=False,
+            self._set_health(
+                replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
             )
             self._condition.notify_all()
 
@@ -1204,11 +1321,13 @@ class ContinuousEvidenceRecorder:
                 self._source = None
                 self._state = "closed"
                 self._closed = True
-                self._health = replace(
-                    self._health,
-                    connected=False,
-                    dut_vio_observation=None,
-                    dut_vio_setup_rejected=False,
+                self._set_health(
+                    replace(
+                        self._health,
+                        connected=False,
+                        dut_vio_observation=None,
+                        dut_vio_setup_rejected=False,
+                    )
                 )
                 self._close_error = close_error
                 self._condition.notify_all()
@@ -1398,13 +1517,15 @@ class ContinuousEvidenceRecorder:
                 else:
                     self._explicit_overflow_bytes += event.dropped_bytes
                 self._session_dropped_bytes = projected_dropped
-                self._health = replace(
-                    self._health,
-                    integrity=UartIntegrity(
-                        "loss_reported",
-                        "debug_helper_rx_buffer",
-                        projected_dropped,
-                    ),
+                self._set_health(
+                    replace(
+                        self._health,
+                        integrity=UartIntegrity(
+                            "loss_reported",
+                            "debug_helper_rx_buffer",
+                            projected_dropped,
+                        ),
+                    )
                 )
             return admission
         if isinstance(event, BufferStatusEvent):
@@ -1453,13 +1574,15 @@ class ContinuousEvidenceRecorder:
                     projected_dropped = 0
                     reported_loss = False
                 self._session_dropped_bytes = projected_dropped
-                self._health = replace(
-                    self._health,
-                    integrity=UartIntegrity(
-                        "loss_reported" if reported_loss else "none_reported",
-                        "debug_helper_rx_buffer",
-                        projected_dropped,
-                    ),
+                self._set_health(
+                    replace(
+                        self._health,
+                        integrity=UartIntegrity(
+                            "loss_reported" if reported_loss else "none_reported",
+                            "debug_helper_rx_buffer",
+                            projected_dropped,
+                        ),
+                    )
                 )
             return admission
         raise TypeError("unsupported backend event")
@@ -1475,18 +1598,27 @@ class ContinuousEvidenceRecorder:
             if admission.rolled_over:
                 self._stored_segment_id = 0
                 self._segment = replace(self._segment, segment_id=0)
-                self._health = replace(self._health, dut_vio_observation=None)
-            if vio_event is not None and self._state == "connected" and not self._closing:
-                self._health = replace(
-                    self._health,
-                    dut_vio_observation=DutVioObservation(
-                        sample=vio_event.sample,
-                        timestamp_us=vio_event.timestamp_us,
-                        received_at_monotonic=vio_event.received_at_monotonic,
-                        session_id=admission.handle.session_id,
-                        segment_id=self._stored_segment_id,
-                        evidence_seq=admission.evidence_seq,
-                    ),
+                self._set_health(replace(self._health, dut_vio_observation=None))
+            if (
+                vio_event is not None
+                and not self._closing
+                and (
+                    self._state == "connected"
+                    or (self._source is None and self._state in {"reconnecting", "reacquiring"})
+                )
+            ):
+                self._set_health(
+                    replace(
+                        self._health,
+                        dut_vio_observation=DutVioObservation(
+                            sample=vio_event.sample,
+                            timestamp_us=vio_event.timestamp_us,
+                            received_at_monotonic=vio_event.received_at_monotonic,
+                            session_id=admission.handle.session_id,
+                            segment_id=self._stored_segment_id,
+                            evidence_seq=admission.evidence_seq,
+                        ),
+                    )
                 )
             self._tail = DurableEvidenceTail(
                 admission.handle.session_id,
@@ -1543,11 +1675,13 @@ class ContinuousEvidenceRecorder:
                 reconnect_started.handle.session_id,
                 _next_sequence(reconnect_started),
             )
-            self._health = replace(
-                self._health,
-                connected=False,
-                dut_vio_observation=None,
-                dut_vio_setup_rejected=False,
+            self._set_health(
+                replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
             )
             self._state = "reconnecting"
             self._replacement_allowed = True
@@ -1594,11 +1728,13 @@ class ContinuousEvidenceRecorder:
             self._fault = error
             self._state = "faulted"
             self._source = None
-            self._health = replace(
-                self._health,
-                connected=False,
-                dut_vio_observation=None,
-                dut_vio_setup_rejected=False,
+            self._set_health(
+                replace(
+                    self._health,
+                    connected=False,
+                    dut_vio_observation=None,
+                    dut_vio_setup_rejected=False,
+                )
             )
             self._condition.notify_all()
         if current is not None:
@@ -1673,7 +1809,7 @@ class ContinuousEvidenceRecorder:
         self._connection_start_dropped_bytes = self._session_dropped_bytes
         self._explicit_overflow_bytes = 0
         self._status_baseline = None
-        self._health = replace(self._health, integrity=integrity)
+        self._set_health(replace(self._health, integrity=integrity))
 
 
 def _source_segment(source: CaptureEventSource) -> SegmentContext:

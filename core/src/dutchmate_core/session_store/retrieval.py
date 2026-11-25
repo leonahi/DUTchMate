@@ -16,7 +16,6 @@ from typing import Final, Literal, cast
 import dutchmate_core.session_store.evidence as _evidence
 import dutchmate_core.session_store.metadata as _metadata
 import dutchmate_core.session_store.persistence as _persistence
-from dutchmate_core.dut_vio import DutVioSample
 from dutchmate_core.session_store.models import (
     EvidenceTypeCount,
     FirstError,
@@ -377,15 +376,9 @@ def _build_v2_detail(
     hardware_records = list(_iter_jsonl_objects(paths.hardware_events))
     for record in hardware_records:
         if record.get("type") == "dut_vio":
-            DutVioSample.from_fields(record)
-            timestamp = record.get("timestamp_us")
-            segment_id = record.get("segment_id")
-            if type(timestamp) is not int or timestamp < 0:
-                raise ValueError("DUT VIO timestamp is invalid")
-            if type(segment_id) is not int or not 0 <= segment_id < len(
-                cast(list[object], metadata["segments"])
-            ):
-                raise ValueError("DUT VIO segment is invalid")
+            _evidence.dut_vio_sample(
+                record, segment_count=len(cast(list[object], metadata["segments"]))
+            )
     connection_records = list(_iter_jsonl_objects(paths.connection_events))
     _validate_v2_primary_order(
         metadata,
