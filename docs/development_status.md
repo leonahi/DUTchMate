@@ -33,7 +33,7 @@
 > GP28 fix commit: `f761c40cdc0d584332f46ea858e2e8e1373de0af` (local); original source base `9914d62`; gp28safe-1 electrically verified at recorded setup
 > Host admission fix commit: `0e483340565e3bd76f8559f6bba57e302b4a1820` (local); original source base `9914d62`; replay/live baseline/250/500 ms verified 2026-11-21
 > Reconnect-test/load-profile fixes: `81ab6f8` (local); fresh 1,899-test pre-commit gate passed 2026-11-24
-> DUT_VIO implementation checkpoint: `a9b2382`; verified review-fix baseline reconciled after commit
+> DUT_VIO verified code baseline: `55cd7c71f306ae03cd848f0cd2e22b705b15db7a` (local `feature/dut-vio-sensing`); initial implementation `a9b2382`
 > Documentation state reviewed: 2026-11-25
 > Authority: the only source for current progress, active phase, blockers, and
 > next step

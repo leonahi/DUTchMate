@@ -11,6 +11,7 @@ their completion chronology after the detailed validation record.
 
 ## 2026-11-25 — DUT_VIO independent review and verified corrections
 
+Verified correction code baseline `55cd7c71f306ae03cd848f0cd2e22b705b15db7a` (local feature branch).
 Fresh reviewer `gpt-6.2-astra` inspected `466a4c2..a9b2382` read-only. Its critical
 startup issue and five important correctness issues were reproduced and fixed in
 one implementation pass. Image provenance was re-graded from minor to important

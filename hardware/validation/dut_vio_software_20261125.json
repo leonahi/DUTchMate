@@ -151,5 +151,6 @@
     ]
   },
   "physical_validation": "pending; no flash or live measurement",
-  "stack_runtime_result": "not measured; diagnostic image build only"
+  "stack_runtime_result": "not measured; diagnostic image build only",
+  "source_commit": "55cd7c71f306ae03cd848f0cd2e22b705b15db7a"
 }
