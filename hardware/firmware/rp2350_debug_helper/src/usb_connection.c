@@ -23,6 +23,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
+#include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
 
 #define DUTCHMATE_CDC_NODE DT_NODELABEL(cdc_acm_uart0)
@@ -60,10 +61,15 @@ static void stage_vio(void)
 		(void)dmh_vio_sense_configure(&vio_sense, enabled, time_us_64());
 		if (!enabled) vio_pending = false;
 	}
-	dmh_vio_sense_poll(&vio_sense, time_us_64());
+	struct dmh_uart_rx_snapshot snapshot;
+	uint64_t sequence;
+	unsigned int key = irq_lock();
+	uint64_t now_us = time_us_64();
+	dutchmate_uart_rx_snapshot_observation(&snapshot, &sequence);
+	irq_unlock(key);
+	dmh_vio_sense_poll(&vio_sense, now_us, sequence);
 	if (dmh_vio_sense_take_observation(&vio_sense, &pending_vio)) {
-		struct dmh_uart_rx_snapshot snapshot;
-		dutchmate_uart_rx_snapshot_observation(&snapshot, &vio_observation_sequence);
+		vio_observation_sequence = pending_vio.observation_sequence;
 		vio_pending = true;
 	}
 }
@@ -126,37 +132,47 @@ static void stage_status_if_due(struct dmh_telemetry_schedule *schedule)
 	if (!dmh_telemetry_status_due(schedule, now_us)) {
 		return;
 	}
-	observation.timestamp_us = now_us;
+	unsigned int key = irq_lock();
+	observation.timestamp_us = time_us_64();
 	dutchmate_uart_rx_snapshot_observation(
 		&observation.snapshot,
 		&observation.observation_sequence
 	);
+	irq_unlock(key);
 	dmh_telemetry_schedule_stage_status(schedule, &observation);
 }
 
 static int drain_one_evidence(struct dmh_telemetry_schedule *schedule)
 {
-	const struct dmh_buffer_status_observation *status =
-		dmh_telemetry_pending_status(schedule);
-	bool send_vio = vio_pending && (status == NULL ||
-		vio_observation_sequence < status->observation_sequence ||
-		(vio_observation_sequence == status->observation_sequence &&
-		 pending_vio.timestamp_us <= status->timestamp_us));
+	const struct dmh_buffer_status_observation *status;
+	bool send_vio;
 	struct dmh_uart_rx_chunk chunk;
 	struct dmh_uart_rx_overflow overflow;
 	enum dmh_uart_rx_observation_kind kind;
 	size_t frame_length;
 	int result;
 
-	result = dutchmate_uart_rx_take_before(
-		send_vio || status != NULL,
-		send_vio ? vio_observation_sequence : status != NULL ? status->observation_sequence : 0U,
-		uart_staging,
-		sizeof(uart_staging),
-		&kind,
-		&chunk,
-		&overflow
-	);
+	for (;;) {
+		/* Check between every frame, including a completion racing this poll. */
+		stage_vio();
+		unsigned int key = irq_lock();
+		if (dutchmate_platform_vio_completion_ready()) {
+			irq_unlock(key);
+			continue;
+		}
+		status = dmh_telemetry_pending_status(schedule);
+		send_vio = vio_pending && (status == NULL ||
+			vio_observation_sequence < status->observation_sequence ||
+			(vio_observation_sequence == status->observation_sequence &&
+			 pending_vio.timestamp_us <= status->timestamp_us));
+		result = dutchmate_uart_rx_take_before(
+			send_vio || status != NULL,
+			send_vio ? vio_observation_sequence : status != NULL ? status->observation_sequence : 0U,
+			uart_staging, sizeof(uart_staging), &kind, &chunk, &overflow
+		);
+		irq_unlock(key);
+		break;
+	}
 	if (result != 0) {
 		return result;
 	}

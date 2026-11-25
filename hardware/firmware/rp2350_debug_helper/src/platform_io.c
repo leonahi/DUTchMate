@@ -15,12 +15,18 @@
 #ifdef CONFIG_ADC
 #include <hardware/timer.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/irq.h>
+#include "uart_rx.h"
 #include <zephyr/kernel.h>
+
+BUILD_ASSERT(DT_CHILD_NUM(DT_PHANDLE(DT_NODELABEL(adc), pinctrl_0)) == 0,
+             "ADC boot pinctrl must not write digital pads");
 
 static const struct device *const vio_adc = DEVICE_DT_GET(DT_NODELABEL(adc));
 static struct k_poll_signal vio_signal;
 static uint16_t vio_buffer;
 static uint64_t vio_completed_us;
+static uint64_t vio_completed_sequence;
 static bool vio_initialized;
 static bool vio_active;
 
@@ -30,7 +36,12 @@ static enum adc_action vio_complete(const struct device *dev,
 	ARG_UNUSED(dev);
 	ARG_UNUSED(sequence);
 	ARG_UNUSED(index);
+	/* Timestamp and ordering position describe the same completion instant. */
+	unsigned int key = irq_lock();
+	struct dmh_uart_rx_snapshot snapshot;
 	vio_completed_us = time_us_64();
+	dutchmate_uart_rx_snapshot_observation(&snapshot, &vio_completed_sequence);
+	irq_unlock(key);
 	return ADC_ACTION_CONTINUE;
 }
 
@@ -74,7 +85,8 @@ static int vio_start(void *context)
 	return result;
 }
 
-static enum dmh_vio_adc_result vio_poll(void *context, uint16_t *raw, uint64_t *done)
+static enum dmh_vio_adc_result vio_poll(void *context, uint16_t *raw, uint64_t *done,
+				      uint64_t *observation_sequence)
 {
 	unsigned int signaled;
 	int result;
@@ -88,7 +100,18 @@ static enum dmh_vio_adc_result vio_poll(void *context, uint16_t *raw, uint64_t *
 	if (result != 0) return DMH_VIO_ADC_ERROR;
 	*raw = vio_buffer;
 	*done = vio_completed_us;
+	*observation_sequence = vio_completed_sequence;
 	return DMH_VIO_ADC_COMPLETE;
+}
+
+bool dutchmate_platform_vio_completion_ready(void)
+{
+	unsigned int signaled;
+	int result;
+
+	if (!vio_active) return false;
+	k_poll_signal_check(&vio_signal, &signaled, &result);
+	return signaled != 0U;
 }
 
 struct dmh_vio_adc_port dutchmate_platform_vio_port(void)
@@ -98,6 +121,7 @@ struct dmh_vio_adc_port dutchmate_platform_vio_port(void)
 #else
 int dutchmate_platform_vio_initialize(void) { return -ENOTSUP; }
 bool dutchmate_platform_vio_ready(void) { return false; }
+bool dutchmate_platform_vio_completion_ready(void) { return false; }
 struct dmh_vio_adc_port dutchmate_platform_vio_port(void)
 {
 	return (struct dmh_vio_adc_port){0};

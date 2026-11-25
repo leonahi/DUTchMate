@@ -366,3 +366,48 @@ def test_congested_uart_and_voltage_preserve_bytes_and_automatic_reconnect(tmp_p
         runtime.close()
         for resource in resources:
             resource.dispose()
+
+
+def test_staged_observation_setup_drains_more_than_serial_fifo_capacity(tmp_path, monkeypatch):
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        if resources:
+            resource.before_sense_ack = 300
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    monkeypatch.setattr(
+        startup,
+        "open_enhanced_async_host",
+        lambda **kw: open_enhanced_async_host(**kw, open_adapter=open_adapter),
+    )
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {"dut_io_voltage": 3.3},
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+    try:
+        assert client.post("/connection/release").status_code == 200
+        response = client.post("/connection/reacquire")
+        assert response.status_code == 200, response.json()
+        root = tmp_path / runtime._evidence_recorder.active_session_id
+        deadline = time.monotonic() + 2
+        expected = b"\xff\x00\n" + b"X" * 300 + b"\xff\x00\n"
+        while time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected:
+            time.sleep(0.001)
+        assert (root / "uart_raw.log").read_bytes() == expected
+        assert resources[1].close_calls == 0
+    finally:
+        runtime.close()
+        client.close()
+        for resource in resources:
+            resource.dispose()

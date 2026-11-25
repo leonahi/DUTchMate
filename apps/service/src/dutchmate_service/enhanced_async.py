@@ -29,7 +29,7 @@ from dutchmate_core.backends.enhanced_serial_io import (
     open_async_enhanced_serial_adapter,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
-from dutchmate_core.device_connection.transport import TransportTimeoutError
+from dutchmate_core.device_connection.transport import TransportTimeoutError, TransportWriteError
 
 DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S = 0.1
 T = TypeVar("T")
@@ -157,9 +157,11 @@ class EnhancedAsyncHost:
                                 enabled=True, timeout_s=DEFAULT_ENHANCED_COMMAND_TIMEOUT_S
                             )
                         )
-                    except TransportTimeoutError as exc:
+                    except (TransportTimeoutError, TransportWriteError) as exc:
                         raise BackendDisconnectedError(
                             "Enhanced observation configuration timed out"
+                            if isinstance(exc, TransportTimeoutError)
+                            else "Enhanced observation configuration write failed"
                         ) from exc
             return self._observation_result
 

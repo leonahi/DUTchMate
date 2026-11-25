@@ -3,6 +3,7 @@
 import base64
 from typing import cast
 
+from dutchmate_core.dut_vio import DutVioSample
 from dutchmate_core.session_store.models import FirstError, MatchExcerpt, V2FirstError
 from dutchmate_core.uart_capture.line_buffer import OversizedUartLine
 from dutchmate_core.uart_capture.processor import UartCaptureResult
@@ -282,3 +283,14 @@ def _pattern_excerpt(value: object) -> MatchExcerpt:
 
 def _bytes_to_b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
+
+
+def dut_vio_sample(record: dict[str, object], *, segment_count: int) -> DutVioSample:
+    """Validate portable measurement and provenance identically for detail and tail."""
+    timestamp = record.get("timestamp_us")
+    segment = record.get("segment_id")
+    if type(timestamp) is not int or timestamp < 0:
+        raise ValueError("DUT VIO timestamp is invalid")
+    if type(segment) is not int or not 0 <= segment < segment_count:
+        raise ValueError("DUT VIO segment is invalid")
+    return DutVioSample.from_fields(record)

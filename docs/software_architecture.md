@@ -662,11 +662,17 @@ telemetry after profile controls and marks receipt before bounded event admissio
 `workflows.capture.BackendObservationInitializer` is the optional per-source setup
 boundary. It is independent of device control and is invoked on each staged
 replacement before connection success, including profiles without controls.
+A recorder-owned staged drainer consumes the candidate's bounded FIFO during
+setup and joins before the permanent ingest worker takes ownership. Commands
+remain on the lifecycle caller thread so runtime mutation ownership is retained.
+Staged UART line/integrity state survives readiness publication; connection-record
+rollover is preflighted so partial-line evidence is flushed at a journal boundary.
 
 The recorder persists `DutVioEvent` as a native-v2 hardware record and publishes
 its sample, original receipt marker and evidence reference in synchronized health
 only after commit. Physical boundaries clear it. An unrelated journal rollover
-also clears the old live reference; an observation that triggers rollover is
+also clears the old live reference; a short retention lease keeps published
+evidence available until withdrawal. An observation that triggers rollover is
 published with its successor reference without refreshing receipt age. Store detail
 and tail validate known voltage fields while older readers retain generic retrieval.
 

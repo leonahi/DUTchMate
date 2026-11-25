@@ -136,3 +136,32 @@ def test_vio_record_never_partially_persists_when_successor_creation_fails(tmp_p
     with pytest.raises(SessionPersistenceError):
         store.append_v2_dut_vio(handle, event=observation())
     assert all(path.read_bytes() == b"" for path in tmp_path.glob("*/hardware_events.jsonl"))
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("timestamp_us", None),
+        ("timestamp_us", False),
+        ("timestamp_us", -1),
+        ("segment_id", None),
+        ("segment_id", True),
+        ("segment_id", -1),
+        ("segment_id", 42),
+    ],
+)
+def test_tail_rejects_invalid_voltage_provenance(tmp_path, field, value):
+    store = SessionStore(root=tmp_path)
+    handle = create(store)
+    cursor = store.read_evidence_page(
+        cursor=None, tail_session_id=handle.session_id, limit=100
+    ).next_cursor
+    store.append_v2_dut_vio(handle, event=observation())
+    record = json.loads(handle.paths.hardware_events.read_text())
+    if value is None:
+        del record[field]
+    else:
+        record[field] = value
+    handle.paths.hardware_events.write_text(json.dumps(record) + "\n")
+    with pytest.raises(ValueError, match="DUT VIO"):
+        store.read_evidence_page(cursor=cursor, tail_session_id=handle.session_id, limit=100)

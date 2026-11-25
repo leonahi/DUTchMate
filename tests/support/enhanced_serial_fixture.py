@@ -14,6 +14,7 @@ class PipeSerial:
     def __init__(
         self, *, origin_us=1000, close_mode="closed", power_sense=False, sense_response="ok"
     ):
+        self.before_sense_ack = 0
         self.power_sense = power_sense
         self.sense_response = sense_response
         self.origin_us = origin_us
@@ -73,7 +74,19 @@ class PipeSerial:
                     ).encode()
                     + b"\n"
                 )
-            self.loop.call_soon_threadsafe(self.protocol.data_received, payload)
+            preceding = b"".join(
+                json.dumps(
+                    {
+                        "type": "uart",
+                        "channel": 0,
+                        "timestamp_us": self.origin_us + i + 1,
+                        "data_b64": "WA==",
+                    }
+                ).encode()
+                + b"\n"
+                for i in range(self.before_sense_ack)
+            )
+            self.loop.call_soon_threadsafe(self.protocol.data_received, preceding + payload)
             return len(data)
         if command["cmd"] == "configure_gpio_mode":
             self.configured.add(command["channel"])

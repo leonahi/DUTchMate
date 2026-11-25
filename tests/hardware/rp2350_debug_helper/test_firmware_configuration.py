@@ -28,3 +28,15 @@ def test_cdc_tx_fifo_holds_one_maximum_evidence_frame() -> None:
     )
 
     assert int(fifo_match.group(1)) >= frame_capacity
+
+
+def test_adc_boot_pinctrl_does_not_write_digital_pads() -> None:
+    # The pinned Pico pinctrl driver calls gpio_init/gpio_set_function before
+    # input-enable/pulls. Its default state must contain no pad writers: the
+    # ordered GPIO_DISCONNECTED/ISO path owns GP28, and ADC selects channel 2.
+    overlay = (FIRMWARE_ROOT / "boards/rpi_pico2_rp2350a_m33.overlay").read_text()
+    state = re.search(r"dutchmate_adc:\s*dutchmate_adc\s*\{(.*?)\n\t\};", overlay, re.S)
+    assert state is not None
+    assert not re.findall(r"pinmux\s*=\s*<([^>]+)>", state.group(1)), (
+        "ADC boot pinctrl must not run generic digital pad initialization"
+    )

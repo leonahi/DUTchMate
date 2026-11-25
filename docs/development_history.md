@@ -9,6 +9,78 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-25 — DUT_VIO independent review and verified corrections
+
+Fresh reviewer `gpt-6.2-astra` inspected `466a4c2..a9b2382` read-only. Its critical
+startup issue and five important correctness issues were reproduced and fixed in
+one implementation pass. Image provenance was re-graded from minor to important
+and corrected too. No second reviewer or physical run was used.
+
+- **Boot pads:** Pinned Zephyr ADC POST_KERNEL initialization invokes generic Pico
+  pinctrl, whose `gpio_init`/`gpio_set_function` enables IE and clears ISO before
+  final pulls/input flags. The original GP28-only state failed a boot-pad guard.
+  ADC now has a valid default phandle with zero child groups; a build assertion
+  and generated devicetree verify zero digital-pad writers. Only the existing
+  `GPIO_DISCONNECTED` then ISO-clear path owns GP28; channel 2 selects analog input.
+  The contract's pinctrl implementation detail was corrected to preserve its
+  required electrical invariant. Cost if wrong: analog readiness; physical campaign pending.
+- **Output order:** Production USB scheduling reproduced UART 50 → UART 110 → ADC
+  completion 100. Completion now carries the UART cutoff captured atomically with
+  its timestamp; each frame choice re-polls/checks completion with dequeue under
+  a short IRQ critical section. Regressions now emit 50 → 100 → 110, including a
+  completion racing poll/dequeue. Failed/interrupted ACKs never enable sampling;
+  disable drops an unsent observation. Encoding and USB writes stay outside the
+  critical section; its remaining cost is short interrupt latency.
+- **Busy readiness:** 300 UART records before enable ACK exceeded the real
+  256-event FIFO and reproduced HTTP409/timeout on a healthy candidate. A
+  recorder-owned staged drainer admits candidate evidence while setup remains on
+  the lifecycle caller thread, preserving runtime mutation ownership. It joins
+  before the permanent ingest worker takes over; queues and timeouts are unchanged.
+  Staged line/integrity state survives readiness, with connection-record rollover
+  preflight. A staged `Hard` + live `Fault\n` regression retains `HardFault`.
+  Storage errors retain precedence when they themselves backpressure an ACK.
+- **Write faults:** Partial-write/flush transport faults now cross the same backend
+  disconnected/lifecycle boundary as setup timeout, retaining the original cause.
+  Host and staged lifecycle tests verify initialization-failed journaling rather
+  than a fabricated persistence-failure classification.
+- **Retention:** A paused store-return/publication interval reproduced a live
+  voltage reference to an already-deleted predecessor. A retention lease now spans
+  publication until reference withdrawal/replacement, including fault/close paths.
+  A max-count-one regression verifies availability through that interval and
+  deletion after withdrawal. Temporary retention over-count while leased is intentional.
+- **Readers:** Detail and tail share measurement/provenance validation. Seven
+  missing/Boolean/negative/out-of-range timestamp/segment regressions reject bad
+  voltage provenance using their existing corruption-error boundaries.
+- **Images:** All three corrected `viosense-2` variants build under Zephyr 4.4.2.
+  The immutable firmware Git tree, UF2/config hashes, zero-pad generated checks,
+  memory results and superseded first-build hashes are retained in
+  [build provenance](../hardware/validation/dut_vio_software_20261125.json).
+  First-build images remain preserved but are superseded for flashing. One local
+  CMake generation process exited -10; an incremental retry completed all builds.
+
+Fresh final gate: **2,028 tests passed in 52.65 s**; Ruff, mypy (104 source files),
+offline lock (66 packages), and diff check passed. Existing architecture/dependency
+checks run in that full suite. The first review-fix gate passed 2,025/58.57 s;
+new staged-fault and partial-line regressions are included in the final count.
+The code graph was refreshed after review added shared staging/lease interfaces
+(6,339 nodes/16,243 edges). Earlier C/preprocessor extraction warnings remain
+limitations; semantic documentation relationships were not regenerated. This
+additional refresh was necessary because review changed interfaces after the
+initial update; source and specifications remain authoritative.
+
+**Deferred minor:** A clock injected only through service startup can use a
+different origin from the real adapter receipt clock. Default production clocks
+both use `time.monotonic`; deterministic whole-service clock composition remains
+limited. The reviewer set aside physical accuracy, runtime stack high-water and
+board acceptance because those require the separate hardware campaign; historical
+AI/report interpretation remains expressly outside this extension. No software
+result is substituted for either boundary.
+
+The isolated worktree/shared test environment protected existing CAD edits; its
+ignored execution ledger was temporary and did not replace canonical status.
+The superseded working plan is removed. The feature branch/worktree is retained;
+merging/pushing and physical hardware use were not requested in this slice.
+
 ## 2026-11-25 — Report-only DUT_VIO software slice
 
 Implementation base `466a4c2`, isolated `feature/dut-vio-sensing` worktree;

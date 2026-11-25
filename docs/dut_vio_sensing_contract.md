@@ -35,10 +35,15 @@ does not control the TMUX. A zero reading measures the interface reference at
 this connector; it does not prove the entire DUT is unpowered.
 
 Use Zephyr's ADC driver on channel 2, single-ended, gain 1 and 12-bit resolution.
-Override the board ADC pinctrl group to GP28 alone, with digital input, output
-and pulls disabled. The default board group also includes GP26, which this
-helper uses as CTRL2 enable; it must not be applied. Preserve the existing
-disable-controls-before-ISO-release startup sequence and pad-readback diagnostics.
+Replace the board ADC pinctrl state with a valid, empty state: the pinned Pico
+pinctrl implementation enables digital input and clears ISO before setting final
+pull/input flags, so it must write no ADC pads during driver initialization.
+The existing ordered `GPIO_DISCONNECTED`/ISO path alone configures GP28 with
+digital input, output and pulls disabled; ADC channel 2 selects its analog input
+independently. The board's default group includes GP26 (CTRL2 enable) and must
+not be applied. Preserve pad-readback diagnostics. This empty-state detail
+supersedes the original GP28-only generic pinctrl proposal to preserve its
+required electrical startup invariant.
 
 The first version takes one conversion per observation. There is no averaging,
 automatic calibration or extra ADC channel. At most one conversion is in flight;
@@ -236,7 +241,8 @@ Software acceptance requires:
 1. C harnesses cover conversion vectors/boundaries, ADC failure/saturation,
    timeout/late completion, epoch changes and bounded observation replacement.
 2. Firmware pin initialization tests and a real Zephyr 4.4.2 build confirm that
-   only GP28 is assigned ADC pinctrl, with safe digital/pull/ISO settings and
+   ADC boot pinctrl writes no pads and only GP28 is configured for sensing,
+   with safe digital/pull/ISO settings and
    unchanged control/UART mappings. Normal and diagnostic configurations build.
 3. Schema/parser/encoder tests cover strict types, exact conversion consistency,
    enable/disable ACK order and all four host/helper compatibility combinations.

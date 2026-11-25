@@ -644,3 +644,28 @@ def test_observation_setup_follows_controls_for_initial_and_replacement(enhanced
     assert len(observations) == 1
     assert len(observations[0]) == 2
     assert runtime._evidence_recorder.capture_source_health().dut_vio_setup_rejected is True
+
+
+@pytest.mark.parametrize("fault", ["partial_write", "flush"])
+def test_staged_observation_write_fault_is_a_lifecycle_failure(enhanced, fault):
+    from dutchmate_core.backends import BackendDisconnectedError
+    from dutchmate_core.device_connection.transport import TransportWriteError
+
+    runtime, client, hosts, options = enhanced
+    original = TransportWriteError(fault, frame_bytes_accepted=2, error="write_failed")
+
+    def initialize():
+        raise BackendDisconnectedError(
+            "Enhanced observation configuration write failed"
+        ) from original
+
+    options["initialize_observation"] = initialize
+    assert client.post("/connection/release").status_code == 200
+    response = client.post("/connection/reacquire")
+    assert response.status_code == 409
+    assert response.json()["context"]["reason"] == "observation_initialization_failed"
+    connection = records(runtime, "connection_events.jsonl")
+    failed = next(r for r in connection if r["type"] == "reacquire_failed")
+    assert failed["detail"]["reason"] == "observation_initialization_failed"
+    metadata = runtime.session_store.load_metadata(runtime._evidence_recorder.active_session_id)
+    assert metadata["end_reason"] != "persistence_error"

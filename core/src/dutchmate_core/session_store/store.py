@@ -284,12 +284,34 @@ class SessionStore:
         self._v2_snapshots: dict[str, BackendSnapshot] = {}
         self._v2_monitor_range_leases: dict[str, set[str]] = {}
         self._v2_tail_read_leases: dict[str, int] = {}
+        self._v2_status_leases: dict[str, int] = {}
 
     @property
     def root(self) -> Path:
         """Directory containing all sessions."""
 
         return self._root
+
+    def retain_v2_evidence(self, session_id: str) -> Callable[[], None]:
+        """Keep one currently published evidence reference alive until withdrawn."""
+        _metadata._validate_session_id(session_id)
+        with self._store_lock:
+            self._v2_status_leases[session_id] = self._v2_status_leases.get(session_id, 0) + 1
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            with self._store_lock:
+                if released:
+                    return
+                released = True
+                remaining = self._v2_status_leases[session_id] - 1
+                if remaining:
+                    self._v2_status_leases[session_id] = remaining
+                else:
+                    del self._v2_status_leases[session_id]
+
+        return release
 
     def read_evidence_page(
         self,
@@ -1932,6 +1954,23 @@ class SessionStore:
                 )
             return admission
 
+    def v2_connection_will_rollover(
+        self, handle: SessionHandle, *, event_type: str, detail: dict[str, object]
+    ) -> bool:
+        """Preflight readiness publication after staged UART admission."""
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            record = self._v2_record(
+                handle,
+                metadata=metadata,
+                evidence_seq=_v2_next_sequence(metadata),
+                record_type=event_type,
+                fields={"segment_id": _current_v2_segment_id(metadata), "detail": detail},
+            )
+            return not self._v2_unit_fits(
+                metadata, unit_bytes=len(_persistence.serialize_jsonl(record))
+            )
+
     def append_v2_connection_event(
         self,
         handle: SessionHandle,
@@ -2630,7 +2669,10 @@ class SessionStore:
             self._root,
             max_count=self._max_count,
             held_session_ids=(
-                held_session_ids | leased_session_ids | self._v2_tail_read_leases.keys()
+                held_session_ids
+                | leased_session_ids
+                | self._v2_tail_read_leases.keys()
+                | self._v2_status_leases.keys()
             ),
         )
         return self._retention_status
