@@ -81,7 +81,8 @@ def test_real_stdio_entrypoint_keeps_stdout_protocol_clean_on_eof() -> None:
         input="",
         text=True,
         capture_output=True,
-        timeout=5,
+        # Whole-process guard: SDK startup (15 s) plus EOF shutdown (5 s).
+        timeout=20,
         check=False,
     )
 

@@ -9,6 +9,63 @@ this preface so dated records remain newest-first. The migrated blocks below
 retain their pre-split text byte-for-byte; the completed-work groups follow
 their completion chronology after the detailed validation record.
 
+## 2026-11-26 — MCP startup test hardening commit verification
+
+User requested commit after review. Fresh focused CLI/MCP launch checks passed
+**29 tests in 8.74 s**; Ruff passed, mypy passed for **104** source files,
+offline lock check passed for **66** packages, and final diff checks passed.
+The unchanged three test modules already passed the full **2,030-test/59.25 s**
+gate recorded below; no additional behavior change justified repeating it.
+Commit scope is those three test modules and the status/history documents.
+Production code, firmware, board evidence and dependency configuration remain
+unchanged. Both preexisting KiCad edits are excluded and their hashes preserved.
+The earlier uncommitted-review note below describes the state before this closeout.
+
+## 2026-11-26 — MCP startup test deadline investigation and hardening
+
+Investigated the five-second CLI-to-MCP subprocess timeout observed during the
+previous evidence commit. Three real installed launches with restricted PATH
+and empty stdin completed normally: CLI **3.872/3.469/3.646 s**, direct MCP
+**2.857/2.774/2.846 s**, exit zero, no stdout/stderr. Import profiles attributed
+most startup cost to the MCP SDK/generated models; the CLI also loads its
+delivery modules before replacing itself with the sibling executable. The
+functional launch tests included that import work inside their five-second
+whole-process EOF guard. No five-second startup performance contract is specified.
+The exact machine-level trigger of the earlier failure was not captured; no
+launcher deadlock or functional regression was reproduced.
+
+Controlled RED/GREEN used the actual installed CLI and MCP SDK, restricted PATH
+and unchanged EOF assertions. A temporary `sitecustomize.py` delayed only the
+MCP child interpreter by six seconds before normal imports. The original test
+failed with `TimeoutExpired` after **5.004 s**; with the corrected guard the
+same delayed real launch passed in **6.603 s**. Local baseline/import profiles
+and reproduction records are retained under ignored `build/mcp-startup-20261126/`.
+They are diagnostic timing observations, not a production startup SLA.
+
+Only three test modules changed:
+
+- CLI sibling-executable launch and real MCP entrypoint EOF checks use a bounded
+  **20 s** whole-process guard, allowing startup plus shutdown.
+- Installed MCP discovery allows **15 s** for its first response, including
+  interpreter/SDK startup. Every later request and explicit post-handshake EOF
+  shutdown still uses **5 s**. Empty-stdin and invalid-option whole-process cases
+  allow **20 s**; those cases do not independently measure their shutdown phase.
+- All existing executable selection, protocol JSON, catalog, URL precedence,
+  error redaction, quiet stdout, return-code and cleanup assertions remain.
+
+No production launcher, SDK/dependency version, protocol/API, service transport
+timeout, hardware, firmware or board evidence changed. No new modules or
+architectural dependencies were introduced; Graphify refresh is not applicable.
+The code/firmware baselines remain `283f0dd`/`55cd7c7`; both preexisting dirty
+KiCad file hashes remain unchanged.
+
+Fresh verification: **29 focused tests passed in 8.48 s**; full pytest
+**2,030 passed in 59.25 s**. Ruff passed; mypy passed for **104** source files;
+offline lock check passed for **66** packages; `git diff --check` passed.
+The change addresses a fragile test deadline, not SDK startup performance or
+an independently demonstrated production defect. Changes remain uncommitted
+for review; no hardware acceptance or voltage calibration changed.
+
 ## 2026-11-25 — Physical characterization evidence commit verification
 
 Reviewed three documents and **42** new evidence files, including the zero and
