@@ -67,20 +67,26 @@ Before completing a structural change, run:
 Update architecture documentation when module ownership or dependency direction
 changes.
 
-## Development Status
+## Work Tracking
 
-- Read `docs/development_status.md` before selecting development work.
-- `docs/development_status.md` is the only source for current progress, active
-  phase, blockers, and the next step. Keep its `Resume Here` section to
-  approximately 40 lines or fewer.
-- Update its review date, current milestone, next step, current checklist, and
-  concise validation result in the same commit as each completed development
-  slice. Reconcile its code-baseline reference after commits are created.
-- Append completed-slice records and detailed validation logs to
-  `docs/development_history.md`, newest first. That append-only record must not
-  acquire a competing current-status or next-step section.
-- Requirements, architecture, plans, and validation records must not maintain
-  competing progress summaries or next-step lists.
+- GitHub Issues own substantive tasks, acceptance criteria, ownership, blockers
+  and dependencies. GitHub Projects is a view of those issues and linked PRs.
+- Read the assigned issue, related PRs and owning specifications before selecting
+  or continuing work. Check existing issues before proposing duplicates.
+- Keep implementation details and fresh validation evidence in the PR. Link its
+  issue and identify a lead owner; small mechanical fixes may use a PR alone.
+- `docs/development_status.md` is a milestone overview and dated acceptance
+  snapshot. Update it only when release scope or milestone acceptance changes;
+  do not maintain a task queue, per-change log or developer handoff there.
+- `docs/development_history.md` is a frozen archive. Preserve its existing
+  records and anchors; do not append routine completed-slice entries.
+- Specifications own requirements, architecture owns dependency decisions,
+  release notes own user-visible changes, and hardware validation records own
+  measured evidence. Link them from issues/PRs instead of copying their content.
+- If tracker access is unavailable, report that limitation and work from the
+  user's task and available specifications. Prepare issue/PR drafts locally;
+  never invent issue IDs or claim that remote tracking was updated.
+- See `CONTRIBUTING.md` for the issue and review workflow.
 
 ## Graphify Usage
 
@@ -162,7 +168,7 @@ Do not redesign an established architecture unless the task explicitly requires 
 
 Before proposing new architecture or creating new design documents:
 
-* Check whether the required behavior is already defined in existing project specifications, architecture documents, protocol documents, or `development_status.md`.
+* Check whether the required behavior is already defined in existing project specifications, architecture documents, protocol documents, or the assigned issue.
 * Reference existing normative documents instead of restating them.
 * Do not create another design document when the required behavior is already specified.
 * Do not repeat large amounts of existing specification content in implementation plans.
@@ -193,8 +199,8 @@ For migration or cleanup work, prefer an inventory of affected consumers and com
 Working design and implementation plans are temporary implementation aids, not
 permanent progress records. After the work is complete, preserve durable
 decisions in the appropriate authoritative specification or architecture
-document, current progress and next steps in `docs/development_status.md`, and
-completed-slice evidence in `docs/development_history.md`; then remove the
+document, task progress and dependencies in its issue, and implementation and
+validation evidence in its PR; then remove the
 superseded working plan. High-risk work may still use a temporary written plan,
 but do not maintain a plan directory as a second status or history system.
 
@@ -275,7 +281,8 @@ Before completing a development slice:
 * verify relevant stale/legacy references are removed;
 * review the final diff;
 * update architecture documentation when architecture actually changed;
-* update `development_status.md` when project status changed;
+* record implementation and validation in the PR and update its linked issue;
+* update the milestone overview only when release scope or acceptance changed;
 * update Graphify when required by the repository's Graphify policy.
 
 Do not claim completion when required validation has not been run or when failures remain.

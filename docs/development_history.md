@@ -1,13 +1,290 @@
-# Development History
+# Development History (Archive)
 
-> Append-only historical record; not a progress tracker or next-step authority.
-> See [Development Status](development_status.md) for the current milestone,
-> blockers, ordered queue, and exact next step.
+> Frozen on 2026-11-27 when task tracking moved to GitHub Issues and PRs.
+> Records describe their original dates, not current task status. Preserve their
+> headings, evidence and anchors; do not append routine development-slice logs.
+> See the [contribution workflow](../CONTRIBUTING.md#issues-and-pull-requests) and
+> [milestone overview](development_status.md) for the new division of ownership.
 
-Add future completed-slice and detailed validation records immediately below
-this preface so dated records remain newest-first. The migrated blocks below
-retain their pre-split text byte-for-byte; the completed-work groups follow
-their completion chronology after the detailed validation record.
+## 2026-11-27 — Issue-based tracking cutover
+
+The repository now uses GitHub Issues for tasks, owners, blockers and
+dependencies, Projects as their team view, and PRs for implementation and
+validation records. The former status file is reduced to milestone scope and
+acceptance; this history is archived rather than maintained for every change.
+Issue forms and the PR template are prepared locally. GitHub settings, project,
+milestone, existing issues and migration into remote issues were not verified:
+there is no connected GitHub tool and `gh` is unavailable. No remote tracking
+items or settings were created or changed.
+
+The final local status/handoff below is preserved once for migration and
+historical evidence. Its task priorities, pending changes and bench state are
+as recorded at cutover; they are not a new live progress authority. Existing
+completed-slice records follow unchanged.
+
+### Final local handoff snapshot
+
+> # Development Status
+>
+> > Reviewed: 2026-11-27. Current progress, blockers and next step live only here.
+> > Last committed baseline: `eff9d67cd1828c3233308c061da4968fbd4509a0` (MCP startup test hardening).
+> > Sensing code baseline: `283f0dd`; firmware image source: `55cd7c7`.
+> > Physical characterization evidence: `b4d7e06`.
+> > README refresh, optional-voltage prerequisite removal, documentation cleanup and specs/plans relocation are uncommitted.
+> > Preexisting KiCad PCB/project edits remain designer-owned and uncommitted.
+> > Completed work and prior baselines: [development history](development_history.md).
+>
+> ## Resume Here
+>
+> Read this document first whenever development resumes.
+>
+> - **Current milestone:** Documents organized under `docs/specs/` and `docs/plans/`.
+>   Cleanup, manual-voltage prerequisite removal and README refresh are ready for review.
+> - **Sensing authority:** [Contract](specs/dut_vio_sensing_contract.md). GP28/ADC2 only,
+>   negotiated observations, durable native-v2 evidence and receipt-age status;
+>   measured voltage does not change control policy or declared interface voltage.
+> - **Next step:** Review/commit documentation, manual-voltage prerequisite removal
+>   and README, then prepare approved `v0.2.0` with Debug Agent publication deferred.
+> - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
+>   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
+>   ADC accuracy tolerance and diagnostic runtime stack results remain unestablished.
+> - **Validation (Nov 27):** Plans: 2,031 tests/56.77 s, Ruff, mypy (104 files),
+>   offline lock (66 packages), diff and 432 relative links/anchors pass. Requirements
+>   and earlier history preserved; no source, firmware or physical evidence changed.
+> - **Clock fix:** Initial open, automatic reconnect and release/reacquire share
+>   the service's configured monotonic clock; the deferred limitation is closed.
+> - **Integration:** Sensing and clock fix fast-forwarded into local `main` at
+>   `283f0dd`; existing CAD edits and verified image provenance preserved.
+> - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
+>   remain needed for outstanding electrical checks; pin 36 remains probe-only.
+> - **Bench handoff:** External DUT isolated, J1.7↔8 loop fitted; PPK2 5000 mV.
+>   Last known USB/PPK2 ON, probes removed; request PPK2 OFF then disconnect USB.
+>   [Flash/startup evidence](../hardware/validation/phase1_kicad_rev_a.md#dut_vio-sensing-flash-and-live-usb-telemetry--2026-11-25)
+>   records the known helper; it establishes no physical voltage accuracy.
+> - **Acceptance boundary:** Phase 1A Complete; manufactured KiCad Rev-A acceptance,
+>   Phase 1B, Stage 8 and Phase 1 incomplete. Legacy EAGLE functional evidence,
+>   source review and software tests establish no KiCad electrical acceptance.
+> - **Design authority:** [KiCad source](../hardware/pcb/debug-helper/rev-a/README.md);
+>   layout, DFM and fabrication remain designer work. Existing local CAD edits preserved.
+> - **MCP boundary:** Twelve tools retained. Strict Inspector/applicable conformance
+>   passed previously; VS Code tool use and Claude Code host UI checks unavailable.
+> - **Capture closed:** Service stopped, listener/serial released; power-order session
+>   `20261125T221457Z-bec57e67` completed/service_shutdown, 3,521 contiguous records
+>   archived/hash-verified; previous 147,031-record campaign and CAD unchanged.
+> - **Follow-up checklist:** Cleanup/manual-voltage/README review and commit pending.
+>   Release preparation, voltage calibration and physical gates remain open.
+> - **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
+>   Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
+>
+> ## Current Acceptance Gates
+>
+> | Gate | Status |
+> |---|---|
+> | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
+> | Phase 1B — Enhanced | Incomplete until required manufactured KiCad Rev-A physical validation is performed and accepted; includes fresh UART electrical/oscilloscope evidence under existing criteria; legacy EAGLE functional HIL cannot satisfy this hardware gate |
+> | Phase 1 shared done criteria | Shared §35 behavioral evidence is retained; Phase 1 remains incomplete pending accepted current-board physical validation, without transferring EAGLE acceptance to KiCad |
+>
+> ## Active Scope and Deferred Work
+>
+> - Approved next host release: `v0.2.0`, retaining the five public distributions;
+>   Debug Agent publication remains deferred. Version/pin/lockfile and release
+>   preparation changes have not been made.
+> - Manufactured KiCad Rev-A acceptance still requires the outstanding electrical
+>   checks, including UART waveform evidence and loaded helper-rail isolation.
+>   Secure 3V3 load access and an oscilloscope remain unavailable at the last test.
+> - Report-only VIO was characterized with a Mastech MAS830L. Recheck DUT_VIO and
+>   ADC_VREF with the lab meter before selecting a board-specific reference build.
+>   New-image diagnostic runtime stack results remain unmeasured.
+> - MCP v2 migration is accepted under its scoped policy. VS Code tool-use and
+>   authenticated Claude Code host UI checks remain unavailable, not passed.
+> - Phase 4 Debug Agent v2 evidence packaging remains paused; existing schema-v1
+>   support is retained. Phase 5 EVENT capture is deferred.
+> - Basic `E_COMMAND_001` remains unresolved/unclassified/non-blocking; the
+>   historical pull-up blocker is satisfied. Neither changes current-board gates.
+> - Manual PCB layout/DFM/fabrication work belongs to the hardware designer. Source
+>   review and older EAGLE HIL do not establish current edited-CAD or manufactured
+>   KiCad electrical acceptance.
+>
+> ## Authoritative References
+>
+> - [Phase 1 specification](specs/phase1_implementation_spec.md) owns current behavior,
+>   testing and acceptance criteria, including the ring-buffer gate.
+> - [MCP adapter contract](specs/mcp_adapter_contract.md) owns the tool catalog and scoped
+>   protocol/host acceptance; [delivery contract](specs/ci_packaging_distribution_contract.md)
+>   owns package/version/publication rules.
+> - [KiCad source](../hardware/pcb/debug-helper/rev-a/README.md) and
+>   [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md)
+>   retain design and measured results; neither is a second next-step tracker.
+>
+> Historical status summaries and migration-stage baselines were retired from
+> this file after audit. Their committed snapshot remains in Git at
+> `eff9d67cd1828c3233308c061da4968fbd4509a0`; detailed records remain in
+> development history. Do not copy completed validation logs
+> back here. Keep Resume Here approximately 40 lines or fewer and append detailed
+> completed-slice evidence to history.
+
+## 2026-11-27 — Dedicated implementation-plans directory
+
+Moved the remaining historical Phase 1 migration reference into `docs/plans/`
+and rebased its links, preserving the same resolved targets and original pinned
+Git source. Added a plans index, updated the docs index and developer-guide tree,
+and retained a six-line forwarding page at the old path. Existing HIL/history
+links continue to work without changing earlier history entries. Completed
+execution instructions remain retired; no obsolete plan was restored. The MCP
+and packaging documents remain active contracts in `docs/specs/`, not plans.
+
+Validation: **2,031 tests passed in 56.77 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **432** relative links/anchors passed, including new plans files
+(vendored Graphify skill docs excluded). New Markdown whitespace checks passed.
+Exact hashes confirm all specifications, runtime code/tests, firmware, CAD and
+unrelated documents are unchanged. Previous history remains byte-for-byte;
+this record is prepended. No code-module/interface change required a Graphify
+update, no live hardware was accessed and no commit was created.
+
+## 2026-11-27 — Dedicated specifications directory
+
+Moved eight canonical requirements/contract documents into `docs/specs/`:
+product context, Phase 1 implementation, DUT_VIO sensing, Debug Agent context,
+GPIO configuration, reconnect/session semantics, MCP adapter, and CI/packaging/
+distribution. Renamed the MCP and packaging documents to
+`mcp_adapter_contract.md` and `ci_packaging_distribution_contract.md` to reflect
+their durable purpose. Added a specifications index and linked it from the main
+docs index; guides, architecture, glossary, status/history and release notes
+remain outside the specifications directory.
+
+Rebased outgoing links in the moved documents and updated active incoming
+references in guides, architecture, hardware documentation, validation records
+and the historical migration reference. Changes to hardware validation records
+are link-destination updates only; measurements and evidence text are unchanged.
+Historical quoted paths and pinned `git show` commands retain their original
+locations. No requirements or acceptance criteria changed.
+
+Kept small forwarding pages at the old Phase 1 and MCP paths, including the
+anchors used by earlier records. This preserves existing history entries
+byte-for-byte rather than rewriting their links; the forwarding pages contain
+no duplicate specification text. Exact comparison confirmed that all eight
+moved documents differ from their pre-move contents only in references/paths.
+All 504 preexisting non-Markdown files and the root README retain their hashes,
+including the pending optional-voltage code/tests and designer-owned KiCad edits.
+
+Validation: **2,031 tests passed in 56.61 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **426** relative document links/anchors passed, including new specs files
+and preserved historical forwarding anchors (vendored Graphify skill docs
+excluded). New Markdown whitespace checks passed. This is documentation
+organization only; no code-module/interface change required a Graphify update.
+No live hardware was accessed, firmware/protocol/raw evidence and release scope
+remain unchanged, and no commit was created.
+
+## 2026-11-26 — Repository and documentation retirement audit
+
+Audited the 555 tracked-file inventory, with particular attention to all 44
+Markdown files, incoming references, completed plans, scaffold markers and
+package/test consumers. A focused Graphify query supported navigation; actual
+source, tests and links governed the decisions. No production code was removed:
+compatibility readers, fixtures, CI helpers, distribution licenses and legacy
+hardware assets retain consumers or provenance value.
+
+Removed seven obsolete `.gitkeep` placeholders from populated test/firmware
+directories or unused empty scaffolds. Removed the 220-line
+`docs/ring_buffer_sizing_plan.md` after consolidating its durable buffering,
+telemetry, loss, memory and per-build acceptance criteria into Phase 1 section
+12.1. Added a consolidation notice to the historical ring-buffer report; every
+original measurement and decision remains unchanged.
+
+Reduced the 972-line Phase 1 migration plan to a 26-line historical reference
+at its original path so preserved HIL links remain valid. Retired the completed
+MCP implementation sequence/inventory while preserving its tool contract and
+acceptance matrix exactly; retained its historical implementation-sequence
+anchor. Trimmed completed packaging/executable-migration and initial-publisher
+bootstrap instructions, retaining ownership, CI, artifact and publication
+contracts. Historical execution text remains retrievable with the documented
+`git show eff9d67cd1828c3233308c061da4968fbd4509a0:<path>` commands.
+
+Reduced development status from 729 lines to a concise current handoff and
+acceptance gates, with Resume Here kept below 40 lines. Retired dated summaries
+and old baseline lists; their committed snapshot remains in Git and existing
+detailed history entries are preserved without rewriting. Updated the docs
+index and developer guide, including removal of empty test scaffolds and the
+stale promise to publish Debug Agent with v0.2.0. Approved scope remains five
+public host distributions; Debug Agent publication remains deferred. No release
+versions or workflows changed, and outstanding physical gates remain open.
+
+Validation: **2,031 tests passed in 57.03 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **412** tracked-document relative links/anchors passed, with no broken
+links before or after cleanup (vendored Graphify skill docs excluded). Exact
+comparisons confirmed the MCP live catalog/behavior and acceptance matrix and
+the original ring-buffer report body were preserved. No architecture/interface
+change required a Graphify update.
+
+The preexisting README, optional-voltage source/tests and sensing contract, and
+both KiCad files retain their pre-cleanup hashes. Prior developer-guide and
+specification changes remain; this entry is prepended without altering earlier
+history. No live hardware was accessed, no firmware/protocol/raw evidence was
+changed, and no commit was created.
+
+## 2026-11-26 — Remove the manual voltage declaration prerequisite only
+
+User clarified the scope: users must be able to use Enhanced without providing
+`hardware.dut_io_voltage`; keep the existing field and sensing functionality.
+Removed the single Enhanced-open prerequisite in service startup and the two
+declaration-presence checks in runtime GPIO configuration/application. No other
+connection, capability, mapping, audit or action checks were changed.
+
+The optional field remains accepted, with the existing numeric/range validation
+when supplied. Existing profile/status/session projections and schema remain;
+omitted declarations stay `None`, with no guessed default and no ADC value
+copied into configuration. Recorded historical evidence is unchanged. Voltage
+sensing remains report-only, with unchanged firmware and hardware behavior.
+Updated the approved README's Enhanced step to use the start command and physical
+DUT_VIO wiring guide, without a mandatory voltage entry. Developer guidance,
+the sensing contract and Phase 1 specification now state that declaration
+omission does not prevent startup or GPIO control. No structural or interface
+change required a Graphify update.
+
+RED: **3 failed/2 passed in 0.47 s** at exactly the three existing prerequisite
+checks. GREEN: **81 focused tests passed in 2.00 s**, covering omitted/present
+declarations, actual runtime control mapping outcomes, preserved profile/session
+provenance and rejection of invalid supplied values. Full pytest: **2,031 passed
+in 56.43 s**. Ruff passed after removing the obsolete negative test's unused
+import; mypy passed for **104** source files; offline lock passed for **66**
+packages; `git diff --check` passed. README's **14** links/anchors and four bash
+blocks validate. No live hardware was accessed; firmware, protocol and physical
+validation evidence remain unchanged. Both preexisting dirty KiCad files retain
+their hashes. This slice and the approved README refresh remain uncommitted.
+
+## 2026-11-26 — Coding-agent-first README refresh
+
+Implemented the user-approved README outline: install from the current checkout,
+connect Basic/Enhanced hardware, register the local MCP launcher, then investigate
+using coding-agent prompts. The README is **508 words versus 911**, a **44.2%**
+reduction, and **116 lines versus 177**. Detailed CLI operation semantics,
+duplicate quick starts and contributor test commands are replaced by links to
+the existing authoritative guides. No guide content or runtime behavior changed.
+
+Retained the logo, published-v0.1.0/current-checkout distinction, Enhanced VIO
+configuration prerequisite, UART TX/control-mapping requirements, service-before-
+MCP startup, continuous recording, explicit shutdown, licensing/branding scope
+and DCO contribution requirement. The separate Debug Agent package is explicitly
+unnecessary for the coding-agent MCP workflow. Agent-specific host configuration
+remains in the developer guide; no new host acceptance is claimed.
+
+Recorded the user's approved future release scope in current status: host
+`v0.2.0`, Debug Agent public distribution deferred. No versions, dependency pins,
+lockfile, release workflow, firmware or release-plan policy were changed in this
+documentation slice; no release action occurred.
+
+Fresh documentation verification: all **13** relative links/fragments resolve;
+the referenced image exists and its markup is unchanged; all **four** bash
+blocks pass `bash -n`. Actual `dutchmate start --help` and
+`dutchmate-mcp --help` confirm the documented flags without starting services or
+accessing hardware. `git diff --check` passed. No code tests were rerun for this
+documentation-only change; the prior unchanged-code gate remains **2,030 tests
+in 59.25 s**, Ruff, mypy/104 and offline lock/66. Both preexisting KiCad edit
+hashes remain unchanged. Status/history bookkeeping accompanies the README;
+changes remain uncommitted for review.
 
 ## 2026-11-26 — MCP startup test hardening commit verification
 

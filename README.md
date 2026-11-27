@@ -7,171 +7,110 @@
 </p>
 
 <p align="center">
-  AI-assisted embedded debugging and UART evidence capture.
+  Connect your coding agent to your embedded device.
 </p>
 
 # DUTchMate
 
-DUTchMate helps embedded developers turn UART output and hardware-control
-actions into durable evidence that humans and coding agents can inspect. Its
-local Device Core Service continuously records UART while it owns a connected
-backend. The CLI and service expose deterministic atomic capabilities;
-clients and coding agents compose higher-level debug procedures from them.
+DUTchMate gives your coding agent access to UART logs, firmware commands, and
+configured reset and boot controls through MCP. Your agent can investigate
+device behavior alongside your source code, using recorded evidence.
 
-- **Continuous evidence recording** preserves UART between client requests.
-- **Audited Control** provides configured reset, boot-mode, and GPIO actions,
-  with durable attempt evidence before physical dispatch.
-- **Monitor** observes new evidence for a bounded duration or until a condition.
-- **Interact** sends exact UART bytes once and observes a bounded response window.
-- **Audited UART TX** sends standalone payloads with explicit line-ending behavior.
+Use your coding agent's existing model. The separate DUTchMate Debug Agent
+package is not required.
 
-## What it looks like
+## 1. Install DUTchMate
 
-Configure the DUT I/O voltage in the project profile and connect an RP2350-based
-Debug Helper. The Enhanced backend can discover and open it during startup.
-Configure the reset signal, then use separate Control and observation requests:
-
-```bash
-dutchmate devices
-dutchmate start --backend enhanced
-dutchmate gpio mode CTRL0 reset RESET_N \
-  --mode open_drain --active-level low
-dutchmate dut reset
-dutchmate monitor --seconds 15
-dutchmate logs --last 100
-```
-
-An illustrative Monitor result identifies its bounded evidence window:
-
-```text
-Monitor elapsed
-Operation: monitor-00000000-0000-4000-8000-000000000001
-Evidence: 20261025T120000Z-demo0001:0..12
-```
-
-Recording is already active before reset. A later Monitor observes only evidence
-after its own start; immediate boot output remains in the session and is available
-through log retrieval. These are independent atomic requests, with no dedicated
-reset-and-observe workflow in Device Core.
-
-With `[hardware.uart].tx_enabled = true`, ordinary UART interaction uses the
-same service-owned connection and evidence journal:
-
-```bash
-dutchmate monitor --until BOOT_OK --timeout 10
-dutchmate send PING --line-ending lf
-dutchmate send --data-b64 AP8=
-dutchmate interact INFO --line-ending lf --until 'DMF/1 INFO' --timeout 5
-dutchmate follow                  # Ctrl-C detaches the view; recording continues
-dutchmate console --line-ending lf
-dutchmate sessions
-dutchmate session SESSION_ID
-dutchmate release                 # external same-port tool may now open the port
-# Close the external tool before reacquiring.
-dutchmate reacquire
-```
-
-Monitor/Interact return operation IDs and evidence ranges; finishing an operation
-leaves the continuous session active. Release/reacquire records the unobserved
-interval and opens a fresh timestamp segment. `capture` and `wait` are thin
-Monitor aliases. New evidence uses schema v2; historical v0/v1 sessions remain
-readable. The Debug Agent currently accepts schema-v1 evidence only.
-
-Coding agents can use the CLI or service to compose procedures from Monitor,
-Interact, audited UART TX, and audited reset/boot/GPIO Control. UART TX requires
-the profile's TX policy to be enabled. The local stdio MCP adapter exposes the
-[twelve-tool v2 catalog](docs/mcp_integration_plan.md#target-tool-catalog), including
-Monitor, Interact, configured reset/boot Control and evidence retrieval. It is a
-thin HTTP client of the already-running Device Core Service; it never starts the
-service or acquires the serial port. Register the installed `dutchmate-mcp` or
-`dutchmate mcp` command using the [developer guide](docs/developer_guide.md#register-mcp-with-a-coding-agent).
-
-## Install
-
-DUTchMate requires Python 3.10 or newer. The examples on this page describe the
-current checkout. Install its workspace and make its commands available in the
-current shell:
+Requires **Python 3.10+** and **uv**. From this repository checkout:
 
 ```bash
 uv sync --all-packages
 export PATH="$PWD/.venv/bin:$PATH"
 ```
 
-For the published `v0.1.0` release, use either isolated-tool installer below.
-That release predates the Phase 1/MCP v2 migrations; its original surface is
-described in the [historical release notes](docs/releases/v0.1.0.md). The workspace
-package version alone does not mean these checkout changes have been published.
+These examples use the current checkout. The published `v0.1.0` release has an
+older interface; see its [release notes](docs/releases/v0.1.0.md).
+
+## 2. Connect your device
+
+| Connection | Available capabilities |
+|---|---|
+| TTL USB-to-UART adapter (Basic) | UART logs and optional firmware commands |
+| RP2350 Pico 2 Debug Helper (Enhanced) | UART plus configured reset, boot and GPIO control |
+
+Connect your adapter and configure the matching baud rate and wiring. See the
+[setup guide](docs/developer_guide.md#local-setup) for configuration. Replace
+`YOUR_UART_PORT` with your adapter's actual serial port:
 
 ```bash
-uv tool install dutchmate==0.1.0
-# or
-pipx install dutchmate==0.1.0
+dutchmate start --backend basic --serial-port YOUR_UART_PORT
+dutchmate status
 ```
 
-## Quick Start
+For the Debug Helper, use `dutchmate start --backend enhanced` instead. Follow
+the [wiring guide](hardware/firmware/rp2350_debug_helper/README.md#revision-a-mapping)
+to connect its DUT_VIO reference to the DUT's logic supply.
 
-For Enhanced, set `[hardware].dut_io_voltage` in `.dutchmate/config.toml` to
-the actual DUT logic voltage before opening the Debug Helper. List candidate
-devices, start one backend, inspect it, and stop the service:
+## 3. Connect your coding agent
+
+Find the MCP launcher's absolute path:
 
 ```bash
-dutchmate devices
-dutchmate start --backend enhanced
-dutchmate status
+realpath .venv/bin/dutchmate-mcp
+```
+
+Register a local MCP server in your coding agent with these settings:
+
+| Setting | Value |
+|---|---|
+| Name | `dutchmate` |
+| Transport | `stdio` |
+| Command | The absolute launcher path printed above |
+| Arguments | `--service-url http://127.0.0.1:2040` |
+
+See the [agent-specific configuration examples](docs/developer_guide.md#register-mcp-with-a-coding-agent)
+for the format your host expects. Your coding agent launches the MCP process.
+**The Device Core Service must already be running; MCP does not start it.**
+
+Verify that the agent lists the DUTchMate tools, then ask it to check the device
+connection before debugging.
+
+## 4. Start debugging
+
+Try these prompts in your coding agent:
+
+> Check the device connection and summarize the latest UART logs.
+
+> Observe UART for 15 seconds and identify errors or unexpected behavior.
+
+> Investigate this boot failure using the UART evidence and this repository.
+> Propose a fix, and ask before resetting the board or sending commands.
+
+DUTchMate records UART continuously while the service owns the connection, so
+your agent can retrieve evidence between requests. Sending commands requires
+UART TX to be enabled; reset and boot actions require configured control mappings.
+
+When finished:
+
+```bash
 dutchmate stop
 ```
 
-Basic mode requires a user-selected generic USB-to-UART port. Enhanced mode can
-auto-select one metadata-hinted Debug Helper; multiple candidates require an
-explicit port. Run `dutchmate --help` for the complete command surface and see
-the [developer guide](docs/developer_guide.md) for configuration and MCP host
-registration.
+## Further information
 
-For Basic, replace the start command with
-`dutchmate start --backend basic --serial-port /dev/cu.EXAMPLE`, using the
-actual adapter path. Select one backend at a time.
+- [Configuration and CLI workflows](docs/developer_guide.md) — also run `dutchmate --help`.
+- [Debug Helper wiring and firmware](hardware/firmware/rp2350_debug_helper/README.md).
+- [Milestone overview and validation boundaries](docs/development_status.md).
+- [Contributing](CONTRIBUTING.md) and the [documentation index](docs/README.md).
 
-## Hardware
+## Licensing
 
-The **Basic** backend uses a generic TTL/logic-level USB-to-UART adapter for UART
-receive and optional UART send. The **Enhanced** backend uses the RP2350-based
-Raspberry Pi Pico 2 Debug Helper for UART receive/send, device timestamps,
-buffer telemetry, and generic `CTRLn` control. Both feed the same host session
-pipeline, but they are mutually exclusive selections; hybrid operation is not
-supported.
+Software, firmware and documentation use the [MIT License](LICENSE), unless
+otherwise noted. DUTchMate-authored hardware design files under `hardware/pcb/`
+use [CERN-OHL-P-2.0](LICENSES/CERN-OHL-P-2.0.txt). Legacy EAGLE and third-party
+assets retain their existing terms; see [LICENSE.md](LICENSE.md) and
+[third-party notices](THIRD_PARTY_NOTICES.md).
 
-## Contributing / Development
-
-Start with the [current development status](docs/development_status.md), which
-owns active progress and next steps. Completed work is preserved in the
-[development history](docs/development_history.md). Setup and validation live
-in the [developer guide](docs/developer_guide.md); the full
-[documentation index](docs/README.md) and [glossary](docs/glossary.md) cover the
-remaining project contracts.
-
-The repository is a `uv` workspace. From a checkout:
-
-```bash
-uv sync --all-packages
-uv run pytest
-uv run ruff check .
-```
-
-## Licensing and contributions
-
-Unless otherwise noted, DUTchMate software, firmware, protocol definitions,
-documentation, scripts, and supporting tools are licensed under the
-[MIT License](LICENSE).
-
-DUTchMate-authored hardware design files under `hardware/pcb/` are licensed
-under [CERN-OHL-P-2.0](LICENSES/CERN-OHL-P-2.0.txt). Third-party components
-retain their respective licenses. The legacy EAGLE files and third-party CAD
-assets retain their existing terms; see [LICENSE.md](LICENSE.md) for the scope
-and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-The DUTchMate name, logo, and associated branding are excluded from these
-grants. The MIT License and CERN-OHL-P-2.0 do not grant permission to use them
-to identify or promote derivative products as official DUTchMate products.
-
-Future pull-request commits require DCO 1.1 sign-off. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the contribution and validation workflow.
+The DUTchMate name, logo and branding are excluded from these grants; they do
+not authorize presenting derivative products as official DUTchMate products.
+Contributions require DCO 1.1 sign-off; see [CONTRIBUTING.md](CONTRIBUTING.md).

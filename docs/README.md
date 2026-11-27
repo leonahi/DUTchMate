@@ -1,24 +1,21 @@
 # DUTchMate Documentation
 
-Use the [glossary](glossary.md) for project terminology. Current progress and
-the next implementation step live only in
-[development status](development_status.md); completed evidence is preserved in
-the append-only [development history](development_history.md).
+Use the [glossary](glossary.md) for project terminology. Track tasks and blockers
+in [GitHub Issues](https://github.com/leonahi/DUTchMate/issues), with implementation
+and validation in PRs. See the [contribution workflow](../CONTRIBUTING.md#issues-and-pull-requests).
 
-[Project context](project_context.md) and the
-[Phase 1 implementation specification](phase1_implementation_spec.md) are the
-normative product and Phase 1 behavior contracts. The Phase 1 v2 migration plan
-is a migration-time execution reference and must not redefine them or describe
-its pre-v2 baseline as the current implementation.
+[Project context](specs/project_context.md) and the
+[Phase 1 implementation specification](specs/phase1_implementation_spec.md) are the
+normative product and Phase 1 behavior contracts. Specification and contract
+documents live under [specifications](specs/README.md). Completed implementation
+plans are retired; implemented features retain their contracts and tests.
 
 | Document | Canonical purpose |
 |---|---|
-| [Development status](development_status.md) | Current milestone, blockers, next step, and ordered queue. |
-| [Development history](development_history.md) | Append-only completed-slice and validation record; not a progress tracker. |
-| [Project context](project_context.md) | Durable product scope, safety, invariants, and phase definitions. |
-| [Phase 1 implementation specification](phase1_implementation_spec.md) | Normative Phase 1 backend, API, session, protocol, test, and done criteria. |
-| [DUT_VIO sensing contract](dut_vio_sensing_contract.md) | Report-only voltage extension: ADC/reference provenance, negotiated protocol, durable evidence, status and acceptance criteria. |
-| [Phase 1 v2 migration plan](dutchmate_phase1_v2_coding_agent_plan.md) | Migration-time baseline, staged acceptance scenarios and implementation rationale; current progress belongs only in status. |
+| [Milestone overview](development_status.md) | Dated release scope and milestone acceptance; no task queue. |
+| [History archive](development_history.md) | Frozen pre-tracker evidence, baselines and final migration handoff. |
+| [Specifications and contracts](specs/README.md) | Product scope, Phase 1 behavior, GPIO, reconnect, voltage sensing, MCP, Debug Agent and distribution requirements. |
+| [Implementation plans](plans/README.md) | Implementation planning policy and retained historical migration references. |
 | [Software architecture](software_architecture.md) | Python data flow, module ownership, and dependency boundaries. |
 | [Developer guide](developer_guide.md) | Workspace setup, commands, package boundaries, and contribution workflow. |
 | [Glossary](glossary.md) | Short definitions of recurring DUTchMate terms. |
@@ -26,15 +23,17 @@ its pre-v2 baseline as the current implementation.
 | [Legacy Revision A design](../hardware/pcb/debug-helper/legacy-eagle/revision_a.md) | Legacy voltage-domain design, pin map, BOM, and validation checklist. |
 | [Debug Helper firmware](../hardware/firmware/rp2350_debug_helper/README.md) | RP2350 Pico 2 firmware behavior, build and host verification. |
 | [Zephyr DUT fixture](../hardware/firmware/zephyr_dut/README.md) | Separate RP2040 Pico 1 test target, DMF/1 commands, wiring and builds. |
-| [GPIO configuration semantics](gpio_configuration_semantics.md) | Control-channel identifiers, electrical modes, state, workflows, and reporting. |
-| [Reconnect and session semantics](reconnect_session_semantics.md) | Reconnect, segment, timestamp, resume, and restart behavior. |
-| [Ring-buffer sizing plan](ring_buffer_sizing_plan.md) | Phase 1B buffer baseline, telemetry, and validation method. |
 | [Ring-buffer validation](../hardware/validation/phase1_ring_buffer.md) | Measurements and final empirical ring-buffer decision. |
-| [MCP integration plan](mcp_integration_plan.md) | Phase 2 tools-only MCP transport, tool set, responses, and tests. |
-| [Debug Agent context contract](debug_agent_context_contract.md) | Phase 4 bounded context, provider boundary, and report contract. |
-| [CI and distribution plan](ci_packaging_distribution_plan.md) | CI, package ownership, firmware identity, plugin, and gated release design. |
 | [v0.1.0 release notes](releases/v0.1.0.md) | First public Python host release. |
 
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
 Its schemas, examples, host models, tests, and firmware handling must change
 together.
+
+The [historical Phase 1 migration reference](plans/dutchmate_phase1_v2_coding_agent_plan.md)
+lives under `plans/`. Its original stage instructions are in Git; use the
+specifications above for current requirements.
+
+Short forwarding pages retain old Phase 1, MCP and migration-reference links
+used by append-only historical records. Canonical documents live in `specs/`
+and `plans/`.

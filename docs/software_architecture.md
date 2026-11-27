@@ -2,13 +2,13 @@
 
 > Scope: host-side Python layers, dependency direction, data flow, and code ownership.
 >
-> The target behavior is defined normatively by `project_context.md` and
-> `phase1_implementation_spec.md`. This document records module ownership and
+> The target behavior is defined normatively by `specs/project_context.md` and
+> `specs/phase1_implementation_spec.md`. This document records module ownership and
 > dependency direction, not migration progress or next steps.
 
 This document describes repository organization and ownership. Requirements
-belong to their contract documents; progress and next-step status belong only
-to `docs/development_status.md`.
+belong to their contract documents; task progress belongs in GitHub Issues and
+implementation/validation records belong in PRs.
 
 ## Goals
 
@@ -151,7 +151,7 @@ device_connection
 Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
-`docs/phase1_implementation_spec.md`. Production Enhanced input enters through
+`docs/specs/phase1_implementation_spec.md`. Production Enhanced input enters through
 one service-owned async host and the core-owned continuous evidence recorder.
 No synchronous Enhanced command/source path or second physical reader remains.
 
@@ -419,7 +419,7 @@ failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
 or schema-v1 evidence formats.
 Evidence and reconnect requirements are centralized in the Phase 1 spec and
-`docs/reconnect_session_semantics.md`; they are not repeated here.
+`docs/specs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
 
@@ -439,7 +439,7 @@ identifiers, rejects edge whitespace and Unicode control characters, and
 enforces the open-drain/push-pull electrical matrix. Config loading, runtime
 state, Enhanced command encoding, service schemas, and CLI dispatch use the
 same contract. The canonical state, validation order, and workflow rules live
-in `docs/gpio_configuration_semantics.md`.
+in `docs/specs/gpio_configuration_semantics.md`.
 
 ### `workflows`
 
@@ -633,7 +633,7 @@ metadata, result typing, private cache hints, and stdio framing to the SDK. The
 entrypoint resolves the Device Core URL from `--service-url`, then
 `DUTCHMATE_SERVICE_URL`, then its loopback default. It configures SDK logging
 on stderr while keeping stdout reserved for protocol frames. The tool contract
-is defined in `docs/mcp_integration_plan.md`.
+is defined in `docs/specs/mcp_adapter_contract.md`.
 
 ## Boundary Rules
 
@@ -650,13 +650,13 @@ is defined in `docs/mcp_integration_plan.md`.
 - Service and CLI layers do not reinterpret core state or error semantics.
 
 Testing commands live in `docs/developer_guide.md`; Phase 1 acceptance coverage
-lives in `docs/phase1_implementation_spec.md`.
+lives in `docs/specs/phase1_implementation_spec.md`.
 
 
 ## DUT interface-voltage observations
 
 `core/dut_vio.py` owns immutable sample invariants and pure status policy under
-[the report-only sensing contract](dut_vio_sensing_contract.md). Enhanced protocol
+[the report-only sensing contract](specs/dut_vio_sensing_contract.md). Enhanced protocol
 parsing validates exact integer conversion; the single async serial owner enables
 telemetry after profile controls and marks receipt before bounded event admission.
 `workflows.capture.BackendObservationInitializer` is the optional per-source setup

@@ -3,7 +3,7 @@
 > Scope: current continuous evidence ownership and segment provenance.
 > Normative authority: [Phase 1 specification](phase1_implementation_spec.md),
 > especially sections 13–16, 18–25, and 26. Implementation ownership is described
-> in [Software Architecture](software_architecture.md).
+> in [Software Architecture](../software_architecture.md).
 
 ## Ownership and evidence lifetime
 

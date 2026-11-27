@@ -3,7 +3,7 @@
 > Historical EAGLE/as-built record. Dated references below to a future KiCad
 > design describe that checkpoint, not today's repository source. Use the
 > [current KiCad design](../pcb/debug-helper/rev-a/README.md) and
-> [Phase 1 evidence boundaries](../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
+> [Phase 1 evidence boundaries](../../docs/specs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
 > no measurement, acceptance result or unresolved historical gap is changed.
 
 > Status: in_progress
@@ -261,7 +261,7 @@ contract. Current progress and next action belong only in
 
 ### Normative scope
 
-[Implementation specification §34](../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced)
+[Implementation specification §34](../../docs/specs/phase1_implementation_spec.md#34-phase-1b-done--enhanced)
 requires:
 
 - **H1:** “the accepted Revision A/current-adopted hardware mapping and

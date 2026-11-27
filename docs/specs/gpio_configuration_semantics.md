@@ -19,8 +19,8 @@ CTRL3
 ```
 
 The current connector/circuit authority is the
-[Rev-A KiCad source](../hardware/pcb/debug-helper/rev-a/README.md); the
-[legacy EAGLE record](../hardware/pcb/debug-helper/legacy-eagle/revision_a.md)
+[Rev-A KiCad source](../../hardware/pcb/debug-helper/rev-a/README.md); the
+[legacy EAGLE record](../../hardware/pcb/debug-helper/legacy-eagle/revision_a.md)
 retains its historical pinout. In the host channel model,
 physical channels such as `CTRL0` are separate from workflow roles such as `reset` and DUT
 schematic names such as `RESET_N`. Phase 1 host code accepts custom control
