@@ -1,0 +1,37 @@
+{
+  "campaign_date": "2026-11-19",
+  "image": "build/dutchmate-rp2350-sense-state-probe/zephyr/zephyr.uf2",
+  "image_bytes": 109056,
+  "image_sha256": "ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132",
+  "bootloader_volume_removed": true,
+  "port": "/dev/cu.usbmodem101",
+  "usb_vid_pid": "2E8A:000A",
+  "usb_serial": "FA63A4D787572B33",
+  "hello": {
+    "type": "hello",
+    "v": 1,
+    "firmware": "sensepad-1-p00000192",
+    "device": "dutchmate-rp2350",
+    "capabilities": [
+      "uart_receive",
+      "gpio_control",
+      "uart_send",
+      "device_timestamp",
+      "overflow_telemetry"
+    ]
+  },
+  "gp28_pad_register_address": "0x40038074",
+  "gp28_pad_register_hex": "0x00000192",
+  "decoded_pad_controls": {
+    "iso_set": true,
+    "output_disabled": true,
+    "digital_input_enabled": false,
+    "pull_up_bit_set": false,
+    "pull_down_bit_set": false
+  },
+  "physical_latched_pull_state_read": false,
+  "protocol_commands_sent": 0,
+  "port_closed": true,
+  "dtr_deasserted_before_close": true,
+  "flash_readback_performed": false
+}

@@ -13,6 +13,8 @@ states, and exposes its initial USB CDC identity:
 - UART and EVENT translator enables are inactive;
 - `EVENT0` through `EVENT3` are inputs without internal pulls;
 - EVENT interrupt capture is absent and `gpio_events` is not advertised;
+- GP28/ADC2 has digital input/output and pulls disabled before releasing its
+  pad-isolation latch; negotiated ADC2 observations report DUT_VIO;
 - the development USB identity is VID/PID `2E8A:000A`, manufacturer
   `DUTchMate`, and product `Debug Helper`;
 - the USB serial descriptor uses the stable board identifier supplied by
@@ -161,6 +163,87 @@ The UF2 image is written to:
 /path/to/DUTchMate/build/dutchmate-rp2350-debug-helper/zephyr/zephyr.uf2
 ```
 
+### GP28 sense-pin initialization
+
+Every successful startup configures GP28/ADC2 (Pico physical pin 34) with digital
+input, output and internal pulls disabled, then clears the RP2350 ISO bit.
+The order matters: the pinned Zephyr `GPIO_DISCONNECTED` path programs the
+controls while setting ISO, whose latches can retain the reset pull-down until
+released. The [RP2350 datasheet §9.7](https://pip-assets.raspberrypi.com/categories/1214-rp2350/documents/RP-008373-DS-2-rp2350-datasheet.pdf?disposition=inline)
+explains those latches. This initialization keeps the DUT_VIO divider unloaded.
+ADC's default pinctrl state has zero pin groups: the pinned generic Pico pinctrl
+would enable digital input and release ISO before applying its final flags.
+Only the ordered safe GPIO path configures GP28; ADC selects analog channel 2
+independently, leaving GP26 (CTRL2 enable) untouched.
+A GPIO configuration error returns before ISO release.
+
+#### Negotiated DUT_VIO observations
+
+The report-only extension follows [the sensing contract](../../../docs/specs/dut_vio_sensing_contract.md).
+Normal firmware advertises `power_sense`; `configure_power_sense` enables or
+stops observations only after its complete ACK. An older host receives no new
+frames. Epoch/DTR loss requires new negotiation. UART and control decisions
+never depend on measured voltage.
+
+The USB owner advances one asynchronous 12-bit ADC2 conversion per second with
+a 20 ms deadline. A timed-out conversion keeps its static buffer until actual
+driver completion, including across disable/reconnect. Late results are discarded.
+Completion timestamps and UART observation barriers preserve source ordering.
+ADC errors and saturation produce explicit observations with no voltage value.
+
+`CONFIG_DUTCHMATE_ADC_REFERENCE_MV` defaults to 3300 (range 2500–3600), and
+`CONFIG_DUTCHMATE_ADC_REFERENCE_MEASURED` defaults off. The integer divider
+conversion is `(raw * reference_mv * 2 + 2048) / 4096`. A measured-reference
+build requires retained measurement of ADC_VREF, physical pin 35, plus image
+provenance. A measurement at pin 36 alone is insufficient. Nominal values are
+approximate; software tests establish no accuracy tolerance.
+
+For the physical campaign, retain source commit, firmware identity/image hash,
+helper identity and reference provenance. At zero and approximately 1.8, 2.5,
+3.3 and 5.0 V, measure actual DUT_VIO with the Fluke, then remove GP28 probes
+before capturing ADC/mV observations with UART active. Use actual measured VIO,
+not a PPK2 setpoint. Confirm the existing wiring and operator access before
+flashing. Physical sensing validation and remaining board acceptance are separate.
+
+#### Optional live pad-control readback
+
+Normal builds use `prj.conf` without extra diagnostic configuration. The optional
+`sense_state_probe.conf` enables default-off `DUTCHMATE_SENSE_PAD_REPORT`, which
+reads pad 28 before each USB epoch starts UART acquisition. It reports
+`sensepad-2-pXXXXXXXX` in the existing firmware identifier, where `XXXXXXXX` is
+the raw eight-digit hexadecimal register value. Stack and pad reporting remain
+separate diagnostics. There are no new protocol fields or commands.
+
+Build from the same pinned west workspace/toolchain as above, with `repo_root`
+set to the repository:
+
+```bash
+ZEPHYR_BASE=/path/to/zephyrproject/zephyr-4.4.2 west build \
+  -b rpi_pico2/rp2350a/m33 \
+  -s "$repo_root/hardware/firmware/rp2350_debug_helper" \
+  -d "$repo_root/build/dutchmate-rp2350-gp28-safe-readback" \
+  --pristine -- \
+  "-DEXTRA_CONF_FILE=$repo_root/hardware/firmware/rp2350_debug_helper/sense_state_probe.conf" \
+  '-DZEPHYR_MODULES=/path/to/zephyrproject/modules/hal/cmsis_6;/path/to/zephyrproject/modules/hal/rpi_pico' \
+  "-DUSER_CACHE_DIR=$repo_root/build/zephyr-cache"
+```
+
+The image is at that directory's `zephyr/zephyr.uf2`. Relevant masks are
+ISO=`0x100`, output-disable=`0x80`, input-enable=`0x40`, pull-up=`0x08` and
+pull-down=`0x04`. Successful initialization leaves ISO/input/pull bits clear
+and output-disable set; with the other reset controls retained, the expected
+word is `0x92`. A register read alone is not an electrical acceptance result.
+
+For reproduction of the earlier baseline and experimental pin modes, use the
+[archived diagnostic source patch](../../validation/evidence/20261119-gp28-diagnostic-sources.patch)
+on the base commit recorded in its
+[archive manifest](../../validation/evidence/20261119-gp28-diagnostic-source-archive.json).
+The temporary mode switches and their obsolete configuration files have been
+removed from current firmware. Earlier UF2 hashes and measurements remain in
+[manufactured-board evidence](../../validation/phase1_kicad_rev_a.md); current
+progress and next actions belong only in
+[development status](../../../docs/development_status.md).
+
 ### USB-only stack measurement build
 
 The production image has no console. For Phase 1 ring-buffer acceptance, use
@@ -216,10 +299,22 @@ bounded Interact with explicit LF against the already-running Enhanced service:
 
 These commands do not perform a host-stall experiment. Backpressure acceptance
 still requires controlled, measured pauses and the recorded provenance below.
-The retained `tools/run_load_profile.py` is historical tooling: it invokes the
-retired `send --force` option and cannot drive the current CLI. Updating that
-tool is separate code work; do not treat its command as a working v2 procedure.
-The historical load/stack measurements remain unchanged.
+For a controlled host pause, use `tools/run_load_profile.py` with the local
+service already running and `hardware.uart.tx_enabled = true` in its DUT Profile:
+
+```bash
+"$repo_root/.venv/bin/python" \
+  "$repo_root/hardware/firmware/rp2350_debug_helper/tools/run_load_profile.py" \
+  SUSTAIN --stall-ms 250 --out "$repo_root/build/sustain-pause-250.json"
+```
+
+The runner starts a 15-second capture, sends `SUSTAIN` or `BURST` once with
+explicit LF, and pauses/resumes the service PID recorded in `.dutchmate`.
+It records measured pause duration and both CLI results; a rejected send or
+failed capture exits nonzero. It does not override TX policy. A successful exit
+alone does not establish byte/sequence/checksum or loss acceptance; inspect the
+session evidence against the profile criteria. Historical load/stack measurements
+remain unchanged; updating the runner does not establish fresh physical validation.
 
 Keeping the build at this repository-relative path also supplies the
 `compile_commands.json` used by the root `.clangd` configuration. After the
@@ -271,10 +366,10 @@ mapping checks and static allocation. Host-compiled tests establish no physical
 UART, voltage, sequencing or signal-integrity result. Existing physical results
 remain scoped to their recorded fixture/build in the validation records;
 current-board acceptance requires the manufactured KiCad campaign under
-[Phase 1 sections 34–35](../../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
+[Phase 1 sections 34–35](../../../docs/specs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
 EVENT pins remain safely initialized and reserved, with no capture implementation
-or advertised capability. GP28 voltage sensing is also unimplemented; the
-hardware-defined TMUX2819 isolation does not imply firmware ADC measurements.
+or advertised capability. GP28 observations establish no physical calibration
+or acceptance of TMUX2819 isolation beyond the recorded electrical evidence.
 
 ## Licensing
 

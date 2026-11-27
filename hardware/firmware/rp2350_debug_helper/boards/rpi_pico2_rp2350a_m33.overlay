@@ -1,4 +1,19 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2350a-pinctrl.h>
+
+&pinctrl {
+	dutchmate_adc: dutchmate_adc {
+		/* No generic Pico pad writes at POST_KERNEL. The ordered
+		 * GPIO_DISCONNECTED/ISO path owns GP28; ADC selects channel 2.
+		 */
+	};
+};
+
+&adc {
+	pinctrl-0 = <&dutchmate_adc>;
+	pinctrl-names = "default";
+	status = "okay";
+};
 
 / {
 	dutchmate_io: dutchmate-io {

@@ -52,6 +52,7 @@ def status_payload(status: DeviceCoreStatus) -> dict[str, object]:
 
     return {
         "connected": status.connected,
+        "dut_vio": asdict(status.dut_vio),
         "connection_state": status.connection_state,
         **(
             {"connection_error": status.connection_error}

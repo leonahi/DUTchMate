@@ -17,6 +17,7 @@ enum field_id {
 	FIELD_PULSE_MS,
 	FIELD_STATE,
 	FIELD_DATA_B64,
+	FIELD_ENABLED,
 	FIELD_COUNT,
 };
 
@@ -42,6 +43,7 @@ struct raw_fields {
 	char state[7];
 	char data_b64[DMH_BASE64_MAX_BYTES + 1U];
 	uint32_t pulse_ms;
+	bool enabled;
 };
 
 static void skip_whitespace(struct parser *parser)
@@ -200,6 +202,7 @@ static int field_id_from_name(const char *name)
 		[FIELD_PULSE_MS] = "pulse_ms",
 		[FIELD_STATE] = "state",
 		[FIELD_DATA_B64] = "data_b64",
+		[FIELD_ENABLED] = "enabled",
 	};
 	size_t index;
 
@@ -241,6 +244,7 @@ static enum string_parse_result parse_field_string(
 			parser, fields->data_b64, sizeof(fields->data_b64)
 		);
 	case FIELD_PULSE_MS:
+	case FIELD_ENABLED:
 	case FIELD_COUNT:
 		return STRING_PARSE_SYNTAX;
 	}
@@ -331,7 +335,20 @@ static int parse_object(
 		}
 		parser.index++;
 		skip_whitespace(&parser);
-		if (field == FIELD_PULSE_MS) {
+		if (field == FIELD_ENABLED) {
+			if (parser.length - parser.index >= 4U &&
+			    memcmp(parser.data + parser.index, "true", 4U) == 0) {
+				fields->enabled = true;
+				parser.index += 4U;
+			} else if (parser.length - parser.index >= 5U &&
+				   memcmp(parser.data + parser.index, "false", 5U) == 0) {
+				fields->enabled = false;
+				parser.index += 5U;
+			} else {
+				*failure = DMH_COMMAND_DECODE_INVALID_ARGUMENT;
+				return -EINVAL;
+			}
+		} else if (field == FIELD_PULSE_MS) {
 			if (!parse_pulse_ms(&parser, &fields->pulse_ms)) {
 				*failure = DMH_COMMAND_DECODE_INVALID_ARGUMENT;
 				return -EINVAL;
@@ -607,6 +624,10 @@ int dmh_command_decode(
 		valid = decode_state(&fields, command);
 	} else if (strcmp(fields.cmd, "uart_send") == 0) {
 		valid = decode_uart_send(&fields, command);
+	} else if (strcmp(fields.cmd, "configure_power_sense") == 0) {
+		valid = exact_fields(fields.present, (1U << FIELD_CMD) | (1U << FIELD_ENABLED));
+		command->kind = DMH_COMMAND_CONFIGURE_POWER_SENSE;
+		command->value.sense_enabled = fields.enabled;
 	} else {
 		*failure = DMH_COMMAND_DECODE_INVALID_COMMAND;
 		return -EINVAL;

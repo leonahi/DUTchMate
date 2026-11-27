@@ -8,7 +8,7 @@ import heapq
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import BinaryIO, cast
 
 from dutchmate_core.evidence.tail import (
@@ -17,6 +17,7 @@ from dutchmate_core.evidence.tail import (
     EvidencePage,
     compact_json,
 )
+from dutchmate_core.session_store.evidence import dut_vio_sample
 from dutchmate_core.session_store.metadata import MAX_V2_JSONL_RECORD_BYTES
 from dutchmate_core.validation import InputValidationError, validate_session_id
 
@@ -122,6 +123,14 @@ class EvidenceSnapshot:
             "evidence_seq": record["evidence_seq"],
             "type": record["type"],
         }
+        if record["type"] == "dut_vio":
+            projection.update(
+                asdict(
+                    dut_vio_sample(
+                        record, segment_count=len(cast(list[object], self.metadata["segments"]))
+                    )
+                )
+            )
         for key in (
             "recorded_at",
             "segment_id",

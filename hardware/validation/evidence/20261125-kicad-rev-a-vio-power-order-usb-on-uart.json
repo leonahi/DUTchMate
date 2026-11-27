@@ -1,0 +1,121 @@
+{
+  "recorded_at_utc": "2026-11-25T22:15:12.957807+00:00",
+  "request": {
+    "text": "VIO_POWER_ORDER_CHECK",
+    "line_ending": "lf",
+    "conditions": [
+      {
+        "pattern": "VIO_POWER_ORDER_CHECK"
+      }
+    ],
+    "timeout_s": 2
+  },
+  "response": {
+    "ok": true,
+    "operation_id": "interact-dbb4c161-fc63-4d24-b466-1c7523d56c18",
+    "outcome": "matched",
+    "mode": "conditions",
+    "duration_s": null,
+    "conditions": [
+      {
+        "pattern": "VIO_POWER_ORDER_CHECK",
+        "name": null
+      }
+    ],
+    "timeout_s": 2.0,
+    "start_cursor": {
+      "session_id": "20261125T221457Z-bec57e67",
+      "next_evidence_seq": 34
+    },
+    "end_cursor": {
+      "session_id": "20261125T221457Z-bec57e67",
+      "next_evidence_seq": 59
+    },
+    "evidence_ranges": [
+      {
+        "session_id": "20261125T221457Z-bec57e67",
+        "start_evidence_seq": 33,
+        "end_evidence_seq_exclusive": 59
+      }
+    ],
+    "matched_condition": {
+      "condition_index": 0,
+      "condition": {
+        "pattern": "VIO_POWER_ORDER_CHECK",
+        "name": null
+      },
+      "source": {
+        "session_id": "20261125T221457Z-bec57e67",
+        "evidence_seq": 57,
+        "segment_id": 0,
+        "timestamp_us": 15133108,
+        "channel": 0
+      },
+      "line": {
+        "start_evidence_seq": 36,
+        "start_event_offset": 0,
+        "end_evidence_seq": 57,
+        "end_event_offset": 1,
+        "total_bytes": 22
+      },
+      "match_start_byte": 0,
+      "match_end_byte": 21,
+      "excerpt": {
+        "start_byte": 0,
+        "end_byte": 22,
+        "raw_b64": "VklPX1BPV0VSX09SREVSX0NIRUNLCg==",
+        "text": "VIO_POWER_ORDER_CHECK\n",
+        "truncated": false
+      }
+    },
+    "line_processing_limited": false,
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "timestamp_provenance": [
+      {
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment": {
+          "segment_id": 0,
+          "timestamp": {
+            "source": "device",
+            "clock": "rp2350_timer",
+            "unit": "us",
+            "origin": "segment_start",
+            "source_origin_us": 50084186,
+            "observation_point": "debug_helper_uart_receive",
+            "event_granularity": "uart_event"
+          }
+        }
+      }
+    ],
+    "data_b64": "VklPX1BPV0VSX09SREVSX0NIRUNLCg==",
+    "transformation": {
+      "input_form": "text",
+      "line_ending": "lf",
+      "resolved_line_ending": "lf"
+    },
+    "tx": {
+      "ok": true,
+      "performed_at": "2026-11-25T22:15:12.937083Z",
+      "device_timestamp_us": 65218393,
+      "attempt_id": "92d90496-49df-495a-89d5-c224dc142365",
+      "data_b64": "VklPX1BPV0VSX09SREVSX0NIRUNLCg==",
+      "accepted_bytes": 22,
+      "status": "success",
+      "audit_status": "recorded",
+      "transformation": {
+        "input_form": "text",
+        "line_ending": "lf",
+        "resolved_line_ending": "lf"
+      },
+      "attempt_session_id": "20261125T221457Z-bec57e67",
+      "attempt_evidence_seq": 34,
+      "result_session_id": "20261125T221457Z-bec57e67",
+      "result_evidence_seq": 35
+    },
+    "tx_error": null
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "session": "20261120T175235Z-2809c3f3",
+  "state": "completed",
+  "end_reason": "service_shutdown",
+  "evidence_records": 14067,
+  "contiguous_sequences": true,
+  "raw_bytes": 112614,
+  "raw_sha256": "746e9b76a1be25be5ffc0d06335e68e4b0a22819d6a40495737d8a3920010ed5",
+  "raw_reconstruction_verified": true,
+  "record_types": {
+    "connected": 1,
+    "control_attempt": 4,
+    "buffer_status": 358,
+    "control_result": 4,
+    "operation_started": 13,
+    "uart_tx_attempt": 13,
+    "uart_rx": 13636,
+    "uart_tx_result": 13,
+    "operation_terminal": 13,
+    "buffer_overflow": 7,
+    "release_requested": 1,
+    "released": 1,
+    "reacquire_started": 1,
+    "segment_opened": 1,
+    "reacquire_succeeded": 1
+  },
+  "operation_summary": {
+    "active": 0,
+    "completed": 13,
+    "failed": 0,
+    "started": 13
+  },
+  "boot_banners": 2,
+  "burst": {
+    "expected_bytes": 43081,
+    "retained_bytes": 17832,
+    "reported_dropped_bytes": 25249,
+    "overflow_episodes": 7,
+    "exact_accounting": true,
+    "purpose": "Deliberate maximum-speed overflow per existing ring-buffer criterion; not lossless UART throughput acceptance",
+    "initial_harness_expectation": "All bytes expected initially; failed assertion retained and corrected against normative overflow profile, no resend"
+  },
+  "sustain": {
+    "count": 4096,
+    "checksum": 8386560,
+    "bytes": 94299,
+    "sha256": "efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8",
+    "exact": true,
+    "additional_dropped_bytes": 0
+  },
+  "unavailable": "DELAYFAULT unsupported in retained fixture. One exact send got E_COMMAND_001 and timed out; not retried. Historical fixture source 203649f confirms no command; no flash.",
+  "evidence_quality": {
+    "backend_integrity": {
+      "dropped_bytes": 25249,
+      "loss_status": "loss_reported",
+      "observation_scope": "debug_helper_rx_buffer"
+    },
+    "local_recording": "complete"
+  },
+  "continuity": {
+    "observation_gap_count": 1
+  },
+  "timestamp_segments": [
+    {
+      "backend": {
+        "backend_capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capability_policy": {
+          "uart_send": {
+            "source": "hardware.uart.tx_enabled",
+            "tx_policy_enabled": true
+          }
+        },
+        "device": "dutchmate-rp2350",
+        "firmware": "gp28safe-1",
+        "mode": "enhanced",
+        "port": "/dev/cu.usbmodem11401"
+      },
+      "end_reason": "released",
+      "ended_at": "2026-11-20T17:58:07Z",
+      "first_timestamp_us": 0,
+      "last_timestamp_us": 331384856,
+      "segment_id": 0,
+      "started_at": "2026-11-20T17:52:35Z",
+      "timestamp": {
+        "clock": "rp2350_timer",
+        "event_granularity": "uart_event",
+        "observation_point": "debug_helper_uart_receive",
+        "origin": "segment_start",
+        "source": "device",
+        "source_origin_us": 6702592922,
+        "unit": "us"
+      }
+    },
+    {
+      "backend": {
+        "backend_capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capability_policy": {
+          "uart_send": {
+            "source": "hardware.uart.tx_enabled",
+            "tx_policy_enabled": true
+          }
+        },
+        "device": "dutchmate-rp2350",
+        "firmware": "gp28safe-1",
+        "mode": "enhanced",
+        "port": "/dev/cu.usbmodem11401"
+      },
+      "end_reason": "service_shutdown",
+      "ended_at": "2026-11-20T17:58:37Z",
+      "first_timestamp_us": 0,
+      "last_timestamp_us": 25021803,
+      "segment_id": 1,
+      "start_reason": "reacquire",
+      "started_at": "2026-11-20T17:58:11Z",
+      "timestamp": {
+        "clock": "rp2350_timer",
+        "event_granularity": "uart_event",
+        "observation_point": "debug_helper_uart_receive",
+        "origin": "segment_start",
+        "source": "device",
+        "source_origin_us": 7038386955,
+        "unit": "us"
+      }
+    }
+  ],
+  "preexisting_files_verified_unchanged": 843,
+  "shutdown_verified": true,
+  "boundary": "Partial manufactured-board functional validation. No boot-role/reconnect/waveform/full physical acceptance from this interval.",
+  "recorded_utc": "2026-11-20T17:59:37.057125+00:00",
+  "archive": {
+    "file": "20261120-kicad-rev-a-device-core-evidence.tar.gz",
+    "bytes": 571877,
+    "sha256": "e5334d5a1454ea6b047bb46718641f7c2c6053381bf7191913a4b540487ba9a4",
+    "member_hashes_verified": 20,
+    "manifest": "kicad-rev-a-20261120/file-manifest.json"
+  },
+  "profile_digest": "006e4c4988c8b26c5f35fb62e004ea42d30e0e9196263e785d4fd8dd3132e4dc",
+  "config_sha256": "97676442c17f416901f05119cb586cb55a6f4c2a41cb43c8ba81bc9308d50bdb",
+  "code_head": "9914d6298479b116c4b797e6cf4cfdb1e4788ec0",
+  "code_state": "dirty working tree; GP28 fix uncommitted",
+  "fixture_provenance": "Existing rpi_pico fixture, Zephyr 4.4.0 / SDK 1.0.1; build ID verified live, retained artifacts are not flash readback",
+  "preflight": {
+    "pytest": "1877 passed in 49.22s",
+    "ruff": "passed",
+    "mypy": "103 files passed",
+    "offline_lock": "66 packages passed",
+    "diff_check": "passed"
+  }
+}

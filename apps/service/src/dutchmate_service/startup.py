@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from typing import Final, NoReturn, Protocol
 
@@ -156,12 +157,9 @@ def build_startup_runtime(
             profile=profile,
         )
 
-    if profile.dut_io_voltage is None:
-        raise DeviceCoreRuntimeError(
-            "Enhanced backend requires hardware.dut_io_voltage before opening the Debug Helper"
-        )
-
-    enhanced_host = open_enhanced_async_host(
+    # Every physical connection must timestamp receipts in the status clock's domain.
+    open_enhanced_host = partial(open_enhanced_async_host, monotonic_clock=reconnect_clock)
+    enhanced_host = open_enhanced_host(
         port=serial_port,
         baudrate=backend_settings.baudrate,
         segment_id=0,
@@ -197,7 +195,7 @@ def build_startup_runtime(
             expected_snapshot=initial_snapshot,
             control=control,
             sender=sender,
-            open_host=open_enhanced_async_host,
+            open_host=open_enhanced_host,
             monotonic_clock=reconnect_clock,
         )
         runtime = DeviceCoreRuntime(

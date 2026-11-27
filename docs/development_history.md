@@ -1,13 +1,2363 @@
-# Development History
+# Development History (Archive)
 
-> Append-only historical record; not a progress tracker or next-step authority.
-> See [Development Status](development_status.md) for the current milestone,
-> blockers, ordered queue, and exact next step.
+> Frozen on 2026-11-27 when task tracking moved to GitHub Issues and PRs.
+> Records describe their original dates, not current task status. Preserve their
+> headings, evidence and anchors; do not append routine development-slice logs.
+> See the [contribution workflow](../CONTRIBUTING.md#issues-and-pull-requests) and
+> [milestone overview](development_status.md) for the new division of ownership.
 
-Add future completed-slice and detailed validation records immediately below
-this preface so dated records remain newest-first. The migrated blocks below
-retain their pre-split text byte-for-byte; the completed-work groups follow
-their completion chronology after the detailed validation record.
+## 2026-11-27 — Issue-based tracking cutover
+
+The repository now uses GitHub Issues for tasks, owners, blockers and
+dependencies, Projects as their team view, and PRs for implementation and
+validation records. The former status file is reduced to milestone scope and
+acceptance; this history is archived rather than maintained for every change.
+Issue forms and the PR template are prepared locally. GitHub settings, project,
+milestone, existing issues and migration into remote issues were not verified:
+there is no connected GitHub tool and `gh` is unavailable. No remote tracking
+items or settings were created or changed.
+
+The final local status/handoff below is preserved once for migration and
+historical evidence. Its task priorities, pending changes and bench state are
+as recorded at cutover; they are not a new live progress authority. Existing
+completed-slice records follow unchanged.
+
+### Final local handoff snapshot
+
+> # Development Status
+>
+> > Reviewed: 2026-11-27. Current progress, blockers and next step live only here.
+> > Last committed baseline: `eff9d67cd1828c3233308c061da4968fbd4509a0` (MCP startup test hardening).
+> > Sensing code baseline: `283f0dd`; firmware image source: `55cd7c7`.
+> > Physical characterization evidence: `b4d7e06`.
+> > README refresh, optional-voltage prerequisite removal, documentation cleanup and specs/plans relocation are uncommitted.
+> > Preexisting KiCad PCB/project edits remain designer-owned and uncommitted.
+> > Completed work and prior baselines: [development history](development_history.md).
+>
+> ## Resume Here
+>
+> Read this document first whenever development resumes.
+>
+> - **Current milestone:** Documents organized under `docs/specs/` and `docs/plans/`.
+>   Cleanup, manual-voltage prerequisite removal and README refresh are ready for review.
+> - **Sensing authority:** [Contract](specs/dut_vio_sensing_contract.md). GP28/ADC2 only,
+>   negotiated observations, durable native-v2 evidence and receipt-age status;
+>   measured voltage does not change control policy or declared interface voltage.
+> - **Next step:** Review/commit documentation, manual-voltage prerequisite removal
+>   and README, then prepare approved `v0.2.0` with Debug Agent publication deferred.
+> - **Sensing handoff:** [Build provenance](../hardware/validation/dut_vio_software_20261125.json)
+>   retains normal/pad/stack image hashes and nominal 3300 mV reference. Physical
+>   ADC accuracy tolerance and diagnostic runtime stack results remain unestablished.
+> - **Validation (Nov 27):** Plans: 2,031 tests/56.77 s, Ruff, mypy (104 files),
+>   offline lock (66 packages), diff and 432 relative links/anchors pass. Requirements
+>   and earlier history preserved; no source, firmware or physical evidence changed.
+> - **Clock fix:** Initial open, automatic reconnect and release/reacquire share
+>   the service's configured monotonic clock; the deferred limitation is closed.
+> - **Integration:** Sensing and clock fix fast-forwarded into local `main` at
+>   `283f0dd`; existing CAD edits and verified image provenance preserved.
+> - **Hardware prerequisites:** Secure helper 3V3 load access and an oscilloscope
+>   remain needed for outstanding electrical checks; pin 36 remains probe-only.
+> - **Bench handoff:** External DUT isolated, J1.7↔8 loop fitted; PPK2 5000 mV.
+>   Last known USB/PPK2 ON, probes removed; request PPK2 OFF then disconnect USB.
+>   [Flash/startup evidence](../hardware/validation/phase1_kicad_rev_a.md#dut_vio-sensing-flash-and-live-usb-telemetry--2026-11-25)
+>   records the known helper; it establishes no physical voltage accuracy.
+> - **Acceptance boundary:** Phase 1A Complete; manufactured KiCad Rev-A acceptance,
+>   Phase 1B, Stage 8 and Phase 1 incomplete. Legacy EAGLE functional evidence,
+>   source review and software tests establish no KiCad electrical acceptance.
+> - **Design authority:** [KiCad source](../hardware/pcb/debug-helper/rev-a/README.md);
+>   layout, DFM and fabrication remain designer work. Existing local CAD edits preserved.
+> - **MCP boundary:** Twelve tools retained. Strict Inspector/applicable conformance
+>   passed previously; VS Code tool use and Claude Code host UI checks unavailable.
+> - **Capture closed:** Service stopped, listener/serial released; power-order session
+>   `20261125T221457Z-bec57e67` completed/service_shutdown, 3,521 contiguous records
+>   archived/hash-verified; previous 147,031-record campaign and CAD unchanged.
+> - **Follow-up checklist:** Cleanup/manual-voltage/README review and commit pending.
+>   Release preparation, voltage calibration and physical gates remain open.
+> - **Other boundaries:** Phase 4 remains paused; Phase 5 EVENT capture deferred;
+>   Basic anomaly non-blocking; historical pull-up blocker #1 remains Satisfied.
+>
+> ## Current Acceptance Gates
+>
+> | Gate | Status |
+> |---|---|
+> | Phase 1A — Basic | Complete; fresh session 20261027T073956Z-7c038da2 satisfies normative criteria; E_COMMAND_001 unresolved/unclassified/non-blocking |
+> | Phase 1B — Enhanced | Incomplete until required manufactured KiCad Rev-A physical validation is performed and accepted; includes fresh UART electrical/oscilloscope evidence under existing criteria; legacy EAGLE functional HIL cannot satisfy this hardware gate |
+> | Phase 1 shared done criteria | Shared §35 behavioral evidence is retained; Phase 1 remains incomplete pending accepted current-board physical validation, without transferring EAGLE acceptance to KiCad |
+>
+> ## Active Scope and Deferred Work
+>
+> - Approved next host release: `v0.2.0`, retaining the five public distributions;
+>   Debug Agent publication remains deferred. Version/pin/lockfile and release
+>   preparation changes have not been made.
+> - Manufactured KiCad Rev-A acceptance still requires the outstanding electrical
+>   checks, including UART waveform evidence and loaded helper-rail isolation.
+>   Secure 3V3 load access and an oscilloscope remain unavailable at the last test.
+> - Report-only VIO was characterized with a Mastech MAS830L. Recheck DUT_VIO and
+>   ADC_VREF with the lab meter before selecting a board-specific reference build.
+>   New-image diagnostic runtime stack results remain unmeasured.
+> - MCP v2 migration is accepted under its scoped policy. VS Code tool-use and
+>   authenticated Claude Code host UI checks remain unavailable, not passed.
+> - Phase 4 Debug Agent v2 evidence packaging remains paused; existing schema-v1
+>   support is retained. Phase 5 EVENT capture is deferred.
+> - Basic `E_COMMAND_001` remains unresolved/unclassified/non-blocking; the
+>   historical pull-up blocker is satisfied. Neither changes current-board gates.
+> - Manual PCB layout/DFM/fabrication work belongs to the hardware designer. Source
+>   review and older EAGLE HIL do not establish current edited-CAD or manufactured
+>   KiCad electrical acceptance.
+>
+> ## Authoritative References
+>
+> - [Phase 1 specification](specs/phase1_implementation_spec.md) owns current behavior,
+>   testing and acceptance criteria, including the ring-buffer gate.
+> - [MCP adapter contract](specs/mcp_adapter_contract.md) owns the tool catalog and scoped
+>   protocol/host acceptance; [delivery contract](specs/ci_packaging_distribution_contract.md)
+>   owns package/version/publication rules.
+> - [KiCad source](../hardware/pcb/debug-helper/rev-a/README.md) and
+>   [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md)
+>   retain design and measured results; neither is a second next-step tracker.
+>
+> Historical status summaries and migration-stage baselines were retired from
+> this file after audit. Their committed snapshot remains in Git at
+> `eff9d67cd1828c3233308c061da4968fbd4509a0`; detailed records remain in
+> development history. Do not copy completed validation logs
+> back here. Keep Resume Here approximately 40 lines or fewer and append detailed
+> completed-slice evidence to history.
+
+## 2026-11-27 — Dedicated implementation-plans directory
+
+Moved the remaining historical Phase 1 migration reference into `docs/plans/`
+and rebased its links, preserving the same resolved targets and original pinned
+Git source. Added a plans index, updated the docs index and developer-guide tree,
+and retained a six-line forwarding page at the old path. Existing HIL/history
+links continue to work without changing earlier history entries. Completed
+execution instructions remain retired; no obsolete plan was restored. The MCP
+and packaging documents remain active contracts in `docs/specs/`, not plans.
+
+Validation: **2,031 tests passed in 56.77 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **432** relative links/anchors passed, including new plans files
+(vendored Graphify skill docs excluded). New Markdown whitespace checks passed.
+Exact hashes confirm all specifications, runtime code/tests, firmware, CAD and
+unrelated documents are unchanged. Previous history remains byte-for-byte;
+this record is prepended. No code-module/interface change required a Graphify
+update, no live hardware was accessed and no commit was created.
+
+## 2026-11-27 — Dedicated specifications directory
+
+Moved eight canonical requirements/contract documents into `docs/specs/`:
+product context, Phase 1 implementation, DUT_VIO sensing, Debug Agent context,
+GPIO configuration, reconnect/session semantics, MCP adapter, and CI/packaging/
+distribution. Renamed the MCP and packaging documents to
+`mcp_adapter_contract.md` and `ci_packaging_distribution_contract.md` to reflect
+their durable purpose. Added a specifications index and linked it from the main
+docs index; guides, architecture, glossary, status/history and release notes
+remain outside the specifications directory.
+
+Rebased outgoing links in the moved documents and updated active incoming
+references in guides, architecture, hardware documentation, validation records
+and the historical migration reference. Changes to hardware validation records
+are link-destination updates only; measurements and evidence text are unchanged.
+Historical quoted paths and pinned `git show` commands retain their original
+locations. No requirements or acceptance criteria changed.
+
+Kept small forwarding pages at the old Phase 1 and MCP paths, including the
+anchors used by earlier records. This preserves existing history entries
+byte-for-byte rather than rewriting their links; the forwarding pages contain
+no duplicate specification text. Exact comparison confirmed that all eight
+moved documents differ from their pre-move contents only in references/paths.
+All 504 preexisting non-Markdown files and the root README retain their hashes,
+including the pending optional-voltage code/tests and designer-owned KiCad edits.
+
+Validation: **2,031 tests passed in 56.61 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **426** relative document links/anchors passed, including new specs files
+and preserved historical forwarding anchors (vendored Graphify skill docs
+excluded). New Markdown whitespace checks passed. This is documentation
+organization only; no code-module/interface change required a Graphify update.
+No live hardware was accessed, firmware/protocol/raw evidence and release scope
+remain unchanged, and no commit was created.
+
+## 2026-11-26 — Repository and documentation retirement audit
+
+Audited the 555 tracked-file inventory, with particular attention to all 44
+Markdown files, incoming references, completed plans, scaffold markers and
+package/test consumers. A focused Graphify query supported navigation; actual
+source, tests and links governed the decisions. No production code was removed:
+compatibility readers, fixtures, CI helpers, distribution licenses and legacy
+hardware assets retain consumers or provenance value.
+
+Removed seven obsolete `.gitkeep` placeholders from populated test/firmware
+directories or unused empty scaffolds. Removed the 220-line
+`docs/ring_buffer_sizing_plan.md` after consolidating its durable buffering,
+telemetry, loss, memory and per-build acceptance criteria into Phase 1 section
+12.1. Added a consolidation notice to the historical ring-buffer report; every
+original measurement and decision remains unchanged.
+
+Reduced the 972-line Phase 1 migration plan to a 26-line historical reference
+at its original path so preserved HIL links remain valid. Retired the completed
+MCP implementation sequence/inventory while preserving its tool contract and
+acceptance matrix exactly; retained its historical implementation-sequence
+anchor. Trimmed completed packaging/executable-migration and initial-publisher
+bootstrap instructions, retaining ownership, CI, artifact and publication
+contracts. Historical execution text remains retrievable with the documented
+`git show eff9d67cd1828c3233308c061da4968fbd4509a0:<path>` commands.
+
+Reduced development status from 729 lines to a concise current handoff and
+acceptance gates, with Resume Here kept below 40 lines. Retired dated summaries
+and old baseline lists; their committed snapshot remains in Git and existing
+detailed history entries are preserved without rewriting. Updated the docs
+index and developer guide, including removal of empty test scaffolds and the
+stale promise to publish Debug Agent with v0.2.0. Approved scope remains five
+public host distributions; Debug Agent publication remains deferred. No release
+versions or workflows changed, and outstanding physical gates remain open.
+
+Validation: **2,031 tests passed in 57.03 s**; Ruff passed; mypy passed for **104**
+source files; offline lock check resolved **66** packages; `git diff --check`
+passed. **412** tracked-document relative links/anchors passed, with no broken
+links before or after cleanup (vendored Graphify skill docs excluded). Exact
+comparisons confirmed the MCP live catalog/behavior and acceptance matrix and
+the original ring-buffer report body were preserved. No architecture/interface
+change required a Graphify update.
+
+The preexisting README, optional-voltage source/tests and sensing contract, and
+both KiCad files retain their pre-cleanup hashes. Prior developer-guide and
+specification changes remain; this entry is prepended without altering earlier
+history. No live hardware was accessed, no firmware/protocol/raw evidence was
+changed, and no commit was created.
+
+## 2026-11-26 — Remove the manual voltage declaration prerequisite only
+
+User clarified the scope: users must be able to use Enhanced without providing
+`hardware.dut_io_voltage`; keep the existing field and sensing functionality.
+Removed the single Enhanced-open prerequisite in service startup and the two
+declaration-presence checks in runtime GPIO configuration/application. No other
+connection, capability, mapping, audit or action checks were changed.
+
+The optional field remains accepted, with the existing numeric/range validation
+when supplied. Existing profile/status/session projections and schema remain;
+omitted declarations stay `None`, with no guessed default and no ADC value
+copied into configuration. Recorded historical evidence is unchanged. Voltage
+sensing remains report-only, with unchanged firmware and hardware behavior.
+Updated the approved README's Enhanced step to use the start command and physical
+DUT_VIO wiring guide, without a mandatory voltage entry. Developer guidance,
+the sensing contract and Phase 1 specification now state that declaration
+omission does not prevent startup or GPIO control. No structural or interface
+change required a Graphify update.
+
+RED: **3 failed/2 passed in 0.47 s** at exactly the three existing prerequisite
+checks. GREEN: **81 focused tests passed in 2.00 s**, covering omitted/present
+declarations, actual runtime control mapping outcomes, preserved profile/session
+provenance and rejection of invalid supplied values. Full pytest: **2,031 passed
+in 56.43 s**. Ruff passed after removing the obsolete negative test's unused
+import; mypy passed for **104** source files; offline lock passed for **66**
+packages; `git diff --check` passed. README's **14** links/anchors and four bash
+blocks validate. No live hardware was accessed; firmware, protocol and physical
+validation evidence remain unchanged. Both preexisting dirty KiCad files retain
+their hashes. This slice and the approved README refresh remain uncommitted.
+
+## 2026-11-26 — Coding-agent-first README refresh
+
+Implemented the user-approved README outline: install from the current checkout,
+connect Basic/Enhanced hardware, register the local MCP launcher, then investigate
+using coding-agent prompts. The README is **508 words versus 911**, a **44.2%**
+reduction, and **116 lines versus 177**. Detailed CLI operation semantics,
+duplicate quick starts and contributor test commands are replaced by links to
+the existing authoritative guides. No guide content or runtime behavior changed.
+
+Retained the logo, published-v0.1.0/current-checkout distinction, Enhanced VIO
+configuration prerequisite, UART TX/control-mapping requirements, service-before-
+MCP startup, continuous recording, explicit shutdown, licensing/branding scope
+and DCO contribution requirement. The separate Debug Agent package is explicitly
+unnecessary for the coding-agent MCP workflow. Agent-specific host configuration
+remains in the developer guide; no new host acceptance is claimed.
+
+Recorded the user's approved future release scope in current status: host
+`v0.2.0`, Debug Agent public distribution deferred. No versions, dependency pins,
+lockfile, release workflow, firmware or release-plan policy were changed in this
+documentation slice; no release action occurred.
+
+Fresh documentation verification: all **13** relative links/fragments resolve;
+the referenced image exists and its markup is unchanged; all **four** bash
+blocks pass `bash -n`. Actual `dutchmate start --help` and
+`dutchmate-mcp --help` confirm the documented flags without starting services or
+accessing hardware. `git diff --check` passed. No code tests were rerun for this
+documentation-only change; the prior unchanged-code gate remains **2,030 tests
+in 59.25 s**, Ruff, mypy/104 and offline lock/66. Both preexisting KiCad edit
+hashes remain unchanged. Status/history bookkeeping accompanies the README;
+changes remain uncommitted for review.
+
+## 2026-11-26 — MCP startup test hardening commit verification
+
+User requested commit after review. Fresh focused CLI/MCP launch checks passed
+**29 tests in 8.74 s**; Ruff passed, mypy passed for **104** source files,
+offline lock check passed for **66** packages, and final diff checks passed.
+The unchanged three test modules already passed the full **2,030-test/59.25 s**
+gate recorded below; no additional behavior change justified repeating it.
+Commit scope is those three test modules and the status/history documents.
+Production code, firmware, board evidence and dependency configuration remain
+unchanged. Both preexisting KiCad edits are excluded and their hashes preserved.
+The earlier uncommitted-review note below describes the state before this closeout.
+
+## 2026-11-26 — MCP startup test deadline investigation and hardening
+
+Investigated the five-second CLI-to-MCP subprocess timeout observed during the
+previous evidence commit. Three real installed launches with restricted PATH
+and empty stdin completed normally: CLI **3.872/3.469/3.646 s**, direct MCP
+**2.857/2.774/2.846 s**, exit zero, no stdout/stderr. Import profiles attributed
+most startup cost to the MCP SDK/generated models; the CLI also loads its
+delivery modules before replacing itself with the sibling executable. The
+functional launch tests included that import work inside their five-second
+whole-process EOF guard. No five-second startup performance contract is specified.
+The exact machine-level trigger of the earlier failure was not captured; no
+launcher deadlock or functional regression was reproduced.
+
+Controlled RED/GREEN used the actual installed CLI and MCP SDK, restricted PATH
+and unchanged EOF assertions. A temporary `sitecustomize.py` delayed only the
+MCP child interpreter by six seconds before normal imports. The original test
+failed with `TimeoutExpired` after **5.004 s**; with the corrected guard the
+same delayed real launch passed in **6.603 s**. Local baseline/import profiles
+and reproduction records are retained under ignored `build/mcp-startup-20261126/`.
+They are diagnostic timing observations, not a production startup SLA.
+
+Only three test modules changed:
+
+- CLI sibling-executable launch and real MCP entrypoint EOF checks use a bounded
+  **20 s** whole-process guard, allowing startup plus shutdown.
+- Installed MCP discovery allows **15 s** for its first response, including
+  interpreter/SDK startup. Every later request and explicit post-handshake EOF
+  shutdown still uses **5 s**. Empty-stdin and invalid-option whole-process cases
+  allow **20 s**; those cases do not independently measure their shutdown phase.
+- All existing executable selection, protocol JSON, catalog, URL precedence,
+  error redaction, quiet stdout, return-code and cleanup assertions remain.
+
+No production launcher, SDK/dependency version, protocol/API, service transport
+timeout, hardware, firmware or board evidence changed. No new modules or
+architectural dependencies were introduced; Graphify refresh is not applicable.
+The code/firmware baselines remain `283f0dd`/`55cd7c7`; both preexisting dirty
+KiCad file hashes remain unchanged.
+
+Fresh verification: **29 focused tests passed in 8.48 s**; full pytest
+**2,030 passed in 59.25 s**. Ruff passed; mypy passed for **104** source files;
+offline lock check passed for **66** packages; `git diff --check` passed.
+The change addresses a fragile test deadline, not SDK startup performance or
+an independently demonstrated production defect. Changes remain uncommitted
+for review; no hardware acceptance or voltage calibration changed.
+
+## 2026-11-25 — Physical characterization evidence commit verification
+
+Reviewed three documents and **42** new evidence files, including the zero and
+powered sweep, UART load/loopback checks, USB reconnect, sampled power-order
+transitions, reversible GP28 meter effect and definitive Mastech MAS830L
+attribution correction. Firmware/source baselines remain unchanged: verified
+code `283f0dd`, image source `55cd7c7`, nominal reference 3300 mV. Preexisting
+KiCad PCB/project edits are excluded and retain their recorded hashes.
+
+Fresh [evidence audit](../hardware/validation/evidence/20261125-kicad-rev-a-vio-evidence-audit.json)
+reconciled **152,957** contiguous records across three completed sessions:
+147,031 powered/UART, 3,521 power-order and 2,405 baseline records. All raw
+UART bytes and compressed archive members match their descriptors/hashes.
+Ten sample windows were recomputed against the integer conversion; all samples
+retain 3300 mV/nominal provenance. The 21 original artifacts covered by the
+meter correction still match their recorded hashes. Documentation links resolve,
+older history is preserved and Resume Here remains 39 lines. Capture services
+were stopped before software checks; no physical hardware action occurred.
+
+Fresh required software gate: Ruff passed; mypy passed for **104** source files;
+offline lock check passed for **66** packages. Initial full pytest reported
+**1 failed/2,029 passed in 231.14 s**: the unchanged absolute CLI-to-MCP launch
+test exceeded its existing five-second subprocess timeout. Its focused module
+then passed **6 tests in 4.08 s**, the launch case taking 3.66 s. The unchanged
+fresh full rerun passed **2,030 tests in 200.48 s**. No application/test code or
+timeout was changed; cause of the initial timing failure remains unassigned,
+and no timing fix is claimed. The first offline lock attempt lacked sandbox
+access to the existing uv cache; the same offline check passed with read access.
+Final diff checks passed. No Graphify update was required for this data/document
+slice; no calibrated accuracy or full manufactured-board acceptance is claimed.
+
+## 2026-11-25 — GP28 probe-removal recovery and archived power-order campaign
+
+Operator answered **“Yes for both questions”**, confirming both probes removed
+and that the earlier sensing sweep/3.22 V ADC_VREF reading used **Mastech MAS830L**.
+The [provenance correction](../hardware/validation/evidence/20261125-kicad-rev-a-vio-meter-provenance-correction.json)
+records this explicitly and hashes 21 original artifacts containing carried-forward
+Fluke labels/field names. Original values, records and hashes remain preserved;
+these sensing results are Mastech comparisons, not Fluke-verified accuracy.
+Older historical tests where Fluke was explicitly identified are unaffected.
+
+A fresh **10.233 s** [probes-removed window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-removed.json)
+retained 11 successful samples: raw **3138–3141**, mean **3139.636**; reported
+VIO **5056–5061 mV**, mean **5059 mV**, reference **3300 mV/nominal**.
+Same session `20261125T221457Z-bec57e67`, segment 0, voltage evidence **3386–3406**,
+zero cursor omissions. The [three-window recovery analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-recovery.json)
+verifies raw means **3139.8 → 3067.727 → 3139.636** as the meter was connected
+then removed. Return is within **0.164 ADC code** of the initial mean. This
+reversible effect strongly supports meter loading of the divider; the earlier
+inferred approximately 1 MΩ load is a model, not a manufacturer specification.
+No firmware/reference correction or new calibrated image was introduced.
+
+Service PID **4315** then stopped cleanly; process, listener and serial ownership
+release were verified. Session ended **completed/service_shutdown**. Its
+[archive manifest](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-session-manifest.json)
+verifies **19** archived native/campaign files, **3,521** contiguous evidence
+records (0–3520), and all **46** raw UART bytes against RX descriptors. Archive
+size **53,972 bytes**; every decompressed member matched its source hash. All
+seven prior powered-session native files and both preexisting dirty CAD files
+retain their recorded hashes. No pytest, production source/firmware change or
+timeout increase occurred; `git diff --check` passed. These scoped DC/sampled
+results leave calibrated accuracy, transient/scope and loaded-rail acceptance open.
+
+## 2026-11-25 — Meter-connected GP28 capture and meter attribution correction
+
+Operator reported GP28 **2.42 V** while requested to hold probes on physical
+pin 34/GND. The following **10.914 s** [meter-connected capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-connected.json)
+retained 11 successful samples: ADC **3066–3069**, mean **3067.727**, reported
+VIO **4940–4945 mV**, mean **4943.182 mV**, reference **3300 mV/nominal**.
+Same session `20261125T221457Z-bec57e67`, segment 0, voltage evidence **2908–2928**,
+zero cursor omissions. This is intentionally probed diagnostic data, not an
+unloaded accuracy observation.
+
+Operator then explicitly clarified **“Mastech MAS830L I don't have Fluke 115
+for the moment”**. The current GP28 meter is therefore Mastech MAS830L.
+Earlier viosense-2 sweep/reference “Fluke” labels were carried forward from
+older tests, not independently reconfirmed for this campaign. Their applicability
+is unconfirmed pending operator clarification; original records remain preserved
+with this correction. This does not revise the older historical tests where the
+operator explicitly identified a Fluke.
+
+[Diagnostic analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-diagnostic.json)
+compares raw means **3139.8 unprobed → 3067.727 meter-connected**, a **2.295%**
+decrease. For nominal 47k/47k resistors, this is consistent with an added load
+of approximately **1.00 MΩ**; that value is an inference, not a verified meter
+specification. Using the prior, nonsimultaneous 3.22 V reference gives approximately
+**2.412 V** at GP28 for the loaded codes. Probe-removal recovery and earlier
+meter provenance are not yet confirmed. No firmware/reference adjustment,
+source patch, timeout increase or pytest run occurred; `git diff --check` passed.
+
+## 2026-11-25 — USB-first DUT_VIO restoration and UART recovery
+
+After requested PPK2 ON at 5000 mV/10-second settling with helper USB and wiring
+unchanged, operator reported **DUT_VIO 4.96 V, helper 3V3 3.25 V, GP28 2.42 V,
+PPK2 average current 58.50 µA**. The readings reproduce those before source-off;
+current was requested over a fresh 10-second probes-removed window.
+
+[Restoration transition](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored-transition.json)
+retains 624 records/312 successful voltage observations, zero cursor omissions,
+from **10 mV** to **5061 mV**. USB session `20261125T221457Z-bec57e67`, segment 0,
+continued unchanged. No physical-switch timestamp or transient latency is inferred.
+A fresh **10.528 s** [unprobed window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored.json)
+retained ten samples: raw **3138–3142**, reported **5056–5063 mV**, mean
+**5059.5 mV**, reference **3300 mV/nominal**, voltage evidence **1794–1812**.
+One bounded audited **24-byte** [UART probe](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-restored-uart.json)
+then echoed byte-for-byte, matching segment 0/evidence **1849**.
+
+The repeated separate GP28 meter reading (2.42 V) differs from the approximately
+2.47 V midpoint calculated offline from unloaded ADC codes and the earlier
+3.22 V reference measurement. Measurements were not simultaneous; no cause,
+calibration change or divider acceptance is assigned. No firmware/source/reference
+change, timeout increase or pytest run occurred; `git diff --check` passed.
+The sole service remains active for a simultaneous meter/ADC comparison.
+
+## 2026-11-25 — USB-on DUT_VIO source-off transition and zero window
+
+After the requested PPK2 OFF/10-second settling with helper USB/wiring unchanged,
+operator reported **DUT_VIO 0.0 V, helper 3V3 3.25 V, GP28 0.0 V, PPK2 90 nA**.
+Current was requested over a fresh 10-second window with probes removed. That
+source-off PPK2 display is not a measurement of total USB-powered helper current.
+
+[Durable transition capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off-transition.json)
+retrieved 424 records/212 voltage observations from the saved pre-switch cursor,
+with zero omissions. Reported voltage moved from **5060 mV** to **10 mV**;
+last ten observations were **6–10 mV**. Operator switching time was not timestamped,
+so no transition latency or transient waveform is claimed. The helper stayed
+connected in session `20261125T221457Z-bec57e67`, physical segment 0.
+
+A fresh **10.691 s** [unprobed zero window](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off.json)
+retained 11 successful samples: raw **4–6**, reported **6–10 mV**, mean
+**8.182 mV**, reference **3300 mV/nominal**, voltage evidence **1064–1084**.
+No UART/GPIO command was sent with the DUT_VIO source off. No production
+source/firmware/reference change, pytest run or timeout increase occurred;
+`git diff --check` passed. The service remains sole serial owner for recovery.
+
+## 2026-11-25 — VIO-first powered readings and unprobed sensing window
+
+Operator reported **DUT_VIO 4.96 V, helper 3V3 3.25 V, GP28 2.42 V,
+PPK2 average current 58.5 µA**, after requested probe removal and a fresh
+10-second current average. Helper USB/PPK2 5000 mV and loopback remained
+requested unchanged, with external DUT isolated and sensing active. Voltages
+were sequential readings, not a simultaneous divider-ratio measurement.
+
+A subsequent **10.467 s** unprobed [capture](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on.json)
+retained ten successful nominal-reference observations: raw **3138–3143**,
+reported **5056–5064 mV**, mean **5060.1 mV**. Same session
+`20261125T221457Z-bec57e67`, segment 0, voltage evidence **525–543**;
+cursor omissions zero. The apparent difference versus Fluke VIO remains a
+nominal-reference observation; GP28's separate meter reading is retained without
+assigning a cause to its difference from the unloaded ADC-derived midpoint.
+No reference correction, source/firmware patch, timeout increase or pytest run
+occurred; `git diff --check` passed. The existing sole service continues recording.
+
+## 2026-11-25 — VIO-first helper power-up and sensing startup
+
+Operator confirmed helper USB **connected** after the requested probe removal,
+with PPK2 5000 mV ON and loopback/external DUT isolation unchanged. Read-only
+USB discovery identified serial **FA63A4D787572B33**, VID/PID **2E8A:000A**,
+at `/dev/cu.usbmodem11401`; listener and serial port were unowned before startup.
+The sole new service PID **4315** opened session **`20261125T221457Z-bec57e67`**
+in the same dedicated campaign store with unchanged profile digest
+`610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87`.
+Controls remain unmapped and no background sender is active.
+
+[Startup evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on-startup.json)
+retains USB identity, process/profile provenance and a fresh successful
+nominal-reference observation: raw **3144**, reported **5066 mV**, reference
+**3300 mV/nominal**, segment 0/evidence **2**, receipt age **102 ms**.
+A bounded audited **22-byte** [UART probe](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on-uart.json)
+echoed byte-for-byte on segment 0, matching evidence **57**. Powered operator
+voltage/current readings have not yet been paired with this startup. No
+production source/firmware change, pytest run or timeout increase occurred;
+`git diff --check` passed. Full power-order and board acceptance remain open.
+
+## 2026-11-25 — DUT_VIO present with helper USB disconnected
+
+After the requested PPK2 OFF → helper USB disconnected → PPK2 5000 mV ON
+sequence, operator reported **DUT_VIO 4.96 V, helper 3V3 0.0 V, GP28 0.0 V,
+PPK2 average current 1.10 µA**. The current was requested over a fresh
+10-second window with probes removed; the external DUT remained requested
+disconnected and J1.7↔8 loopback fitted. The installed image remains
+`viosense-2`, nominal 3300 mV reference; no image or configuration changed.
+
+[Operator evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-off.json)
+retains the reply, requested sequence, measurement precision and image identity.
+There is no observable rise on helper 3V3 or GP28 at the reported meter
+resolution. A 0.0 V display does not prove zero leakage; this is not a loaded
+isolation or transient test. The capture service remains stopped and no live
+ADC/UART observation exists while USB is disconnected. Full power-order and
+manufactured-board acceptance remain open. No pytest/source/firmware change
+occurred; `git diff --check` passed.
+
+## 2026-11-25 — Physical sensing reconnect and closed campaign archive
+
+Operator confirmed **done** for the requested helper-only USB unplug/replug,
+with PPK2 5000 mV ON, loopback unchanged and probes removed. The HTTP observer
+captured 37 disconnected status polls; each cleared voltage, age, sample and
+evidence. First disconnected observation 22:08:00.336611 UTC, first connected
+fresh valid observation 22:08:04.763316 UTC: **4.4278 s** between HTTP polls,
+not a measurement of physical cable disconnection duration. Timeout remained
+5.0 s. Same session `20261125T214101Z-3f27f1be`, fresh physical segment **1**.
+
+Durable connection evidence: disconnect **146846**, reconnect start **146847**,
+segment open **146848**, reconnect success **146850**, first observed valid
+new-segment voltage **146851**. Old observation was not reused. Fresh sensing
+retained **3300 mV/nominal** provenance. One audited post-reconnect 25-byte UART
+probe echoed byte-for-byte and matched on segment 1, evidence **146925**.
+[Reconnect record](../hardware/validation/evidence/20261125-kicad-rev-a-vio-reconnect.json)
+links the complete compressed observer capture; cursor omissions were zero.
+
+The sender had already stopped after 6,537 sends. Service PID 3141 then stopped
+normally at 22:09:20 UTC; process, listener and serial ownership released.
+Native metadata is **completed/service_shutdown**, no active/pending operations,
+one observation gap, two completed Interacts. The
+[archive manifest](../hardware/validation/evidence/20261125-kicad-rev-a-vio-powered-session-manifest.json)
+verifies all 15 archived native/campaign files against source hashes. Its native
+journals contain **147,031** contiguous evidence records (0–147030), and every
+RX record reconciles with all **130,565** bytes of `uart_raw.log`. Compressed
+archive size: **2,553,915 bytes**. No source/firmware/reference change, pytest run
+or timeout increase occurred. `git diff --check` passed. This records one
+physical reconnect trial; power-order and independent board acceptance gates
+are not closed by it.
+
+## 2026-11-25 — Measured ADC reference and offline sweep comparison
+
+In response to the requested Fluke measurement of Pico physical pin 35
+ADC_VREF against J1.1/GND, operator reported **3.22 V**, with the 5000 mV
+PPK2 setting and loopback setup requested unchanged. No additional meter digits
+are inferred. Firmware remains nominal-reference 3300 mV; original wire samples
+and paired-point records are unchanged.
+
+[Offline analysis](../hardware/validation/evidence/20261125-kicad-rev-a-vio-reference-analysis.json)
+recalculates each stored raw ADC sample using `(raw * 3220 * 2 + 2048) // 4096`.
+The 1.8/2.5/3.3/5 V window means become 1.7712/2.4588/3.2458/4.9351 V,
+respectively: differences −0.494%/−0.453%/−0.129%/−0.502% against the
+operator meter readings. This assumes the single later reference measurement
+applies to earlier windows. It supports a reference-related explanation for
+most positive bias but proves neither reference stability nor total accuracy.
+It is not new firmware telemetry, a calibrated image or board acceptance.
+
+HTTP-only UART sender PID 3207 stopped normally after 6,537 sends, with no
+reported error. Sole serial service PID 3141 remains connected; HTTP observer
+PID 3906 armed for the operator reconnect. No production source/firmware change,
+pytest run, reference configuration change or timeout increase occurred.
+
+## 2026-11-25 — DUT_VIO 5 V point under ongoing UART traffic
+
+Operator Fluke actual **4.96 V**, after requested PPK2 maximum setting 5000 mV
+and settling with wiring/DUT isolation unchanged. A fresh **10.120 s** window
+retained ten successful samples: raw **3134–3140**, reported VIO
+**5.050–5.060 V**, mean **5.0581 V**, nominal reference 3300 mV. Observed mean
+difference **+98.1 mV (+1.98%)**; cause and accuracy tolerance remain unassigned.
+
+The same window contained 980 RX bytes, 50 TX attempts and 49 complete echoes;
+all 48 interior frames matched byte-exact, excluding cursor edges. Session
+`20261125T214101Z-3f27f1be`, segment 0, voltage sequences 90918–91904.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-5p0-comparison.json)
+retain the measured-point evidence. No source/firmware/reference/offset change,
+GPIO command, timeout increase or pytest run occurred. No calibration or board
+acceptance is claimed; the service and bounded sender remain live.
+
+## 2026-11-25 — DUT_VIO 3.3 V point under ongoing UART traffic
+
+Operator Fluke actual **3.25 V**, after requested PPK2 setting 3300 mV and
+settling with wiring/DUT isolation unchanged. A 10.172 s fresh window retained
+ten successful samples: raw **2061–2073**, VIO **3.321–3.340 V**, mean
+**3.3264 V**, nominal reference 3300 mV. Observed mean difference:
+**+76.4 mV (+2.35%)**; finer meter digits, cause and tolerance remain unassigned.
+
+The same window contained 1000 RX bytes, 50 TX attempts and 50 complete echoes;
+all 48 interior frames matched byte-exact, excluding cursor edges. Session
+`20261125T214101Z-3f27f1be`, segment 0, voltage sequences 75592–76578.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-3p3-comparison.json)
+retain the measured-point evidence. No source/firmware/reference/offset change,
+GPIO command, timeout increase or pytest run occurred. No calibration or board
+acceptance is claimed; the service and bounded sender remain live.
+
+## 2026-11-25 — DUT_VIO 2.5 V point under ongoing UART traffic
+
+Operator Fluke reading **2.47 V**, after requested PPK2 setting 2500 mV and
+settling, with USB/loopback/DUT isolation unchanged. HTTP sender PID 3207
+remained active. A 10.043 s fresh window retained ten successful samples:
+raw ADC 1558–1567, VIO **2.510–2.525 V**, mean **2.5198 V**, reference
+3300 mV/nominal. Observed difference **+49.8 mV (+2.02%)**; no finer meter
+precision or accuracy tolerance is inferred.
+
+The same window contained 980 RX bytes, 50 TX attempts and 49 complete echo
+frames; all 48 interior frames matched byte-exact, excluding cursor edges.
+Session `20261125T214101Z-3f27f1be`, segment 0, voltage sequences 50495–51481.
+[Comparison and raw-capture hash](../hardware/validation/evidence/20261125-kicad-rev-a-vio-2p5-comparison.json)
+retain the measured-point evidence. No firmware/source/reference/offset change,
+GPIO command, timeout increase or pytest run occurred; no calibration or full
+board acceptance is claimed.
+
+## 2026-11-25 — First powered DUT_VIO comparison with UART activity
+
+Operator reported PPK2 setting 1800 mV, Fluke actual DUT_VIO **1.780 V**, and
+J1.7↔8 loop fitted; rechecked **1.780 V** once traffic was active. The prior
+zero session completed normally on controlled service restart and its seven-file
+archive was hash verified. Service PID 3141/session `20261125T214101Z-3f27f1be`
+now enables TX with controls unmapped; its first audited 20-byte probe echoed.
+Sender PID 3207 uses only the HTTP audited-send API at 5 Hz, capped at one hour.
+
+A 10.146 s fresh evidence window retained ten successful samples: raw 1124–1129,
+reported VIO **1.811–1.819 V**, mean **1.8152 V**, reference 3300 mV/nominal.
+Observed mean difference: **+35.2 mV (+1.98%)** relative to the meter report.
+Within the same window, 980 RX bytes/49 complete echoes were observed and all
+48 interior TX frames matched exactly; cursor-edge frames were excluded.
+[Comparison evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-1p8-comparison.json)
+links the complete cursor/status capture with its hash. A preceding five-second
+traffic window also verified 23/23 interior frames.
+
+Cause of the voltage difference and a formal accuracy tolerance are unassigned.
+No reference/offset adjustment, source/firmware patch, GPIO command, timeout
+increase or pytest run occurred. Waveform/electrical and board acceptance remain
+separate. The service and bounded sender remain live for the operator campaign.
+
+## 2026-11-25 — DUT_VIO reported zero-point comparison
+
+Operator Fluke 115 reading: **0.0 V** between J1.14/DUT_VIO and J1.1/GND,
+under the requested USB-only helper setup with PPK2 OFF/VOUT disconnected,
+external DUT isolated and GP28 unprobed. The response's reported precision
+was preserved without inferring additional meter digits.
+
+A subsequent 10.419 s durable HTTP evidence window collected 11 successful
+voltage observations: raw ADC 4–6, VIO 6–10 mV, mean 8.727 mV, reference
+3300 mV/nominal. Session `20261125T212057Z-0428d0a5`, segment 0, voltage
+sequences 1194–1214. UART TX remained disabled and controls unmapped.
+[Zero-point evidence](../hardware/validation/evidence/20261125-kicad-rev-a-vio-zero.json)
+retains the full cursor pages and start/end status. This is characterization,
+not an accuracy tolerance, offset-calibration change or full board acceptance.
+No firmware/source patch, GPIO/UART command, timeout change or pytest run occurred.
+
+## 2026-11-25 — viosense-2 physical flash and telemetry startup
+
+The operator reported the sole RP2350 BOOTSEL drive after the isolated-board
+preparation instructions. The retained normal image hash matched before its
+114,176-byte copy. Known helper serial `FA63A4D787572B33` re-enumerated and a
+bounded exclusive read verified `viosense-2`/protocol v1/`power_sense`; DTR was
+lowered and that connection closed. No flash readback was performed.
+
+A separate native-v2 campaign store was opened by the real service, PID 2632,
+localhost:2040, session `20261125T212057Z-0428d0a5`. Profile digest
+`e62b223e2f2ede70bd3cd622291067ccc1908283716705378faff0d66247d059`, UART TX
+disabled and no controls mapped. Service startup negotiated sensing and published
+a committed observation (raw 6, nominal 3300 mV reference, reported 10 mV,
+segment 0/evidence 51). Operator Fluke comparison was not yet recorded.
+
+[Board record](../hardware/validation/phase1_kicad_rev_a.md#dut_vio-sensing-flash-and-live-usb-telemetry--2026-11-25)
+links raw flash/startup provenance. No pytest, source modification, DUT command
+or physical voltage sweep occurred in this live step. Optional `diskutil` metadata
+was unavailable through DiskManagement; the filesystem UF2 board identity and
+live USB serial/firmware were observed directly. Localhost reads required the
+available external-access execution context; the service itself started normally.
+This record establishes image-copy/live identity and telemetry, not voltage
+accuracy, physical calibration or full board acceptance.
+
+## 2026-11-25 — Local integration of DUT_VIO and the clock fix
+
+Local `main` fast-forwarded from `466a4c2` to verified code baseline
+`283f0ddab4f8966c03f305911a9f3dd07f2050cf`. The sensing feature and the injected-clock correction are integrated;
+the previously deferred clock-origin limitation is closed.
+
+Fresh validation in the merged main checkout: **2,030 tests passed in 53.45 s**;
+Ruff, mypy (104 source files), offline lock (66 packages), and diff check passed.
+Both pre-existing KiCad PCB/project file hashes match their pre-merge values.
+Three active `viosense-2` UF2 images and their `.config` files were retained in
+main's `build/` paths after verifying every hash against the committed manifest.
+The committed firmware Git tree still matches the built image source. The feature
+worktree remains available as retained build provenance.
+
+Main's code graph was refreshed for the integrated structural feature (6,515
+nodes/16,386 edges). Known extractor limitations persist for `hello.c` and
+`fixture_protocol.h`; semantic documentation relationships were not regenerated.
+No flash or physical measurement occurred during this integration.
+
+## 2026-11-25 — Shared monotonic clock for DUT_VIO receipt and status
+
+Closed the injected test-clock limitation from the sensing review. Service startup
+now configures one Enhanced host factory with its selected monotonic clock and
+uses that factory for initial open and every replacement. The async host and
+concrete serial-adapter factory explicitly forward the same callable to receipt
+stamping; runtime status already uses that injected clock. Default production
+behavior and existing request/cleanup ownership are preserved, with no clock
+abstraction or firmware/protocol change.
+
+Two real pyserial-asyncio pipe regressions failed RED with age 0 rather than
+3000 ms. They now pass through startup, automatic reconnect and release/reacquire,
+checking valid age 3000, stale age 3001 with null public voltage, fresh age 0,
+then ages 500 and 3125 on the new segment while retaining the correct evidence
+reference. Test factory doubles were migrated to the explicit clock argument;
+there is no compatibility branch that drops injected clocks.
+
+Focused host/startup/serial/transport/parity gate: 72 passed in 5.52 s before the
+final parity fixture forwarded the clock explicitly. Fresh complete gate:
+**2,030 tests passed in 57.68 s**; Ruff, mypy (104 source files), offline lock
+(66 packages), and diff check passed. Firmware inputs and built image hashes
+remain unchanged, so no firmware rebuild, flash or live hardware test occurred.
+Local feature integration follows the verified fix; physical validation remains
+the next sensing step.
+
+## 2026-11-25 — DUT_VIO independent review and verified corrections
+
+Verified correction code baseline `55cd7c71f306ae03cd848f0cd2e22b705b15db7a` (local feature branch).
+Fresh reviewer `gpt-6.2-astra` inspected `466a4c2..a9b2382` read-only. Its critical
+startup issue and five important correctness issues were reproduced and fixed in
+one implementation pass. Image provenance was re-graded from minor to important
+and corrected too. No second reviewer or physical run was used.
+
+- **Boot pads:** Pinned Zephyr ADC POST_KERNEL initialization invokes generic Pico
+  pinctrl, whose `gpio_init`/`gpio_set_function` enables IE and clears ISO before
+  final pulls/input flags. The original GP28-only state failed a boot-pad guard.
+  ADC now has a valid default phandle with zero child groups; a build assertion
+  and generated devicetree verify zero digital-pad writers. Only the existing
+  `GPIO_DISCONNECTED` then ISO-clear path owns GP28; channel 2 selects analog input.
+  The contract's pinctrl implementation detail was corrected to preserve its
+  required electrical invariant. Cost if wrong: analog readiness; physical campaign pending.
+- **Output order:** Production USB scheduling reproduced UART 50 → UART 110 → ADC
+  completion 100. Completion now carries the UART cutoff captured atomically with
+  its timestamp; each frame choice re-polls/checks completion with dequeue under
+  a short IRQ critical section. Regressions now emit 50 → 100 → 110, including a
+  completion racing poll/dequeue. Failed/interrupted ACKs never enable sampling;
+  disable drops an unsent observation. Encoding and USB writes stay outside the
+  critical section; its remaining cost is short interrupt latency.
+- **Busy readiness:** 300 UART records before enable ACK exceeded the real
+  256-event FIFO and reproduced HTTP409/timeout on a healthy candidate. A
+  recorder-owned staged drainer admits candidate evidence while setup remains on
+  the lifecycle caller thread, preserving runtime mutation ownership. It joins
+  before the permanent ingest worker takes over; queues and timeouts are unchanged.
+  Staged line/integrity state survives readiness, with connection-record rollover
+  preflight. A staged `Hard` + live `Fault\n` regression retains `HardFault`.
+  Storage errors retain precedence when they themselves backpressure an ACK.
+- **Write faults:** Partial-write/flush transport faults now cross the same backend
+  disconnected/lifecycle boundary as setup timeout, retaining the original cause.
+  Host and staged lifecycle tests verify initialization-failed journaling rather
+  than a fabricated persistence-failure classification.
+- **Retention:** A paused store-return/publication interval reproduced a live
+  voltage reference to an already-deleted predecessor. A retention lease now spans
+  publication until reference withdrawal/replacement, including fault/close paths.
+  A max-count-one regression verifies availability through that interval and
+  deletion after withdrawal. Temporary retention over-count while leased is intentional.
+- **Readers:** Detail and tail share measurement/provenance validation. Seven
+  missing/Boolean/negative/out-of-range timestamp/segment regressions reject bad
+  voltage provenance using their existing corruption-error boundaries.
+- **Images:** All three corrected `viosense-2` variants build under Zephyr 4.4.2.
+  The immutable firmware Git tree, UF2/config hashes, zero-pad generated checks,
+  memory results and superseded first-build hashes are retained in
+  [build provenance](../hardware/validation/dut_vio_software_20261125.json).
+  First-build images remain preserved but are superseded for flashing. One local
+  CMake generation process exited -10; an incremental retry completed all builds.
+
+Fresh final gate: **2,028 tests passed in 52.65 s**; Ruff, mypy (104 source files),
+offline lock (66 packages), and diff check passed. Existing architecture/dependency
+checks run in that full suite. The first review-fix gate passed 2,025/58.57 s;
+new staged-fault and partial-line regressions are included in the final count.
+The code graph was refreshed after review added shared staging/lease interfaces
+(6,339 nodes/16,243 edges). Earlier C/preprocessor extraction warnings remain
+limitations; semantic documentation relationships were not regenerated. This
+additional refresh was necessary because review changed interfaces after the
+initial update; source and specifications remain authoritative.
+
+**Deferred minor:** A clock injected only through service startup can use a
+different origin from the real adapter receipt clock. Default production clocks
+both use `time.monotonic`; deterministic whole-service clock composition remains
+limited. The reviewer set aside physical accuracy, runtime stack high-water and
+board acceptance because those require the separate hardware campaign; historical
+AI/report interpretation remains expressly outside this extension. No software
+result is substituted for either boundary.
+
+The isolated worktree/shared test environment protected existing CAD edits; its
+ignored execution ledger was temporary and did not replace canonical status.
+The superseded working plan is removed. The feature branch/worktree is retained;
+merging/pushing and physical hardware use were not requested in this slice.
+
+## 2026-11-25 — Report-only DUT_VIO software slice
+
+Implementation base `466a4c2`, isolated `feature/dut-vio-sensing` worktree;
+final independent review pending at this checkpoint. The approved contract is
+implemented from GP28/ADC2 through negotiated protocol frames, native-v2 durable
+records and the shared runtime/HTTP/CLI/MCP status projection. No automatic
+voltage interlock, new MCP tool or metadata schema version was introduced.
+Existing declared interface voltage, UART bytes, loss and pattern semantics remain.
+
+Fresh full gate: 2,008 pytest tests passed in 53.22 s; Ruff, mypy (104 source
+files), offline lock check (66 packages), and diff check passed. Focused sampler,
+protocol, storage, lifecycle and delivery gates passed. Real pyserial-asyncio pipe
+coverage preserved 50,006 raw UART bytes and 42 voltage records through an
+automatic reconnect, contiguous evidence, one close per physical resource and
+configuration-before-sensing order. Explicit ADC rejection preserves UART;
+ambiguous ACK/timeout/close follow terminal cleanup. Initial full collection caught
+new duplicate test basenames; the storage test module was renamed before the gate.
+
+Native-v2 transaction tests cover commit-before-publication, failure rollback,
+quota, logical rollover, recovery, strict known-record validation and durable tail.
+Exported pre-extension `4880590` readers retrieved/counted the new record without
+rewriting evidence. All generated fixture hashes were unchanged by old-reader use.
+
+Three real Zephyr 4.4.2 / SDK 1.0.1 builds passed; image identities, UF2/config
+hashes and memory sizes are retained in
+[build provenance](../hardware/validation/dut_vio_software_20261125.json).
+Generated ADC pinctrl references only GP28/ADC2 (0x39f), OE override 2,
+bias disabled and digital input-enable absent/false; GP26 control enable untouched.
+The stack probe is a built diagnostic image, not a runtime stack measurement.
+Graphify code update completed (6,278 nodes/16,103 edges); extractor warnings
+remain for hello.c and fixture_protocol.h; semantic documentation graph not updated.
+
+Implementation rulings: ACK intent is snapshotted with the existing response-ready
+handshake and applied immediately in the USB owner after complete ACK transmission,
+avoiding a delayed-worker disable race. A previous live observation is cleared on
+unrelated logical rollover rather than retaining a possibly retired predecessor
+reference; a rollover-triggering sample keeps original receipt age and successor
+references. Setup timeout crosses the existing backend disconnected boundary with
+its original cause, then lifecycle cleanup. Schemas validate shape/range while the
+canonical typed parser validates exact cross-field ADC arithmetic. Focused protocol
+cases are grouped in one extension module. The isolated worktree/shared venv
+protect CAD edits; the ignored execution ledger is temporary, never a status authority.
+
+No hardware access, flash, physical calibration, scope validation or board acceptance
+occurred. Physical comparison at zero/~1.8/2.5/3.3/5.0 V with actual Fluke VIO,
+unloaded GP28, source/image/helper identity and reference provenance remains pending.
+Nominal reference is approximate; pin 36 is not ADC_VREF calibration evidence.
+Remaining electrical gates, Phase 4 pause and EVENT deferral are unchanged.
+
+
+## DUT_VIO Written Contract Approval and Implementation Planning — 2026-11-24
+
+- User approved the written report-only contract committed at `4880590`.
+  Marked that contract as approved without changing its behavior, and authored
+  the temporary `docs/dut_vio_sensing_implementation_plan.md` from actual callers,
+  firmware thread/ACK handoff, source initialization and store/tail consumers.
+- Seven coherent tasks cover typed protocol/value contracts, ADC state and pin
+  setup, firmware negotiation/output, durable storage, host lifecycle, delivery
+  and integrated verification/artifacts. Durable support precedes enabling host
+  negotiation; actual current/staged sources receive initialization after profile
+  controls, avoiding stale initial-host callbacks and an extra serial owner.
+- Review cases include same-read ACK/sample dispatch, late ADC completion across
+  timeout/epoch boundaries, delayed admission/rollover age, ordered UART drain,
+  strict old/new compatibility and preserved historical evidence. The plan
+  references the approved contract rather than restating its wire/status tables.
+- Self-review checked contract coverage, shared interface/type names, source paths,
+  step ordering and plan size. Documentation links/anchors, whitespace, execution
+  commands and operator CAD hashes verified; no code suite, firmware build/flash,
+  service startup, hardware access or delegated agent work occurred. Implementation
+  and physical acceptance were not claimed. Last code gate remains 1,899 tests.
+
+## Report-Only DUT_VIO Contract Draft — 2026-11-24
+
+- User approved report-only sensing and the in-chat design after software fixes
+  were committed. Authored `docs/dut_vio_sensing_contract.md` as the focused
+  extension contract and linked it from the documentation index. No additional
+  Phase 1 done criterion, output gating, EVENT capture or Debug Agent work.
+- Verified the GP28/ADC2 divider against the KiCad mapping and the pinned Zephyr
+  4.4.2 ADC driver/pinctrl sources. The default board ADC group includes GP26,
+  which owns CTRL2 enable; the contract therefore requires GP28-only pinctrl and
+  the existing digital-disable-before-ISO-release sequence. Checked integer
+  scaling against Zephyr's 12-bit denominator and hand-derived conversion vectors.
+- Specified nominal versus measured ADC-reference provenance, asynchronous
+  sampling/deadline/late-completion behavior, opt-in per-epoch telemetry, strict
+  wire fields and compatibility, transactional hardware evidence, segment-bound
+  live state, receipt-age semantics and stale/error reporting. Source inspection
+  confirmed generic v2 primary record counting/order/tail behavior; compatibility
+  remains an implementation acceptance test, not a newly claimed test pass.
+- Self-review covered scope, ambiguity, failure states, existing control/UART
+  invariants and acceptance criteria. Local links/anchors, source consistency,
+  CAD hash preservation and `git diff --check` passed. Documentation only; no
+  code suite rerun, build, flash, service/serial access or hardware acceptance.
+  Prior 1,899-test code gate remains the last executed software gate.
+
+## Committed Software Follow-Up Baseline — 2026-11-24
+
+- Reconnect-test synchronization and load-profile CLI migration committed locally
+  as `81ab6f8` after the fresh 1,899-test gate. Commit contains exactly the six
+  reviewed software/test/documentation files; operator KiCad files are excluded.
+- Reconciled the code-baseline reference in status after commit creation.
+  Whitespace checks passed; verified software is unchanged. No push or hardware
+  action. DUT_VIO sensing contract review follows as separately selected work.
+
+## Reconnect and Load-Profile Commit Verification — 2026-11-24
+
+- User requested committing both verified fixes before moving to DUT_VIO sensing.
+  Fresh full pytest: **1,899 passed in 52.47 s**; Ruff, mypy (103 source files),
+  offline lock check (66 packages) and `git diff --check` passed.
+- Reviewed the six-file software/test/documentation scope. Separate operator
+  KiCad PCB/project files retain their recorded SHA-256 hashes and are excluded.
+  No service startup, serial access, firmware flash or push.
+- DUT_VIO sensing is selected for contract/scope review after the commit;
+  sensing implementation has not started and hardware acceptance remains open.
+
+## Load-Profile Runner CLI Migration — 2026-11-24
+
+- Source base: local `main` at `8841ffa`, retaining the preceding uncommitted
+  reconnect-test slice. Updated `run_load_profile.py` to send SUSTAIN/BURST with
+  explicit `--line-ending lf` instead of retired `--force`. UART TX remains
+  governed by the running service's DUT Profile; no policy/configuration change.
+- Added six hardware-free regression cases that run the script's entrypoint and
+  real CLI/client against an HTTP test transport, replacing the slow capture
+  subprocess. Both commands are checked for the explicit LF request; policy
+  rejection and capture failure must retain their result codes/output and make
+  the runner exit nonzero. The old command failed all six cases because the CLI
+  rejected `--force` before sending a request (6 failed in 0.28 s).
+- After correction, runner/CLI focused tests: **9 passed in 0.52 s**. Full pytest:
+  **1,899 passed in 52.43 s**. Ruff, mypy (103 source files), offline lock check
+  (66 packages), script `--help` and `git diff --check` passed. Existing measured
+  pause logic, deadlines and result schema are unchanged.
+- Updated the firmware README with the local-service/TX prerequisite, controlled
+  pause invocation and result limits. Successful process completion alone does
+  not establish byte/sequence/checksum or loss acceptance. Historical evidence
+  remains unchanged; no service startup, pause signal, serial access or physical
+  validation was performed during this slice.
+- Separate operator PCB/project files retain their captured SHA-256 hashes;
+  preceding reconnect changes are preserved. Changes remain uncommitted; no push.
+  Phase 1B/Stage 8/Phase 1 hardware gates remain incomplete and Phase 4 paused.
+
+## Reconnect Test Publication Synchronization — 2026-11-24
+
+- Source base: local `main` at `8841ffa`. The existing Enhanced transport test
+  could observe recorder `faulted` before the reconnect coordinator published
+  `connection_error`, then raise `KeyError` while inspecting the diagnostic.
+  Confirmed the separate publication paths in recorder, coordinator and runtime;
+  production behavior did not require a change.
+- Added an event gate to the existing parametrized integration test in
+  `apps/service/tests/test_enhanced_transport_reconnect.py`. It pauses the real
+  coordinator immediately before diagnostic publication, verifies an actual
+  HTTP status snapshot with `faulted` and no diagnostic, then releases it.
+  The original wait predicate reproduced the exact failure deterministically:
+  **3 failed/1 passed in 0.52 s**, covering failed/incomplete/unknown cleanup.
+- Corrected the poll to wait for both fault state and a published diagnostic,
+  with an explicit timeout failure. The successful reconnect path, original
+  2-second poll deadline, configured 5-second reconnect timeout, cleanup/error
+  identity assertions, replacement-ownership checks and profile ACK ordering
+  remain intact. The gate is released during teardown even after assertion failure.
+- Focused transport/control/connection lifecycle tests: **34 passed in 6.24 s**.
+  Twenty fresh-process repeats: **80 parameter cases passed**, including 60
+  deliberately delayed failure publications. Full pytest: **1,893 passed in
+  50.03 s**. Ruff, mypy (103 source files), offline lock check (66 packages),
+  and `git diff --check` passed.
+- Scope is the test and status/history documentation. No production, protocol,
+  firmware, dependency or architecture change; no physical hardware access.
+  Separate operator PCB/project edits retain their captured SHA-256 hashes.
+  Changes remain uncommitted; no push. Existing hardware acceptance boundaries
+  and the paused Phase 4 are unchanged.
+
+## Committed Validation Baselines Reconciled — 2026-11-21
+
+- GP28 firmware/initial board evidence committed locally as `f761c40cdc0d584332f46ea858e2e8e1373de0af`.
+  Its exact staged snapshot passed 1,877 tests/51.77 s, Ruff and mypy103;
+  normal/readback/stack build checks and retained UF2 hashes verified.
+- Host transaction batching and Nov-21 evidence committed locally as `0e483340565e3bd76f8559f6bba57e302b4a1820`.
+  Fresh full gate passed 1,893 tests/51.04 s, Ruff, mypy103, offline lock66 and
+  diff check. Replay and prior live baseline/250/500 ms results are retained.
+- Current status now references those code commits. Original capture/build
+  manifests keep their historical source bases and working-tree provenance;
+  raw evidence and archives were not rewritten after commit creation.
+- Separate operator PCB layout/project files remain unstaged and byte-for-byte
+  unchanged. No push, flash, service startup or new hardware actuation.
+  Phase 1B/full manufactured-board electrical acceptance remains incomplete.
+- This final reconciliation changes status/history only; whitespace checks
+  passed and code hashes remain identical to the verified software/live slice.
+
+## Host Recorder Commit Preparation Verification — 2026-11-21
+
+- After the isolated firmware commit, ran the full combined suite again:
+  1,893 passed in 51.04 s. Ruff, mypy (103 files), offline lock check
+  (66 packages) and diff check passed. No physical service or serial owner.
+- Verified staged firmware commit matches its independently tested snapshot
+  exactly. Current host source hashes match the replay/live evidence; four
+  archive hashes and all member manifests verified. Historical raw artifacts
+  were not rewritten to change their recorded source bases or outcomes.
+- Reviewed the second slice's exact 19-file scope: host code/tests, architecture,
+  Nov-21 evidence and status/history updates. Separate PCB layout/project edits
+  remain unstaged, their hashes unchanged. No push or hardware actuation.
+
+## GP28 Commit Preparation Verification — 2026-11-21
+
+- Exported HEAD plus only the intended firmware/initial evidence slice to an
+  isolated temporary snapshot. Full pytest: 1,877 passed in 51.77 s; Ruff and
+  mypy (103 files) passed. Host admission changes were absent from this snapshot.
+- Normal, optional pad-readback and stack-probe build checks passed; all three
+  UF2 hashes match retained build evidence. No flash or board actuation.
+- Archive hashes/member manifests verified; original capture/source patches
+  preserved byte-for-byte. A path-scoped Git whitespace attribute preserves
+  intentional context whitespace inside archived unified diffs.
+- Initial physical evidence remains limited; host admission lag is retained in
+  its original failed capture. No full manufactured-board acceptance inferred.
+
+## KiCad Rev-A Live Admission Fix Verification — 2026-11-21
+
+- Operator confirmed reset pull-up/wiring and helper-only USB before normal
+  selection; DUT then powered with setup untouched. Known gp28safe-1 identity,
+  exact BOOT and INFO verified. No firmware change/rebuild/flash.
+- Fresh session `20261121T174635Z-56780735`, sole PID 3395: baseline, measured
+  255.169375 ms and 505.060750 ms service pauses each retained exact 94,299-byte
+  SUSTAIN/all 4,096 sequence lines/checksum 8,386,560. All Monitors matched the
+  unchanged 20 s deadline; zero reported drops/overflows. Post-stress PING passed.
+- Source hashes checked against the prior 1,893-test software gate before and
+  after live use; no tests ran during ownership. Old failed timeout preserved.
+- Native audit: 283,040 exact raw bytes, 36,116 contiguous records, five UART
+  pairs, three control pairs, five terminal operations, one uninterrupted
+  segment. All 930 pre-existing local files unchanged. Graceful shutdown
+  verified PID/listener/serial free.
+- [Live evidence](../hardware/validation/evidence/20261121-kicad-rev-a-live-admission-summary.json)
+  archive SHA-256 `cf9251411313d03b70208fc614ff37eb419a00f54dae963af1301b528c7b059a`,
+  18 member hashes verified. Host patch reconstructs 12 files from HEAD.
+  Architecture decisions retained; temporary working plan removed.
+- Operator reports no scope/analyzer and pin 36 still probe-only. CAD/net
+  inspection found no separate helper 3.3 V test point/connector; no secure
+  alternate load connection established. Electrical acceptance remains open.
+  Detailed scope and limits in [board record](../hardware/validation/phase1_kicad_rev_a.md).
+
+## Host V2 Admission Lag Reproduction and Bounded Transactions — 2026-11-21
+
+- Replayed frozen SUSTAIN from physical session `20261120T180241Z-21d9dc70`
+  into isolated stores, no serial/hardware access: 11,992 events/94,299 bytes,
+  source span8.606316s. Unprofiled20.282077s reproduces prior admission delay.
+  Profiled24.173s: append RX22.073s, 11,992 transactions; file opens/replacements/
+  links dominate, fsync1.485s alone does not explain the delay.
+- Optional nonblocking source poll and bounded groups of queued normal UART
+  units now share one existing crash-recoverable transaction. Records, timestamps,
+  raw offsets, schema, durability, quotas and configured deadlines preserved.
+  Pattern/line-limit/quota units fall back to existing per-unit processing;
+  already-read UART commits before deferred terminal input is handled.
+- TDD: six store failures then green; recorder reproduced1025transactions for
+  1024tiny events, then bounded work/commit publication green. New post-reacquire
+  quota regression caught stale logical segment mapping in the first batch
+  integration; refresh per fallback unit fixed it. Tests also cover telemetry,
+  error drains, pattern state, rollback and source polling.
+- Basic release tests initially observed only the blocking public read and
+  missed EOF consumed by the new poll. Gate moved to shared FIFO; final RX
+  durability, late wakeup, cancellation and concurrent shutdown still asserted.
+- Final replay0.466631s, exact deterministic SHA256
+  `efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8`;
+  old source files and both physical evidence archives unchanged.
+- Full gate:1893passed/52.37s, Ruff, mypy103, offline lock66, diff check passed.
+  Architecture documented; code graph refreshed with existing C-header partial
+  extraction/community-label warnings. No source-module ownership changes.
+- [Replay evidence/patch](../hardware/validation/evidence/20261121-v2-admission-replay-summary.json)
+  retains before/after scripts, timings, profiler and reproducible patch against
+  dirty-workspace base9914d62. Archive10member hashes verified, SHA256
+  `f9f491550bdc72e65126e691778dcb538d5ac3be1e417a9b52ee65b5eead95a2`.
+  No firmware change/rebuild/flash or live hardware result in this record.
+- Operator asked which resistor was the reset pull-up; explained loose10kΩ
+  J1.14→J1.3. Operator then confirmed resistor/wiring fitted, both USB off and
+  PPK2 off/VOUT disconnected. Helper-only USB connection requested for live setup.
+
+## KiCad Rev-A Boot/USB Reconnect and Operator Stop Checkpoint — 2026-11-20
+
+- Both boot selections occurred only with operator-confirmed DUT USB off.
+  Exact alternate synthetic E_INIT_001/81 bytes and normal BOOT/62 bytes
+  captured ambient; normal INFO matched. Expected fixture fault is intentional.
+- Operator helper-USB cycle automatically reconnected in same native session
+  `20261120T180241Z-21d9dc70`, segment 1/one gap. Observed response interval
+  4.518491 s, unchanged policy 5.0 s. Both controls reconfigured; later audited
+  reset/ambient BOOT and INFO passed, zero reported drops.
+- Requested 250 ms service pause measured 255.072916 ms. All SUSTAIN bytes/
+  4,096 lines/checksum exact, zero drops/overflows, high-water 490 bytes.
+  Monitor timed out at 20 s: terminal 12345 precedes END final RX 12512.
+  Source span 8.606316 s vs about 20 s host admission; matcher window explains
+  timeout. Per-event persistence is a candidate cost, not a proven root cause.
+  Original harness failure retained; no deadline/code change, 500 ms unrun.
+- Operator asked to stop and continue tomorrow. Graceful close verified PID,
+  listener and serial free. Final audit: 94,644 exact raw bytes, 12,662
+  contiguous records, seven control/three UART pairs, three terminal operations,
+  two segments/one gap. All 843 prior local files unchanged.
+- [Summary/archive](../hardware/validation/evidence/20261120-kicad-rev-a-boot-reconnect-summary.json)
+  verified 20 member hashes; details/limits in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md). No source or
+  firmware change, flash, commit or push; manufactured-board acceptance open.
+
+## KiCad Rev-A Boot Role Armed with DUT Unpowered — 2026-11-20
+
+- Operator confirmed power-off addition CTRL1/J1.4→GP2/physical4 and helper
+  USB only reconnected. DUT USB off, PPK2 off/VOUT removed; other wiring retained.
+- New isolated two-role service PID 6649/session `20261120T180241Z-21d9dc70`.
+  Normal helper identity/configuration verified; CLI bootloader accepted at
+  7323047804 µs with DUT still unpowered. No pin readback inferred from ACK.
+- Requested DUT USB power to capture the fixture's synthetic E_INIT_001,
+  not ROM BOOTSEL. No capture result yet. No firmware change or flash.
+
+## KiCad Rev-A Device Core Functional Session — 2026-11-20
+
+- Fresh pre-start gate: 1,877 tests/49.22 s, Ruff, mypy103, offline lock66 and
+  diff check passed. Dirty HEAD `9914d62` retained; no product/firmware change.
+- Isolated native session `20261120T175235Z-2809c3f3`: reset/INFO, Monitor and
+  Interact outcomes, actual CLI follow/console, exact invalid UTF-8 payload,
+  retrieval, external release/reacquire and fresh-segment ambient boot passed.
+- One DELAYFAULT send returned E_COMMAND_001/timeout: retained fixture predates
+  command. No retry/flash. Initial lossless BURST assertion was too strict for
+  the specified deliberate-overflow profile; failure/source retained. Actual
+  17,832 received + 25,249 dropped = 43,081 expected, seven reported episodes.
+- SUSTAIN sent once, all 4,096 lines/94,299 bytes/checksum exact, no added drops.
+  Native audit: 112,614 raw bytes, 14,067 contiguous records, 13 UART pairs,
+  four control pairs, 13 terminal operations, two segments/one intentional gap.
+- Graceful close verified PID/listener/serial free; 843 prior local files
+  unchanged. [Summary/archive](../hardware/validation/evidence/20261120-kicad-rev-a-device-core-summary.json)
+  verified 20 member hashes; detailed results/limits in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Operator reports neither scope nor logic analyzer available. No electrical
+  or full-board acceptance. After close, operator added CTRL1/J1.4 to fixture
+  GP2/physical4 with both USB off, then connected helper USB only; DUT USB off.
+
+## KiCad Rev-A Hands-Off Reset Repeat — 2026-11-20
+
+- Operator confirmed probes removed and setup untouched; wiring/power retained.
+  Fresh epoch configured CTRL0 open-drain idle and issued one 250 ms reset.
+- Exact expected 62-byte fixture boot captured, followed by 30.051448 s with
+  zero UART bytes/additional boots. Baseline was empty; both commands ACKed;
+  reported drops/overflows/ending occupancy zero. DTR low and port closed.
+- Source hash, exact command/reply/UART bytes and close independently verified.
+  Raw log: 45 records, SHA-256
+  `e1be5977024afdd2e7dc27bd0aca59dbaa5788100023537322c3826a31e230a6`.
+  [Result](../hardware/validation/evidence/20261120-kicad-rev-a-dut-hands-off-result.json)
+  and [board evidence](../hardware/validation/phase1_kicad_rev_a.md) preserve scope.
+- Prior extra boots did not recur in this interval. Probe contact remains a
+  possible cause, not proven; no long-term or waveform acceptance inferred.
+  No firmware change/flash. No service was running during this direct bench.
+
+## KiCad Rev-A Possible Probe Contact and Hands-Off Repeat Preparation — 2026-11-20
+
+- Operator replied: `Probe or wiring contact may have disturbed RUN` during
+  the released-level measurement. Saved the context separately in
+  [probe context](../hardware/validation/evidence/20261120-kicad-rev-a-reset-probe-context.json),
+  preserving the original closed raw capture and its pending-context snapshot.
+- This is a possible explanation, not confirmed causality or a board/firmware
+  diagnosis. Prepared a bounded repeat with meter probes removed, unchanged
+  wiring/power, one commanded 250 ms reset and 30 seconds without more commands.
+- Temporary repeat script syntax/62-byte LF boot marker verified. Requested
+  probes-removed/hands-off readiness before opening the port; no repeat
+  command or physical result yet. No firmware/image change or flash occurred.
+
+## KiCad Rev-A Released RUN, Closed Capture and Additional Boot Banners — 2026-11-20
+
+- Operator reported released RUN=3.277 V. Session 27438 then closed normally,
+  DTR low/port released; no serial owner or TCP 2040 listener remained.
+- Final log contains the earlier verified 216-byte expected exercise prefix
+  plus ten additional exact BOOT banners, total 836 UART bytes. Extra banners
+  occurred 18:31:54.352670–18:32:00.506386 Paris time. The full command log has
+  seven acknowledged commands and only the one previously recorded 250 ms
+  reset pulse; no later host reset command explains the additional banners.
+- Requested operator context about deliberate resets/power changes or RUN
+  probe/wire contact during the released-level measurement. No board/firmware
+  cause or stability pass/fail assigned before that context/reproduction.
+- Source hash, command bytes/replies, raw full trace, zero loss counters and
+  close verified. Closed log: 862 JSON records, SHA-256
+  `c8dc068bc87896d60f2c5fa9b004ee312aaf4fdb1bf045f528f1af20369024df`.
+  Facts and pending-context scope saved in
+  [reset observations](../hardware/validation/evidence/20261120-kicad-rev-a-dut-reset-observations.json)
+  and [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- No further actuation, firmware/image change or flash occurred during close.
+
+## KiCad Rev-A Real-DUT Boot, UART Identity and Controlled Reset — 2026-11-20
+
+- Operator powered fixture USB with CTRL0 asserted and reported VIO=3.3 V,
+  fixture RUN=0.0 V. Releasing CTRL0 ACKed at 4942969157 µs and captured the
+  exact expected `phase1-enhanced-460800-001` BOOT OK banner from `rpi_pico`.
+- INFO and PING were acknowledged with five bytes accepted each and returned
+  exact expected identity/protocol and PONG. A commanded 250 ms CTRL0 pulse
+  ACKed at 5066295592 µs and produced a second identical boot banner; a later
+  PING returned PONG. No USB power cycle was used for that reset.
+- Independently reconstructed the exact 216-byte UART sequence from raw
+  frames: BOOT, INFO, PONG, BOOT, PONG, with no extra bytes. Latest telemetry
+  shows zero occupancy, dropped bytes and overflow events. Full timestamps,
+  scope and payloads are in [board evidence](../hardware/validation/phase1_kicad_rev_a.md)
+  and the still-open reset bench log.
+- Requested released RUN voltage before checkpoint/close. Actual pulse
+  waveform/duration and v2 service/HIL acceptance are not established. No
+  firmware/image change, flash or epoch close occurred during this observation.
+
+## KiCad Rev-A Real-DUT Reset Wiring Confirmed and Capture Armed — 2026-11-20
+
+- Operator confirmed the added CTRL0-to-RUN/30 wire and 10 kΩ VIO-to-CTRL0
+  pull-up with DUT USB still disconnected and PPK2 VOUT removed. Helper USB
+  remained connected; no serial owner or TCP 2040 listener found before open.
+- Bench session 27438 verified known serial/normal `gp28safe-1` hello, configured
+  CTRL0 open-drain active-low and commanded active. Both ACKed at timestamp_us
+  4733203787/4733213885; UART capture remains armed. Exact source and frames are
+  in [reset bench log](../hardware/validation/evidence/20261120-kicad-rev-a-dut-reset-bench.jsonl).
+- Requested fixture USB power with reset commanded low, then measured DUT_VIO
+  and physical RUN levels before releasing reset. Actual held level, DUT boot/
+  INFO identity and baud remain unverified. No DUT UART payload, firmware
+  change, flash or session close occurred.
+
+## KiCad Rev-A CTRL0 Reset Selected for Real-DUT Boot Capture — 2026-11-20
+
+- Operator confirmed the initial four-wire fixture setup and asked to use
+  CTRL0 for reset/boot capture. The earlier separate power-on capture was
+  a setup choice, not a restriction; switched the prepared procedure to
+  open-drain active-low CTRL0 controlling fixture RUN/physical pin 30.
+- Requested an added J1.3-to-RUN wire and temporary 10 kΩ J1.14-to-J1.3
+  pull-up, with DUT USB still off and PPK2 VOUT removed. The planned capture
+  holds RUN low while powering the fixture, then releases it to boot.
+- Prepared a syntax-checked temporary reset/UART bench script using the
+  established exclusive serial/DTR teardown, guarded INFO/PING after observed
+  fixture boot identity, bounded raw UART collection and optional 250 ms
+  reset pulse. No port was opened or commands sent in this preparation.
+- Actual reset wiring, live fixture build/baud, boot capture and DUT UART
+  results remain pending; no firmware/image change or flash occurred.
+
+## KiCad Rev-A Four-Point UART Loopbacks Verified and Fixture Selected — 2026-11-20
+
+- Operator reported upper preflight VIO=4.96 V at PPK2 setting 5000 mV.
+  Both payloads echoed exactly again at configured 460800 baud, zero reported
+  drops/overflows and zero final occupancy. All four bounded points are saved
+  in [UART summary](../hardware/validation/evidence/20261120-kicad-rev-a-uart-loopback-summary.json)
+  and [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Independently reconstructed all 1,156 echo bytes from raw frames and checked
+  command bytes, acceptance lengths, exact hello identities, source hashes,
+  counter/status scope and all close records. Four logs each have 303 JSON
+  records and two acknowledged sends. Upper log SHA-256:
+  `463ca71c42620a563b7278723607df27c2882a5ae3fdce2f66bdefba93c008d2`.
+  No serial owner or TCP 2040 listener remained.
+- Operator selected the existing, already-flashed Zephyr DUT fixture. Source
+  documentation identifies the saved Pico 1/H pinout and a 115200 Basic
+  default versus 460800 Enhanced overlay; actual fixture build/baud still
+  requires live verification. No reflash was selected or performed.
+- Prepared safe four-wire DUT connection with PPK2 VOUT removed and fixture
+  3V3 feeding only J1 DUT_VIO; helper USB on, fixture USB off pending passive
+  capture. No DUT wiring confirmation or real-DUT UART/HIL result occurred.
+- No firmware/image change or flash; full physical acceptance remains open.
+
+## KiCad Rev-A Control Range Closed and Initial UART Loopbacks — 2026-11-20
+
+- Operator reported final CTRL0 LOW=0.0 V at VIO=4.95 V, current=1.20 mA.
+  Representative static range pairs are saved in
+  [range summary](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-range-summary.json)
+  and [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Closed session 41713 normally and verified no serial owner/service listener.
+  Run 5 verifies 1,073 JSON records, seven commands/seven successful responses,
+  matching archived source hash and closed-port record; SHA-256
+  `4b6de4a3641f71c9cb2f898eb5bc028b5192e2c4ac9d11b458cf70dfb09bb71b`.
+- Operator confirmed removal of the external control load, J1.7↔J1.8 loopback
+  jumper, no DUT and preflight VIO=1.858 V at setting 1875 mV. Bounded direct
+  UART test at configured 460800 baud matched 33 text and 256 binary bytes,
+  zero reported drops/overflows, final occupancy zero; DTR/port closed.
+  Raw-frame reconstruction/source-hash validation passed; 303 records; SHA-256
+  `a54cd0b87a1ca2ff2d30885ac7789cc527fadcd9d3b90845a3282eb8d6494526`.
+- With the same jumper, operator preflight VIO=2.53 V (setting 2575 mV) and
+  3.28 V (3325 mV) each produced the same two exact echoes, zero reported
+  drops/overflows and normal close. Exact sources/frames/results are in their
+  separate UART JSONL logs; no DUT connection, analog waveform, extended
+  stress, calibrated margin or v2 service/HIL acceptance is inferred.
+- UART script syntax checked before execution. All source/firmware and CAD
+  remain unchanged; no flash occurred. Operator was asked for upper-point
+  preflight VIO at setting 5000 mV before that bounded loopback is attempted.
+
+## KiCad Rev-A CTRL0 HIGH at Actual 4.94 V and LOW Command — 2026-11-20
+
+- Operator reported actual VIO=4.94 V, loaded CTRL0 HIGH=4.84 V,
+  Pico 3V3=3.277 V and fresh current=1.73 mA at source setting 5000 mV.
+  Saved in [board evidence](../hardware/validation/phase1_kicad_rev_a.md)
+  without claiming an exact 5.000 V rail result.
+- Session 41713 commanded CTRL0 idle/LOW and received `ok=true`, timestamp_us
+  2428682667. Physical LOW/VIO/current readings remain pending at unchanged
+  wiring and source setting, with the DUT/fixture disconnected.
+- No fixture connection, UART payload, session close, firmware/image change
+  or flash occurred.
+
+## KiCad Rev-A CTRL0 LOW at Actual 3.31 V and Upper-Voltage Setup — 2026-11-20
+
+- Operator reported actual VIO=3.31 V, CTRL0 LOW=0.0 V and fresh current
+  832 µA. Together with prior HIGH=3.24 V/current=1.14 mA at the same VIO,
+  the static pair is saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Session 41713 commanded HIGH again, ACK `ok=true` at 2140612932 µs.
+  Specified output off before selecting PPK2 maximum 5000 mV, retaining
+  the ground load/USB and recording actual VIO without compensation above 5 V.
+- Operator confirmed a Zephyr DUT fixture or spare Pico is available for
+  later UART tests. None is connected by this confirmation; no UART payload,
+  upper-voltage control result, firmware change or flash occurred.
+
+## KiCad Rev-A CTRL0 HIGH at Actual 3.31 V and LOW Command — 2026-11-20
+
+- Operator reported actual VIO=3.31 V, loaded CTRL0 HIGH=3.24 V and fresh
+  current=1.14 mA. Saved the supplied units/precision in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Session 41713 commanded CTRL0 idle/LOW and received `ok=true`, timestamp_us
+  2007533315; physical LOW/VIO/current readings remain pending at unchanged
+  source setting 3325 mV and 10 kΩ ground load.
+- No fixture change, session close, firmware/image change or flash.
+
+## KiCad Rev-A CTRL0 LOW at Actual 2.56 V and 3.3 V Setup — 2026-11-20
+
+- Operator reported actual VIO=2.56 V, CTRL0 LOW=0.0 V and fresh current
+  665 µA. Together with prior HIGH=2.50 V at VIO=2.55 V/current=900 µA,
+  the static pair is saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Session 41713 commanded CTRL0 active/HIGH again, ACK `ok=true` at
+  1841642752 µs. Initial PPK2 setting 3325 mV was selected for the next ~3.3 V
+  point, with output off before setting change and independent actual-VIO
+  measurement. No exact source calibration or ~3.3 V result is inferred.
+- No fixture change, session close, firmware/image change or flash.
+
+## KiCad Rev-A CTRL0 HIGH at Actual 2.55 V and LOW Command — 2026-11-20
+
+- Operator reported actual VIO=2.55 V, loaded CTRL0 HIGH=2.50 V and fresh
+  current=900 µA. Saved measured precision and source/load context in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md), without
+  relabelling the rail as exactly 2.50 V.
+- The 50 mV source-to-output difference is consistent with the nominal
+  series/load network. Bench session 41713 commanded CTRL0 idle/LOW and
+  received `ok=true`, timestamp_us=1702668179; physical LOW readings pending.
+- No fixture change, session close, firmware/image change or flash.
+
+## KiCad Rev-A Four Low-Voltage Push-Pull Pairs and Range Setup — 2026-11-20
+
+- Operator reported final CTRL3 LOW=0.0 V at VIO=1.833 V, current=415 µA.
+  All four static HIGH/LOW pairs under the 10 kΩ ground load are recorded
+  in [board evidence](../hardware/validation/phase1_kicad_rev_a.md) and the
+  [machine-readable summary](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-low-voltage-summary.json).
+- Closed session 48715 normally. All four frozen logs validate exact normal
+  hello identity, archived source hashes, per-channel command bytes/order,
+  12 total successful responses and final port/DTR close records. No serial
+  owner or TCP 2040 listener remained before the next open. Run 4 has 354
+  JSON records and SHA-256
+  `264a70a7030eee2b41f30015f1b9cc4893f34d1420e6e6c0020b447a36d5b7ca`.
+- Prepared representative CTRL0 range measurements using the historical
+  procedure as reference, without transferring its acceptance. Fresh session
+  41713 reverified `gp28safe-1`, configured CTRL0 and commanded HIGH; ACKs
+  at 1503803687/1503813683 µs in
+  [run 5 evidence](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-bench-5.jsonl).
+  Load movement J1.6 to J1.3 and initial setting 2575 mV for ~2.5 V were
+  specified, with actual source voltage to be measured independently.
+- No higher-voltage control result, full board acceptance, firmware/image
+  change or flash occurred in this setup.
+
+## KiCad Rev-A CTRL3 Push-Pull HIGH Reading and LOW Command — 2026-11-20
+
+- Operator reported VIO=1.869 V, loaded CTRL3 HIGH=1.827 V and fresh
+  current=690 µA. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 48715 commanded CTRL3 idle (push-pull LOW) and received
+  `ok=true`, timestamp_us=1302716769. Physical LOW/current readings remain
+  pending with unchanged wiring and 10 kΩ ground load.
+- No fixture change, session close, firmware/image change or flash.
+
+## KiCad Rev-A CTRL2 Push-Pull LOW Reading and CTRL3 Setup — 2026-11-20
+
+- Operator reported CTRL2 LOW=0.0 V at VIO=1.833 V, fresh current=415 µA.
+  Static HIGH/LOW pair under the 10 kΩ ground load is saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Closed session 79413 normally, DTR low and port released; no serial owner
+  or TCP 2040 listener. Frozen run 3: 205 JSON records, three commands/three
+  successful replies, archived source hash and close verified; SHA-256
+  `58681fd6aab28f07db190a67faccc6528365265c52f9b1c9ecc4dce6561d03c0`.
+- Fresh session 48715 reverified `gp28safe-1`, configured CTRL3 push-pull and
+  commanded HIGH; ACKs at 1146770402/1146780591 µs, archived in
+  [run 4 evidence](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-bench-4.jsonl).
+  Await load move J1.5 to J1.6 with PPK2 off and physical readings.
+- No firmware/image change, flash, CTRL3 physical result or full acceptance.
+
+## KiCad Rev-A CTRL2 Push-Pull HIGH Reading and LOW Command — 2026-11-20
+
+- Operator reported VIO=1.867 V, loaded CTRL2 HIGH=1.827 V and fresh
+  current=690 µA. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 79413 commanded CTRL2 idle (push-pull LOW) and received
+  `ok=true`, timestamp_us=1045454464. Physical LOW/current readings remain
+  pending with unchanged wiring and 10 kΩ ground load.
+- No fixture change, next-channel result, firmware/image change or flash.
+
+## KiCad Rev-A CTRL1 Push-Pull LOW Reading and CTRL2 Setup — 2026-11-20
+
+- Operator reported CTRL1 LOW=0.0 V at VIO=1.833 V, fresh current=415 µA.
+  Static HIGH/LOW pair under the 10 kΩ ground load is saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Closed session 56584 normally, DTR low and port released; no serial owner
+  or TCP 2040 listener. Frozen run 2: 297 JSON records, three commands/three
+  successful replies, archived source hash and close verified; SHA-256
+  `cd9a84e075e69b91e2f2bdbc3d111ec09855c0c6c5f4da119694d51b8f8a9c04`.
+- Fresh session 79413 reverified `gp28safe-1`, configured CTRL2 push-pull and
+  commanded HIGH; ACKs at 939169677/939179672 µs, archived in
+  [run 3 evidence](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-bench-3.jsonl).
+  Await load move J1.4 to J1.5 with PPK2 off and physical readings.
+- No firmware/image change, flash, CTRL2 physical result or full acceptance.
+
+## KiCad Rev-A CTRL1 Push-Pull HIGH Reading and LOW Command — 2026-11-20
+
+- Operator reported VIO=1.867 V, loaded CTRL1 HIGH=1.827 V and fresh
+  current=690 µA. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 56584 commanded CTRL1 idle (push-pull LOW) and received
+  `ok=true`, timestamp_us=767674180. Physical LOW/current readings remain
+  pending with unchanged wiring and 10 kΩ ground load.
+- No fixture change, next-channel result, firmware/image change or flash.
+
+## KiCad Rev-A CTRL0 Push-Pull LOW Reading and CTRL1 Setup — 2026-11-20
+
+- Operator reported CTRL0 LOW=0.0 V at VIO=1.833 V, fresh current=416 µA.
+  With the preceding HIGH observation, the static HIGH/LOW pair is recorded
+  under the 10 kΩ ground load. See
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Closed session 22724 normally, DTR low and port released; no serial owner
+  or TCP 2040 listener. Frozen first push-pull log: 321 JSON records, three
+  commands/three successful replies, matching archived source hash and close;
+  SHA-256 `55832e4538e97e8db839eb2659cb3b09f946b171667f27e693836ff57657abfc`.
+- Fresh session 56584 reverified `gp28safe-1`, configured CTRL1 push-pull and
+  commanded HIGH; ACK timestamps 641872446/641882444 µs. Exact source and frames
+  are in [run 2 evidence](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-bench-2.jsonl).
+  Await load move J1.3 to J1.4 with PPK2 off and physical readings.
+- No firmware/image change, flash, CTRL1 physical result or full acceptance.
+
+## KiCad Rev-A CTRL0 Push-Pull HIGH Reading and LOW Command — 2026-11-20
+
+- Operator reported VIO=1.866 V, loaded CTRL0 HIGH=1.827 V, 3V3=3.277 V
+  and fresh current=690 µA. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md). The 39 mV
+  supply-to-output difference is consistent with the nominal 180 Ω series
+  path under this 10 kΩ load; no precise/full-range acceptance is inferred.
+- Bench session 22724 sent CTRL0 idle (push-pull LOW) and received `ok=true`,
+  timestamp_us=490996555. Physical LOW/current readings remain pending.
+  LOW is actively driven and leaves the enable path asserted.
+- No fixture change, new channel result, firmware/image change or flash.
+
+## KiCad Rev-A CTRL0 Push-Pull HIGH Command Setup — 2026-11-20
+
+- Operator confirmed 10 kΩ J1.3-to-J1.1 load, PPK2 output off, no DUT and
+  USB connected. Rechecked no service/serial owner before exclusive access.
+- Bench session 22724 verified serial FA63A4D787572B33, normal `gp28safe-1`
+  hello and exact capabilities, then configured CTRL0 push-pull active high/
+  idle low and commanded active. Both ACKed at 316679583/316688497 µs.
+- Session holds CTRL0 HIGH awaiting actual VIO/output/3V3/current measurements
+  after enabling PPK2 at setting 1875 mV. Exact script/source hash, commands,
+  responses and telemetry are preserved in
+  [bench evidence](../hardware/validation/evidence/20261120-kicad-rev-a-push-pull-bench.jsonl).
+- No physical HIGH result, firmware/image change or flash occurred. Details
+  and scope are in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+
+## KiCad Rev-A Push-Pull Bench Preparation on Resume — 2026-11-20
+
+- Operator requested resuming the saved bench work. Reviewed the checkpoint,
+  existing changes and protocol/control source; preserved prior electrical
+  evidence and operator-owned CAD modifications.
+- Known helper USB serial FA63A4D787572B33 enumerates at
+  `/dev/cu.usbmodem11401`; no serial owner or TCP 2040 listener found. This
+  enumeration is not a fresh firmware hello or physical result.
+- Prepared a temporary single-channel push-pull bench script for CTRL0,
+  active high/idle low, nominal 10 kΩ signal-to-ground load. Syntax check passed.
+  Each channel uses a fresh epoch to clear earlier driven configurations;
+  DTR loss requests high impedance on close/error or the 30-minute deadline.
+- Requested PPK2-off fixture rewiring and no-DUT confirmation before opening
+  the serial port. No commands, new firmware/image change, flash or push-pull
+  measurement occurred. Procedure is recorded in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+
+## KiCad Rev-A Four-Control Open-Drain Record and Bench Stop — 2026-11-19
+
+- Operator reported released CTRL3: VIO=1.857 V, output=1.834 V, fresh
+  current=20 µA, then requested stopping until tomorrow. All four static
+  open-drain assertion/release pairs are now recorded at their approximately
+  1.86 V supply/load points. This is not full hardware acceptance.
+- Saved consolidated measurements and evidence hashes in
+  [machine-readable summary](../hardware/validation/evidence/20261119-kicad-rev-a-open-drain-summary.json)
+  and appended the final table to
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Closed bench session 40845 normally: DTR deasserted, port closed; no serial
+  owner or TCP 2040 listener remained. Both frozen logs validate source hashes,
+  command bytes, exact hello identities and sequential successful responses:
+  17 commands/17 ACKs total. Run 2: 627 JSON records, six commands; SHA-256
+  `ea2499eb5ab9d8390ee1ca41ec95303c208f12e608d4334b3a47a7272becd7e4`.
+  Run 1 hash remains `21247ee39a836635d0e55f9dd812c129a52720225309542b2678a46246310fa5`.
+- Requested PPK2 output off followed by Pico USB disconnection; physical
+  shutdown is not yet confirmed. Current pause/resume instructions are saved
+  only in development status. No further bench actuation, firmware/image
+  change, flash, software gate rerun, commit or push occurred during shutdown.
+
+## KiCad Rev-A CTRL3 Assertion and Release Command — 2026-11-19
+
+- Operator reported VIO=1.868 V, asserted CTRL3/J1.6=0.037 V and fresh
+  current=690 µA. All four controls now have matching asserted measurements
+  at this supply/load point; saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 40845 sent CTRL3 idle and received `ok=true`, timestamp_us
+  2692985968. Physical released readings remain pending, wiring unchanged.
+- No firmware/image change, flash, session close or full acceptance.
+
+## KiCad Rev-A CTRL2 Physical Release and CTRL3 Setup — 2026-11-19
+
+- Operator reported released VIO=1.856 V, CTRL2/J1.5=1.835 V and fresh
+  current=20 µA. Together with its prior assertion this supports CTRL2 static
+  open-drain assertion/release at the recorded supply/load point. Full readings
+  are in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 40845 configured/asserted CTRL3; both ACKed at timestamp_us
+  2539177777 and 2542774180 respectively. Await pull-up move J1.5 to J1.6
+  with output off, USB retained, then physical CTRL3 assertion readings.
+- No firmware/image change, flash, CTRL3 physical result or full acceptance.
+
+## KiCad Rev-A CTRL2 Assertion and Release Command — 2026-11-19
+
+- Operator reported VIO=1.868 V, asserted CTRL2/J1.5=0.037 V and fresh
+  current=690 µA with the moved 10 kΩ pull-up. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Bench session 40845 sent CTRL2 idle and received `ok=true`, timestamp_us
+  2421483459. Physical released readings remain pending with unchanged wiring.
+- No firmware/image change, flash, next-channel move or full acceptance.
+
+## KiCad Rev-A CTRL1 Release and Renewed CTRL2 Bench Session — 2026-11-19
+
+- Operator reported released VIO=1.856 V, CTRL1=1.834 V and fresh current
+  20 µA. Together with the prior assertion, this supports CTRL1 static
+  open-drain assertion/release at the recorded supply/load point. Full
+  readings are in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Original session 2145 briefly configured/asserted CTRL2, then returned it
+  idle and closed before its 30-minute measurement deadline could interfere.
+  JSONL verified: 1,443 valid records, 11 commands/11 successful responses,
+  archived source hash matches and final port-closed record. Frozen log SHA-256
+  `21247ee39a836635d0e55f9dd812c129a52720225309542b2678a46246310fa5`.
+- Renewed exclusive session 40845 reverified `gp28safe-1` and configured/asserted
+  CTRL2, both ACKed, with [separate evidence](../hardware/validation/evidence/20261119-kicad-rev-a-control-bench-2.jsonl).
+  Temporary script syntax check passed; exact revised source archived there.
+  Await pull-up move J1.4 to J1.5 with output off and physical CTRL2 readings.
+- No firmware/image change, flash, CTRL2 physical result or full acceptance.
+
+## KiCad Rev-A CTRL1 Assertion and Release Command — 2026-11-19
+
+- Operator reported VIO=1.868 V, asserted CTRL1/J1.4=0.037 V and fresh
+  current=690 µA with the moved 10 kΩ pull-up. Saved in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The asserted level matches corrected CTRL0. Bench session 2145 then sent
+  CTRL1 idle and received `ok=true`, timestamp_us=1892276941; physical
+  released VIO/CTRL1/current readings remain pending, wiring unchanged.
+- No firmware/image change, flash, next-channel move or full acceptance.
+
+## KiCad Rev-A CTRL0 Decimal Correction and CTRL1 Setup — 2026-11-19
+
+- Operator repeated assertion: VIO=1.868 V, CTRL0=0.037 V, GP8 enable=3.3 V,
+  GP9 data=0.0 V and current=690 µA. Operator explicitly identified the earlier
+  `0.37 V` as a decimal transcription of `0.037 V`. Appended the correction to
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md), preserving
+  the original reported values and investigation.
+- The corrected 37 mV connector level is consistent with approximately
+  33 mV across the nominal 180 Ω path at the estimated 183 µA pull-up current.
+  With the prior physical release, this supports CTRL0 static open-drain
+  assertion/release at this point; no component/firmware fix was needed.
+- Bench session 2145 ACKed CTRL0 idle at 1734071521 µs, CTRL1 open-drain
+  configuration at 1737973009 µs and CTRL1 active at 1741623812 µs. Await
+  operator pull-up move with PPK2 off and physical CTRL1 readings. No firmware
+  change, flash or full-board acceptance occurred.
+
+## KiCad Rev-A CTRL0 Physical Release and Reassertion for Diagnosis — 2026-11-19
+
+- Operator reported released VIO=1.855 V, CTRL0=1.838 V and fresh current
+  20 µA, confirming a return to externally pulled-high release in this setup.
+  Saved alongside the earlier asserted readings in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Verified source routing: CTRL0 enable is GP8/Pico physical pin 11, data
+  is GP9/physical pin 12; buffer output U1.3 connects through RN3C pads 3/6
+  to J1.3. The latter small components may be obscured by the fitted Pico.
+- Reasserted CTRL0 in bench session 2145; ACK `ok=true`, timestamp_us=1446313910.
+  Await exact repeated output and accessible enable/data header voltages before
+  diagnosing the 0.37 V reading. No wiring, firmware/image change or flash.
+
+## KiCad Rev-A CTRL0 Asserted Measurement and Release Command — 2026-11-19
+
+- With CTRL0 commanded open-drain active low and its 10 kΩ VIO pull-up
+  retained, operator reported VIO=1.870 V, CTRL0=0.37 V, Pico 3V3=3.277 V
+  and fresh current=690 µA. Recorded in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Issued `set_control_state` idle on existing exclusive bench session 2145;
+  helper ACKed `ok=true`, timestamp_us=1092460518. Session remains open for
+  released-state measurement, not closed or moved to another control.
+- Active current includes the 4.7 kΩ /OE pull-up sink path. The 0.37 V
+  connector low requires review at the buffer/series path before electrical
+  acceptance; no fault or firmware cause assigned. Consulted TI datasheet §6.5.
+- No firmware change, flash, physical release reading or acceptance occurred.
+
+## KiCad Rev-A GP28 VIO-First Repeat and Active CTRL0 Bench Setup — 2026-11-19
+
+- Operator repeated VIO-first startup from both supplies off: actual VIO
+  1.855 V, 3V3 3.277 V, GP28 0.907 V and fresh probes-removed current 20 µA.
+  The earlier powered GP28 zero was not reproduced; its cause remains
+  unassigned. No new firmware fix or precision sense acceptance is inferred.
+- Verified known USB serial FA63A4D787572B33 at `/dev/cu.usbmodem11201`, with
+  no service/serial owner before exclusive access. Live hello matched
+  `gp28safe-1` and its five capabilities. Direct bench commands configured
+  CTRL0 open-drain active-low and set it active; both returned `ok=true`.
+  Physical low-output readings are still pending, with 10 kΩ pull-up retained.
+- Temporary bench script syntax check passed; exact source, command bytes,
+  responses and incoming frames are archived in
+  [bench evidence](../hardware/validation/evidence/20261119-kicad-rev-a-control-bench.jsonl).
+  The interactive session intentionally holds DTR/CTRL0 for measurement;
+  release/close evidence must follow. This is electrical bench work, not
+  Device Core/HIL acceptance. No firmware change or flash occurred.
+
+## KiCad Rev-A Completed Sequence Data and GP28 Order Difference — 2026-11-19
+
+- Operator resupplied VIO-first rows with GP28=0.0 V in all three states,
+  including USB connected at VIO=1.855 V, 3V3=3.277 V, current=20.76 µA.
+  Earlier missing entries remain preserved as the original report.
+- USB-first PPK2 off/on/off rows show GP28=0/0.911/0 V with 3V3=3.277 V
+  throughout; powered VIO=1.860 V and current=20 µA. Supplied source-off
+  currents 0.99/1 nA are displayed observations, not board leakage acceptance.
+  Full tables are in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- CTRL0 follows VIO across the settled states. The VIO-first powered GP28
+  zero conflicts with the USB-first near-half-VIO reading and prior normal
+  measurements; requested a VIO-first repeat from both supplies off. No
+  sequencing acceptance, root cause, firmware change or flash is inferred.
+
+## KiCad Rev-A VIO-First CTRL0 Settled Sequence — 2026-11-19
+
+- Operator supplied USB-absent/connected/absent rows at unchanged source
+  setting and CTRL0 pull-up. Full table is in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md). CTRL0
+  stayed near VIO, helper 3V3 changed 0/3.277/0 V and current changed
+  0.33/20.76/0.34 µA.
+- GP28=0 V was supplied only in the first row. The connected and final rows
+  contain three voltages plus current; their GP28 values remain unreported.
+  No transient, all-channel/order or full board acceptance is inferred.
+- Prepared USB-first PPK2 output off/on/off observations with VOUT attached,
+  including GP28 in each state. This is a source-switching sequence, not
+  proof of isolation from a physically disconnected source. No firmware
+  change or flash occurred.
+
+## KiCad Rev-A Reverse UART/Event Preliminary Observations — 2026-11-19
+
+- Operator supplied six reverse UART/event rows, saved in full in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md). DUT_VIO
+  was 1.874–1.875 V, signal voltages 1.846–1.862 V, Pico 3V3 0.0 V throughout,
+  UART currents 0.30/0.33 µA and event currents 0.70 µA each.
+- Together with the control repeats, the preliminary USB-absent sweep now
+  covers all ten external digital signals. The defined external 3V3 load was
+  omitted, so the intended loaded rail-isolation check remains unperformed;
+  no calibrated per-pin leakage or full board acceptance is inferred.
+- Prepared a settled CTRL0 supply-order observation with VIO first and USB
+  absent/connected/absent. Scope remains DC readings, without transient
+  capture. No sequencing result, firmware/image change or flash occurred.
+
+## KiCad Rev-A Reverse CTRL1–3 Preliminary Observations — 2026-11-19
+
+- Operator supplied VIO/control/3V3/current respectively: CTRL1
+  1.874 V/1.846 V/0.0 V/0.35 µA; CTRL2
+  1.874 V/1.848 V/0.0 V/0.36 µA; CTRL3
+  1.875 V/1.850 V/0.0 V/0.34 µA. Saved the full table in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Controls follow VIO and 3V3 shows no reported rise in this USB-absent
+  fixture. These remain preliminary observations without an external 3V3
+  load; no calibrated per-pin leakage or full isolation acceptance is inferred.
+- Prepared the same one-at-a-time reverse UART/event sweep at J1.7–12.
+  No firmware/image change, flash or software test rerun occurred.
+
+## KiCad Rev-A Reverse CTRL0 Fresh Current and Rail Readings — 2026-11-19
+
+- Operator completed the same reverse CTRL0 measurement set with helper
+  3V3=0.0 V, GP28=0.0 V and fresh probes-removed 10-second average current
+  0.33 µA. Appended to [board evidence](../hardware/validation/phase1_kicad_rev_a.md)
+  without replacing the earlier contradictory measurements.
+- With the preceding voltage repeat showing CTRL0 following VIO, these
+  support the preliminary USB-absent pull-up observation. No cause for the
+  original zero CTRL0 reading is established. The externally loaded 3V3 check
+  remains pending because of physical access.
+- Prepared the same preliminary check on CTRL1–3, one pull-up at a time.
+  No firmware/image change, flash or software test rerun occurred.
+
+## KiCad Rev-A Reverse CTRL0 Powered Voltage Repeat — 2026-11-19
+
+- Operator reported VIO/J1.14=1.86 V, CTRL0/J1.3=1.83 V and directly measured
+  resistor drop approximately 0.0 V. Preserved the supplied precision in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- CTRL0 now follows the externally applied VIO pull-up; its earlier 0 V
+  observation was not reproduced. No cause for that earlier reading or exact
+  leakage was inferred from the sequential voltage values.
+- Fresh steady-state current and repeated unpowered 3V3/GP28 readings are
+  still needed for this set. The unavailable external 3V3 load remains omitted.
+  No firmware/image change or flash occurred.
+
+## KiCad Rev-A Reverse CTRL0 Pull-Up Continuity Confirmation — 2026-11-19
+
+- Operator reported 0 Ω from the VIO-side resistor lead to J1.14, 0 Ω from
+  the CTRL0-side lead to J1.3 and 10 kΩ across the resistor, and confirmed
+  the earlier 0.40 µA reading was taken with PPK2 on and Pico USB disconnected.
+- Preserved these confirmations in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md). USB absence
+  is the intended condition. The prior voltage/current mismatch remains
+  unresolved; no driver fault or isolation acceptance is assigned.
+- Requested powered node voltages plus direct resistor voltage drop and a
+  fresh steady-state current capture. No firmware/image change or flash.
+
+## KiCad Rev-A Reverse CTRL0 Preliminary Readings Requiring Fixture Check — 2026-11-19
+
+- Operator reported actual DUT_VIO=1.832 V, CTRL0=0 V, helper 3V3=0.001 V,
+  GP28=0.002 V and PPK2 current without probes=0.40 µA, with the external
+  3V3 load omitted. Saved the unchanged readings in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- A continuously connected nominal 10 kΩ pull-up across 1.832 V to a pin at
+  0 V would draw approximately 183.2 µA. The supplied current does not support
+  that steady condition. Connection, resistor value, measurement node/timing
+  and current averaging remain unverified; no control-driver fault or isolation
+  acceptance is inferred.
+- Requested power-off fixture resistance/continuity checks and clarification
+  that current was measured with output enabled. No firmware change or flash.
+
+## KiCad Rev-A Reverse-Supply Fixture Access Limitation — 2026-11-19
+
+- Operator cannot easily attach a jumper at Pico pin 36. Current PCB net
+  inspection found no separate 3V3 header or dedicated test point; socket
+  pad 36 is through-hole, with other same-net access on small SMD pads.
+  No physical access to those alternatives was confirmed.
+- Adapted the first reverse-supply CTRL0 check to omit the external 10 kΩ
+  3V3 load while retaining USB absent, direct VIO supply and the 10 kΩ CTRL0
+  pull-up. Record the rail as measured without an external load; the intended
+  loaded debugger-rail isolation check remains open. No result or flash occurred.
+
+## KiCad Rev-A UART TX Passive Supply-Coupling Observation — 2026-11-19
+
+- Operator reported source=1.749 V, DUT_UART_TX/J1.7=1.136 V, loaded
+  DUT_VIO=0.536 V and current without meter probes=62 µA. Saved exact values
+  and circuit interpretation in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The external 10 kΩ source resistor's 0.613 V drop implies approximately
+  61.3 µA, close to the reported current. R13 provides an intentional passive
+  path from this signal into DUT_VIO; this is observed supply coupling, not
+  evidence of zero back-feed or an independently isolated translator failure.
+- Prepared reverse-supply CTRL0 check: USB absent, direct VIO source set
+  1875 mV, 10 kΩ VIO-to-CTRL0 pull-up and 10 kΩ helper-3V3-to-ground load.
+  No reverse loaded result, firmware/image change or flash occurred.
+
+## KiCad Rev-A EVENT0–1 Loaded Missing-VIO Observations — 2026-11-19
+
+- Operator supplied source/signal/VIO/current respectively: EVENT0
+  1.756 V/1.749 V/0.001 V/0.36 µA; EVENT1
+  1.756 V/1.746 V/0.001 V/0.35 µA. Saved both rows in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Both remain externally high with loaded VIO at 1 mV. Static observations
+  now cover four controls, four event inputs and UART RX in this supply
+  condition; active functionality and full hardware acceptance remain open.
+- Prepared UART TX/J1.7 measurement separately, retaining both 10 kΩ fixture
+  resistors and accounting for the fitted R13-to-DUT_VIO passive current path.
+  No UART TX result, firmware/image change or flash occurred.
+
+## KiCad Rev-A UART RX and EVENT2–3 Loaded Observations — 2026-11-19
+
+- Operator supplied source/signal/VIO/current respectively: DUT_UART_RX
+  1.756 V/1.750 V/0.002 V/0.35 µA; EVENT2
+  1.756 V/1.745 V/0.001 V/0.35 µA; EVENT3
+  1.755 V/1.752 V/0.001 V/0.32 µA. Saved the full table in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Signal voltages remain within 3–11 mV of source while loaded DUT_VIO is
+  1–2 mV, supporting static missing-VIO isolation in the tested setup. No
+  calibrated per-pin leakage, active UART/event function or full acceptance
+  is inferred. EVENT0/1 readings have not yet been supplied.
+- No firmware/image change, flash or software test rerun occurred.
+
+## KiCad Rev-A CTRL1–3 Loaded Missing-VIO Observations — 2026-11-19
+
+- Operator supplied source/channel/VIO/current respectively: CTRL1
+  1.756 V/1.750 V/0.002 V/10 nA; CTRL2 1.757 V/1.754 V/0.005 V/14 nA;
+  CTRL3 1.756 V/1.754 V/0.001 V/12 nA. Saved the full table in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Together with CTRL0's consistent voltage repeat, these support static
+  externally pulled-high control isolation with missing, loaded DUT_VIO at
+  this operating point. Reported current readings are not calibrated per-pin
+  leakage limits. No all-channel/full-board acceptance was inferred.
+- Prepared the same test for J1.8 UART RX and J1.9–12 events. J1.7 UART TX
+  requires separate interpretation because R13 intentionally connects that
+  signal path to DUT_VIO. No firmware/image change or flash occurred.
+
+## KiCad Rev-A CTRL0 Loaded-Test Voltage Repeat — 2026-11-19
+
+- Operator repeated source/CTRL0/DUT_VIO measurements as requested and reported
+  1.756 V, 1.748 V and 0.002 V respectively. Preserved the repeat separately
+  from the earlier inconsistent set in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The consistent repeat supports CTRL0 externally pulled-high isolation with
+  DUT_VIO absent and loaded to ground in this setup. The cause of the earlier
+  source reading was not supplied; its 6.37 nA current is not assigned to this
+  repeat. No full-board or all-channel acceptance was inferred.
+- Prepared the same one-channel-at-a-time test for CTRL1–3/J1 pins 4–6, with
+  output disabled before moving the injection lead. No firmware change or flash.
+
+## KiCad Rev-A CTRL0 Loaded-Test Readings Requiring Clarification — 2026-11-19
+
+- Operator reported source before series resistor=0.0 V, CTRL0 after it=1.723 V,
+  DUT_VIO=0.001 V, helper 3V3=3.277 V and PPK2 average current with probes
+  removed=6.37 nA. Preserved the values unchanged in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Source and CTRL0 voltages require clarification under one unchanged enabled
+  supply state. Measurement timing, probe location and transcription remain
+  possibilities, not diagnosed causes. No channel-isolation pass/fail or
+  fault diagnosis was assigned; requested a voltage recheck before advancing.
+- No wiring/firmware change, flash or software test rerun occurred.
+
+## KiCad Rev-A Loaded-Isolation Fixture Preparation — 2026-11-19
+
+- Operator confirmed two loose 10 kΩ resistors are available. Prepared the
+  first current-board missing-DUT_VIO loaded check on CTRL0, J1 pin 3, using
+  a separate 10 kΩ load from DUT_VIO/J1 pin 14 to ground and PPK2 Source
+  Meter set to 1800 mV through a 10 kΩ series injection resistor.
+- Helper stays USB powered with DUT absent and no direct source connection
+  to DUT_VIO. Required readings are actual source voltage, CTRL0, DUT_VIO,
+  helper 3V3 and source current. No loaded measurement or acceptance result
+  has yet been supplied; no firmware/image change or flash occurred.
+
+## KiCad Rev-A USB-Only Startup Voltages — 2026-11-19
+
+- With USB power and the PPK2 VOUT lead disconnected, operator reported helper
+  3V3=3.276 V, DUT_VIO=0.0 V, GP28=0.011 V, each CTRL0–3=0.004 V and
+  DUT_UART_RX=0.010 V. Saved exact readings in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- These unloaded startup readings show no observed DUT_VIO rise. They do not
+  demonstrate output high impedance or replace loaded channel isolation.
+- Asked whether two loose 10 kΩ resistors are available before adapting the
+  historical loaded method to current KiCad J1. No loaded result, firmware
+  change or flash occurred.
+
+## KiCad Rev-A USB-Absent Upper-Voltage Isolation Observation — 2026-11-19
+
+- With Pico fitted and USB disconnected, operator reported DUT_VIO=4.936 V,
+  helper 3V3=0.002 V, GP28=0.001 V and PPK2 average current without meter
+  probes=0.97 µA. Recorded exact values in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- These settled readings support sense-path isolation and show no substantial
+  debugger-rail rise in this setup. Current is total DUT_VIO input current,
+  not a per-device or per-pin leakage measurement. Loaded channel isolation,
+  insertion/removal transients and complete board acceptance remain unproven.
+- Prepared a USB-only, VIO-source-disconnected startup voltage observation.
+  No firmware/image change, flash or software test rerun occurred.
+
+## KiCad Rev-A Upper-Voltage Rail/Sense Observation — 2026-11-19
+
+- Operator reported PPK2 set 5000 mV, actual DUT_VIO=4.932 V, helper
+  3V3=3.277 V, GP28=2.452 V and average current without probes=56.29 µA on
+  normal fitted firmware. Recorded exact values in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- GP28 is close to half measured VIO (2.466 V); helper 3V3 remains at the
+  prior reported value. Powered observations now span actual 1.811–4.932 V;
+  an exact 5.000 V endpoint, calibrated sense accuracy and all-channel/full
+  board acceptance are not established.
+- Prepared the static USB-disconnected rail/sense observation with unchanged
+  PPK2 setting and output disabled before removing USB. No result for that
+  setup, firmware/image change or flash occurred in this observation.
+
+## KiCad Rev-A Approximately 3.3 V Rail/Sense Observation — 2026-11-19
+
+- Operator increased PPK2 setting to 3400 mV and reported actual DUT_VIO=3.304 V,
+  helper 3V3=3.277 V, GP28=1.640 V and average current without probes=36.75 µA
+  on normal fitted firmware. Recorded exact values in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- GP28 is close to half the measured VIO (1.652 V); helper 3V3 remains at the
+  prior reported value. This observation does not establish calibrated sense
+  accuracy, all-channel functionality or full board acceptance.
+- Confirmed Nordic's documented Source Meter maximum is 5.0 V before preparing
+  the upper-voltage observation. No source/image change or flash occurred.
+
+## KiCad Rev-A Approximately 2.5 V Rail/Sense Observation — 2026-11-19
+
+- Operator reported PPK2 set 2575 mV, actual DUT_VIO=2.499 V, helper 3V3=3.277 V,
+  GP28=1.233 V and average current without probes=27.84 µA on normal fitted
+  firmware. Saved measured values and limits in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The helper rail remains stable at reported precision. No calibrated sense/
+  ADC accuracy or all-channel result was inferred. Selected an approximately
+  3.3 V point with initial PPK2 setting 3385 mV for continued measurements.
+- No source/image change, flash, complete hardware acceptance, commit or push
+  occurred in this observation.
+
+## KiCad Rev-A 1875 mV Low-Voltage Observation — 2026-11-19
+
+- Operator reported setting 1875 mV, actual DUT_VIO=1.811 V, GP28=0.895 V
+  and PPK2 current without probes=20.20 µA. Actual VIO is within the supported
+  range; values were recorded without substituting an ideal half-ratio.
+- Saved scope in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  An approximately 2.5 V point with initial setting 2575 mV was selected for
+  the remaining range measurements; no result for that point yet occurred.
+- No source/image change, flash, calibration, all-channel/board acceptance,
+  commit or push occurred in this observation.
+
+## KiCad Rev-A 1865 mV Source Trial — 2026-11-19
+
+- Operator reported PPK2 set 1865 mV, actual DUT_VIO=1.793 V, GP28=0.895 V
+  and average current without probes=19.96 µA on normal fitted firmware.
+  Recorded actual values in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Divider ratio remains consistent; a small 1875 mV trial was proposed to
+  measure slightly above the 1.8 V lower endpoint. No exact-voltage calibration,
+  new product acceptance limit, source/image change, flash, commit or push
+  occurred in this trial.
+
+## KiCad Rev-A PPK2 Unloaded Output Observation — 2026-11-19
+
+- Operator reported PPK2 Source Meter set to 1800 mV, board disconnected,
+  VOUT↔GND=1.756 V. Recorded the source's unloaded 44 mV setting difference
+  separately from the additional 20 mV difference in the prior loaded result.
+- Consulted manufacturer documentation and Power Profiler source. The default
+  lowest-range resistance predicts approximately 20 mV burden at 19.34 µA,
+  consistent with the observed loaded difference; per-device calibrated
+  resistance/range/voltage accuracy were not obtained. No wiring/PPK2 defect
+  or calibration is inferred. Details and primary-source link are in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Prepared an estimated 1865 mV setpoint trial to establish approximately
+  1.8 V measured under load. No result for that trial, firmware/source/image
+  change, flash, acceptance change, commit or push occurred in this observation.
+
+## KiCad Rev-A Normal GP28 Firmware Electrical Verification — 2026-11-19
+
+- Operator verified fitted normal `gp28safe-1`: actual DUT_VIO=1.736 V,
+  helper 3V3=3.277 V, GP28=0.867 V and PPK2 average current without meter
+  probes=19.34 µA. Saved exact readings and scope in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The observed midpoint matches the half-divider expectation (0.868 V) for
+  the measured supply and reproduces diagnostic recovery. The permanent
+  normal startup sequence resolves the GP28 loading issue on the fitted
+  board/module at this recorded setup; no component rework was needed.
+- Recorded actual 1.736 V separately from the nominal PPK2 1.8 V setting;
+  it does not establish the specified 1.8 V lower endpoint or full voltage
+  range. ADC sampling/telemetry, complete electrical/isolation/UART/HIL
+  acceptance remain outside this result.
+- No further source/image change, new build/flash, source calibration,
+  commit or push occurred; the prior full software/build gate remains the
+  validated normal-firmware baseline for this physical check.
+
+## KiCad Rev-A Normal GP28 Firmware Flash — 2026-11-19
+
+- Operator reported BOOTSEL ready with Pico left fitted after instructions to
+  disconnect PPK2/DUT. Verified the sole RP2350 volume, bootloader v1.0 and
+  normal UF2 `876365369ab5af87977322cb2019e1465db87ad62e752af8f45eb6329198095c`
+  (104,448 bytes). Config confirms `gp28safe-1` without diagnostic/ADC options.
+- Copied `DUTchMate-gp28safe-1.uf2` with authorized volume access; copy succeeded,
+  boot volume disappeared and same helper serial returned. With no competing
+  owner/service listener, exclusive startup read verified `gp28safe-1`, v1 and
+  exactly five expected capabilities. No protocol/UART TX/control commands
+  sent; DTR deasserted and port closed. Saved
+  [normal USB evidence](../hardware/validation/evidence/20261119-kicad-rev-a-gp28safe-usb.json).
+- No source/image change, flash-content readback or normal-firmware voltage
+  repeat occurred in the flash check. Prior build/test validation remains as
+  recorded below. No hardware acceptance, commit or push performed.
+
+## KiCad Rev-A Fitted Recovery and Normal GP28 Startup Fix — 2026-11-19
+
+- Operator's fitted `senseiso-1` repeat: DUT_VIO=1.736 V, helper 3V3=3.277 V,
+  GP28=0.866 V, PPK2 average current without meter probes=19.36 µA. The ground
+  resistance field was blank and not inferred. Recovery reproduces the
+  off-board ratio/current; no full board acceptance is transferred.
+- Promoted the verified disabled-controls-then-ISO-release sequence into every
+  successful normal startup; GPIO configuration failure returns before release.
+  ADC sampling remains absent. Optional live pad readback remains default-off.
+- Archived pre-promotion firmware/config sources in a patch against `9914d62`:
+  SHA-256 `d7542d6481429665bb1a3e62de6759ceeed03d118880a5b3f1da650ef6060aae`.
+  Verified reverse-check against pre-cleanup files and an independent temporary
+  base reconstruction reproducing every archived file hash. Preserved UF2 and
+  evidence records. Removed two temporary Kconfig mode switches and three
+  obsolete configs after mapping source, tests and README consumers.
+- Regression tests first failed **3 / passed 2** for missing normal-mode
+  initialization/error propagation, then **5 passed in 1.30 s**. Retired two
+  obsolete experimental-mode cases; normal/readback startup, failure safety,
+  fresh register selection and output bounds remain covered. Fresh full
+  pytest: **1,877 passed in 62.07 s**; Ruff and mypy/103 passed. Removed-symbol
+  searches in current source/tests returned no matches.
+- Zephyr 4.4.2 / SDK 1.0.1 normal build, no extra conf, development identity
+  override `-DCONFIG_DUTCHMATE_FIRMWARE_VERSION="gp28safe-1"`: target passed,
+  FLASH 52,124 B, RAM 81,040 B, UF2 104,448 bytes, SHA-256
+  `876365369ab5af87977322cb2019e1465db87ad62e752af8f45eb6329198095c`.
+  Target disassembly confirms normal GPIO-28 configuration then atomic ISO clear.
+  Normal readback/stack/ADC flags are disabled.
+- Optional readback build (`sensepad-2`) and stack diagnostic build also passed;
+  build logs contain no warning/error findings. Saved
+  [normal build manifest](../hardware/validation/evidence/20261119-kicad-rev-a-normal-gp28-build.json),
+  [diagnostic archive manifest](../hardware/validation/evidence/20261119-gp28-diagnostic-source-archive.json)
+  and appended operator measurements/scope to
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  Updated current firmware/KiCad descriptions for normal safe initialization.
+- No normal image flash/physical result, architecture/module ownership change,
+  full hardware acceptance, commit or push occurred in this preparation slice.
+  Operator PCB/project edits remained untouched.
+
+## KiCad Rev-A ISO-Release Off-Board Electrical Result — 2026-11-19
+
+- Operator reported actual DUT_VIO/R10 feed=1.738 V, helper 3V3=3.277 V,
+  midpoint/GP28=0.867 V and PPK2 current without probes=19.36 µA using
+  `senseiso-1` with the controlled off-board GP28-connected wiring. Previous
+  non-release values were feed=1.725 V, midpoint=0.426 V, current=28.56 µA.
+- The measured ratio returns to approximately 0.499 and current near the
+  20 µA disconnected baseline. With the previously verified one-bit/control
+  comparison, ISO release resolves the observed off-board loading at this
+  operating point; retained pad control is the supported cause. Saved numeric
+  readings and limits in [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- After the report, a bounded USB recheck again read `senseiso-1-p00000092`,
+  same serial `FA63A4D787572B33`; no protocol/UART TX/control commands sent,
+  DTR deasserted and port closed. Saved
+  [post-voltage USB evidence](../hardware/validation/evidence/20261119-kicad-rev-a-senseiso-post-voltage-usb.json).
+- No normal-firmware change, new source/image build or flash, fitted-module
+  repeat, component rework, full voltage/isolation acceptance, commit or push
+  occurred in this measurement slice. ADC sensing remains unimplemented.
+
+## KiCad Rev-A ISO-Release Flash and Live Register — 2026-11-19
+
+- Operator reported BOOTSEL ready after instructions to keep PPK2 off and Pico
+  isolated. Verified the sole RP2350 volume, bootloader v1.0 and ISO UF2
+  `be6ce0f72e0eb0701fb5a6eb9496514988eaac25eafbd084403a94912573b2f3`
+  (109,056 bytes), then copied `DUTchMate-senseiso-1.uf2` with authorized access.
+  Copy succeeded; volume disappeared; same Pico serial returned.
+- With no competing owner/service listener, a bounded exclusive startup read
+  verified **`senseiso-1-p00000092`**: ISO=0, OD=1, IE/PUE/PDE=0. Only ISO
+  changed versus the earlier observed `0x192`. No protocol/UART TX/control
+  commands sent; DTR deasserted and port closed. Saved
+  [USB/register evidence](../hardware/validation/evidence/20261119-kicad-rev-a-senseiso-usb.json).
+- No source/image change or new voltage/current measurement occurred; the live
+  register transition alone does not establish an electrical fix, permanent
+  normal-mode change or hardware acceptance. No commit/push performed.
+
+## KiCad Rev-A Live Pad Readback and ISO-Release Preparation — 2026-11-19
+
+- With the operator reporting BOOTSEL ready and instructed to isolate Pico
+  from the helper/PPK2, verified and copied the readback UF2
+  `ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132`.
+  Copy succeeded; boot volume disappeared; serial `FA63A4D787572B33` returned
+  at `/dev/cu.usbmodem101`. No competing serial owner/service listener found.
+- Bounded exclusive startup read reported **`sensepad-1-p00000192`**:
+  ISO=1, OD=1, IE=0, PUE=0, PDE=0. No protocol/UART TX/control commands sent;
+  DTR deasserted and port closed, with no owner afterward. Saved
+  [USB/register evidence](../hardware/validation/evidence/20261119-kicad-rev-a-sensepad-usb.json).
+  Physical latched-pull state was not read; no voltage fix was established.
+- Added default-off `DUTCHMATE_SENSE_RELEASE_ISOLATION`, dependent on readback.
+  After successful disconnected-control configuration it atomically clears
+  only GP28 ISO; on configuration error it returns without that write.
+  No ADC, new protocol fields/capabilities or normal-mode change was added.
+- TDD: **1 failed / 6 passed** before implementation (pad stayed `0x192`), then
+  **7 passed in 1.60 s**. Tests verify only ISO clears and adjacent pad state
+  remains, plus no release after failed GPIO configuration. Fresh full suite:
+  **1,879 passed in 63.55 s**; Ruff passed; mypy passed/103 source files.
+- Zephyr 4.4.2 / SDK 1.0.1 ISO target passed: FLASH 54,460 B, RAM 81,040 B,
+  UF2 109,056 bytes, SHA-256
+  `be6ce0f72e0eb0701fb5a6eb9496514988eaac25eafbd084403a94912573b2f3`.
+  Disassembly verifies a `0x100` atomic-clear write at `0x4003b074` only after
+  GPIO configuration succeeds. Fresh baseline/readback target builds passed
+  and are byte-identical to their preserved hashes. Config differs only in
+  the release option and firmware identifier; ADC remains disabled.
+- Saved [ISO-release build manifest](../hardware/validation/evidence/20261119-kicad-rev-a-iso-release-build.json),
+  updated the firmware diagnostic procedure and appended scoped board evidence.
+  No release-image flash, live post-release pad value, ISO-release voltage
+  result, permanent normal-mode fix, hardware acceptance, commit or push
+  occurred in this preparation slice.
+
+## KiCad Rev-A GP28 Load Localization and Pad-Readback Preparation — 2026-11-19
+
+- Operator added only GP28 to the off-board power/ground setup and reported
+  actual DUT_VIO/R10 feed=1.725 V, midpoint/GP28=0.426 V and PPK2 current
+  without meter probes=28.56 µA. Prior GP28-open baseline was feed=1.75 V,
+  midpoint=0.868 V, current=20 µA. The comparison localizes a load associated
+  with GP28; it does not establish internal cause or hardware damage.
+- Consulted primary RP2350 datasheet §9.7 and installed SDK/Zephyr source:
+  ISO latches output/pull controls, so writing cleared pull bits while ISO
+  remains set need not remove the earlier physical pull. Corrected current
+  firmware/KiCad documentation and diagnostic help; earlier claims of
+  guaranteed analog Hi-Z from `GPIO_DISCONNECTED` alone were incomplete.
+- Added default-off `DUTCHMATE_SENSE_PAD_REPORT`, dependent on the first probe
+  and exclusive of stack reporting. A diagnostic-only platform helper reads
+  pad 28 and formats a bounded existing firmware identifier. Each USB epoch
+  reports `sensepad-1-pXXXXXXXX` before starting UART; no ADC sampling,
+  physical-pad write experiment, new protocol fields or capabilities were added.
+- Tests first exposed the missing report symbol, then failed the scaffold's
+  expected missing report behavior. Implementation passed fresh read/update,
+  pad-selection, register-preservation, exact-capacity/truncation/null-buffer
+  checks. Focused probe suite: **5 passed in 1.71 s**. Full frozen/offline pytest:
+  **1,877 passed in 54.48 s**; Ruff passed; mypy passed/103 files.
+- Zephyr 4.4.2 / SDK 1.0.1, board `rpi_pico2/rp2350a/m33`, CMSIS 6/Pico HAL
+  only; repository-local build/user/ccache directories. Readback target build
+  passed: FLASH 54,452 B, RAM 81,040 B, UF2 109,056 bytes, SHA-256
+  `ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132`.
+  Target disassembly reads pad 28 at `0x40038074`. Baseline regression build
+  passed and is byte-identical to preserved SHA-256 `4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4`.
+  Existing stack diagnostic target build also passed: FLASH 55,520 B,
+  RAM 82,136 B, UF2 111,104 bytes. Initial probe/baseline images were preserved.
+- Saved [build/source manifest](../hardware/validation/evidence/20261119-kicad-rev-a-pad-readback-build.json)
+  and appended measurements, isolation interpretation and scope to
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  No readback image flash, live register value, ISO-release measurement,
+  permanent fix, hardware acceptance, commit or push occurred in this slice.
+
+## KiCad Rev-A Off-Board GP28-Disconnected Baseline — 2026-11-19
+
+- Following the off-board Pico power/common-ground/GNDA wiring with GP28 and
+  other signal pins disconnected, operator reported helper 3V3=3.3 V, R10
+  terminals=1.75 V/0.868 V and PPK2 current without meter probes=20 µA.
+  Recorded the exact values and setup in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Midpoint is approximately half the measured feed. The actual J1 DUT_VIO
+  voltage was not supplied; no nominal source setting was substituted for
+  the 1.75 V observation. No off-board GP28-connected comparison yet occurred.
+- No source/image change, flash, rework, acceptance change, commit or push
+  occurred for this baseline measurement.
+
+## KiCad Rev-A Fitted R11 Ground-End Check — 2026-11-19
+
+- Operator reported DUT_VIO=1.8 V, Pico 3V3=3.3 V and confirmed R11 ground
+  end=0.0 V after the USB identity recheck. Both R10 terminals were inaccessible
+  under fitted Pico, so no fitted switch-output voltage was obtained.
+- Recorded the readings/access limitation in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  Prepared an off-board power/ground setup to expose R10, initially leaving
+  GP28 disconnected for a controlled baseline; no rewiring/result was claimed.
+- No firmware/source/image change, new flash, physical rework, acceptance
+  change, commit or push occurred.
+
+## KiCad Rev-A USB Identity Recheck on This Mac — 2026-11-19
+
+- Operator identified another Mac as the fitted Fluke run's USB source and
+  reconnected the fitted helper to this host with PPK2 output instructed off.
+  Same USB serial `FA63A4D787572B33` appeared at `/dev/cu.usbmodem101`.
+- With no serial owner/TCP 2040 listener found, a bounded exclusive startup
+  read verified `senseprobe-1`, protocol v1 and expected capabilities. No
+  protocol/UART TX/control commands were sent; DTR was deasserted and the port
+  closed. Saved [USB recheck evidence](../hardware/validation/evidence/20261119-kicad-rev-a-usb-recheck.json).
+- Prepared probe UF2 SHA-256 remained
+  `5e2597ecad980e4020bbccca8d2b1d581641977e41f5159244b9b3330510cf64`.
+  No flash readback, pad-register read, new electrical measurement, source/image
+  change, flash, acceptance change, commit or push occurred.
+
+## KiCad Rev-A Fitted-Pico Fluke Voltage Repeat — 2026-11-19
+
+- Operator reported fitted Pico ground=0 Ω, DUT_VIO=1.8 V, helper 3V3=3.3 V,
+  both R11 sense midpoint and Pico GP28=0.424 V, and PPK2 average current
+  without meter probes=28.47 µA. Saved exact readings and scope in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- The Fluke reproduces the low fitted voltage at both sense points, but the
+  fitted switch-output/R10-input voltage was not supplied. Upstream feed loss
+  and midpoint loading were not distinguished. No USB serial device was visible
+  on the host during the follow-up, so no fresh firmware identity or pad-register
+  read was obtained. Prepared image configuration/driver behavior were inspected.
+- No new source/image change, flash, rework, acceptance change, commit or push
+  occurred; the existing opt-in diagnostic remains an investigation aid.
+
+## KiCad Rev-A Corrected R11 and Ground Continuity — 2026-11-19
+
+- After component-location clarification, the operator reported corrected R11
+  end A→socket pin 33=46.94 kΩ, followed by end A→socket pin 34=0 Ω,
+  end B→socket pin 33=0 Ω, and jumpered socket pin 33→J1 GND=0 Ω with
+  Pico removed/all power off. Recorded the corrected point identities and
+  preserved prior conflicting reports in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- These readings resolve the specific divider/socket/jumper continuity
+  ambiguity in the reported no-Pico setup. Fitted-module ground and a Fluke
+  powered-voltage repeat were not measured in this confirmation.
+- No physical rework, further source/image change, flash, hardware acceptance,
+  commit or push occurred.
+
+## KiCad Rev-A Additional Divider Resistance Observation — 2026-11-19
+
+- Operator reported current "R11 end A"→socket pin 33=93.9 kΩ and confirmed
+  the pin-33→J1-ground jumper was fitted. Preserved this alongside the earlier
+  46.94 kΩ readings and unresolved pin-33→ground Open observation in
+  [board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- 93.9 kΩ approximates two nominal divider resistors in series. The numeric
+  pattern raises the hypothesis that the probed component was R10 rather than
+  R11; actual component/pad/socket/jumper locations were not verified. No board
+  fault, resistor replacement or firmware correction was established.
+- No source/image change, flash, rework, acceptance change, commit or push
+  occurred for this observation.
+
+## KiCad Rev-A Fluke Resistance Follow-Up — 2026-11-19
+
+- Operator changed to Fluke 115, resistance/Auto, and reported R11 A↔B=46.94 kΩ,
+  end A↔socket pin 34=46.94 kΩ, end B↔socket pin 34=1 Ω, and socket pin
+  33↔J1 GND=Open. Saved exact measurements and setup limits in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Numeric results support an unshorted nominal 47 kΩ resistor and current
+  end B as the sense-to-pin-34 connection. Earlier end labels/qualitative
+  readings were preserved rather than treated as fixed physical-pad identities.
+  Latest jumper presence was not supplied; open pin-33/common ground with
+  Pico removed is not itself a fitted-module ground defect.
+- No source/image change, new flash, powered measurement, physical rework,
+  acceptance change, commit or push was performed. Prior software/build
+  validation remains the dated Nov-18 preparation evidence.
+
+## KiCad Rev-A Qualitative Continuity Follow-Up — 2026-11-18
+
+- Operator described both R11 ends→socket pin 34 as shorted and socket pin
+  34→J1 GND as not shorted. Numeric readings, shorted-probe resistance and
+  meter mode/range were not supplied. Recorded the descriptions without
+  inferring a zero-ohm connection, a resistor short or a board defect in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- Source, firmware and images unchanged; no new flash, physical rework or
+  electrical acceptance was performed.
+
+## KiCad Rev-A External Wiring and Continuity Observation — 2026-11-18
+
+- Operator clarified removed Pico pin 36 supplied helper A1 socket pin 36,
+  with J1 common ground and an explicit A1 socket pin 33→J1 GND jumper;
+  PPK2 supplied 1.8 V DUT_VIO. This identifies the no-Pico GNDA return missing
+  from the preceding setup description.
+- Operator reported midpoint→socket physical pin 34 resistance **46.9 kΩ**.
+  Source inspection confirms that pin and the divider midpoint share the
+  sense net and should have direct continuity. Recorded the discrepancy and
+  its limits in [board evidence](../hardware/validation/phase1_kicad_rev_a.md);
+  physical test-point identity and de-energized continuity were not verified
+  by the host. No defect or firmware/root-cause conclusion was established.
+- No further flashing, source/image change, physical rework, acceptance change,
+  commit or push was performed.
+
+## KiCad Rev-A Pico-Removed Divider Measurements — 2026-11-18
+
+- Operator reported R10 terminal voltages 1.8 V/0.9 V and R11 terminal voltages
+  0.9 V/0.0 V, then clarified Pico 2 was removed and external 3.3 V powered the
+  helper. Recorded the corrected setup in the
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+- These are Pico-removed divider observations, not `senseprobe-1` fitted-module
+  measurements. External source/injection/ground wiring and the altered GNDA
+  return were not supplied. No in-place divider pass, firmware diagnosis or
+  board acceptance is inferred from this changed setup.
+- No additional flash, firmware/source/image change, continuity measurement,
+  new powered test, commit or push was performed by the host for this correction.
+
+## KiCad Rev-A GP28 A/B Measurement Result — 2026-11-18
+
+- Operator-reported `senseprobe-1` results exactly matched the verified
+  `sensebase-1` measurements at the supplied precision: DUT_VIO=1.8 V,
+  helper 3V3=3.3 V, GP28=0.42 V and PPK2 average current=29.46 µA with and
+  without meter probes. The tested GP28 digital/pull configuration change
+  demonstrated no reported effect and did not establish a cause or fix.
+- Appended the comparison, scope and source-verified R10/R11 pad mapping to
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  No lab-meter repeat, switch-output/resistor-terminal measurements, actual
+  resistor-value checks or runtime-register readings were supplied.
+- Firmware source and images were unchanged; no further firmware modification,
+  hardware acceptance, commit or push was performed.
+
+## KiCad Rev-A GP28 Diagnostic Flash — 2026-11-18
+
+- After the operator reported BOOTSEL ready, verified the sole RP2350 UF2
+  volume and diagnostic image hash
+  `5e2597ecad980e4020bbccca8d2b1d581641977e41f5159244b9b3330510cf64`
+  (104,448 bytes). Build config enables the GP28 probe, with ADC disabled.
+- Copied `DUTchMate-senseprobe-1.uf2` using authorized volume access; copy
+  succeeded, boot volume disappeared and helper serial `FA63A4D787572B33`
+  re-enumerated. No serial owner/TCP 2040 listener was found before an exclusive
+  startup-frame read verified `senseprobe-1`, protocol v1 and expected capabilities.
+  No protocol/UART TX/control commands were sent; DTR was deasserted and the
+  port closed. Saved [USB evidence](../hardware/validation/evidence/20261118-kicad-rev-a-senseprobe-usb.json)
+  and appended the flash scope to the manufactured-board record.
+- Source/build unchanged from preparation; no new diagnostic electrical readings,
+  flash readback, A/B conclusion, acceptance change, commit or push was performed.
+
+## KiCad Rev-A GP28 Matched Baseline Measurements — 2026-11-18
+
+- After verified `sensebase-1` flashing, the operator reported DUT_VIO=1.8 V,
+  helper 3V3=3.3 V, GP28=0.42 V and PPK2 average current=29.46 µA both while
+  probing GP28 and with meter probes removed. The known image reproduces the
+  earlier low sense voltage; no current change was reported at that precision.
+- Appended setup, numeric results and measurement limits to the
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  Rechecked the prepared probe UF2 hash against the recorded
+  `5e2597ecad980e4020bbccca8d2b1d581641977e41f5159244b9b3330510cf64`.
+  Firmware source/images were unchanged; no diagnostic flash, A/B result or
+  cause/acceptance conclusion was established by these measurements.
+
+## KiCad Rev-A GP28 Matched Baseline Flash — 2026-11-18
+
+- Operator reported the BOOTSEL drive present after instructions to disconnect
+  PPK2 and DUT. Verified the sole `/Volumes/RP2350` UF2 volume, bootloader v1.0,
+  model Raspberry Pi RP2350, board ID RP2350, and the prepared baseline UF2:
+  104,448 bytes, SHA-256
+  `4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4`.
+- Copied to `DUTchMate-sensebase-1.uf2` with authorized volume access; copy
+  returned successfully, boot volume disappeared, and serial
+  `FA63A4D787572B33` returned at `/dev/cu.usbmodem11401`.
+- No serial owner or TCP 2040 listener was found before a bounded exclusive
+  startup-frame read. Verified `sensebase-1`, protocol v1, expected device and
+  five capabilities; sent no protocol/UART TX/control commands, deasserted DTR
+  and closed the port. Saved
+  [machine-readable evidence](../hardware/validation/evidence/20261118-kicad-rev-a-sensebase-usb.json)
+  and appended the measured scope to the manufactured-board record.
+- Source implementation and built images were unchanged from the validated
+  preparation below. No flash readback, new electrical measurements, probe
+  image flash, A/B result, hardware acceptance, commit or push was performed.
+
+## Manufactured KiCad Rev-A Bring-Up and GP28 Diagnostic Preparation — 2026-11-18
+
+- Source base: `9914d6298479b116c4b797e6cf4cfdb1e4788ec0`. The pre-existing
+  operator modification to `dutchmate_debug_helper.kicad_pcb` was preserved.
+  No PCB, schematic, protocol, Device Core or delivery-app change was made.
+- Recorded the operator's assembly/inspection, qualitative resistance,
+  USB-only and 1.8 V DUT_VIO observations in
+  [manufactured-board evidence](../hardware/validation/phase1_kicad_rev_a.md).
+  The operator corrected USB-powered 3V3 to 3.3 V; GP28 remained reported at
+  0.42 V and PPK2 current at 29 µA with both supplies present. No exact initial
+  flashed-image hash, fabrication-source identity, lab-meter repeat or
+  oscilloscope measurement was established.
+- USB enumeration and a bounded startup-greeting read identified reused Pico
+  serial `FA63A4D787572B33`, firmware `development`, and the expected five
+  capabilities. Device access required an authorized sandbox retry. No protocol,
+  UART TX or control commands were sent; DTR was deasserted and the port closed.
+- Investigated application initialization, the installed RP2350 pad reset
+  definitions and Zephyr 4.4.2 GPIO driver. GP28 is untouched by the application;
+  reset pull-down is enabled and input-enable is clear. Running registers were
+  not read. Neither input-buffer leakage nor a meter fault was diagnosed.
+- Added default-off `DUTCHMATE_SENSE_PIN_PROBE`, using `GPIO_DISCONNECTED` on
+  GP28 during safe initialization. The pinned driver clears pulls and input
+  enable, disables output, and sets digital pad isolation. No ADC path was added.
+  `sense_baseline.conf` reports `sensebase-1`; `sense_probe.conf` reports
+  `senseprobe-1`. Normal builds retain their prior GP28 behavior. Build and
+  external-meter comparison procedures are documented in the firmware README.
+- Compiled the real platform initializer against a host GPIO boundary harness.
+  Before implementation, the normal-mode case passed while diagnostic startup
+  and configuration-error propagation failed for the expected missing behavior.
+  After implementation all three passed, including preserved safe CTRL/UART/
+  EVENT initialization and no sense-pin drive.
+- Zephyr **4.4.2**, SDK **1.0.1**, board `rpi_pico2/rp2350a/m33`, CMSIS 6 and
+  Pico HAL only. Separate pristine builds use each `sense_*.conf` with
+  `EXTRA_CONF_FILE` and repository-local `USER_CACHE_DIR`. The initial baseline
+  compile hit sandbox denial writing the default ccache directory; rebuilding
+  with repository-local `CCACHE_DIR`/`CCACHE_TEMPDIR` succeeded. The diagnostic
+  build also succeeded. Both images are 104,448 bytes:
+
+  | Image | UF2 SHA-256 | FLASH / RAM |
+  |---|---|---|
+  | `build/dutchmate-rp2350-sense-baseline/zephyr/zephyr.uf2` | `4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4` | 52,084 / 81,040 B |
+  | `build/dutchmate-rp2350-sense-probe/zephyr/zephyr.uf2` | `5e2597ecad980e4020bbccca8d2b1d581641977e41f5159244b9b3330510cf64` | 52,120 / 81,040 B |
+
+- Generated devicetrees are identical. Resolved Kconfig differs only in firmware
+  label and the GP28 probe option; ADC is disabled in both. Target disassembly
+  confirms GPIO 28 is configured with flags 0 (`GPIO_DISCONNECTED`) in the probe
+  initializer and an error returns before continuing initialization.
+- Validation with `UV_CACHE_DIR=/tmp/dutchmate-stage8-uv-cache` and
+  `uv run --frozen --offline`: focused probe **3 passed in 0.74 s**; firmware
+  host group **100 passed in 11.09 s**; full pytest **1,875 passed in 51.35 s**;
+  Ruff passed; mypy passed for **103 source files**; `git diff --check` passed.
+  No diagnostic image was flashed, no A/B electrical result was obtained, and
+  no Phase 1B/Stage 8/Phase 1 acceptance or historical EAGLE evidence changed.
+  This preparation slice was not committed or pushed.
 
 ## Rev-A KiCad Source and Branding Review — 2026-11-09
 

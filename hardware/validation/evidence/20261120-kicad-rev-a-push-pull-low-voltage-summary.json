@@ -1,0 +1,124 @@
+{
+  "operator_date": "2026-11-20",
+  "board": "operator-identified manufactured KiCad Rev-A",
+  "firmware_hello": "gp28safe-1",
+  "device_serial": "FA63A4D787572B33",
+  "method": "Single channel per fresh direct USB epoch; push_pull active high/idle low; external nominal 10 kΩ control-to-GND load; PPK2 Source Meter setting 1875 mV; Fluke 115 DC volts; fresh 10-second probes-removed current; USB connected, DUT absent.",
+  "measurements": [
+    {
+      "channel": "CTRL0",
+      "j1_pin": 3,
+      "high": {
+        "dut_vio_v": 1.866,
+        "control_v": 1.827,
+        "average_current_uA": 690
+      },
+      "low": {
+        "dut_vio_v": 1.833,
+        "control_v": 0.0,
+        "average_current_uA": 416
+      }
+    },
+    {
+      "channel": "CTRL1",
+      "j1_pin": 4,
+      "high": {
+        "dut_vio_v": 1.867,
+        "control_v": 1.827,
+        "average_current_uA": 690
+      },
+      "low": {
+        "dut_vio_v": 1.833,
+        "control_v": 0.0,
+        "average_current_uA": 415
+      }
+    },
+    {
+      "channel": "CTRL2",
+      "j1_pin": 5,
+      "high": {
+        "dut_vio_v": 1.867,
+        "control_v": 1.827,
+        "average_current_uA": 690
+      },
+      "low": {
+        "dut_vio_v": 1.833,
+        "control_v": 0.0,
+        "average_current_uA": 415
+      }
+    },
+    {
+      "channel": "CTRL3",
+      "j1_pin": 6,
+      "high": {
+        "dut_vio_v": 1.869,
+        "control_v": 1.827,
+        "average_current_uA": 690
+      },
+      "low": {
+        "dut_vio_v": 1.833,
+        "control_v": 0.0,
+        "average_current_uA": 415
+      }
+    }
+  ],
+  "additional_measurements": [
+    {
+      "channel": "CTRL0",
+      "state": "high",
+      "pico_3v3_v": 3.277
+    }
+  ],
+  "scope": "Static HIGH/LOW voltages under the ground load at recorded low-voltage points only; not a pull-up-loaded LOW test, calibrated per-pin leakage, transient, all-voltage/temperature, v2 service/HIL or full board acceptance.",
+  "logs": [
+    {
+      "file": "20261120-kicad-rev-a-push-pull-bench.jsonl",
+      "sha256": "55832e4538e97e8db839eb2659cb3b09f946b171667f27e693836ff57657abfc",
+      "records": 321,
+      "commands_with_successful_responses": 3,
+      "source_sha256": "e5aa889523fefd71316e85e0e4079234bedd5d750cac914e26f739d1666c1f8b",
+      "source_hash_verified": true,
+      "port_closed": true,
+      "dtr_deasserted": true,
+      "closed_utc": "2026-11-20T16:11:22.959338+00:00"
+    },
+    {
+      "file": "20261120-kicad-rev-a-push-pull-bench-2.jsonl",
+      "sha256": "cd9a84e075e69b91e2f2bdbc3d111ec09855c0c6c5f4da119694d51b8f8a9c04",
+      "records": 297,
+      "commands_with_successful_responses": 3,
+      "source_sha256": "e5aa889523fefd71316e85e0e4079234bedd5d750cac914e26f739d1666c1f8b",
+      "source_hash_verified": true,
+      "port_closed": true,
+      "dtr_deasserted": true,
+      "closed_utc": "2026-11-20T16:16:23.607675+00:00"
+    },
+    {
+      "file": "20261120-kicad-rev-a-push-pull-bench-3.jsonl",
+      "sha256": "58681fd6aab28f07db190a67faccc6528365265c52f9b1c9ecc4dce6561d03c0",
+      "records": 205,
+      "commands_with_successful_responses": 3,
+      "source_sha256": "e5aa889523fefd71316e85e0e4079234bedd5d750cac914e26f739d1666c1f8b",
+      "source_hash_verified": true,
+      "port_closed": true,
+      "dtr_deasserted": true,
+      "closed_utc": "2026-11-20T16:19:49.375728+00:00"
+    },
+    {
+      "file": "20261120-kicad-rev-a-push-pull-bench-4.jsonl",
+      "sha256": "264a70a7030eee2b41f30015f1b9cc4893f34d1420e6e6c0020b447a36d5b7ca",
+      "records": 354,
+      "commands_with_successful_responses": 3,
+      "source_sha256": "e5aa889523fefd71316e85e0e4079234bedd5d750cac914e26f739d1666c1f8b",
+      "source_hash_verified": true,
+      "port_closed": true,
+      "dtr_deasserted": true,
+      "closed_utc": "2026-11-20T16:25:45.962462+00:00"
+    }
+  ],
+  "cleanup_at_end_of_low_voltage_sweep": {
+    "all_four_epochs_closed": true,
+    "serial_owner_after_close": false,
+    "tcp_2040_listener_after_close": false
+  }
+}

@@ -230,11 +230,14 @@ static enum dmh_command_executor_result submit_uart(
 void dmh_command_executor_init(
 	struct dmh_command_executor *executor,
 	struct dmh_control *control,
-	const struct dmh_command_uart_port *uart
+	const struct dmh_command_uart_port *uart,
+	const struct dmh_command_vio_port *vio
 )
 {
 	executor->control = control;
 	executor->uart = *uart;
+	executor->vio = vio != NULL ? *vio : (struct dmh_command_vio_port){0};
+	executor->sense_pending = false;
 	executor->state = DMH_COMMAND_EXECUTOR_STATE_IDLE;
 	executor->response_length = 0U;
 }
@@ -259,6 +262,19 @@ enum dmh_command_executor_result dmh_command_executor_submit(
 	}
 	if (command->kind == DMH_COMMAND_UART_SEND) {
 		return submit_uart(executor, command, now_us);
+	}
+	if (command->kind == DMH_COMMAND_CONFIGURE_POWER_SENSE) {
+		if (executor->vio.prepare == NULL ||
+		    executor->vio.prepare(executor->vio.context, command->value.sense_enabled) != 0) {
+			return stage_literal_error(executor, DMH_COMMAND_ERROR_HARDWARE_FAULT,
+					   "Voltage sensing is unavailable");
+		}
+		enum dmh_command_executor_result result = stage_timestamp(executor, now_us);
+		if (result == DMH_COMMAND_EXECUTOR_RESPONSE_READY) {
+			executor->sense_pending = true;
+			executor->sense_enabled = command->value.sense_enabled;
+		}
+		return result;
 	}
 	return stage_literal_error(
 		executor,
@@ -373,8 +389,26 @@ enum dmh_control_result dmh_command_executor_cancel_epoch(
 	struct dmh_command_executor *executor
 )
 {
+	executor->sense_pending = false;
 	executor->uart.cancel(executor->uart.context);
 	executor->state = DMH_COMMAND_EXECUTOR_STATE_IDLE;
 	executor->response_length = 0U;
 	return dmh_control_end_epoch(executor->control);
+}
+
+bool dmh_command_executor_take_sense_configuration(struct dmh_command_executor *executor,
+						 bool *enabled)
+{
+	if (executor->state != DMH_COMMAND_EXECUTOR_STATE_IDLE || !executor->sense_pending) return false;
+	*enabled = executor->sense_enabled;
+	executor->sense_pending = false;
+	return true;
+}
+
+bool dmh_command_executor_response_sense_configuration(const struct dmh_command_executor *executor,
+						     bool *enabled)
+{
+	if (executor->state != DMH_COMMAND_EXECUTOR_STATE_RESPONSE || !executor->sense_pending) return false;
+	*enabled = executor->sense_enabled;
+	return true;
 }

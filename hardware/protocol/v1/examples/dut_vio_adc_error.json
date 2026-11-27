@@ -1,0 +1,9 @@
+{
+  "type": "dut_vio",
+  "timestamp_us": 1234567,
+  "status": "adc_error",
+  "adc_raw": null,
+  "voltage_mv": null,
+  "adc_reference_mv": 3300,
+  "reference_source": "nominal"
+}

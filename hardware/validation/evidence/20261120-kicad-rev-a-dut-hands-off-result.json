@@ -1,0 +1,51 @@
+{
+  "operator_date": "2026-11-20",
+  "method": "Operator confirmed probes removed, wiring/power unchanged and setup untouched. Fresh epoch configures CTRL0 open-drain idle, observes baseline, commands one 250 ms pulse, then collects a 30 s quiet interval without more commands or DUT UART sends.",
+  "operator_reported_prior_contact": "Probe or wiring contact may have disturbed RUN",
+  "observation": {
+    "utc": "2026-11-20T17:46:51.847455+00:00",
+    "kind": "quiet_result",
+    "observed_quiet_seconds": 30.05144833400118,
+    "baseline_uart_bytes": 0,
+    "reset_phase_uart_bytes": 62,
+    "quiet_uart_bytes": 0,
+    "total_boot_count": 1,
+    "only_expected_boot_bytes": true,
+    "quiet_uart_hex": "",
+    "scope": "No recurrence during this interval does not establish cause or long-term stability"
+  },
+  "uart_bytes": 62,
+  "commands": [
+    {
+      "cmd": "configure_gpio_mode",
+      "channel": "CTRL0",
+      "mode": "open_drain",
+      "active_level": "low"
+    },
+    {
+      "cmd": "pulse_control",
+      "channel": "CTRL0",
+      "pulse_ms": 250
+    }
+  ],
+  "final_status": {
+    "type": "buffer_status",
+    "timestamp_us": 6358446600,
+    "uart_rx_size_bytes": 32768,
+    "uart_rx_used_bytes": 0,
+    "uart_rx_high_water_bytes": 256,
+    "dropped_bytes_total": 0,
+    "overflow_events": 0
+  },
+  "log": {
+    "file": "20261120-kicad-rev-a-dut-hands-off-bench.jsonl",
+    "sha256": "e1be5977024afdd2e7dc27bd0aca59dbaa5788100023537322c3826a31e230a6",
+    "records": 45,
+    "source_sha256": "9a82836656beb9cc93b1d4db24c5565739217786d929f2fd771cfbfbcdaa5c73",
+    "source_hash_verified": true,
+    "port_closed": true,
+    "dtr_deasserted": true,
+    "closed_utc": "2026-11-20T17:46:52.153576+00:00"
+  },
+  "interpretation": "Extra boot banners not reproduced in this probes-off interval. Probe contact remains plausible, not causally proven; no long-term stability, waveform or full board acceptance is inferred."
+}

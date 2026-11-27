@@ -1,0 +1,40 @@
+name: Work item
+description: Propose a feature, maintenance, release or hardware-validation task.
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Work category
+      options:
+        - Feature
+        - Maintenance
+        - Release
+        - Hardware validation
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Problem and intended outcome
+      description: Describe one outcome and what is outside this task's scope.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions for closing this issue.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation approach
+      description: Describe tests or measurements needed; identify hardware evidence when applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Specifications, dependencies and blockers
+      description: Link owning contracts, related issues and evidence; describe prerequisites.

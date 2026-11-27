@@ -491,10 +491,7 @@ async def test_orphan_response_retains_same_batch_prefix_evidence() -> None:
     adapter = make_adapter(reader)
     await adapter.start(0.1)
 
-    reader.feed(
-        b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n'
-        b'{"ok":true}\n'
-    )
+    reader.feed(b'{"type":"uart","channel":0,"timestamp_us":700,"data_b64":"WA=="}\n{"ok":true}\n')
     await asyncio.wait_for(reader.closed_event.wait(), timeout=0.1)
 
     assert await adapter.receive_event(0.1) == UartReceiveEvent(
@@ -1103,9 +1100,7 @@ async def test_invalid_frame_fails_response_but_keeps_prior_event() -> None:
     assert await writer.written.get() == b'{"cmd":"one"}\n'
     assert not request.done()
     reader.feed(
-        b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n'
-        b'{"ok":true}\n'
-        b'{"type":}\n'
+        b'{"type":"uart","channel":0,"timestamp_us":10,"data_b64":"WA=="}\n{"ok":true}\n{"type":}\n'
     )
 
     assert await adapter.receive_event(0.1) == UartReceiveEvent(
@@ -1408,3 +1403,105 @@ async def test_resource_close_completion_is_shared_across_reader_cancellation_an
     assert second.exception() is None
     assert reader.close_completed.is_set()
     assert reader.close_count == 1
+
+
+VIO_FRAME = (
+    b'{"type":"dut_vio","timestamp_us":100,"status":"ok",'
+    b'"adc_raw":2048,"voltage_mv":3300,"adc_reference_mv":3300,'
+    b'"reference_source":"nominal"}\n'
+)
+POWER_HELLO = HELLO_FRAME.replace(b'"uart_receive"', b'"uart_receive","power_sense"')
+
+
+def test_power_sense_ack_and_sample_in_same_read() -> None:
+    async def run() -> None:
+        from dutchmate_core.backends import DutVioEvent
+
+        reader, writer = FakeAsyncSerialReader(), FakeAsyncFrameWriter()
+        adapter = AsyncEnhancedSerialAdapter(
+            reader=reader, writer=writer, port="test", segment_id=3, monotonic_clock=lambda: 42.5
+        )
+        reader.feed(POWER_HELLO)
+        await adapter.start(1)
+        task = asyncio.create_task(adapter.configure_power_sense(enabled=True, timeout_s=1))
+        assert await writer.written.get() == b'{"cmd":"configure_power_sense","enabled":true}\n'
+        reader.feed(
+            b'{"ok":true,"timestamp_us":99}\n' + VIO_FRAME + UART_FRAME.replace(b":1,", b":101,")
+        )
+        assert await task is True
+        event = await adapter.receive_event(1)
+        assert isinstance(event, DutVioEvent)
+        assert (event.timestamp_us, event.received_at_monotonic) == (0, 42.5)
+        assert isinstance(await adapter.receive_event(1), UartReceiveEvent)
+        assert reader.maximum_concurrent_reads == 1
+        await adapter.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("hello", [HELLO_FRAME, POWER_HELLO])
+def test_unsolicited_voltage_is_terminal(hello: bytes) -> None:
+    async def run() -> None:
+        reader, writer = FakeAsyncSerialReader(), FakeAsyncFrameWriter()
+        adapter = AsyncEnhancedSerialAdapter(
+            reader=reader, writer=writer, port="test", segment_id=0
+        )
+        reader.feed(hello)
+        await adapter.start(1)
+        reader.feed(VIO_FRAME)
+        with pytest.raises(BackendInputError, match="not enabled"):
+            await adapter.receive_event(1)
+        await adapter.close()
+
+    asyncio.run(run())
+
+
+def test_power_sense_rejection_keeps_uart_available() -> None:
+    async def run() -> None:
+        reader, writer = FakeAsyncSerialReader(), FakeAsyncFrameWriter()
+        adapter = AsyncEnhancedSerialAdapter(
+            reader=reader, writer=writer, port="test", segment_id=0
+        )
+        reader.feed(POWER_HELLO)
+        await adapter.start(1)
+        task = asyncio.create_task(adapter.configure_power_sense(enabled=True, timeout_s=1))
+        await writer.written.get()
+        reader.feed(
+            b'{"ok":false,"error":"hardware_fault","detail":"ADC unavailable"}\n' + UART_FRAME
+        )
+        assert await task is False
+        assert isinstance(await adapter.receive_event(1), UartReceiveEvent)
+        await adapter.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("action", ["close", "timeout", "ambiguous"])
+def test_pending_power_sense_uses_existing_terminal_cleanup(action):
+    async def run():
+        reader, writer = FakeAsyncSerialReader(), FakeAsyncFrameWriter()
+        adapter = AsyncEnhancedSerialAdapter(
+            reader=reader, writer=writer, port="test", segment_id=0
+        )
+        reader.feed(POWER_HELLO)
+        await adapter.start(1)
+        task = asyncio.create_task(
+            adapter.configure_power_sense(
+                enabled=True, timeout_s=0.01 if action == "timeout" else 1
+            )
+        )
+        await writer.written.get()
+        if action == "close":
+            await adapter.close()
+            expected = BackendDisconnectedError
+        elif action == "ambiguous":
+            reader.feed(b'{"ok":true}\n')
+            expected = BackendInputError
+        else:
+            expected = TransportTimeoutError
+        with pytest.raises(expected):
+            await task
+        assert reader.close_count == 1
+        await adapter.close()
+
+    asyncio.run(run())

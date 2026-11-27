@@ -106,6 +106,7 @@ def test_format_status_renders_channel_first_state() -> None:
             "Timestamp provenance: segment 0: device/rp2350_timer, "
             "debug_helper_uart_receive/uart_event",
             "UART loss: none_reported (scope=debug_helper_rx_buffer, dropped_bytes=0)",
+            "DUT VIO: unavailable (status_missing)",
             "Retention: healthy (3/25 sessions)",
             "Control channels:",
             "  CTRL0: reset -> RESET_N (mode=open_drain, active=low, idle=high, source=config)",
@@ -252,3 +253,35 @@ def test_status_command_uses_config_service_url(monkeypatch: pytest.MonkeyPatch)
 
     assert result.exit_code == 0
     assert result.output == "Service: running\n"
+
+
+@pytest.mark.parametrize("reference", ["nominal", "measured"])
+def test_format_status_voltage_uses_reference_and_receipt_age(reference):
+    payload = {
+        "dut_vio": {
+            "state": "valid",
+            "reason": None,
+            "voltage_mv": 3300,
+            "age_ms": 120,
+            "sample": {"reference_source": reference},
+            "evidence": {},
+        }
+    }
+    assert f"DUT VIO: ≈3.30 V ({reference} reference; received 120 ms ago)" in format_status(
+        payload
+    )
+
+
+def test_format_stale_voltage_does_not_show_old_number():
+    text = format_status(
+        {
+            "dut_vio": {
+                "state": "stale",
+                "reason": "sample_timeout",
+                "voltage_mv": None,
+                "sample": {"voltage_mv": 3300},
+            }
+        }
+    )
+    assert "DUT VIO: stale (sample_timeout)" in text
+    assert "3.30" not in text

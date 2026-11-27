@@ -1,0 +1,295 @@
+{
+  "recorded_at_utc": "2026-11-25T22:09:47.557394+00:00",
+  "session_id": "20261125T214101Z-3f27f1be",
+  "state": "completed",
+  "end_reason": "service_shutdown",
+  "archive": "hardware/validation/evidence/20261125-kicad-rev-a-vio-powered-session.tar.gz",
+  "archive_bytes": 2553915,
+  "archive_sha256": "9f5eba92b6359aff66b3e3e1a7d74e26a3ae082e8aa1320ea8ac7dee0df1d449",
+  "files": [
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/connection_events.jsonl",
+      "bytes": 655,
+      "sha256": "4c00e08ac84ad6d7a4dd1ef05a7c3cd02d39065788da52f8df43b635600252d5"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/detected_patterns.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/hardware_events.jsonl",
+      "bytes": 784746,
+      "sha256": "42d1c3528067da00dfd07ec7ea1e7afdc80266287aa209d176ed84a2463016a7"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/metadata.json",
+      "bytes": 3458,
+      "sha256": "377bfe80b07e48be99c3aeab4252e5d88891b582232e0a2a2dc0bdcdeb159925"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/operation_events.jsonl",
+      "bytes": 3761302,
+      "sha256": "32878682c5f90c8621b490a5df376aedd5e155cc082c93d40d47c3c4823e8209"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/uart_events.jsonl",
+      "bytes": 25583404,
+      "sha256": "26fb90a4fe1e39063f63a706914ee17d3caafe85b7d268d860fc98ae5b080088"
+    },
+    {
+      "archive_path": "20261125T214101Z-3f27f1be/uart_raw.log",
+      "bytes": 130565,
+      "sha256": "c3f1fa246f00bff2a66ba3800c75df44dae57f9a34bf7ffb4288047ca279c47e"
+    },
+    {
+      "archive_path": "campaign/profile-uart.toml",
+      "bytes": 260,
+      "sha256": "0154990175017f53283c0c63fed8bf3a6c11cc359e81dbd46364c9f64be3a642"
+    },
+    {
+      "archive_path": "campaign/service-process-uart.json",
+      "bytes": 952,
+      "sha256": "9565cf76235fe1e326dc7b0935c8b186b084e9f22d008340f478e584e8d1d313"
+    },
+    {
+      "archive_path": "campaign/uart-traffic-process.json",
+      "bytes": 486,
+      "sha256": "70b2949b8e805b812a4b18bf83d864b380b78320504b6f129d71924fac0fa487"
+    },
+    {
+      "archive_path": "campaign/uart-traffic-status.json",
+      "bytes": 342,
+      "sha256": "eb8e05f7ff31b58da62ce1ce8212149375e7638bb512ee18a49252f4fc2d9870"
+    },
+    {
+      "archive_path": "campaign/uart-traffic-3207.jsonl",
+      "bytes": 5362487,
+      "sha256": "a8a70247588c0b6f1c3de5499a12c7b8cc48b180716d47405aaf55458e914d60"
+    },
+    {
+      "archive_path": "campaign/uart-traffic-3207-end.json",
+      "bytes": 342,
+      "sha256": "eb8e05f7ff31b58da62ce1ce8212149375e7638bb512ee18a49252f4fc2d9870"
+    },
+    {
+      "archive_path": "campaign/service-shutdown-verification.json",
+      "bytes": 5364,
+      "sha256": "2133a5454b3c2ae8a6c73cc3ba65daa2915242cde661c6f6fd0d1eccb51ded97"
+    },
+    {
+      "archive_path": "campaign/reconnect-uart-probe.json",
+      "bytes": 3290,
+      "sha256": "be04e62893eee4ddd6bd63032e6db006b145dba9649dec73acfd504410978322"
+    }
+  ],
+  "verification": {
+    "archive_members_match_source_hashes": true,
+    "contiguous_evidence_count": 147031,
+    "sequence_start": 0,
+    "sequence_end_inclusive": 147030,
+    "uart_raw_bytes_reconciled": 130565,
+    "record_types": {
+      "connected": 1,
+      "unexpected_disconnect": 1,
+      "reconnect_started": 1,
+      "segment_opened": 1,
+      "reconnect_succeeded": 1,
+      "buffer_status": 1684,
+      "dut_vio": 1695,
+      "operation_started": 2,
+      "uart_tx_attempt": 6539,
+      "uart_tx_result": 6539,
+      "operation_terminal": 2,
+      "uart_rx": 130565
+    }
+  },
+  "shutdown": {
+    "pid": 3141,
+    "process_absent": true,
+    "listener_closed": true,
+    "serial_owner_released": true,
+    "metadata": {
+      "active_operations": {},
+      "backend_identity": {
+        "device": "dutchmate-rp2350",
+        "firmware": "viosense-2",
+        "port": "/dev/cu.usbmodem11401"
+      },
+      "backend_mode": "enhanced",
+      "continuity": {
+        "observation_gap_count": 1
+      },
+      "effective_profile": {
+        "backend": {
+          "current_serial_port": "/dev/cu.usbmodem11401",
+          "mode": "enhanced",
+          "reconnect_timeout_s": 5.0,
+          "selector": {
+            "exact_path": "/dev/cu.usbmodem11401",
+            "strategy": "exact_path"
+          },
+          "topology": "external_uart"
+        },
+        "hardware": {
+          "control": [],
+          "dut_io_voltage": 3.3,
+          "uart": {
+            "baudrate": 460800,
+            "control_lines": {
+              "dtr_on_open": "driver_default",
+              "rts_on_open": "driver_default"
+            },
+            "data_bits": 8,
+            "default_line_ending": "none",
+            "parity": "none",
+            "rtscts": false,
+            "stop_bits": 1,
+            "tx_enabled": true,
+            "xonxoff": false
+          }
+        },
+        "name": "kicad-rev-a-vio-sensing-20261125"
+      },
+      "end_reason": "service_shutdown",
+      "ended_at": "2026-11-25T22:09:20Z",
+      "error": null,
+      "evidence_quality": {
+        "backend_integrity": {
+          "dropped_bytes": 0,
+          "loss_status": "none_reported",
+          "observation_scope": "debug_helper_rx_buffer"
+        },
+        "local_recording": "complete"
+      },
+      "interrupted_operations": {},
+      "line_processing": {
+        "max_line_bytes": 65536,
+        "oversized_line_count": 0,
+        "status": "complete"
+      },
+      "next_evidence_seq": 147031,
+      "operation_summary": {
+        "active": 0,
+        "completed": 2,
+        "failed": 0,
+        "started": 2
+      },
+      "pending_attempts": {},
+      "predecessor_session_id": null,
+      "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87",
+      "profile_name": "kicad-rev-a-vio-sensing-20261125",
+      "reconnect_policy": {
+        "selector": {
+          "exact_path": "/dev/cu.usbmodem11401",
+          "strategy": "exact_path"
+        },
+        "timeout_s": 5.0,
+        "topology": "external_uart"
+      },
+      "schema_version": 2,
+      "segments": [
+        {
+          "backend": {
+            "backend_capabilities": [
+              "device_timestamp",
+              "gpio_control",
+              "overflow_telemetry",
+              "power_sense",
+              "uart_receive",
+              "uart_send"
+            ],
+            "capabilities": [
+              "device_timestamp",
+              "gpio_control",
+              "overflow_telemetry",
+              "power_sense",
+              "uart_receive",
+              "uart_send"
+            ],
+            "capability_policy": {
+              "uart_send": {
+                "source": "hardware.uart.tx_enabled",
+                "tx_policy_enabled": true
+              }
+            },
+            "device": "dutchmate-rp2350",
+            "firmware": "viosense-2",
+            "mode": "enhanced",
+            "port": "/dev/cu.usbmodem11401"
+          },
+          "end_reason": "unexpected_disconnect",
+          "ended_at": "2026-11-25T22:08:00Z",
+          "first_timestamp_us": 0,
+          "last_timestamp_us": 1618527423,
+          "segment_id": 0,
+          "started_at": "2026-11-25T21:41:01Z",
+          "timestamp": {
+            "clock": "rp2350_timer",
+            "event_granularity": "uart_event",
+            "observation_point": "debug_helper_uart_receive",
+            "origin": "segment_start",
+            "source": "device",
+            "source_origin_us": 1445947007,
+            "unit": "us"
+          }
+        },
+        {
+          "backend": {
+            "backend_capabilities": [
+              "device_timestamp",
+              "gpio_control",
+              "overflow_telemetry",
+              "power_sense",
+              "uart_receive",
+              "uart_send"
+            ],
+            "capabilities": [
+              "device_timestamp",
+              "gpio_control",
+              "overflow_telemetry",
+              "power_sense",
+              "uart_receive",
+              "uart_send"
+            ],
+            "capability_policy": {
+              "uart_send": {
+                "source": "hardware.uart.tx_enabled",
+                "tx_policy_enabled": true
+              }
+            },
+            "device": "dutchmate-rp2350",
+            "firmware": "viosense-2",
+            "mode": "enhanced",
+            "port": "/dev/cu.usbmodem11401"
+          },
+          "end_reason": "service_shutdown",
+          "ended_at": "2026-11-25T22:09:20Z",
+          "first_timestamp_us": 0,
+          "last_timestamp_us": 75170128,
+          "segment_id": 1,
+          "start_reason": "reconnect",
+          "started_at": "2026-11-25T22:08:04Z",
+          "timestamp": {
+            "clock": "rp2350_timer",
+            "event_granularity": "uart_event",
+            "observation_point": "debug_helper_uart_receive",
+            "origin": "segment_start",
+            "source": "device",
+            "source_origin_us": 3051650,
+            "unit": "us"
+          }
+        }
+      ],
+      "session_id": "20261125T214101Z-3f27f1be",
+      "started_at": "2026-11-25T21:41:01Z",
+      "state": "completed",
+      "storage": {
+        "evidence_budget_bytes": 52428800,
+        "evidence_bytes_written": 30260675,
+        "metadata_max_bytes": 262144
+      },
+      "successor_session_id": null
+    }
+  }
+}

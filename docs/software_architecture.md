@@ -2,13 +2,13 @@
 
 > Scope: host-side Python layers, dependency direction, data flow, and code ownership.
 >
-> The target behavior is defined normatively by `project_context.md` and
-> `phase1_implementation_spec.md`. This document records module ownership and
+> The target behavior is defined normatively by `specs/project_context.md` and
+> `specs/phase1_implementation_spec.md`. This document records module ownership and
 > dependency direction, not migration progress or next steps.
 
 This document describes repository organization and ownership. Requirements
-belong to their contract documents; progress and next-step status belong only
-to `docs/development_status.md`.
+belong to their contract documents; task progress belongs in GitHub Issues and
+implementation/validation records belong in PRs.
 
 ## Goals
 
@@ -151,7 +151,7 @@ device_connection
 Only the Enhanced adapter may translate `HelloMessage`, `UartMessage`, command
 responses, and telemetry messages. Shared layers consume the normalized
 `BackendEventSource` contract defined in
-`docs/phase1_implementation_spec.md`. Production Enhanced input enters through
+`docs/specs/phase1_implementation_spec.md`. Production Enhanced input enters through
 one service-owned async host and the core-owned continuous evidence recorder.
 No synchronous Enhanced command/source path or second physical reader remains.
 
@@ -267,6 +267,17 @@ session-local line state across disconnect, rollover, and shutdown boundaries;
 and faults and closes physical ownership when authoritative persistence cannot
 continue. Clean shutdown first stops physical input, drains already-normalized
 source events, and then terminalizes the active v2 session.
+
+Sources may implement `BufferedCaptureEventSource.read_event_nowait` to let
+the same recorder opportunistically collect up to 64 already-queued UART
+events. It never waits to fill a group or crosses a telemetry/segment boundary.
+The store commits a fitting group in one existing crash-recoverable transaction,
+preserving each event's record, timestamp, bytes and raw offsets. The durable
+tail and processor state advance only after commit. Pattern/line-limit units
+and groups that cannot fit retain per-unit admission and rollover; logical
+segment mapping is refreshed after each rollover. Terminal source errors are
+handled after already-read UART is committed. Action admission remains serialized
+with the whole bounded transaction. Ordinary blocking sources remain supported.
 
 It also serializes bounded-operation lifecycle and TX/Control attempt/result
 admissions with receive/connection admissions, snapshots the operation start cursor and pre-cursor partial-line
@@ -408,7 +419,7 @@ failed terminal metadata replacement or unrecoverable transaction preimage as a
 startup error. Transaction bookkeeping is internal and does not change schema-v0
 or schema-v1 evidence formats.
 Evidence and reconnect requirements are centralized in the Phase 1 spec and
-`docs/reconnect_session_semantics.md`; they are not repeated here.
+`docs/specs/reconnect_session_semantics.md`; they are not repeated here.
 
 ### `gpio_config`
 
@@ -428,7 +439,7 @@ identifiers, rejects edge whitespace and Unicode control characters, and
 enforces the open-drain/push-pull electrical matrix. Config loading, runtime
 state, Enhanced command encoding, service schemas, and CLI dispatch use the
 same contract. The canonical state, validation order, and workflow rules live
-in `docs/gpio_configuration_semantics.md`.
+in `docs/specs/gpio_configuration_semantics.md`.
 
 ### `workflows`
 
@@ -622,7 +633,7 @@ metadata, result typing, private cache hints, and stdio framing to the SDK. The
 entrypoint resolves the Device Core URL from `--service-url`, then
 `DUTCHMATE_SERVICE_URL`, then its loopback default. It configures SDK logging
 on stderr while keeping stdout reserved for protocol frames. The tool contract
-is defined in `docs/mcp_integration_plan.md`.
+is defined in `docs/specs/mcp_adapter_contract.md`.
 
 ## Boundary Rules
 
@@ -639,4 +650,33 @@ is defined in `docs/mcp_integration_plan.md`.
 - Service and CLI layers do not reinterpret core state or error semantics.
 
 Testing commands live in `docs/developer_guide.md`; Phase 1 acceptance coverage
-lives in `docs/phase1_implementation_spec.md`.
+lives in `docs/specs/phase1_implementation_spec.md`.
+
+
+## DUT interface-voltage observations
+
+`core/dut_vio.py` owns immutable sample invariants and pure status policy under
+[the report-only sensing contract](specs/dut_vio_sensing_contract.md). Enhanced protocol
+parsing validates exact integer conversion; the single async serial owner enables
+telemetry after profile controls and marks receipt before bounded event admission.
+`workflows.capture.BackendObservationInitializer` is the optional per-source setup
+boundary. It is independent of device control and is invoked on each staged
+replacement before connection success, including profiles without controls.
+A recorder-owned staged drainer consumes the candidate's bounded FIFO during
+setup and joins before the permanent ingest worker takes ownership. Commands
+remain on the lifecycle caller thread so runtime mutation ownership is retained.
+Staged UART line/integrity state survives readiness publication; connection-record
+rollover is preflighted so partial-line evidence is flushed at a journal boundary.
+
+The recorder persists `DutVioEvent` as a native-v2 hardware record and publishes
+its sample, original receipt marker and evidence reference in synchronized health
+only after commit. Physical boundaries clear it. An unrelated journal rollover
+also clears the old live reference; a short retention lease keeps published
+evidence available until withdrawal. An observation that triggers rollover is
+published with its successor reference without refreshing receipt age. Store detail
+and tail validate known voltage fields while older readers retain generic retrieval.
+
+Runtime projects receipt age with its existing injected monotonic clock. Service
+serialization, CLI formatting and the existing MCP `get_status` tool consume this
+one projection. ADC errors, staleness and measured values never change control
+policy, UART integrity, pattern matching or declared `hardware.dut_io_voltage`.

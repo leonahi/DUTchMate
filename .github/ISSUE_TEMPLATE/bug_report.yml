@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible failure or unexpected behavior.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Describe what should happen and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest setup or commands that reproduce the failure.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and environment
+      description: Include commit/release, OS, backend and relevant firmware or board revision.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and related work
+      description: Link relevant logs, sessions, measurements, specifications or existing issues.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Describe the observable result that would demonstrate the fix.
+    validations:
+      required: true

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from dutchmate_core.backends.contracts import (
     BackendCapabilityPolicy,
@@ -16,6 +16,7 @@ SessionState = Literal["active", "completed", "failed", "abandoned"]
 SessionWorkflow = Literal["capture", "boot_test", "wait_pattern"]
 SessionCompatibility = Literal["native", "legacy_read_only"]
 CommandedBootMode = Literal["normal", "bootloader"]
+MAX_V2_UART_BATCH_EVENTS: Final = 64
 
 
 @dataclass(frozen=True, slots=True)

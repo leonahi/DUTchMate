@@ -1,0 +1,60 @@
+{
+  "campaign_date": "2026-11-19",
+  "zephyr": "4.4.2",
+  "sdk": "1.0.1",
+  "board": "rpi_pico2/rp2350a/m33",
+  "artifacts": [
+    {
+      "build": "sense-baseline",
+      "image": "build/dutchmate-rp2350-sense-baseline/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4"
+    },
+    {
+      "build": "sense-state-probe",
+      "image": "build/dutchmate-rp2350-sense-state-probe/zephyr/zephyr.uf2",
+      "bytes": 109056,
+      "sha256": "ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132"
+    },
+    {
+      "build": "sense-iso-probe",
+      "image": "build/dutchmate-rp2350-sense-iso-probe/zephyr/zephyr.uf2",
+      "bytes": 109056,
+      "sha256": "be6ce0f72e0eb0701fb5a6eb9496514988eaac25eafbd084403a94912573b2f3"
+    },
+    {
+      "build": "sense-baseline-iso-check",
+      "image": "build/dutchmate-rp2350-sense-baseline-iso-check/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4"
+    },
+    {
+      "build": "sense-state-probe-iso-check",
+      "image": "build/dutchmate-rp2350-sense-state-probe-iso-check/zephyr/zephyr.uf2",
+      "bytes": 109056,
+      "sha256": "ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132"
+    }
+  ],
+  "source_sha256": {
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.c": "9a12f4418367bd4741d183c48bd87e621f2ad1975d796ed1ee0e71d427f362b1",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.h": "524748e41b730e5902131c0e5e37dbae0ed883ed9ce763cee144387befa828c9",
+    "hardware/firmware/rp2350_debug_helper/src/usb_connection.c": "6ed909002d17016644438e74478da5fc46615554c84bed493ae8acc420b18a9c",
+    "hardware/firmware/rp2350_debug_helper/Kconfig": "988ed0e4ef3e19dea55761e81c5bd82fc68e4f7d3be016e332df8de035de7003",
+    "hardware/firmware/rp2350_debug_helper/sense_iso_probe.conf": "0a0499936c2bf6573aa799a012f09979c557f69201fb49ac9bb20991f0f73d0b"
+  },
+  "readback_vs_iso_configuration_differences": {
+    "CONFIG_DUTCHMATE_SENSE_RELEASE_ISOLATION": [
+      "n",
+      "y"
+    ],
+    "CONFIG_DUTCHMATE_FIRMWARE_VERSION": [
+      "\"sensepad-1\"",
+      "\"senseiso-1\""
+    ]
+  },
+  "previous_modes_byte_identical": true,
+  "iso_release_image_flashed": false,
+  "iso_release_live_pad_observed": false,
+  "iso_release_voltage_measured": false,
+  "adc_enabled": false
+}

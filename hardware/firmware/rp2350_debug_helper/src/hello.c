@@ -8,7 +8,11 @@
 static const char hello_prefix[] =
 	"{\"type\":\"hello\",\"v\":1,\"firmware\":\"";
 static const char hello_suffix[] =
-	"\",\"device\":\"dutchmate-rp2350\",\"capabilities\":[\"uart_receive\","
+	"\",\"device\":\"dutchmate-rp2350\",\"capabilities\":["
+#ifdef CONFIG_ADC
+	"\"power_sense\","
+#endif
+	"\"uart_receive\","
 	"\"gpio_control\",\"uart_send\",\"device_timestamp\",\"overflow_telemetry\"]}\n";
 
 static int is_safe_firmware_byte(unsigned char byte)

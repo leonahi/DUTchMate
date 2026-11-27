@@ -310,6 +310,11 @@ class BasicBackendEventSource:
 
         return self._next_event(self._read_timeout_s)
 
+    def read_event_nowait(self) -> BackendEvent | None:
+        """Poll the same FIFO without delaying a partially filled RX batch."""
+
+        return self._next_event(0)
+
 
     @property
     def has_pending_events(self) -> bool:

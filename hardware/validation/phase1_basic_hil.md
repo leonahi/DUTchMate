@@ -3,7 +3,7 @@
 > Recorded procedures/evidence retain the commands and session semantics of
 > their identified builds; early examples predate v2. For current commands use
 > the [CLI guide](../../docs/developer_guide.md#continuous-evidence-through-the-cli),
-> [normative acceptance criteria](../../docs/phase1_implementation_spec.md#33-phase-1a-done--basic)
+> [normative acceptance criteria](../../docs/specs/phase1_implementation_spec.md#33-phase-1a-done--basic)
 > and [development status](../../docs/development_status.md). No old run is revalidated here.
 
 This document is the reproducible procedure and report template for accepting
@@ -1460,7 +1460,7 @@ evidence. Enhanced HIL and MCP work were not started.
 
 ### Normative acceptance audit — 2026-10-27
 
-Authority is the [Phase 1 implementation specification](../../docs/phase1_implementation_spec.md)
+Authority is the [Phase 1 implementation specification](../../docs/specs/phase1_implementation_spec.md)
 and the [Stage 8 plan](../../docs/dutchmate_phase1_v2_coding_agent_plan.md), whose
 authority statement says it must not redefine the normative contracts.
 

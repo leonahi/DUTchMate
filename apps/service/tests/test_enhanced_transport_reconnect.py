@@ -3,6 +3,7 @@
 import json
 import time
 from contextlib import suppress
+from threading import Event
 
 import pytest
 from enhanced_serial_fixture import PipeSerial
@@ -73,6 +74,19 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
     client = TestClient(create_app(runtime=runtime, profile=profile))
     recorder = runtime._evidence_recorder
     session = recorder.active_session_id
+    failure_pending = Event()
+    allow_failure_publication = Event()
+    owner = runtime._backend_reconnect
+    original_retain_close_error = owner._retain_close_error
+
+    def retain_close_error_after_status_read(error):
+        # Hold the real coordinator at the known recorder/diagnostic handoff.
+        failure_pending.set()
+        assert allow_failure_publication.wait(2), "test did not release diagnostic publication"
+        original_retain_close_error(error)
+
+    if close_mode != "closed":
+        monkeypatch.setattr(owner, "_retain_close_error", retain_close_error_after_status_read)
 
     def records(artifact):
         return [
@@ -81,14 +95,25 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
 
     try:
         resources[0].disconnect()
+        if close_mode != "closed":
+            assert failure_pending.wait(2), "cleanup failure did not reach coordinator"
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             status = client.get("/status").json()
-            if status["connection_state"] == "faulted":
+            if failure_pending.is_set() and not allow_failure_publication.is_set():
+                assert status["connection_state"] == "faulted"
+                assert status.get("connection_error") is None
+                allow_failure_publication.set()
+            if (
+                status["connection_state"] == "faulted"
+                and status.get("connection_error") is not None
+            ):
                 break
             if status["connected"] and status["timestamp_provenance"]["segment_id"] == 1:
                 break
             time.sleep(0.001)
+        else:
+            pytest.fail(f"Reconnect did not publish a complete terminal outcome: {status}")
         connection = records("connection_events.jsonl")
         assert [r["type"] for r in connection[:3]] == [
             "connected",
@@ -141,9 +166,320 @@ def test_terminal_read_cleanup_controls_replacement_opening_and_profile_ack_orde
                     runtime.close()
                 assert cleanup.value is resources[0].read_error
     finally:
+        allow_failure_publication.set()
         client.close()
         with suppress(Exception):
             runtime.close()
         for resource in resources:
             resource.dispose()
     assert all(resource.close_calls == 1 for resource in resources)
+
+
+@pytest.mark.parametrize(
+    "capable,response", [(False, "ok"), (True, "ok"), (True, "reject"), (True, "timeout")]
+)
+def test_observation_startup_without_controls_and_fresh_reacquire(
+    tmp_path, monkeypatch, capable, response
+):
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(
+            origin_us=(len(resources) + 1) * 1000, power_sense=capable, sense_response=response
+        )
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    def open_host(**kwargs):
+        return open_enhanced_async_host(**kwargs, open_adapter=open_adapter)
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", open_host)
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {"dut_io_voltage": 3.3},
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    try:
+        if capable and response == "timeout":
+            from dutchmate_core.connection import ConnectionLifecycleError
+
+            with pytest.raises(ConnectionLifecycleError, match="timed out"):
+                create_app(runtime=runtime, profile=profile)
+            assert resources[0].is_open is False
+            return
+        client = TestClient(create_app(runtime=runtime, profile=profile))
+        for epoch in range(2):
+            if capable:
+                assert resources[epoch].commands == [
+                    {"cmd": "configure_power_sense", "enabled": True}
+                ]
+            else:
+                assert resources[epoch].commands == []
+            deadline = time.monotonic() + 2
+            while capable and response == "ok" and time.monotonic() < deadline:
+                health = runtime._evidence_recorder.capture_source_health()
+                if health.dut_vio_observation is not None:
+                    break
+                time.sleep(0.001)
+            health = runtime._evidence_recorder.capture_source_health()
+            assert health.dut_vio_setup_rejected is (capable and response == "reject")
+            if capable and response == "ok":
+                assert health.dut_vio_observation.sample.voltage_mv == 3300
+                assert health.dut_vio_observation.segment_id == epoch
+                root = tmp_path / runtime._evidence_recorder.active_session_id
+                expected = b"\xff\x00\n" * (epoch + 1)
+                while (
+                    time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected
+                ):
+                    time.sleep(0.001)
+                assert (root / "uart_raw.log").read_bytes() == expected
+            if epoch == 0:
+                assert client.post("/connection/release").status_code == 200
+                assert (
+                    runtime._evidence_recorder.capture_source_health().dut_vio_observation is None
+                )
+                assert client.post("/connection/reacquire").status_code == 200
+        client.close()
+    finally:
+        runtime.close()
+        for resource in resources:
+            resource.dispose()
+
+
+def test_congested_uart_and_voltage_preserve_bytes_and_automatic_reconnect(tmp_path, monkeypatch):
+    import base64
+
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    monkeypatch.setattr(
+        startup,
+        "open_enhanced_async_host",
+        lambda **kw: open_enhanced_async_host(**kw, open_adapter=open_adapter),
+    )
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {
+                    "dut_io_voltage": 3.3,
+                    "control": {
+                        "reset": {
+                            "channel": "CTRL0",
+                            "dut_signal": "RUN",
+                            "mode": "open_drain",
+                            "active_level": "low",
+                        }
+                    },
+                },
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+    try:
+        resource = resources[0]
+        assert [c["cmd"] for c in resource.commands] == [
+            "configure_gpio_mode",
+            "configure_power_sense",
+        ]
+        expected = b"\xff\x00\n"
+        frames = []
+        for i in range(1000):
+            data = bytes([i % 256]) * 49 + b"\n"
+            expected += data
+            frames.append(
+                json.dumps(
+                    {
+                        "type": "uart",
+                        "channel": 0,
+                        "timestamp_us": 2000 + i,
+                        "data_b64": base64.b64encode(data).decode(),
+                    }
+                ).encode()
+                + b"\n"
+            )
+            if i % 25 == 0:
+                frames.append(
+                    json.dumps(
+                        {
+                            "type": "dut_vio",
+                            "timestamp_us": 2000 + i,
+                            "status": "ok",
+                            "adc_raw": 1024,
+                            "voltage_mv": 1650,
+                            "adc_reference_mv": 3300,
+                            "reference_source": "nominal",
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+        payload = b"".join(frames)
+        for offset in range(0, len(payload), 4096):
+            resource.loop.call_soon_threadsafe(
+                resource.protocol.data_received, payload[offset : offset + 4096]
+            )
+        root = tmp_path / runtime._evidence_recorder.active_session_id
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected:
+            time.sleep(0.001)
+        assert (root / "uart_raw.log").read_bytes() == expected
+        resource.disconnect()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if len(resources) == 2 and runtime.status().connection_state == "connected":
+                health = runtime._evidence_recorder.capture_source_health()
+                if health.dut_vio_observation is not None:
+                    break
+            time.sleep(0.001)
+        assert len(resources) == 2
+        assert resources[0].close_calls == 1
+        assert [c["cmd"] for c in resources[1].commands] == [
+            "configure_gpio_mode",
+            "configure_power_sense",
+        ]
+        assert health.dut_vio_observation.segment_id == 1
+        runtime.close()
+        assert (root / "uart_raw.log").read_bytes() == expected + b"\xff\x00\n"
+        records = []
+        for path in root.glob("*_events.jsonl"):
+            records.extend(json.loads(line) for line in path.read_text().splitlines())
+        sequences = sorted(record["evidence_seq"] for record in records)
+        assert sequences == list(range(len(sequences)))
+        assert sum(r["type"] == "dut_vio" for r in records) == 42
+        assert resources[1].close_calls == 1
+        assert not any(r.callback_errors for r in resources)
+    finally:
+        client.close()
+        runtime.close()
+        for resource in resources:
+            resource.dispose()
+
+
+def test_staged_observation_setup_drains_more_than_serial_fifo_capacity(tmp_path, monkeypatch):
+    resources = []
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        if resources:
+            resource.before_sense_ack = 300
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    monkeypatch.setattr(
+        startup,
+        "open_enhanced_async_host",
+        lambda **kw: open_enhanced_async_host(**kw, open_adapter=open_adapter),
+    )
+    profile = resolve_dut_profile(
+        parse_dut_profile_config(
+            {
+                "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+                "hardware": {"dut_io_voltage": 3.3},
+            }
+        )
+    )
+    runtime = startup.build_startup_runtime(session_root=tmp_path, profile=profile)
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+    try:
+        assert client.post("/connection/release").status_code == 200
+        response = client.post("/connection/reacquire")
+        assert response.status_code == 200, response.json()
+        root = tmp_path / runtime._evidence_recorder.active_session_id
+        deadline = time.monotonic() + 2
+        expected = b"\xff\x00\n" + b"X" * 300 + b"\xff\x00\n"
+        while time.monotonic() < deadline and (root / "uart_raw.log").read_bytes() != expected:
+            time.sleep(0.001)
+        assert (root / "uart_raw.log").read_bytes() == expected
+        assert resources[1].close_calls == 0
+    finally:
+        runtime.close()
+        client.close()
+        for resource in resources:
+            resource.dispose()
+
+
+@pytest.mark.parametrize("boundary", ["automatic_reconnect", "release_reacquire"])
+def test_injected_clock_ages_real_voltage_across_connection_boundaries(
+    tmp_path, monkeypatch, boundary
+):
+    # Missing any clock handoff must make a real receipt use the wrong origin,
+    # rather than merely changing a mock's observed constructor arguments.
+    resources = []
+    now = [0.0]
+
+    async def open_adapter(**kwargs):
+        resource = PipeSerial(origin_us=(len(resources) + 1) * 1000, power_sense=True)
+        resources.append(resource)
+        return await open_async_enhanced_serial_adapter(
+            **kwargs, open_connection=resource.open_connection
+        )
+
+    def open_host(**kwargs):
+        return open_enhanced_async_host(**kwargs, open_adapter=open_adapter)
+
+    monkeypatch.setattr(startup, "open_enhanced_async_host", open_host)
+    profile = resolve_dut_profile(parse_dut_profile_config({
+        "backend": {"mode": "enhanced", "serial_port": "/test/pipe"},
+        "hardware": {"dut_io_voltage": 3.3},
+    }))
+    runtime = startup.build_startup_runtime(
+        session_root=tmp_path, profile=profile, monotonic_clock=lambda: now[0]
+    )
+    client = TestClient(create_app(runtime=runtime, profile=profile))
+
+    def wait_voltage(segment_id):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            payload = client.get("/status").json()
+            vio = payload["dut_vio"]
+            if (payload["connected"] and vio["evidence"] is not None
+                    and vio["evidence"]["segment_id"] == segment_id):
+                return vio
+            time.sleep(.001)
+        pytest.fail(f"no admitted voltage for segment {segment_id}: {payload}")
+
+    try:
+        first = wait_voltage(0)
+        assert first["state"] == "valid" and first["age_ms"] == 0
+        now[0] = 3.0
+        at_boundary = client.get("/status").json()["dut_vio"]
+        assert (at_boundary["state"], at_boundary["age_ms"]) == ("valid", 3000)
+        now[0] = 3.001
+        stale = client.get("/status").json()["dut_vio"]
+        assert (stale["state"], stale["age_ms"], stale["voltage_mv"]) == ("stale", 3001, None)
+        assert stale["evidence"] == first["evidence"]
+
+        now[0] = 10.0
+        if boundary == "release_reacquire":
+            assert client.post("/connection/release").status_code == 200
+            assert client.post("/connection/reacquire").status_code == 200
+        else:
+            resources[0].disconnect()
+        fresh = wait_voltage(1)
+        assert fresh["age_ms"] == 0 and fresh["state"] == "valid"
+        now[0] = 10.5
+        assert client.get("/status").json()["dut_vio"]["age_ms"] == 500
+        now[0] = 13.125
+        again = client.get("/status").json()["dut_vio"]
+        assert (again["state"], again["age_ms"], again["voltage_mv"]) == ("stale", 3125, None)
+        assert again["evidence"] == fresh["evidence"]
+    finally:
+        client.close()
+        runtime.close()
+        for resource in resources:
+            resource.dispose()

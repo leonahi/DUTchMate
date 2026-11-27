@@ -1,0 +1,99 @@
+{
+  "recorded_at_utc": "2026-11-25T22:52:02.349299+00:00",
+  "purpose": "Fresh pre-commit verification of archived characterization evidence; no hardware access or firmware changes",
+  "sessions": [
+    {
+      "session_id": "20261125T214101Z-3f27f1be",
+      "state": "completed",
+      "end_reason": "service_shutdown",
+      "contiguous_evidence_records": 147031,
+      "reconciled_uart_raw_bytes": 130565,
+      "record_types": {
+        "connected": 1,
+        "unexpected_disconnect": 1,
+        "reconnect_started": 1,
+        "segment_opened": 1,
+        "reconnect_succeeded": 1,
+        "buffer_status": 1684,
+        "dut_vio": 1695,
+        "operation_started": 2,
+        "uart_tx_attempt": 6539,
+        "uart_tx_result": 6539,
+        "operation_terminal": 2,
+        "uart_rx": 130565
+      },
+      "archive_members_verified": 15
+    },
+    {
+      "session_id": "20261125T221457Z-bec57e67",
+      "state": "completed",
+      "end_reason": "service_shutdown",
+      "contiguous_evidence_records": 3521,
+      "reconciled_uart_raw_bytes": 46,
+      "record_types": {
+        "connected": 1,
+        "buffer_status": 1731,
+        "dut_vio": 1735,
+        "operation_started": 2,
+        "uart_tx_attempt": 2,
+        "uart_tx_result": 2,
+        "operation_terminal": 2,
+        "uart_rx": 46
+      },
+      "archive_members_verified": 19
+    },
+    {
+      "session_id": "20261125T212057Z-0428d0a5",
+      "state": "completed",
+      "end_reason": "service_shutdown",
+      "contiguous_evidence_records": 2405,
+      "reconciled_uart_raw_bytes": 0,
+      "record_types": {
+        "connected": 1,
+        "unexpected_disconnect": 1,
+        "reconnect_started": 1,
+        "segment_opened": 1,
+        "reconnect_succeeded": 1,
+        "buffer_status": 1199,
+        "dut_vio": 1201
+      },
+      "files": [
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/connection_events.jsonl",
+          "sha256": "3fee4a03f6334b88675d3b7c094181921de0cc59547b665779da8cd610fb7880"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/detected_patterns.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/hardware_events.jsonl",
+          "sha256": "a3b1040cba0887a54a15c41eb670ec991ca7a928b11427f999429da71adf458a"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/metadata.json",
+          "sha256": "e8abcdfca1ffec528c456cef674e6ce931cd0554e14b6748971bf7b5332c3511"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/operation_events.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/uart_events.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-baseline-session/20261125T212057Z-0428d0a5/uart_raw.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ],
+  "parsed_campaign_json_files": 31,
+  "sample_windows_recomputed": 10,
+  "sample_conversion_reference": "3300 mV/nominal; integer conversion verified",
+  "meter_correction_records_hash_checked": 21,
+  "meter_confirmed": "Mastech MAS830L",
+  "reconnect_observer_compressed_and_uncompressed_hashes_verified": true,
+  "result": "All checks passed"
+}

@@ -3,7 +3,7 @@
 > Scope: workspace layout, local development, package boundaries, and contribution patterns.
 
 This guide is for contributors working on the current Python repository. Target
-Phase 1 behavior is defined in `docs/phase1_implementation_spec.md` rather than
+Phase 1 behavior is defined in `docs/specs/phase1_implementation_spec.md` rather than
 repeated here.
 
 ## Workspace
@@ -35,12 +35,16 @@ hardware/
   pcb/             Current KiCad source and preserved legacy EAGLE design.
   validation/      Hardware acceptance records and unrun templates.
 
-docs/              Architecture, contracts, plans, and guides.
+docs/              Architecture, guides, status/history and release notes.
+  specs/           Product requirements, behavior and acceptance contracts.
+  plans/           Implementation plans and historical migration references.
 
 tests/
   unit/            Core and cross-package unit tests.
-  integration/     Service/API integration tests.
-  fixtures/        Protocol streams and expected session outputs.
+  architecture/    Dependency-boundary contracts.
+  hardware/        Host-compiled firmware checks, without live hardware.
+  packaging/       Distribution and release contracts.
+  support/         Shared fake backends, evidence and integration fixtures.
 ```
 
 Python packages:
@@ -77,7 +81,8 @@ uv run --package dutchmate-debug-agent dutchmate-debug --help
 
 The final command is a workspace-development interface. The Debug Agent is
 tested in normal CI but is not a dependency, extra, command, or artifact of the
-public `v0.1.0` release. Its first public release is planned for `v0.2.0`.
+public `v0.1.0` release. Public Debug Agent distribution remains deferred; see
+[milestone overview](development_status.md) for the approved next-release scope.
 
 To analyze a completed schema-v1 session with a locally running Ollama model,
 first review the manifest returned by `preview`. Then pass its
@@ -209,11 +214,12 @@ The default service URL remains `http://127.0.0.1:2040`. `--service-url URL`
 overrides `DUTCHMATE_SERVICE_URL`, which overrides the default; remove the flag
 from an example to use environment/default selection. A stopped service does
 not prevent discovery of the twelve tools in the
-[authoritative catalog](mcp_integration_plan.md#target-tool-catalog); dependent
+[authoritative catalog](specs/mcp_adapter_contract.md#target-tool-catalog); dependent
 calls return a bounded, actionable `service_unavailable` tool error. No service
 startup is attempted. Host UI acceptance is separate from configuration syntax
-or Inspector evidence; current dispositions live only in
-[development status](development_status.md).
+or Inspector evidence; track follow-up checks in GitHub Issues and preserve
+measured acceptance records separately. The
+[milestone overview](development_status.md) summarizes the dated acceptance scope.
 
 `dutchmate start` requires `--backend basic|enhanced` or `[backend].mode`.
 Basic also requires an explicit/configured serial port and opens it directly as
@@ -262,8 +268,8 @@ uv run --package dutchmate dutchmate release
 uv run --package dutchmate dutchmate reacquire
 ```
 
-Use `--backend enhanced` with the configured DUT voltage and Debug Helper path
-for Enhanced. Configure generic CTRL channels with host-side roles before Control:
+Use `--backend enhanced` with the Debug Helper path for Enhanced. Configure
+generic CTRL channels with host-side roles before Control:
 
 ```bash
 uv run --package dutchmate dutchmate gpio mode CTRL0 reset RESET_N --mode open_drain --active-level low
@@ -287,9 +293,9 @@ markers; page it again until caught up. Session list/detail and logs can retriev
 older retained evidence. An expired cursor is explicit and never jumps silently.
 
 Historical hardware records describe their recorded firmware and schema-v1
-commands. For current acceptance use specification sections 32–35 and the Stage 8
-scenarios in `dutchmate_phase1_v2_coding_agent_plan.md`, retaining hardware/build
-identity, configuration, session IDs, raw bytes, and measured loss/provenance.
+commands. For current acceptance use specification sections 31–35, retaining
+hardware/build identity, configuration, session IDs, raw bytes, and measured
+loss/provenance.
 Historical `accepted_32k` evidence remains scoped to its actual measurements.
 
 ## Package Boundaries
@@ -320,8 +326,8 @@ Historical `accepted_32k` evidence remains scoped to its actual measurements.
 4. Register the route in `apps/service/src/dutchmate_service/app.py`.
 5. Map expected failures in `apps/service/src/dutchmate_service/errors.py`.
 6. Add service tests under `apps/service/tests/`.
-7. Update the owning contract and `docs/development_status.md` when the slice
-   changes milestone progress.
+7. Update affected contracts and record implementation/validation in the PR
+   linked to its issue.
 
 Validation order and state transitions belong in core. Service handlers own
 HTTP serialization, not a parallel behavior implementation.
@@ -332,8 +338,8 @@ HTTP serialization, not a parallel behavior implementation.
 2. Add focused output formatting in the relevant CLI module.
 3. Register the Typer command in `apps/cli/src/dutchmate_cli/main.py`.
 4. Add CLI/client tests under `apps/cli/tests/`.
-5. Update the owning contract and `docs/development_status.md` when the slice
-   changes milestone progress.
+5. Update affected contracts and record implementation/validation in the PR
+   linked to its issue.
 
 Preserve service errors. When the service is unavailable, commands fail with:
 
@@ -382,19 +388,40 @@ passes through fake backends.
 ## Documentation
 
 - `README.md` is the short repository entry point.
-- `docs/development_status.md` is the only current progress tracker and
-  next-step queue; keep its `Resume Here` section concise.
-- `docs/development_history.md` is the append-only, newest-first record of
-  completed slices and detailed validation. It must not define current status
-  or a next step.
-- `docs/project_context.md` owns durable product scope, safety, invariants, and
-  phase definitions.
-- `docs/software_architecture.md` owns code structure and dependency boundaries.
-- `docs/phase1_implementation_spec.md` owns Phase 1 requirements and done
-  criteria.
-- Focused contract documents own their named subsystem and are referenced
-  rather than copied into broader documents.
-- Only `docs/development_status.md` may define current progress or the next
-  implementation step; completed progress belongs in
-  `docs/development_history.md`.
+- [CONTRIBUTING.md](../CONTRIBUTING.md#issues-and-pull-requests) defines the shared
+  issue/PR workflow. Issues own tasks and blockers; PRs record implementation and
+  validation, with links to durable evidence.
+- `docs/development_status.md` is a milestone/acceptance overview, updated when
+  scope or milestone acceptance changes, not for every PR.
+- `docs/development_history.md` is a frozen pre-tracker archive. Preserve its
+  historical evidence and links; do not add routine development-slice entries.
+- `docs/specs/` owns product requirements, subsystem contracts and acceptance
+  criteria. Reference those documents rather than restating their content.
+- `docs/software_architecture.md` owns code structure and dependency decisions.
+- `docs/plans/` contains temporary implementation aids and explicitly historical
+  references. Task ownership/progress belongs in issues, not a second queue here.
+- Release notes own user-visible changes; `hardware/validation/` retains actual
+  measurements and acceptance evidence.
 - Keep links and protocol examples valid when moving or renaming content.
+
+
+## Reading DUT_VIO status
+
+`dutchmate status` displays the helper's optional, report-only voltage estimate,
+reference provenance and age since host receipt. HTTP `/status` and MCP
+`get_status` expose the same `dut_vio` object, including the original sample and
+its durable session/segment/evidence reference. No additional serial port is opened.
+
+A supported helper is enabled after startup control configuration and again for
+each physical reconnect/reacquisition. An older helper reports `unsupported`.
+No sample, explicit setup rejection, ADC error and saturation report `unavailable`.
+A successful sample becomes `stale` after integer receipt age exceeds 3000 ms;
+its public voltage is then null. Connection loss clears live sample references.
+Receipt age does not guarantee physical measurement age when traffic is buffered.
+
+Nominal reference readings are approximate. A measured reference label describes
+ADC_VREF provenance rather than full calibration. The optional declaration
+`hardware.dut_io_voltage` records the intended interface level. Enhanced startup
+and GPIO control work when it is omitted; a supplied value is still validated
+and is never populated or overwritten by sensing. See the
+[sensing contract](specs/dut_vio_sensing_contract.md) for fields and physical validation.

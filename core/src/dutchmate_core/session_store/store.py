@@ -6,7 +6,7 @@ import json
 import unicodedata
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
@@ -23,6 +23,7 @@ from dutchmate_core.backends.contracts import (
     BackendSnapshot,
     BufferOverflowEvent,
     BufferStatusEvent,
+    DutVioEvent,
     SegmentContext,
     SegmentTimestamp,
     UartIntegrity,
@@ -44,6 +45,7 @@ from dutchmate_core.session_store.log_replay import (
     replay_recent_logs as _replay_recent_logs,
 )
 from dutchmate_core.session_store.models import (
+    MAX_V2_UART_BATCH_EVENTS,
     BaselineError,
     BaselineMutationResult,
     BaselinePointer,
@@ -282,12 +284,34 @@ class SessionStore:
         self._v2_snapshots: dict[str, BackendSnapshot] = {}
         self._v2_monitor_range_leases: dict[str, set[str]] = {}
         self._v2_tail_read_leases: dict[str, int] = {}
+        self._v2_status_leases: dict[str, int] = {}
 
     @property
     def root(self) -> Path:
         """Directory containing all sessions."""
 
         return self._root
+
+    def retain_v2_evidence(self, session_id: str) -> Callable[[], None]:
+        """Keep one currently published evidence reference alive until withdrawn."""
+        _metadata._validate_session_id(session_id)
+        with self._store_lock:
+            self._v2_status_leases[session_id] = self._v2_status_leases.get(session_id, 0) + 1
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            with self._store_lock:
+                if released:
+                    return
+                released = True
+                remaining = self._v2_status_leases[session_id] - 1
+                if remaining:
+                    self._v2_status_leases[session_id] = remaining
+                else:
+                    del self._v2_status_leases[session_id]
+
+        return release
 
     def read_evidence_page(
         self,
@@ -741,6 +765,89 @@ class SessionStore:
                 next_evidence_seq=evidence_seq + 1 + len(hardware_event_bytes),
             )
 
+    def try_append_v2_uart_receive_batch(
+        self,
+        handle: SessionHandle,
+        *,
+        events: Sequence[UartReceiveEvent],
+        capture_results: Sequence[UartCaptureResult],
+    ) -> V2EvidenceAdmission | None:
+        """Commit queued UART units together, or leave single-unit fallback untouched.
+
+        Each RX event retains its own primary record. Pattern/line-limit units
+        and groups crossing the quota use the existing per-unit admission path.
+        No write or rollover occurs when returning ``None``.
+        """
+
+        if not 2 <= len(events) <= MAX_V2_UART_BATCH_EVENTS:
+            raise ValueError("v2 UART group must contain 2..64 events")
+        if len(events) != len(capture_results):
+            raise ValueError("v2 UART group requires one capture result per event")
+        for event, result in zip(events, capture_results, strict=True):
+            if not event.data or len(event.data) > 32768:
+                raise ValueError("v2 UART RX payload must contain 1..32768 bytes")
+            _require_matching_capture_result(event, result)
+        if any(
+            result.matches or result.oversized_lines or result.newly_oversized_line_count
+            for result in capture_results
+        ):
+            return None
+
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            first_sequence = _v2_next_sequence(metadata)
+            try:
+                raw_start = handle.paths.uart_raw.stat().st_size
+            except OSError as exc:
+                raise SessionPersistenceError(
+                    operation="read UART offset", path=handle.paths.uart_raw, detail=str(exc)
+                ) from exc
+            records: list[bytes] = []
+            raw_parts: list[bytes] = []
+            for event, result in zip(events, capture_results, strict=True):
+                record, unit_bytes, patterns, hardware = self._v2_uart_unit(
+                    handle,
+                    metadata=metadata,
+                    event=event,
+                    detected_patterns=(),
+                    capture_result=result,
+                    raw_offset_start=raw_start,
+                )
+                if (
+                    patterns is not None
+                    or hardware
+                    or not self._v2_unit_fits(metadata, unit_bytes=unit_bytes)
+                ):
+                    return None
+                records.append(_persistence.serialize_jsonl(record))
+                raw_parts.append(event.data)
+                raw_start += len(event.data)
+                metadata["next_evidence_seq"] = cast(int, record["evidence_seq"]) + 1
+                storage = cast(dict[str, int], metadata["storage"])
+                storage["evidence_bytes_written"] += unit_bytes
+                _metadata._record_metadata_segment_timestamp(
+                    metadata, segment_id=event.segment_id, timestamp_us=event.timestamp_us
+                )
+            serialized_metadata = _persistence.serialize_compact_json(metadata)
+            _require_metadata_capacity(serialized_metadata)
+            try:
+                with _transactions.evidence_transaction(
+                    handle.paths, append_paths=[handle.paths.uart_raw, handle.paths.uart_events]
+                ) as transaction:
+                    _persistence.append_serialized(handle.paths.uart_raw, b"".join(raw_parts))
+                    _persistence.append_serialized(handle.paths.uart_events, b"".join(records))
+                    transaction.prepare_metadata(serialized_metadata)
+                    _persistence.write_serialized(handle.paths.metadata, serialized_metadata)
+            except SessionPersistenceError as exc:
+                self._fail_active_v2_persistence_locked(handle, cause=exc)
+                raise
+            return V2EvidenceAdmission(
+                handle=handle,
+                evidence_seq=first_sequence,
+                rolled_over=False,
+                next_evidence_seq=_v2_next_sequence(metadata),
+            )
+
     def v2_uart_receive_will_rollover(
         self,
         handle: SessionHandle,
@@ -820,6 +927,7 @@ class SessionStore:
         event: UartReceiveEvent,
         detected_patterns: Sequence[dict[str, object]],
         capture_result: UartCaptureResult | None,
+        raw_offset_start: int | None = None,
     ) -> tuple[dict[str, object], int, bytes | None, tuple[bytes, ...]]:
         segments = metadata.get("segments")
         if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
@@ -829,14 +937,17 @@ class SessionStore:
         evidence_seq = metadata.get("next_evidence_seq")
         if isinstance(evidence_seq, bool) or not isinstance(evidence_seq, int):
             raise ValueError("v2 next_evidence_seq must be a non-negative integer")
-        try:
-            raw_start = handle.paths.uart_raw.stat().st_size
-        except OSError as exc:
-            raise SessionPersistenceError(
-                operation="read UART offset",
-                path=handle.paths.uart_raw,
-                detail=str(exc),
-            ) from exc
+        if raw_offset_start is None:
+            try:
+                raw_start = handle.paths.uart_raw.stat().st_size
+            except OSError as exc:
+                raise SessionPersistenceError(
+                    operation="read UART offset",
+                    path=handle.paths.uart_raw,
+                    detail=str(exc),
+                ) from exc
+        else:
+            raw_start = raw_offset_start
         record: dict[str, object] = {
             "evidence_seq": evidence_seq,
             "type": "uart_rx",
@@ -1843,6 +1954,23 @@ class SessionStore:
                 )
             return admission
 
+    def v2_connection_will_rollover(
+        self, handle: SessionHandle, *, event_type: str, detail: dict[str, object]
+    ) -> bool:
+        """Preflight readiness publication after staged UART admission."""
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            record = self._v2_record(
+                handle,
+                metadata=metadata,
+                evidence_seq=_v2_next_sequence(metadata),
+                record_type=event_type,
+                fields={"segment_id": _current_v2_segment_id(metadata), "detail": detail},
+            )
+            return not self._v2_unit_fits(
+                metadata, unit_bytes=len(_persistence.serialize_jsonl(record))
+            )
+
     def append_v2_connection_event(
         self,
         handle: SessionHandle,
@@ -1909,7 +2037,7 @@ class SessionStore:
         self,
         handle: SessionHandle,
         *,
-        event: BufferOverflowEvent | BufferStatusEvent,
+        event: BufferOverflowEvent | BufferStatusEvent | DutVioEvent,
     ) -> bool:
         """Return whether this exact telemetry record requires a successor."""
 
@@ -1924,6 +2052,13 @@ class SessionStore:
                     "timestamp_us": event.timestamp_us,
                     "channel": event.channel,
                     "dropped_bytes": event.dropped_bytes,
+                }
+            elif isinstance(event, DutVioEvent):
+                record_type = "dut_vio"
+                fields = {
+                    "segment_id": event.segment_id,
+                    "timestamp_us": event.timestamp_us,
+                    **asdict(event.sample),
                 }
             else:
                 record_type = "buffer_status"
@@ -1947,6 +2082,34 @@ class SessionStore:
             return not self._v2_unit_fits(
                 metadata,
                 unit_bytes=len(serialized_record),
+            )
+
+    def append_v2_dut_vio(
+        self, handle: SessionHandle, *, event: DutVioEvent
+    ) -> V2EvidenceAdmission:
+        """Admit a whole voltage observation using the existing journal transaction."""
+        with self._store_lock:
+            metadata = self._require_active_v2_metadata(handle)
+            if event.segment_id != _current_v2_segment_id(metadata):
+                raise ValueError("v2 voltage observation must reference the current segment")
+
+            def record_time(updated: dict[str, object], admission: V2EvidenceAdmission) -> None:
+                _metadata._record_metadata_segment_timestamp(
+                    updated,
+                    segment_id=_current_v2_segment_id(updated),
+                    timestamp_us=event.timestamp_us,
+                )
+
+            return self._append_v2_record_locked(
+                handle,
+                stream="hardware",
+                record_type="dut_vio",
+                fields=lambda _handle, updated, _seq: {
+                    "segment_id": _current_v2_segment_id(updated),
+                    "timestamp_us": event.timestamp_us,
+                    **asdict(event.sample),
+                },
+                metadata_mutator=record_time,
             )
 
     def append_v2_buffer_overflow(
@@ -2210,9 +2373,7 @@ class SessionStore:
         fields: dict[str, object]
         | Callable[[SessionHandle, dict[str, object], int], dict[str, object]],
     ) -> dict[str, object]:
-        record_fields = (
-            fields(handle, metadata, evidence_seq) if callable(fields) else fields
-        )
+        record_fields = fields(handle, metadata, evidence_seq) if callable(fields) else fields
         return {
             "evidence_seq": evidence_seq,
             "type": record_type,
@@ -2508,7 +2669,10 @@ class SessionStore:
             self._root,
             max_count=self._max_count,
             held_session_ids=(
-                held_session_ids | leased_session_ids | self._v2_tail_read_leases.keys()
+                held_session_ids
+                | leased_session_ids
+                | self._v2_tail_read_leases.keys()
+                | self._v2_status_leases.keys()
             ),
         )
         return self._retention_status
@@ -2987,11 +3151,7 @@ def _v2_pending_attempts(
         if not isinstance(session_id, str):
             raise ValueError("v2 pending attempt session ID is invalid")
         _metadata._validate_session_id(session_id)
-        if (
-            isinstance(evidence_seq, bool)
-            or not isinstance(evidence_seq, int)
-            or evidence_seq < 0
-        ):
+        if isinstance(evidence_seq, bool) or not isinstance(evidence_seq, int) or evidence_seq < 0:
             raise ValueError("v2 pending attempt evidence sequence is invalid")
     return cast(dict[str, dict[str, object]], raw_pending)
 

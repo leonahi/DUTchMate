@@ -41,6 +41,40 @@ static bool append_decimal(struct frame_writer *writer, uint64_t value)
 	return append_bytes(writer, &digits[index], sizeof(digits) - index);
 }
 
+int dmh_dut_vio_encode(const struct dmh_vio_observation *observation,
+		       char *output, size_t capacity, size_t *length)
+{
+	struct frame_writer writer = {.output = output, .capacity = capacity};
+	const char *status;
+
+	if (observation == NULL || output == NULL || length == NULL ||
+	    observation->reference_mv < 2500U || observation->reference_mv > 3600U) return -EINVAL;
+	switch (observation->status) {
+	case DMH_VIO_OK: status = "ok"; break;
+	case DMH_VIO_ERROR: status = "adc_error"; break;
+	case DMH_VIO_SATURATED: status = "saturated"; break;
+	default: return -EINVAL;
+	}
+	if (!append_literal(&writer, "{\"type\":\"dut_vio\",\"timestamp_us\":") ||
+	    !append_decimal(&writer, observation->timestamp_us) ||
+	    !append_literal(&writer, ",\"status\":\"") || !append_literal(&writer, status) ||
+	    !append_literal(&writer, "\",\"adc_raw\":")) return -ENOSPC;
+	if (observation->status == DMH_VIO_ERROR) {
+		if (!append_literal(&writer, "null")) return -ENOSPC;
+	} else if (!append_decimal(&writer, observation->adc_raw)) return -ENOSPC;
+	if (!append_literal(&writer, ",\"voltage_mv\":")) return -ENOSPC;
+	if (observation->status == DMH_VIO_OK) {
+		if (!append_decimal(&writer, observation->voltage_mv)) return -ENOSPC;
+	} else if (!append_literal(&writer, "null")) return -ENOSPC;
+	if (!append_literal(&writer, ",\"adc_reference_mv\":") ||
+	    !append_decimal(&writer, observation->reference_mv) ||
+	    !append_literal(&writer, ",\"reference_source\":\"") ||
+	    !append_literal(&writer, observation->reference_measured ? "measured" : "nominal") ||
+	    !append_literal(&writer, "\"}\n")) return -ENOSPC;
+	*length = writer.length;
+	return 0;
+}
+
 int dmh_buffer_overflow_encode(
 	uint8_t channel,
 	uint64_t timestamp_us,

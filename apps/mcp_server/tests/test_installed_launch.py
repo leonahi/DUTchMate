@@ -45,7 +45,7 @@ def clean_environment():
     return environment
 
 
-async def exchange(process, request_id, method, **arguments):
+async def exchange(process, request_id, method, *, timeout_s=5, **arguments):
     request = {
         "jsonrpc": "2.0",
         "id": request_id,
@@ -62,7 +62,7 @@ async def exchange(process, request_id, method, **arguments):
     process.stdin.write(json.dumps(request).encode() + b"\n")
     await process.stdin.drain()
     # Parse every line, unlike a transport that might discard non-JSON output.
-    line = await asyncio.wait_for(process.stdout.readline(), 5)
+    line = await asyncio.wait_for(process.stdout.readline(), timeout_s)
     response = json.loads(line)
     assert response["jsonrpc"] == "2.0" and response["id"] == request_id
     assert "error" not in response, response
@@ -102,7 +102,9 @@ async def test_installed_stdio_catalog_url_precedence_errors_and_eof(
     # Drain diagnostics concurrently so stderr cannot block protocol progress.
     stderr_task = asyncio.create_task(process.stderr.read())
     try:
-        discovery = await exchange(process, 1, "server/discover")
+        # Only the first response includes interpreter/SDK startup. Subsequent
+        # responses and explicit EOF shutdown retain their five-second limits.
+        discovery = await exchange(process, 1, "server/discover", timeout_s=15)
         assert discovery["supportedVersions"] == [LATEST_MODERN_VERSION]
         assert discovery["resultType"] == "complete"
         assert discovery["ttlMs"] == 300000 and discovery["cacheScope"] == "private"
@@ -146,7 +148,8 @@ def test_installed_default_start_and_empty_eof_are_quiet(command, tmp_path):
         capture_output=True,
         env=clean_environment(),
         cwd=tmp_path,
-        timeout=5,
+        # Includes SDK startup (15 s) and EOF shutdown (5 s).
+        timeout=20,
         check=False,
     )
     assert completed.returncode == 0
@@ -164,7 +167,8 @@ def test_installed_rejects_invalid_options_on_stderr(command, arguments, tmp_pat
         capture_output=True,
         env=clean_environment(),
         cwd=tmp_path,
-        timeout=5,
+        # Argument parsing follows SDK imports, so include the startup allowance.
+        timeout=20,
         check=False,
     )
     assert completed.returncode == 2

@@ -1,0 +1,49 @@
+{
+  "campaign_date": "2026-11-19",
+  "zephyr": "4.4.2",
+  "sdk": "1.0.1",
+  "board": "rpi_pico2/rp2350a/m33",
+  "artifacts": [
+    {
+      "build": "gp28-safe",
+      "image": "build/dutchmate-rp2350-gp28-safe/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "876365369ab5af87977322cb2019e1465db87ad62e752af8f45eb6329198095c",
+      "firmware": "\"gp28safe-1\"",
+      "pad_report": "n",
+      "stack_probe": "n"
+    },
+    {
+      "build": "gp28-safe-readback",
+      "image": "build/dutchmate-rp2350-gp28-safe-readback/zephyr/zephyr.uf2",
+      "bytes": 109056,
+      "sha256": "e52e8f9ee9c26479e0f582af8adf90efc346527826669e97be42b3f3bcc6204f",
+      "firmware": "\"sensepad-2\"",
+      "pad_report": "y",
+      "stack_probe": "n"
+    },
+    {
+      "build": "gp28-safe-stack",
+      "image": "build/dutchmate-rp2350-gp28-safe-stack/zephyr/zephyr.uf2",
+      "bytes": 111616,
+      "sha256": "4095f225c0c9f0be4292bf65db587c560351d2672437c726c6eccf350d8d9818",
+      "firmware": "\"stackprobe-1\"",
+      "pad_report": "n",
+      "stack_probe": "y"
+    }
+  ],
+  "source_sha256": {
+    "hardware/firmware/rp2350_debug_helper/Kconfig": "458b4267c7066a012799da375933a1ec7df93347ca1cfec2c41fd8760d2f05d4",
+    "hardware/firmware/rp2350_debug_helper/prj.conf": "79dce0f3308504e5e4fbb4bec69407f68f6bc54f7c13584aa2ce03333210911b",
+    "hardware/firmware/rp2350_debug_helper/sense_state_probe.conf": "36e1f4ebc15dfa07bce49b12df6629b02bec7de88f81e8a5400fcfeedb371167",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.c": "3a5d5bf4e3fc84c58797da4778fdb92ba386e40d900b379306b1165b0f19eb65",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.h": "524748e41b730e5902131c0e5e37dbae0ed883ed9ce763cee144387befa828c9",
+    "hardware/firmware/rp2350_debug_helper/src/usb_connection.c": "6ed909002d17016644438e74478da5fc46615554c84bed493ae8acc420b18a9c"
+  },
+  "normal_identity_build_override": "-DCONFIG_DUTCHMATE_FIRMWARE_VERSION=\"gp28safe-1\"",
+  "normal_extra_conf_file": null,
+  "normal_gp28_initialization_unconditional": true,
+  "adc_enabled": false,
+  "normal_image_flashed": false,
+  "normal_firmware_voltage_measured": false
+}

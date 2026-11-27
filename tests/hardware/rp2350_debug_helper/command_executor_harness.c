@@ -159,7 +159,8 @@ static void harness_init(struct harness *harness)
 	dmh_command_executor_init(
 		&harness->executor,
 		&harness->control,
-		&executor_uart
+		&executor_uart,
+		NULL
 	);
 }
 

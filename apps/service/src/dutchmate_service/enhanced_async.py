@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
@@ -21,6 +22,7 @@ from dutchmate_core.backends.contracts import (
     mark_open_cleanup,
 )
 from dutchmate_core.backends.enhanced import (
+    DEFAULT_ENHANCED_COMMAND_TIMEOUT_S,
     AsyncEnhancedDeviceControl,
     AsyncEnhancedUartSender,
 )
@@ -28,6 +30,7 @@ from dutchmate_core.backends.enhanced_serial_io import (
     open_async_enhanced_serial_adapter,
 )
 from dutchmate_core.device_connection.parser import DeviceMessage
+from dutchmate_core.device_connection.transport import TransportTimeoutError, TransportWriteError
 
 DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S = 0.1
 T = TypeVar("T")
@@ -46,6 +49,8 @@ class _AsyncEnhancedAdapter(Protocol):
     def segment(self) -> SegmentContext | None: ...
 
     async def request(self, command: bytes, timeout_s: float) -> DeviceMessage: ...
+
+    async def configure_power_sense(self, *, enabled: bool, timeout_s: float) -> bool: ...
 
     async def receive_event(
         self,
@@ -69,6 +74,7 @@ class OpenAsyncEnhancedAdapter(Protocol):
         port: str,
         segment_id: int,
         baudrate: int,
+        monotonic_clock: Callable[[], float],
     ) -> Coroutine[Any, Any, _AsyncEnhancedAdapter]: ...
 
 
@@ -86,6 +92,8 @@ class EnhancedAsyncHost:
     """Own one asyncio loop and expose its Enhanced adapter synchronously."""
 
     def __init__(self) -> None:
+        self._observation_lock = threading.Lock()
+        self._observation_result: bool | None = None
         self._state_lock = threading.Lock()
         self._loop_ready = threading.Event()
         self._close_complete = threading.Event()
@@ -137,6 +145,28 @@ class EnhancedAsyncHost:
         with self._state_lock:
             return self._segment
 
+    def initialize_observation(self) -> bool:
+        """Enable optional telemetry once for this physical connection."""
+        with self._observation_lock:
+            if self._observation_result is None:
+                adapter = self._adapter_for_operation()
+                if "power_sense" not in self.info.capabilities:
+                    self._observation_result = True
+                else:
+                    try:
+                        self._observation_result = self._submit(
+                            lambda: adapter.configure_power_sense(
+                                enabled=True, timeout_s=DEFAULT_ENHANCED_COMMAND_TIMEOUT_S
+                            )
+                        )
+                    except (TransportTimeoutError, TransportWriteError) as exc:
+                        raise BackendDisconnectedError(
+                            "Enhanced observation configuration timed out"
+                            if isinstance(exc, TransportTimeoutError)
+                            else "Enhanced observation configuration write failed"
+                        ) from exc
+            return self._observation_result
+
     def configure_gpio_mode(
         self,
         *,
@@ -177,13 +207,21 @@ class EnhancedAsyncHost:
         return self._submit(lambda: sender.send_uart(data))
 
     def read_event(self) -> BackendEvent | None:
+        return self._read_event(DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S)
+
+    def read_event_nowait(self) -> BackendEvent | None:
+        """Poll queued evidence on its owner loop without waiting for input."""
+
+        return self._read_event(0)
+
+    def _read_event(self, timeout_s: float) -> BackendEvent | None:
         with self._state_lock:
             if self._drained_events:
                 return self._drained_events.popleft()
             if self._closed:
                 raise BackendDisconnectedError("Enhanced async host is closed")
         adapter = self._adapter_for_operation()
-        event, segment = self._submit(lambda: self._receive_event(adapter))
+        event, segment = self._submit(lambda: self._receive_event(adapter, timeout_s))
         with self._state_lock:
             self._segment = segment
         return event
@@ -310,8 +348,9 @@ class EnhancedAsyncHost:
     async def _receive_event(
         self,
         adapter: _AsyncEnhancedAdapter,
+        timeout_s: float,
     ) -> tuple[BackendEvent | None, SegmentContext | None]:
-        event = await adapter.receive_event(DEFAULT_ENHANCED_EVENT_POLL_TIMEOUT_S)
+        event = await adapter.receive_event(timeout_s)
         return event, adapter.segment
 
     def _install(self, opened: _OpenedHost) -> None:
@@ -343,11 +382,13 @@ async def _open_host_on_owner_loop(
     baudrate: int,
     segment_id: int,
     open_adapter: OpenAsyncEnhancedAdapter,
+    monotonic_clock: Callable[[], float],
 ) -> _OpenedHost:
     adapter = await open_adapter(
         port=port,
         baudrate=baudrate,
         segment_id=segment_id,
+        monotonic_clock=monotonic_clock,
     )
     try:
         return _OpenedHost(
@@ -374,6 +415,7 @@ def open_enhanced_async_host(
     baudrate: int,
     segment_id: int,
     open_adapter: OpenAsyncEnhancedAdapter = open_async_enhanced_serial_adapter,
+    monotonic_clock: Callable[[], float] = time.monotonic,
 ) -> EnhancedAsyncHost:
     """Open one ready Enhanced adapter on its permanent owner loop."""
 
@@ -385,6 +427,7 @@ def open_enhanced_async_host(
                 baudrate=baudrate,
                 segment_id=segment_id,
                 open_adapter=open_adapter,
+                monotonic_clock=monotonic_clock,
             )
         )
         host._install(opened)

@@ -28,6 +28,7 @@ def format_status(payload: Mapping[str, object]) -> str:
         f"UART TX policy: {_format_tx_policy(payload.get('capability_policy'))}",
         f"Timestamp provenance: {_format_timestamp(payload.get('timestamp_provenance'))}",
         f"UART loss: {_format_integrity(payload.get('integrity'))}",
+        f"DUT VIO: {_format_dut_vio(payload.get('dut_vio'))}",
         f"Retention: {_format_retention(payload.get('retention'))}",
         "Control channels:",
     ]
@@ -40,6 +41,26 @@ def format_status(payload: Mapping[str, object]) -> str:
         )
     lines.extend(_format_control_channels(payload.get("control_channels")))
     return "\n".join(lines)
+
+
+def _format_dut_vio(value: object) -> str:
+    status = _as_mapping(value)
+    if status is None:
+        return "unavailable (status_missing)"
+    sample = _as_mapping(status.get("sample"))
+    voltage = status.get("voltage_mv")
+    age = status.get("age_ms")
+    if (
+        status.get("state") == "valid"
+        and type(voltage) is int
+        and type(age) is int
+        and sample is not None
+    ):
+        return (
+            f"≈{voltage / 1000:.2f} V ({_display(sample.get('reference_source'))} reference; "
+            f"received {age} ms ago)"
+        )
+    return f"{_display(status.get('state'))} ({_display(status.get('reason'))})"
 
 
 def _format_profile(payload: Mapping[str, object]) -> str:

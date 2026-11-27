@@ -2,6 +2,7 @@
 #define DUTCHMATE_TELEMETRY_H
 
 #include "uart_rx_ring.h"
+#include "vio_sense.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,6 +32,8 @@ int dmh_buffer_overflow_encode(
 	size_t output_capacity,
 	size_t *output_length
 );
+int dmh_dut_vio_encode(const struct dmh_vio_observation *observation,
+		       char *output, size_t capacity, size_t *length);
 int dmh_buffer_status_encode(
 	uint64_t timestamp_us,
 	const struct dmh_uart_rx_snapshot *snapshot,

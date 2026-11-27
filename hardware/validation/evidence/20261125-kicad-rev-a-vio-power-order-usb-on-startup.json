@@ -1,0 +1,207 @@
+{
+  "recorded_at_utc": "2026-11-25T22:14:57.918807+00:00",
+  "operator_reply": "connected",
+  "requested_sequence": "DUT_VIO remains supplied at PPK2 5000 mV; remove probes and connect helper USB; then service enables sensing",
+  "usb_identity": {
+    "serial_number": "FA63A4D787572B33",
+    "vid": 11914,
+    "pid": 10,
+    "port": "/dev/cu.usbmodem11401"
+  },
+  "service_process": {
+    "started_at_utc": "2026-11-25T22:14:56.271019+00:00",
+    "pid": 4315,
+    "argv": [
+      "/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/.venv/bin/dutchmate-service",
+      "--config",
+      "/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dut-vio-physical-20261125/profile-uart.toml",
+      "--session-root",
+      "/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dut-vio-physical-20261125/sessions",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "2040"
+    ],
+    "url": "http://127.0.0.1:2040",
+    "session_root": "/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dut-vio-physical-20261125/sessions",
+    "log": "/Users/nahitpawar/Documents/github/dutchmate/DUTchMate/build/dut-vio-physical-20261125/service-powerorder.log",
+    "verified_usb_serial": "FA63A4D787572B33",
+    "uart_tx_enabled": true,
+    "control_mappings": 0,
+    "active_session_id": "20261125T221457Z-bec57e67",
+    "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87"
+  },
+  "startup_status": {
+    "connected": true,
+    "dut_vio": {
+      "state": "valid",
+      "reason": null,
+      "voltage_mv": 5066,
+      "age_ms": 102,
+      "sample": {
+        "status": "ok",
+        "adc_raw": 3144,
+        "voltage_mv": 5066,
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "timestamp_us": 21523,
+        "type": "dut_vio"
+      },
+      "evidence": {
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": 2
+      }
+    },
+    "connection_state": "connected",
+    "backend_mode": "enhanced",
+    "profile_name": "kicad-rev-a-vio-sensing-20261125",
+    "profile_digest_sha256": "610f5cc2d80e79d45f6b0cdb43e3db4f62760e3aebfa2d8fc5a50ea9ac232c87",
+    "effective_profile": {
+      "name": "kicad-rev-a-vio-sensing-20261125",
+      "backend": {
+        "mode": "enhanced",
+        "topology": "external_uart",
+        "selector": {
+          "strategy": "exact_path",
+          "exact_path": "/dev/cu.usbmodem11401"
+        },
+        "current_serial_port": "/dev/cu.usbmodem11401",
+        "reconnect_timeout_s": 5.0
+      },
+      "hardware": {
+        "dut_io_voltage": 3.3,
+        "uart": {
+          "baudrate": 460800,
+          "data_bits": 8,
+          "parity": "none",
+          "stop_bits": 1,
+          "rtscts": false,
+          "xonxoff": false,
+          "tx_enabled": true,
+          "default_line_ending": "none",
+          "control_lines": {
+            "dtr_on_open": "driver_default",
+            "rts_on_open": "driver_default"
+          }
+        },
+        "control": []
+      }
+    },
+    "port": "/dev/cu.usbmodem11401",
+    "firmware": "viosense-2",
+    "device": "dutchmate-rp2350",
+    "backend_identity": {
+      "port": "/dev/cu.usbmodem11401",
+      "firmware": "viosense-2",
+      "device": "dutchmate-rp2350"
+    },
+    "backend_capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capabilities": [
+      "device_timestamp",
+      "gpio_control",
+      "overflow_telemetry",
+      "power_sense",
+      "uart_receive",
+      "uart_send"
+    ],
+    "capability_policy": {
+      "uart_send": {
+        "tx_policy_enabled": true,
+        "source": "hardware.uart.tx_enabled"
+      }
+    },
+    "timestamp_provenance": {
+      "segment_id": 0,
+      "timestamp": {
+        "source": "device",
+        "clock": "rp2350_timer",
+        "unit": "us",
+        "origin": "segment_start",
+        "source_origin_us": 50084186,
+        "observation_point": "debug_helper_uart_receive",
+        "event_granularity": "uart_event"
+      }
+    },
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "active_session_id": "20261125T221457Z-bec57e67",
+    "active_operations": [],
+    "commanded_boot_mode": null,
+    "reconnect_remaining_s": null,
+    "retention": {
+      "enabled": false,
+      "max_count": null,
+      "session_count": 0,
+      "protected_session_ids": [],
+      "deleted_session_ids": [],
+      "diagnostic": null,
+      "detail": null
+    },
+    "control_channels": {
+      "CTRL0": {
+        "channel": "CTRL0",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL1": {
+        "channel": "CTRL1",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL2": {
+        "channel": "CTRL2",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      },
+      "CTRL3": {
+        "channel": "CTRL3",
+        "state": "unconfigured",
+        "role": null,
+        "dut_signal": null,
+        "mode": null,
+        "active_level": null,
+        "idle_level": null,
+        "source": null,
+        "configured_at": null,
+        "device_timestamp_us": null,
+        "last_rejected": null
+      }
+    }
+  },
+  "interpretation": "Fresh service/sensing startup with DUT_VIO already present; no paired powered Fluke voltage or current reading yet"
+}

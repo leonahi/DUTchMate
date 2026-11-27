@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from dutchmate_core.backends.contracts import BackendEvent, BackendSnapshot, UartIntegrity
+from dutchmate_core.dut_vio import DutVioObservation
 
 
 class CaptureEventSource(Protocol):
@@ -15,6 +16,22 @@ class CaptureEventSource(Protocol):
 
     def read_event(self) -> BackendEvent | None:
         """Return the next normalized event, or ``None`` after read inactivity."""
+
+
+@runtime_checkable
+class BufferedCaptureEventSource(CaptureEventSource, Protocol):
+    """Optional polling boundary for opportunistic durable admission batches."""
+
+    def read_event_nowait(self) -> BackendEvent | None:
+        """Take an already queued event without waiting for additional input."""
+
+
+@runtime_checkable
+class BackendObservationInitializer(Protocol):
+    """Optional per-source setup after desired controls have been acknowledged."""
+
+    def initialize_observation(self) -> bool:
+        """Return False only for an explicit, nonterminal setup rejection."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +42,8 @@ class CaptureSourceHealth:
     integrity: UartIntegrity | None
     backend_snapshot: BackendSnapshot | None = None
     connection_generation: int = 0
+    dut_vio_observation: DutVioObservation | None = None
+    dut_vio_setup_rejected: bool = False
 
     def __post_init__(self) -> None:
         if self.connection_generation < 0:

@@ -87,12 +87,13 @@ class LateCloseWakeup:
         self.rescue = Event()
         if not pause:
             self.allow_wakeup.set()
-        original_read = self.source.read_event
+        # Observe the shared FIFO boundary, including nonblocking batch polls.
+        original_read = self.source._next_event
         original_put = self.source._outcomes.put_nowait
 
-        def read():
+        def read(timeout_s):
             try:
-                return original_read()
+                return original_read(timeout_s)
             except BackendDisconnectedError:
                 self.terminal_seen.set()
                 if self.wakeup_published.is_set() and self.source.has_pending_events:
@@ -108,7 +109,7 @@ class LateCloseWakeup:
             original_put(outcome)
             self.wakeup_published.set()
 
-        monkeypatch.setattr(self.source, "read_event", read)
+        monkeypatch.setattr(self.source, "_next_event", read)
         monkeypatch.setattr(self.source._outcomes, "put_nowait", publish)
 
     def cleanup_failed_baseline(self):
@@ -132,9 +133,11 @@ def test_http_release_drains_real_basic_source_after_eof_before_close_wakeup(tmp
     assert recorder.wait_for_durable_tail(tail, timeout_s=1)
     gate = LateCloseWakeup(runtime, monkeypatch)
     physical_close = Event()
+    close_tails = []
 
     def closing():
         assert events(runtime)[-1]["type"] == "release_requested"
+        close_tails.append(recorder.durable_tail())
         # The blocked physical read returns a final admitted chunk as close
         # interrupts it; the real serial reader must enqueue and drain it.
         ports[0].feed(b"last admitted RX\n")
@@ -159,6 +162,7 @@ def test_http_release_drains_real_basic_source_after_eof_before_close_wakeup(tmp
         assert physical_close.wait(1)
         assert gate.before_wakeup.wait(1)
         assert ports[0].closed and not source._reader.is_alive()
+        assert recorder.wait_for_durable_tail(close_tails[0], timeout_s=1)
         assert raw.read_bytes() == b"ambient\nlast admitted RX\n"
         assert done.wait(1), "Basic release stranded a late close wakeup after terminal EOF"
         assert not failures

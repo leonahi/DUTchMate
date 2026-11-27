@@ -120,9 +120,7 @@ class FakeAsyncEnhancedAdapter:
     async def wait_for_segment(self, timeout_s: float) -> SegmentContext | None:
         self.operation_thread_ids.append(threading.get_ident())
         self.wait_for_segment_timeouts.append(timeout_s)
-        outcome = (
-            self.segment_wait_outcomes.pop(0) if self.segment_wait_outcomes else None
-        )
+        outcome = self.segment_wait_outcomes.pop(0) if self.segment_wait_outcomes else None
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
@@ -163,6 +161,7 @@ class OpenAdapterFake:
         port: str,
         segment_id: int,
         baudrate: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeAsyncEnhancedAdapter:
         self.thread_id = threading.get_ident()
         assert port == "/dev/ttyACM0"
@@ -565,3 +564,77 @@ def test_calls_after_close_raise_the_closed_host_error() -> None:
 
     with pytest.raises(RuntimeError, match="^Enhanced async host is closed$"):
         host.read_event()
+
+
+def test_nonblocking_receive_uses_zero_timeout_on_the_owner_loop() -> None:
+    event = UartReceiveEvent(0, 1, 0, b"READY\n")
+
+    class PollAdapter(FakeAsyncEnhancedAdapter):
+        async def receive_event(self, timeout_s: float | None = None) -> BackendEvent | None:
+            assert timeout_s == 0
+            return await super().receive_event(timeout_s)
+
+    fake = PollAdapter(info=_info(), segment_id=0, event_outcomes=[event])
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0,
+        open_adapter=OpenAdapterFake(fake),
+    )
+    try:
+        assert host.read_event_nowait() == event
+        assert host.read_event_nowait() is None
+        assert fake.operation_thread_ids == [host.owner_thread_id, host.owner_thread_id]
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize("capable,result", [(False, True), (True, True), (True, False)])
+def test_host_initializes_observation_once_on_owner_loop(capable, result):
+    from dataclasses import replace
+
+    info = _info()
+    if capable:
+        info = replace(info, capabilities=info.capabilities | {"power_sense"})
+    fake = FakeAsyncEnhancedAdapter(info=info, segment_id=0)
+    calls = []
+
+    async def configure(enabled, timeout_s):
+        calls.append((enabled, timeout_s, threading.get_ident()))
+        return result
+
+    fake.configure_power_sense = configure
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0, open_adapter=OpenAdapterFake(fake)
+    )
+    try:
+        assert host.initialize_observation() is result
+        assert host.initialize_observation() is result
+        assert calls == ([(True, 1.0, host.owner_thread_id)] if capable else [])
+    finally:
+        host.close()
+
+
+@pytest.mark.parametrize("failure", ["partial_write", "flush"])
+def test_observation_write_fault_preserves_backend_classification(failure):
+    from dataclasses import replace
+
+    from dutchmate_core.backends import BackendDisconnectedError
+    from dutchmate_core.device_connection.transport import TransportWriteError
+
+    original = TransportWriteError(failure, frame_bytes_accepted=2, error="write_failed")
+    fake = FakeAsyncEnhancedAdapter(
+        info=replace(_info(), capabilities=_info().capabilities | {"power_sense"}), segment_id=0
+    )
+
+    async def configure(**kwargs):
+        raise original
+
+    fake.configure_power_sense = configure
+    host = open_enhanced_async_host(
+        port="/dev/ttyACM0", baudrate=460800, segment_id=0, open_adapter=OpenAdapterFake(fake)
+    )
+    try:
+        with pytest.raises(BackendDisconnectedError, match="write failed") as raised:
+            host.initialize_observation()
+        assert raised.value.__cause__ is original
+    finally:
+        host.close()

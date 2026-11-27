@@ -2,12 +2,17 @@
 
 > Historical measurements and decision for the fixture/builds identified below.
 > `accepted_32k` does not transfer physical acceptance to manufactured KiCad Rev-A.
-> See [Phase 1 section 4.1](../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
+> See [Phase 1 section 4.1](../../docs/specs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
 > and [development status](../../docs/development_status.md) for the separate current-board gate.
 
 > Status: accepted_32k
 > Scope: Phase 1B RP2350-based Raspberry Pi Pico 2 Debug Helper 32 KiB UART RX
 > ring-buffer acceptance evidence.
+
+> Sizing-document consolidation, 2026-11-26: the current criteria now live in
+> [Phase 1 section 12.1](../../docs/specs/phase1_implementation_spec.md#121-uart-rx-buffering-and-acceptance).
+> The historical measurements and decision below are unchanged; the original
+> `docs/ring_buffer_sizing_plan.md` remains available in Git history.
 
 ## Decision State
 

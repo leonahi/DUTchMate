@@ -1,0 +1,50 @@
+{
+  "campaign_date": "2026-11-19",
+  "zephyr": "4.4.2",
+  "sdk": "1.0.1",
+  "board": "rpi_pico2/rp2350a/m33",
+  "artifacts": [
+    {
+      "build": "sense-baseline",
+      "image": "build/dutchmate-rp2350-sense-baseline/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4"
+    },
+    {
+      "build": "sense-probe",
+      "image": "build/dutchmate-rp2350-sense-probe/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "5e2597ecad980e4020bbccca8d2b1d581641977e41f5159244b9b3330510cf64"
+    },
+    {
+      "build": "sense-state-probe",
+      "image": "build/dutchmate-rp2350-sense-state-probe/zephyr/zephyr.uf2",
+      "bytes": 109056,
+      "sha256": "ee8cfaa41c2fe85a317fad650eded50b4f689af5db4f457c7cb4b803ea460132"
+    },
+    {
+      "build": "sense-baseline-check",
+      "image": "build/dutchmate-rp2350-sense-baseline-check/zephyr/zephyr.uf2",
+      "bytes": 104448,
+      "sha256": "4f3c600a896a4d4c3f0fc6e36ada6abe52a6402abdd4b77c8dda9527d7835fd4"
+    },
+    {
+      "build": "stack-probe-regression",
+      "image": "build/dutchmate-rp2350-stack-probe-regression/zephyr/zephyr.uf2",
+      "bytes": 111104,
+      "sha256": "ce5cb47c15d4dbc6045938be440557374dca061e0c1972d713a7cc5cd96b5ed0"
+    }
+  ],
+  "source_sha256": {
+    "hardware/firmware/rp2350_debug_helper/Kconfig": "6f9e09f2982846d9661018444547110850d9dce4196c5bd1660b6ec4fb30e29b",
+    "hardware/firmware/rp2350_debug_helper/sense_state_probe.conf": "9db0bf4806cb9aa9f30e20f4309ea00a8e156611a16132d58c0fc0904cbe9f57",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.c": "269e8edbce8074e7357831ee2acab8e01c3ab13150f5afc0f2ed89e00cafedc3",
+    "hardware/firmware/rp2350_debug_helper/src/platform_io.h": "524748e41b730e5902131c0e5e37dbae0ed883ed9ce763cee144387befa828c9",
+    "hardware/firmware/rp2350_debug_helper/src/usb_connection.c": "6ed909002d17016644438e74478da5fc46615554c84bed493ae8acc420b18a9c"
+  },
+  "baseline_byte_identical": true,
+  "readback_register_address": "0x40038074",
+  "readback_image_flashed": false,
+  "live_pad_register_observed": false,
+  "adc_enabled": false
+}

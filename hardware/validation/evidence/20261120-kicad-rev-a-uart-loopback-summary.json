@@ -1,0 +1,246 @@
+{
+  "operator_date": "2026-11-20",
+  "board": "operator-identified manufactured KiCad Rev-A",
+  "device_serial": "FA63A4D787572B33",
+  "firmware_hello": "gp28safe-1",
+  "method": "J1.7 directly joined to J1.8; external control load removed; DUT/spare Pico disconnected; helper USB powered; PPK2 Source Meter; operator Fluke preflight VIO; fresh exclusive USB epoch per point; configured DUT UART 460800 baud/8N1.",
+  "scope": "Two bounded payloads per actual preflight voltage only; no continuous rail recording, analog waveform/absolute baud accuracy, external-DUT clock interoperability, cable/load margins, extended stress, v2 service/HIL or full board acceptance.",
+  "points": [
+    {
+      "label": "1v8",
+      "operator_preflight_vio_v": 1.858,
+      "requested_ppk_mV": 1875,
+      "cases": [
+        {
+          "name": "ascii_33",
+          "bytes": 33,
+          "sha256": "c919cad92ec4a5e1c993ee1a521b9ab1bb4fcb4ea9bdc006397eb3b2d8a41e7d",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 2844444568,
+            "bytes_accepted": 33
+          }
+        },
+        {
+          "name": "binary_256",
+          "bytes": 256,
+          "sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 2844706819,
+            "bytes_accepted": 256
+          }
+        }
+      ],
+      "baseline_status": {
+        "type": "buffer_status",
+        "timestamp_us": 2844439059,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 0,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "final_status": {
+        "type": "buffer_status",
+        "timestamp_us": 2845442887,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "log": {
+        "file": "20261120-kicad-rev-a-uart-loopback-1v8.jsonl",
+        "sha256": "a54cd0b87a1ca2ff2d30885ac7789cc527fadcd9d3b90845a3282eb8d6494526",
+        "records": 303,
+        "source_sha256": "924dc07918f9ef0984c75d7816a30b823613a13a275a663105844ba0b297f1c5",
+        "source_hash_verified": true,
+        "port_closed": true,
+        "dtr_deasserted": true,
+        "closed_utc": "2026-11-20T16:48:18.782197+00:00"
+      }
+    },
+    {
+      "label": "2v5",
+      "operator_preflight_vio_v": 2.53,
+      "requested_ppk_mV": 2575,
+      "cases": [
+        {
+          "name": "ascii_33",
+          "bytes": 33,
+          "sha256": "8bf23a8d3ed7cd83d1604b9e36f00f9a8ef249ddf062d9c09b9c0a6690bef1e4",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 2969988873,
+            "bytes_accepted": 33
+          }
+        },
+        {
+          "name": "binary_256",
+          "bytes": 256,
+          "sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 2970234995,
+            "bytes_accepted": 256
+          }
+        }
+      ],
+      "baseline_status": {
+        "type": "buffer_status",
+        "timestamp_us": 2969983569,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "final_status": {
+        "type": "buffer_status",
+        "timestamp_us": 2970991347,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "log": {
+        "file": "20261120-kicad-rev-a-uart-loopback-2v5.jsonl",
+        "sha256": "18654175265eae4c007e58278f27029e1b34509093667bd90d67738d1ab4abf7",
+        "records": 303,
+        "source_sha256": "924dc07918f9ef0984c75d7816a30b823613a13a275a663105844ba0b297f1c5",
+        "source_hash_verified": true,
+        "port_closed": true,
+        "dtr_deasserted": true,
+        "closed_utc": "2026-11-20T16:50:24.331087+00:00"
+      }
+    },
+    {
+      "label": "3v3",
+      "operator_preflight_vio_v": 3.28,
+      "requested_ppk_mV": 3325,
+      "cases": [
+        {
+          "name": "ascii_33",
+          "bytes": 33,
+          "sha256": "d6e63c81ddc0a0178feff6f741d1f91deba86736d9de9cd920db37783a7d33e3",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 3054565292,
+            "bytes_accepted": 33
+          }
+        },
+        {
+          "name": "binary_256",
+          "bytes": 256,
+          "sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 3054813571,
+            "bytes_accepted": 256
+          }
+        }
+      ],
+      "baseline_status": {
+        "type": "buffer_status",
+        "timestamp_us": 3054559491,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "final_status": {
+        "type": "buffer_status",
+        "timestamp_us": 3055562031,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "log": {
+        "file": "20261120-kicad-rev-a-uart-loopback-3v3.jsonl",
+        "sha256": "f3f7eca46488a9ef86a3acdfc0d8d83d0a0d1b459554f05eec0f3b33d1b949fd",
+        "records": 303,
+        "source_sha256": "924dc07918f9ef0984c75d7816a30b823613a13a275a663105844ba0b297f1c5",
+        "source_hash_verified": true,
+        "port_closed": true,
+        "dtr_deasserted": true,
+        "closed_utc": "2026-11-20T16:51:48.899649+00:00"
+      }
+    },
+    {
+      "label": "5v0",
+      "operator_preflight_vio_v": 4.96,
+      "requested_ppk_mV": 5000,
+      "cases": [
+        {
+          "name": "ascii_33",
+          "bytes": 33,
+          "sha256": "dba1666d31abcc947755f4bb15d739126f47c3c7cc440bbeda487e6ba29fd8e1",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 3290414360,
+            "bytes_accepted": 33
+          }
+        },
+        {
+          "name": "binary_256",
+          "bytes": 256,
+          "sha256": "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+          "exact_match_verified_from_raw_frames": true,
+          "response": {
+            "ok": true,
+            "timestamp_us": 3290663935,
+            "bytes_accepted": 256
+          }
+        }
+      ],
+      "baseline_status": {
+        "type": "buffer_status",
+        "timestamp_us": 3290408854,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "final_status": {
+        "type": "buffer_status",
+        "timestamp_us": 3291414294,
+        "uart_rx_size_bytes": 32768,
+        "uart_rx_used_bytes": 0,
+        "uart_rx_high_water_bytes": 256,
+        "dropped_bytes_total": 0,
+        "overflow_events": 0
+      },
+      "log": {
+        "file": "20261120-kicad-rev-a-uart-loopback-5v0.jsonl",
+        "sha256": "463ca71c42620a563b7278723607df27c2882a5ae3fdce2f66bdefba93c008d2",
+        "records": 303,
+        "source_sha256": "924dc07918f9ef0984c75d7816a30b823613a13a275a663105844ba0b297f1c5",
+        "source_hash_verified": true,
+        "port_closed": true,
+        "dtr_deasserted": true,
+        "closed_utc": "2026-11-20T16:55:44.751690+00:00"
+      }
+    }
+  ],
+  "total_exact_bytes_transmitted_and_echoed": 1156,
+  "reported_dropped_bytes": 0,
+  "reported_overflow_events": 0,
+  "host_cleanup_at_end": {
+    "all_four_epochs_closed": true,
+    "serial_owner_after_close": false,
+    "tcp_2040_listener_after_close": false
+  }
+}

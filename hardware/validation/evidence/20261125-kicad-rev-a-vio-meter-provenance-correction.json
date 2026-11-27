@@ -1,0 +1,101 @@
+{
+  "recorded_at_utc": "2026-11-25T22:43:13.082705+00:00",
+  "operator_clarification": "Mastech MAS830L I don't have Fluke 115 for the moment",
+  "followup_question": "Are both probes now removed, and were the earlier voltage sweep and 3.22 V ADC_VREF reading also measured with the Mastech?",
+  "operator_followup_reply": "Yes for both questions",
+  "confirmed_meter": "Mastech MAS830L",
+  "confirmed_probes_removed": true,
+  "scope": "The current viosense-2 sensing campaign: earlier voltage sweep/reference and current diagnostic measurements. Does not revise older historical validation where Fluke was explicitly identified.",
+  "correction": "Earlier Fluke 115 model labels and fluke_* field names were carried forward from older tests. For this sensing campaign, read the operator voltage readings as Mastech MAS830L measurements. Original records/hashes and voltage values are preserved; field names are not independent instrument provenance.",
+  "affected_original_records": [
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-1p8-comparison.json",
+      "sha256": "06a31caaaff4534d5db0770c8259fb0622a67a80ed966bf2a42400526a842c51"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-1p8-uart-active.json",
+      "sha256": "29401fb06626e1e0724796991372cdc3f7a5c4ac435a3ae9d8f20f194b1b163a"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-1p8-uart-probe.json",
+      "sha256": "bdc16bb683e444f9cefe2a67cb126a73c67a05ce87a184128ee9a71d71b6626f"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-2p5-comparison.json",
+      "sha256": "285da06e66831ce45fe0e85a27025a51ecef2033f899876361397579212e2146"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-3p3-comparison.json",
+      "sha256": "e2c34dc96403f3209c30e43fe02bd8b6a0fbcacf7045c4f2a68472d385061f43"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-5p0-comparison.json",
+      "sha256": "ffff846e0e83c815899e7a02163722b178a5718ebd0f29b888695572e406c6ea"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-connected.json",
+      "sha256": "4d744dc2e501139c869f8649966ff19bc51a023c91af57ea2a5a025b3ba01cdd"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-diagnostic.json",
+      "sha256": "01e5c1073a7e01076bb9a24b0b3f0cbd2081a80924aa13977f3657c227f641a3"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-off.json",
+      "sha256": "4ca5473a847557c85d934a94deae7b12090965ec5733182491ea316aab1430d1"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on-startup.json",
+      "sha256": "2226dded2b1eb761abfb89f66e134ad1e96d54592f0e37e74d496f3d6835e7c7"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-usb-on.json",
+      "sha256": "8165ce67a2cb55c8201dc47c7c1a862dbe8d8f58d3ba55a3db3caa13077ab053"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off-transition.json",
+      "sha256": "46cd78461cea432a63bb91077054ab99842c21a1e8a52a16dd56a3f7d0a1ee15"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-off.json",
+      "sha256": "0de851920813e2b37b25255c3fc9a647a515036f3baf90d3bf3b8f001e5ad0a1"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored-transition.json",
+      "sha256": "1b2094ce8205703c28dd935406d64a2e861874e0c3d6cd58f295d20ea05c4367"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored.json",
+      "sha256": "6ebeb9fd41415680558ff9b053a0407cd5e1a411a377c58b685ea95e0a99d5c4"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-reference-analysis.json",
+      "sha256": "c77a9c2fb1daea582100e0935c1fb25de1e460adca19a6f09151d1aab9dec678"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-1p8.json",
+      "sha256": "7a6572f341b567f44cb261ae9fd7a756663423647c5c742f7392eb35630585f7"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-2p5.json",
+      "sha256": "407a836bc1b4027896aac4de0e1fc7898087930141afb891c9fe00d4b0f0db73"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-3p3.json",
+      "sha256": "cbf66a41d3f01792d8266996a90358762f71ccb2e9fc88495039ae17b8bfd521"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-5p0.json",
+      "sha256": "22517a68cb929f4db9b7a23414b5adc0dbbaf417cc403bc765f8da6f9cd34c22"
+    },
+    {
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-zero.json",
+      "sha256": "79b46621ce3367a75e900dca204905a0a51d2b84373614f8f6a14f15be804ac8"
+    }
+  ],
+  "image_reference_unchanged": {
+    "adc_reference_mv": 3300,
+    "reference_source": "nominal"
+  },
+  "calibration_limit": "The 3.22 V ADC_VREF reading is a Mastech measurement; it is not evidence of Fluke accuracy or a calibrated ADC reference. No measured-reference image has been built or flashed in this campaign."
+}

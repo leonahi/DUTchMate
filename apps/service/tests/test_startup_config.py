@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from threading import Condition
 from threading import Event as ThreadEvent
@@ -38,7 +39,7 @@ from dutchmate_core.profile import (
     UartProfileConfig,
     resolve_dut_profile,
 )
-from dutchmate_core.runtime import DeviceCoreRuntime, DeviceCoreRuntimeError
+from dutchmate_core.runtime import DeviceCoreRuntime
 from dutchmate_core.session_store.store import SessionRecoveryResult, SessionStore
 from dutchmate_service import startup
 from dutchmate_service.app import create_app
@@ -379,38 +380,12 @@ def test_build_startup_runtime_preserves_disconnected_enhanced_selection(
     assert status.port is None
 
 
-def test_enhanced_startup_requires_declared_voltage_before_opening_host(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    opened = False
-
-    def fake_open_host(**_kwargs: object) -> FakeEnhancedAsyncHost:
-        nonlocal opened
-        opened = True
-        raise AssertionError("host opened before voltage validation")
-
-    monkeypatch.setattr(startup, "open_enhanced_async_host", fake_open_host)
-
-    with pytest.raises(DeviceCoreRuntimeError, match="hardware.dut_io_voltage"):
-        build_startup_runtime(
-            session_root=tmp_path,
-            profile=profile_for(
-                backend_settings(
-                    "enhanced",
-                    serial_port="/dev/ttyACM0",
-                    baudrate=460800,
-                )
-            ),
-        )
-
-    assert opened is False
-
-
+@pytest.mark.parametrize("dut_io_voltage", [None, 3.3], ids=["omitted", "declared"])
 def test_enhanced_startup_selects_one_async_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     request: pytest.FixtureRequest,
+    dut_io_voltage: float | None,
 ) -> None:
     host = FakeEnhancedAsyncHost(
         info=_enhanced_info(),
@@ -424,6 +399,7 @@ def test_enhanced_startup_selects_one_async_host(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         opened.append((port, baudrate, segment_id))
         return host
@@ -437,7 +413,7 @@ def test_enhanced_startup_selects_one_async_host(
                 serial_port="/dev/ttyACM0",
                 baudrate=460800,
             ),
-            dut_io_voltage=3.3,
+            dut_io_voltage=dut_io_voltage,
         ),
     )
     request.addfinalizer(runtime.close)
@@ -448,6 +424,11 @@ def test_enhanced_startup_selects_one_async_host(
     assert host.close_count == 0
     assert runtime.status().connected is True
     assert runtime.status().device == "dutchmate-rp2350"
+    status = runtime.status()
+    assert status.effective_profile["hardware"]["dut_io_voltage"] == dut_io_voltage
+    assert status.active_session_id is not None
+    metadata = runtime.session_store.load_metadata(status.active_session_id)
+    assert metadata["effective_profile"]["hardware"]["dut_io_voltage"] == dut_io_voltage
     reconnect = runtime._backend_reconnect  # noqa: SLF001
     assert isinstance(reconnect, BackendReconnectCoordinator)
     worker = reconnect._worker  # noqa: SLF001
@@ -534,6 +515,7 @@ def test_enhanced_startup_idle_reconnect_restores_existing_status(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         opened.append((port, baudrate, segment_id))
         host = hosts.pop(0)
@@ -1063,6 +1045,7 @@ def test_enhanced_startup_recorder_reopens_with_async_host(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         assert port == "/dev/ttyACM0"
         assert baudrate == 460800
@@ -1163,6 +1146,7 @@ def test_enhanced_reconnect_rejects_changed_device_identity(
         port: str,
         baudrate: int,
         segment_id: int,
+        monotonic_clock: Callable[[], float],
     ) -> FakeEnhancedAsyncHost:
         del port, baudrate
         if not hosts:

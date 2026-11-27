@@ -1,0 +1,26 @@
+{
+  "fluke_dut_vio_v": 1.78,
+  "operator_reading_under_traffic": true,
+  "reported_voltage_mv": {
+    "min": 1811,
+    "max": 1819,
+    "mean": 1815.2
+  },
+  "mean_difference_mv": 35.200000000000045,
+  "mean_difference_percent": 1.977528089887643,
+  "samples": 10,
+  "duration_s": 10.146085542000037,
+  "uart": {
+    "rx_bytes": 980,
+    "tx_frames": 50,
+    "complete_rx_frames": 49,
+    "byte_exact_interior_frames": 48,
+    "traffic_pid": 3207,
+    "interval_s": 0.2
+  },
+  "source_evidence": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-1p8.json",
+  "source_sha256": "7a6572f341b567f44cb261ae9fd7a756663423647c5c742f7392eb35630585f7",
+  "reference_source": "nominal",
+  "adc_reference_mv": 3300,
+  "interpretation": "Observed positive difference; cause and accuracy tolerance not established; no calibration change"
+}

@@ -1,0 +1,105 @@
+{
+  "recorded_at_utc": "2026-11-25T22:43:49.602865+00:00",
+  "operator_reply": "Yes for both questions",
+  "confirmed_probes_removed": true,
+  "confirmed_campaign_meter": "Mastech MAS830L",
+  "meter_correction": "hardware/validation/evidence/20261125-kicad-rev-a-vio-meter-provenance-correction.json",
+  "sources": [
+    {
+      "label": "power-order-vio-restored",
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-power-order-vio-restored.json",
+      "sha256": "6ebeb9fd41415680558ff9b053a0407cd5e1a411a377c58b685ea95e0a99d5c4",
+      "summary": {
+        "samples": 10,
+        "duration_s": 10.528336458000012,
+        "voltage_mv": {
+          "min": 5056,
+          "max": 5063,
+          "mean": 5059.5
+        },
+        "adc_raw": {
+          "min": 3138,
+          "max": 3142,
+          "mean": 3139.8
+        },
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": [
+          1794,
+          1812
+        ]
+      }
+    },
+    {
+      "label": "gp28-meter-connected",
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-connected.json",
+      "sha256": "4d744dc2e501139c869f8649966ff19bc51a023c91af57ea2a5a025b3ba01cdd",
+      "summary": {
+        "samples": 11,
+        "duration_s": 10.914190458000121,
+        "voltage_mv": {
+          "min": 4940,
+          "max": 4945,
+          "mean": 4943.181818181818
+        },
+        "adc_raw": {
+          "min": 3066,
+          "max": 3069,
+          "mean": 3067.7272727272725
+        },
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": [
+          2908,
+          2928
+        ]
+      }
+    },
+    {
+      "label": "gp28-meter-removed",
+      "path": "hardware/validation/evidence/20261125-kicad-rev-a-vio-gp28-meter-removed.json",
+      "sha256": "33981bed68f3846ab98dac7e25a640f6f375c14d46fd2ded3b5290f4c23bdb21",
+      "summary": {
+        "samples": 11,
+        "duration_s": 10.233378542000537,
+        "voltage_mv": {
+          "min": 5056,
+          "max": 5061,
+          "mean": 5059
+        },
+        "adc_raw": {
+          "min": 3138,
+          "max": 3141,
+          "mean": 3139.6363636363635
+        },
+        "adc_reference_mv": 3300,
+        "reference_source": "nominal",
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment_id": 0,
+        "evidence_seq": [
+          3386,
+          3406
+        ]
+      }
+    }
+  ],
+  "comparison": {
+    "before_mean_raw": 3139.8,
+    "connected_mean_raw": 3067.7272727272725,
+    "removed_mean_raw": 3139.6363636363635,
+    "removed_minus_before_raw": -0.16363636363666956,
+    "before_mean_reported_vio_mv": 5059.5,
+    "connected_mean_reported_vio_mv": 4943.181818181818,
+    "removed_mean_reported_vio_mv": 5059
+  },
+  "interpretation": "Probe connection produced a reversible decrease in sampled voltage; data strongly supports meter loading of the nominal 47k/47k divider. Approximate inferred 1 megohm added load is an experimental model, not a verified manufacturer impedance specification.",
+  "limits": [
+    "One before/connected/removed sequence, not calibrated accuracy or transient characterization",
+    "Earlier 3.22 V reference reading is Mastech MAS830L, not Fluke",
+    "No firmware/reference changes or automatic corrections made"
+  ]
+}

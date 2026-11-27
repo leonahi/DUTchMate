@@ -374,6 +374,11 @@ def _build_v2_detail(
     uart_records = list(_iter_jsonl_objects(paths.uart_events))
     operation_records = list(_iter_jsonl_objects(paths.operation_events))
     hardware_records = list(_iter_jsonl_objects(paths.hardware_events))
+    for record in hardware_records:
+        if record.get("type") == "dut_vio":
+            _evidence.dut_vio_sample(
+                record, segment_count=len(cast(list[object], metadata["segments"]))
+            )
     connection_records = list(_iter_jsonl_objects(paths.connection_events))
     _validate_v2_primary_order(
         metadata,
@@ -917,11 +922,7 @@ def _validate_v2_primary_order(
         _validate_timestamp(recorded_at, "recorded_at")
         sequences.append(sequence)
     next_sequence = metadata.get("next_evidence_seq")
-    if (
-        isinstance(next_sequence, bool)
-        or not isinstance(next_sequence, int)
-        or next_sequence < 0
-    ):
+    if isinstance(next_sequence, bool) or not isinstance(next_sequence, int) or next_sequence < 0:
         raise ValueError("v2 next_evidence_seq is invalid")
     if sorted(sequences) != list(range(next_sequence)):
         raise ValueError("v2 primary evidence sequence is not contiguous")

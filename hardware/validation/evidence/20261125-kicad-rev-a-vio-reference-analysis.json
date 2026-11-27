@@ -1,0 +1,67 @@
+{
+  "recorded_at_utc": "2026-11-25T22:06:15.075370+00:00",
+  "operator_reference_measurement": {
+    "reply": "3.22V",
+    "voltage_v": 3.22,
+    "meter": "Fluke 115, DC volts",
+    "requested_measurement": "Pico physical pin 35 ADC_VREF relative to J1 pin 1 GND",
+    "requested_setup": "Helper USB on; PPK2 setting 5000 mV; J1.7 to J1.8 loopback; external DUT isolated; GP28 unprobed",
+    "precision": "3.22 V as supplied; no finer digits inferred"
+  },
+  "analysis_kind": "Offline hypothetical recalculation of prior raw ADC samples; not new firmware telemetry or calibration validation",
+  "formula": "(adc_raw * 3220 * 2 + 2048) // 4096, then arithmetic mean",
+  "assumptions": [
+    "Single later reference measurement treated as constant across earlier sweep windows",
+    "Divider nominal ratio 2; meter, divider and ADC uncertainty not independently established"
+  ],
+  "firmware_unchanged": true,
+  "observed_wire_reference_mv": 3300,
+  "observed_wire_reference_source": "nominal",
+  "rows": [
+    {
+      "point": "1p8",
+      "source_evidence": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-1p8.json",
+      "source_sha256": "7a6572f341b567f44cb261ae9fd7a756663423647c5c742f7392eb35630585f7",
+      "fluke_dut_vio_mv": 1780.0,
+      "observed_nominal_mean_mv": 1815.2,
+      "offline_calculated_mean_mv": 1771.2,
+      "offline_difference_mv": -8.8,
+      "offline_difference_percent": -0.494382,
+      "samples": 10
+    },
+    {
+      "point": "2p5",
+      "source_evidence": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-2p5.json",
+      "source_sha256": "407a836bc1b4027896aac4de0e1fc7898087930141afb891c9fe00d4b0f0db73",
+      "fluke_dut_vio_mv": 2470.0,
+      "observed_nominal_mean_mv": 2519.8,
+      "offline_calculated_mean_mv": 2458.8,
+      "offline_difference_mv": -11.2,
+      "offline_difference_percent": -0.453441,
+      "samples": 10
+    },
+    {
+      "point": "3p3",
+      "source_evidence": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-3p3.json",
+      "source_sha256": "cbf66a41d3f01792d8266996a90358762f71ccb2e9fc88495039ae17b8bfd521",
+      "fluke_dut_vio_mv": 3250.0,
+      "observed_nominal_mean_mv": 3326.4,
+      "offline_calculated_mean_mv": 3245.8,
+      "offline_difference_mv": -4.2,
+      "offline_difference_percent": -0.129231,
+      "samples": 10
+    },
+    {
+      "point": "5p0",
+      "source_evidence": "hardware/validation/evidence/20261125-kicad-rev-a-vio-vio-5p0.json",
+      "source_sha256": "22517a68cb929f4db9b7a23414b5adc0dbbaf417cc403bc765f8da6f9cd34c22",
+      "fluke_dut_vio_mv": 4960.0,
+      "observed_nominal_mean_mv": 5058.1,
+      "offline_calculated_mean_mv": 4935.1,
+      "offline_difference_mv": -24.9,
+      "offline_difference_percent": -0.502016,
+      "samples": 10
+    }
+  ],
+  "interpretation": "Lower measured reference is consistent with most observed positive bias. Residuals are not an accuracy guarantee; reference stability and cause are not proven."
+}

@@ -31,6 +31,7 @@ from dutchmate_core.connection import (
     ConnectionOwner,
     ConnectionState,
 )
+from dutchmate_core.dut_vio import DutVioStatus, project_dut_vio_status
 from dutchmate_core.evidence.recorder import (
     ContinuousEvidenceRecorder,
     DurableEvidenceTail,
@@ -177,6 +178,7 @@ class DeviceCoreStatus:
     effective_profile: dict[str, object] | None = None
     active_operations: tuple[ActiveMonitorSummary, ...] = ()
     connection_error: dict[str, object] | None = None
+    dut_vio: DutVioStatus = DutVioStatus()
 
 
 class DeviceCoreRuntime:
@@ -574,7 +576,21 @@ class DeviceCoreRuntime:
                 SessionRetentionStatus(),
             )
             failure = self._connection_owner.failure if self._connection_owner is not None else None
+            health = (
+                self._evidence_recorder.capture_source_health()
+                if self._evidence_recorder is not None
+                else None
+            )
             return DeviceCoreStatus(
+                dut_vio=project_dut_vio_status(
+                    connection_state=connection_state
+                    if self._connected
+                    else (connection_state if connection_state != "connected" else "disconnected"),
+                    capable="power_sense" in self._backend_capabilities,
+                    setup_rejected=health.dut_vio_setup_rejected if health is not None else False,
+                    observation=health.dut_vio_observation if health is not None else None,
+                    now_monotonic=self._status_clock(),
+                ),
                 connection_error=(
                     {"error": failure.error, "detail": str(failure), "context": failure.context}
                     if failure is not None
@@ -642,10 +658,6 @@ class DeviceCoreRuntime:
 
         with self._mutation():
             self._require_connected()
-            if config.dut_io_voltage is None and config.controls:
-                raise DeviceCoreRuntimeError(
-                    "hardware.dut_io_voltage must be configured before GPIO control"
-                )
             if config.dut_io_voltage is not None:
                 self._dut_io_voltage = config.dut_io_voltage
             applied: dict[GpioRoleName, GpioControlChannelState] = {}
@@ -685,13 +697,14 @@ class DeviceCoreRuntime:
         source_name = validate_gpio_source(source)
         with self._mutation():
             self._require_connected()
-            if self._dut_io_voltage is None:
-                raise DeviceCoreRuntimeError(
-                    "hardware.dut_io_voltage must be configured before GPIO control"
-                )
             self._require_control_capability("configure_gpio_mode")
             recorder = self._require_action_recorder()
             return self._configure_gpio_mode(request, source_name, recorder)
+
+    def initialize_backend_observation(self) -> None:
+        """Perform optional source setup after startup profile application."""
+        if self._evidence_recorder is not None:
+            self._evidence_recorder.initialize_observation()
 
     def _initialize_profile_controls(
         self,

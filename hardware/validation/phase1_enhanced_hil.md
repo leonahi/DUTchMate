@@ -3,7 +3,7 @@
 > Dated EAGLE/prototype evidence, not manufactured KiCad acceptance. "Current"
 > and "future" statements inside old entries refer to their recorded date.
 > The [KiCad source](../pcb/debug-helper/rev-a/README.md) and
-> [Phase 1 section 4.1](../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
+> [Phase 1 section 4.1](../../docs/specs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries)
 > own current-board design and functional-HIL boundaries; old entries remain unchanged.
 
 This record preserves the historical Enhanced runs, the current-contract HIL,

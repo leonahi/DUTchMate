@@ -1,0 +1,166 @@
+{
+  "utc": "2026-11-21T17:50:20.023290+00:00",
+  "session": "20261121T174635Z-56780735",
+  "code_head": "9914d6298479b116c4b797e6cf4cfdb1e4788ec0",
+  "code_state": "Uncommitted bounded UART transaction fix with prior GP28 and operator-owned CAD changes retained",
+  "host_patch_sha256": "ecf86a354a2b32b49529b9afa2bb4263c7698a6f41ff6023649a6fe4212288bf",
+  "helper_firmware": "gp28safe-1",
+  "helper_serial": "FA63A4D787572B33",
+  "profile_digest": "8062c40deaa0874708a9fc6c6e39a192080d0bcbad4f7103e182d9664a8dc6f8",
+  "config_sha256": "9d0e6e8fde8933e86fd8d5ac34a8f89fec222cc430344db8ebc691d9c978f748",
+  "fixture_build": "phase1-enhanced-460800-001",
+  "mode": "normal, selected while DUT USB disconnected",
+  "power": "Both USB on during test; PPK2 off/VOUT disconnected; wiring and probes untouched",
+  "software_preflight": "1893 passed in52.37s",
+  "other_gate": "Ruff/mypy103/lock66/diff passed before startup; tested source hashes unchanged after shutdown",
+  "profiles": [
+    {
+      "utc": "2026-11-21T17:48:21.447497+00:00",
+      "kind": "profile_verified",
+      "requested_pause_s": 0,
+      "measured_signal_interval_s": 0.0,
+      "count": 4096,
+      "checksum": 8386560,
+      "raw_bytes": 94299,
+      "sha256": "efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8",
+      "operation_id": "monitor-81e526b3-4910-49b0-b49d-c0df53488ab8",
+      "outcome": "matched",
+      "timeout_s": 20.0,
+      "evidence_range": [
+        119,
+        12085
+      ],
+      "last_rx_seq": 12083,
+      "terminal_seq": 12084,
+      "ring_high_water_bytes_boot_cumulative": 684
+    },
+    {
+      "utc": "2026-11-21T17:48:30.464956+00:00",
+      "kind": "profile_verified",
+      "requested_pause_s": 0.25,
+      "measured_signal_interval_s": 0.25516937500015047,
+      "count": 4096,
+      "checksum": 8386560,
+      "raw_bytes": 94299,
+      "sha256": "efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8",
+      "operation_id": "monitor-3d100b62-39f7-40f6-992a-e5cb697e398b",
+      "outcome": "matched",
+      "timeout_s": 20.0,
+      "evidence_range": [
+        12085,
+        24070
+      ],
+      "last_rx_seq": 24068,
+      "terminal_seq": 24069,
+      "ring_high_water_bytes_boot_cumulative": 697
+    },
+    {
+      "utc": "2026-11-21T17:48:39.523458+00:00",
+      "kind": "profile_verified",
+      "requested_pause_s": 0.5,
+      "measured_signal_interval_s": 0.5050607500002116,
+      "count": 4096,
+      "checksum": 8386560,
+      "raw_bytes": 94299,
+      "sha256": "efd834a49a58d2658dd2e4ca509fbdd677894242740b4c3391b5c2559eb8f4f8",
+      "operation_id": "monitor-c13b3dd3-1103-4ac6-b41c-27fa7eadfdad",
+      "outcome": "matched",
+      "timeout_s": 20.0,
+      "evidence_range": [
+        24070,
+        36068
+      ],
+      "last_rx_seq": 36066,
+      "terminal_seq": 36067,
+      "ring_high_water_bytes_boot_cumulative": 966
+    }
+  ],
+  "profile_scope": "SIGSTOP/SIGCONT interval measures a service-consumption pause, not independently observed USB bus stall. No hardware waveform evidence implied.",
+  "raw_bytes": 283040,
+  "raw_sha256": "6435d0cfda18f95dfad46a394dfed62879e926086fdb5fd8fcdb91456fe10fc6",
+  "exact_trace": "BOOT, INFO, three deterministic SUSTAIN outputs, PONG; entire trace verified",
+  "evidence_records": 36116,
+  "contiguous_sequences": true,
+  "record_types": {
+    "connected": 1,
+    "control_attempt": 3,
+    "buffer_status": 167,
+    "control_result": 3,
+    "uart_rx": 35922,
+    "operation_started": 5,
+    "uart_tx_attempt": 5,
+    "uart_tx_result": 5,
+    "operation_terminal": 5
+  },
+  "operation_summary": {
+    "active": 0,
+    "completed": 5,
+    "failed": 0,
+    "started": 5
+  },
+  "evidence_quality": {
+    "backend_integrity": {
+      "dropped_bytes": 0,
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer"
+    },
+    "local_recording": "complete"
+  },
+  "segments": [
+    {
+      "backend": {
+        "backend_capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capabilities": [
+          "device_timestamp",
+          "gpio_control",
+          "overflow_telemetry",
+          "uart_receive",
+          "uart_send"
+        ],
+        "capability_policy": {
+          "uart_send": {
+            "source": "hardware.uart.tx_enabled",
+            "tx_policy_enabled": true
+          }
+        },
+        "device": "dutchmate-rp2350",
+        "firmware": "gp28safe-1",
+        "mode": "enhanced",
+        "port": "/dev/cu.usbmodem11401"
+      },
+      "end_reason": "service_shutdown",
+      "ended_at": "2026-11-21T17:49:22Z",
+      "first_timestamp_us": 0,
+      "last_timestamp_us": 166969105,
+      "segment_id": 0,
+      "started_at": "2026-11-21T17:46:35Z",
+      "timestamp": {
+        "clock": "rp2350_timer",
+        "event_granularity": "uart_event",
+        "observation_point": "debug_helper_uart_receive",
+        "origin": "segment_start",
+        "source": "device",
+        "source_origin_us": 50257810,
+        "unit": "us"
+      }
+    }
+  ],
+  "state": "completed",
+  "end_reason": "service_shutdown",
+  "shutdown_ownership_verified": true,
+  "preexisting_files_verified_unchanged": 930,
+  "original_timeout": "Prior 20s timeout preserved. Current baseline/250ms/500ms all matched with unchanged20s deadline.",
+  "remaining": "Full board acceptance open: UART waveforms/signal integrity, loaded helper3V3 isolation and remaining sequencing. No firmware rebuild/flash or new ADC/EVENT functionality.",
+  "archive": {
+    "file": "20261121-kicad-rev-a-live-admission-evidence.tar.gz",
+    "bytes": 1301656,
+    "sha256": "cf9251411313d03b70208fc614ff37eb419a00f54dae963af1301b528c7b059a",
+    "member_hashes_verified": 18
+  }
+}

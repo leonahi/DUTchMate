@@ -1,0 +1,121 @@
+{
+  "recorded_at_utc": "2026-11-25T22:29:56.506773+00:00",
+  "request": {
+    "text": "VIO_RESTORED_UART_CHECK",
+    "line_ending": "lf",
+    "conditions": [
+      {
+        "pattern": "VIO_RESTORED_UART_CHECK"
+      }
+    ],
+    "timeout_s": 2
+  },
+  "response": {
+    "ok": true,
+    "operation_id": "interact-bb05026b-22d9-46dd-9cfc-e0a77aa1cc4d",
+    "outcome": "matched",
+    "mode": "conditions",
+    "duration_s": null,
+    "conditions": [
+      {
+        "pattern": "VIO_RESTORED_UART_CHECK",
+        "name": null
+      }
+    ],
+    "timeout_s": 2.0,
+    "start_cursor": {
+      "session_id": "20261125T221457Z-bec57e67",
+      "next_evidence_seq": 1824
+    },
+    "end_cursor": {
+      "session_id": "20261125T221457Z-bec57e67",
+      "next_evidence_seq": 1851
+    },
+    "evidence_ranges": [
+      {
+        "session_id": "20261125T221457Z-bec57e67",
+        "start_evidence_seq": 1823,
+        "end_evidence_seq_exclusive": 1851
+      }
+    ],
+    "matched_condition": {
+      "condition_index": 0,
+      "condition": {
+        "pattern": "VIO_RESTORED_UART_CHECK",
+        "name": null
+      },
+      "source": {
+        "session_id": "20261125T221457Z-bec57e67",
+        "evidence_seq": 1849,
+        "segment_id": 0,
+        "timestamp_us": 898682231,
+        "channel": 0
+      },
+      "line": {
+        "start_evidence_seq": 1826,
+        "start_event_offset": 0,
+        "end_evidence_seq": 1849,
+        "end_event_offset": 1,
+        "total_bytes": 24
+      },
+      "match_start_byte": 0,
+      "match_end_byte": 23,
+      "excerpt": {
+        "start_byte": 0,
+        "end_byte": 24,
+        "raw_b64": "VklPX1JFU1RPUkVEX1VBUlRfQ0hFQ0sK",
+        "text": "VIO_RESTORED_UART_CHECK\n",
+        "truncated": false
+      }
+    },
+    "line_processing_limited": false,
+    "integrity": {
+      "loss_status": "none_reported",
+      "observation_scope": "debug_helper_rx_buffer",
+      "dropped_bytes": 0
+    },
+    "timestamp_provenance": [
+      {
+        "session_id": "20261125T221457Z-bec57e67",
+        "segment": {
+          "segment_id": 0,
+          "timestamp": {
+            "source": "device",
+            "clock": "rp2350_timer",
+            "unit": "us",
+            "origin": "segment_start",
+            "source_origin_us": 50084186,
+            "observation_point": "debug_helper_uart_receive",
+            "event_granularity": "uart_event"
+          }
+        }
+      }
+    ],
+    "data_b64": "VklPX1JFU1RPUkVEX1VBUlRfQ0hFQ0sK",
+    "transformation": {
+      "input_form": "text",
+      "line_ending": "lf",
+      "resolved_line_ending": "lf"
+    },
+    "tx": {
+      "ok": true,
+      "performed_at": "2026-11-25T22:29:56.476132Z",
+      "device_timestamp_us": 948767472,
+      "attempt_id": "1331c360-3de6-406d-93ea-e960314a2510",
+      "data_b64": "VklPX1JFU1RPUkVEX1VBUlRfQ0hFQ0sK",
+      "accepted_bytes": 24,
+      "status": "success",
+      "audit_status": "recorded",
+      "transformation": {
+        "input_form": "text",
+        "line_ending": "lf",
+        "resolved_line_ending": "lf"
+      },
+      "attempt_session_id": "20261125T221457Z-bec57e67",
+      "attempt_evidence_seq": 1824,
+      "result_session_id": "20261125T221457Z-bec57e67",
+      "result_evidence_seq": 1825
+    },
+    "tx_error": null
+  }
+}

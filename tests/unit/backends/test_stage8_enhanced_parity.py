@@ -51,7 +51,7 @@ def test_enhanced_wire_telemetry_control_reconnect_and_v2_evidence(tmp_path, mon
     wires = []
     readers = []
 
-    async def open_adapter(*, port, segment_id, baudrate):
+    async def open_adapter(*, port, segment_id, baudrate, monotonic_clock):
         reader = FakeAsyncSerialReader()
         wire = FixtureWire(reader)
         readers.append(reader)
@@ -78,6 +78,7 @@ def test_enhanced_wire_telemetry_control_reconnect_and_v2_evidence(tmp_path, mon
             writer=wire,
             port=port,
             segment_id=segment_id,
+            monotonic_clock=monotonic_clock,
         )
         await adapter.start(1)
         return adapter
