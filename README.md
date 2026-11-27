@@ -21,15 +21,16 @@ package is not required.
 
 ## 1. Install DUTchMate
 
-Requires **Python 3.10+** and **uv**. From this repository checkout:
+Requires **Python 3.10+** and **uv**:
 
 ```bash
-uv sync --all-packages
-export PATH="$PWD/.venv/bin:$PATH"
+uv tool install dutchmate==0.2.0
 ```
 
-These examples use the current checkout. The published `v0.1.0` release has an
-older interface; see its [release notes](docs/releases/v0.1.0.md).
+If the installed commands are not on your PATH, run `uv tool update-shell` and
+reopen your terminal. See the [v0.2.0 release notes](docs/releases/v0.2.0.md)
+for upgrade guidance, or the [setup guide](docs/developer_guide.md#local-setup)
+to run from a repository checkout.
 
 ## 2. Connect your device
 
@@ -56,7 +57,7 @@ to connect its DUT_VIO reference to the DUT's logic supply.
 Find the MCP launcher's absolute path:
 
 ```bash
-realpath .venv/bin/dutchmate-mcp
+command -v dutchmate-mcp
 ```
 
 Register a local MCP server in your coding agent with these settings:
