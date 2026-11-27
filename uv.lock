@@ -314,7 +314,7 @@ wheels = [
 
 [[package]]
 name = "dutchmate"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/dutchmate" }
 dependencies = [
     { name = "dutchmate-cli" },
@@ -331,7 +331,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "dutchmate-core" },
@@ -350,7 +350,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-core"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "core" }
 dependencies = [
     { name = "pyserial-asyncio" },
@@ -365,7 +365,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-debug-agent"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "apps/debug_agent" }
 dependencies = [
     { name = "dutchmate-core" },
@@ -380,7 +380,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "apps/mcp_server" }
 dependencies = [
     { name = "dutchmate-core" },
@@ -397,7 +397,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-service"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "apps/service" }
 dependencies = [
     { name = "dutchmate-core" },
@@ -414,7 +414,7 @@ requires-dist = [
 
 [[package]]
 name = "dutchmate-workspace"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

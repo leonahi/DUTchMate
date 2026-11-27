@@ -12,8 +12,12 @@ for every development slice. See the
 ## Host Release Scope
 
 The approved next host release is **v0.2.0**, with the five public host
-distributions. Debug Agent publication remains deferred. At this snapshot,
-release version/pin/lockfile preparation has not been performed.
+distributions. Debug Agent publication remains deferred; its workspace version
+is synchronized only for internal validation. The candidate versions, exact
+internal pins and lockfile are prepared at `0.2.0`. All six workspace artifact
+pairs and the five public pairs passed clean installed-package checks.
+[Prepared release notes](releases/v0.2.0.md) describe upgrade behavior and limits.
+Publication remains subject to review, CI and the existing protected release gates.
 
 ## Acceptance Snapshot
 

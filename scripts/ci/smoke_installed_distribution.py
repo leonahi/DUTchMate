@@ -108,7 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--public-release",
         action="store_true",
-        help="Validate the five-distribution v0.1 public release set.",
+        help="Validate the five approved public host distributions.",
     )
     return parser
 
@@ -127,7 +127,7 @@ def _wheels_by_distribution(
                 requirements = metadata.get_all("Requires-Dist")
                 assert "mcp>=2.0,<3" in requirements
                 assert "httpx>=0.27" in requirements
-                assert "dutchmate-core==0.1.0" in requirements
+                assert f"dutchmate-core=={metadata['Version']}" in requirements
         distribution = metadata["Name"]
         if distribution in wheels:
             raise AssertionError(f"multiple wheels built for {distribution}")

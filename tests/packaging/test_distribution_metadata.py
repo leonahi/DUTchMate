@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import runpy
+import zipfile
 from importlib import metadata
 from pathlib import Path
 
-from dutchmate_mcp_server.server import create_server
+import pytest
+
+from dutchmate_core import __version__
+from dutchmate_mcp_server.server import SERVER_VERSION, create_server
 
 try:
     import tomllib
@@ -67,6 +71,13 @@ def test_all_host_distributions_use_the_workspace_version() -> None:
     assert versions == dict.fromkeys(DISTRIBUTIONS, host_version)
 
 
+def test_runtime_version_identifiers_match_the_workspace_version() -> None:
+    host_version = _project(HOST_VERSION_AUTHORITY)["version"]
+
+    assert __version__ == host_version
+    assert host_version == SERVER_VERSION
+
+
 def test_first_party_dependencies_use_exact_host_version_constraints() -> None:
     host_version = _project(HOST_VERSION_AUTHORITY)["version"]
 
@@ -104,6 +115,26 @@ async def test_installed_smoke_expects_the_current_public_catalog() -> None:
     assert smoke["EXPECTED_TOOLS"] == [tool.name for tool in await create_server().list_tools()]
 
 
+@pytest.mark.parametrize("version", ["0.1.0", "0.2.0"])
+def test_installed_smoke_accepts_a_core_pin_matching_the_wheel_version(
+    tmp_path: Path, version: str
+) -> None:
+    smoke = runpy.run_path(str(REPOSITORY_ROOT / "scripts/ci/smoke_installed_distribution.py"))
+    wheel = _mcp_wheel(tmp_path, version=version, core_version=version)
+
+    assert smoke["_wheels_by_distribution"](tmp_path, {"dutchmate-mcp-server"}) == {
+        "dutchmate-mcp-server": wheel
+    }
+
+
+def test_installed_smoke_rejects_a_stale_core_pin(tmp_path: Path) -> None:
+    smoke = runpy.run_path(str(REPOSITORY_ROOT / "scripts/ci/smoke_installed_distribution.py"))
+    _mcp_wheel(tmp_path, version="0.2.0", core_version="0.1.0")
+
+    with pytest.raises(AssertionError):
+        smoke["_wheels_by_distribution"](tmp_path, {"dutchmate-mcp-server"})
+
+
 def test_installed_metadata_exposes_mcp_entrypoints_and_runtime_dependencies() -> None:
     installed = metadata.distribution("dutchmate")
     scripts = {ep.name: ep.value for ep in installed.entry_points if ep.group == "console_scripts"}
@@ -111,7 +142,8 @@ def test_installed_metadata_exposes_mcp_entrypoints_and_runtime_dependencies() -
     dependencies = metadata.distribution("dutchmate-mcp-server").requires
     assert "mcp>=2.0,<3" in dependencies
     assert "httpx>=0.27" in dependencies
-    assert "dutchmate-core==0.1.0" in dependencies
+    host_version = _project(HOST_VERSION_AUTHORITY)["version"]
+    assert f"dutchmate-core=={host_version}" in dependencies
     assert metadata.version("mcp").split(".", 1)[0] == "2"
 
 
@@ -165,3 +197,18 @@ def _project(path: Path) -> dict[str, object]:
     project = parsed["project"]
     assert isinstance(project, dict)
     return project
+
+
+def _mcp_wheel(root: Path, *, version: str, core_version: str) -> Path:
+    wheel = root / f"dutchmate_mcp_server-{version}-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(
+            f"dutchmate_mcp_server-{version}.dist-info/METADATA",
+            "Metadata-Version: 2.4\n"
+            "Name: dutchmate-mcp-server\n"
+            f"Version: {version}\n"
+            "Requires-Dist: mcp>=2.0,<3\n"
+            "Requires-Dist: httpx>=0.27\n"
+            f"Requires-Dist: dutchmate-core=={core_version}\n",
+        )
+    return wheel

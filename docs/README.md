@@ -24,6 +24,7 @@ plans are retired; implemented features retain their contracts and tests.
 | [Debug Helper firmware](../hardware/firmware/rp2350_debug_helper/README.md) | RP2350 Pico 2 firmware behavior, build and host verification. |
 | [Zephyr DUT fixture](../hardware/firmware/zephyr_dut/README.md) | Separate RP2040 Pico 1 test target, DMF/1 commands, wiring and builds. |
 | [Ring-buffer validation](../hardware/validation/phase1_ring_buffer.md) | Measurements and final empirical ring-buffer decision. |
+| [v0.2.0 release notes](releases/v0.2.0.md) | Prepared host release: upgrade guidance, features, public scope and remaining limits. |
 | [v0.1.0 release notes](releases/v0.1.0.md) | First public Python host release. |
 
 `hardware/protocol/v1/` is the canonical Enhanced host-device wire contract.
