@@ -85,7 +85,7 @@ def test_apply_hardware_config_requires_connection(tmp_path: Path) -> None:
         runtime.apply_hardware_config(config)
 
 
-def test_configure_gpio_mode_requires_declared_dut_io_voltage(tmp_path: Path) -> None:
+def test_configure_gpio_mode_without_declared_dut_io_voltage(tmp_path: Path) -> None:
     control = FakeDeviceControl([CommandSuccessMessage(timestamp_us=100)])
     runtime = _recording_runtime(
         device_control=control,
@@ -93,20 +93,34 @@ def test_configure_gpio_mode_requires_declared_dut_io_voltage(tmp_path: Path) ->
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
 
-    with pytest.raises(DeviceCoreRuntimeError, match="hardware.dut_io_voltage"):
-        runtime.configure_gpio_mode(
-            role="reset",
-            channel="CTRL0",
-            dut_signal="RESET_N",
-            mode="open_drain",
-            active_level="low",
+    state = runtime.configure_gpio_mode(
+        role="reset",
+        channel="CTRL0",
+        dut_signal="RESET_N",
+        mode="open_drain",
+        active_level="low",
+    )
+
+    assert state.state == "configured"
+    assert state.device_timestamp_us == 100
+    assert runtime.status().control_channels["CTRL0"] == state
+    assert control.calls == [
+        (
+            "configure_gpio_mode",
+            {
+                "channel": "CTRL0",
+                "mode": "open_drain",
+                "active_level": "low",
+                "idle_level": None,
+            },
         )
-
-    assert control.calls == []
-    assert runtime.status().control_channels["CTRL0"].state == "unconfigured"
+    ]
 
 
-def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
+@pytest.mark.parametrize("dut_io_voltage", [None, 3.3], ids=["omitted", "declared"])
+def test_apply_hardware_config_sends_configured_modes(
+    tmp_path: Path, dut_io_voltage: float | None
+) -> None:
     control = FakeDeviceControl(
         [
             CommandSuccessMessage(timestamp_us=100),
@@ -118,28 +132,28 @@ def test_apply_hardware_config_sends_configured_modes(tmp_path: Path) -> None:
         session_store=SessionStore(root=tmp_path),
     )
     runtime.record_backend_connection(enhanced_info(port="/dev/ttyACM0"))
-    config = parse_hardware_gpio_config(
-        {
-            "hardware": {
-                "dut_io_voltage": 3.3,
-                "control": {
-                    "reset": {
-                        "channel": "CTRL0",
-                        "dut_signal": "RESET_N",
-                        "mode": "open_drain",
-                        "active_level": "low",
-                    },
-                    "boot": {
-                        "channel": "CTRL1",
-                        "dut_signal": "BOOT0",
-                        "mode": "push_pull",
-                        "active_level": "high",
-                        "idle_level": "low",
-                    },
+    data = {
+        "hardware": {
+            "control": {
+                "reset": {
+                    "channel": "CTRL0",
+                    "dut_signal": "RESET_N",
+                    "mode": "open_drain",
+                    "active_level": "low",
                 },
-            }
+                "boot": {
+                    "channel": "CTRL1",
+                    "dut_signal": "BOOT0",
+                    "mode": "push_pull",
+                    "active_level": "high",
+                    "idle_level": "low",
+                },
+            },
         }
-    )
+    }
+    if dut_io_voltage is not None:
+        data["hardware"]["dut_io_voltage"] = dut_io_voltage
+    config = parse_hardware_gpio_config(data)
 
     states = runtime.apply_hardware_config(config)
 

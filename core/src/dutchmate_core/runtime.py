@@ -658,10 +658,6 @@ class DeviceCoreRuntime:
 
         with self._mutation():
             self._require_connected()
-            if config.dut_io_voltage is None and config.controls:
-                raise DeviceCoreRuntimeError(
-                    "hardware.dut_io_voltage must be configured before GPIO control"
-                )
             if config.dut_io_voltage is not None:
                 self._dut_io_voltage = config.dut_io_voltage
             applied: dict[GpioRoleName, GpioControlChannelState] = {}
@@ -701,10 +697,6 @@ class DeviceCoreRuntime:
         source_name = validate_gpio_source(source)
         with self._mutation():
             self._require_connected()
-            if self._dut_io_voltage is None:
-                raise DeviceCoreRuntimeError(
-                    "hardware.dut_io_voltage must be configured before GPIO control"
-                )
             self._require_control_capability("configure_gpio_mode")
             recorder = self._require_action_recorder()
             return self._configure_gpio_mode(request, source_name, recorder)
