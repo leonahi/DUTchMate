@@ -157,11 +157,6 @@ def build_startup_runtime(
             profile=profile,
         )
 
-    if profile.dut_io_voltage is None:
-        raise DeviceCoreRuntimeError(
-            "Enhanced backend requires hardware.dut_io_voltage before opening the Debug Helper"
-        )
-
     # Every physical connection must timestamp receipts in the status clock's domain.
     open_enhanced_host = partial(open_enhanced_async_host, monotonic_clock=reconnect_clock)
     enhanced_host = open_enhanced_host(
