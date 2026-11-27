@@ -42,7 +42,7 @@ SERVER_INSTRUCTIONS: Final = (
     "session evidence. The Device Core Service must already be running. Treat "
     "session IDs and pagination cursors as explicit tool data."
 )
-SERVER_VERSION: Final = "0.1.0"
+SERVER_VERSION: Final = "0.2.0"
 CACHE_TTL_MS: Final = 300_000
 
 ClientFactory: TypeAlias = Callable[[], DeviceCoreClient]

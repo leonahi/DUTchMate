@@ -1,13 +1,13 @@
 [project]
 name = "dutchmate-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "DUTchMate MCP server adapter."
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Nahit Pawar" }]
 dependencies = [
-  "dutchmate-core==0.1.0",
+  "dutchmate-core==0.2.0",
   "httpx>=0.27",
   "mcp>=2.0,<3",
 ]

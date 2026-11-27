@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from dutchmate_core import __version__
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -25,7 +27,7 @@ def _load_script(name: str):  # type: ignore[no-untyped-def]
 def test_release_tag_matches_every_distribution_version() -> None:
     validator = _load_script("validate_release_tag.py")
 
-    assert validator.validate_release_tag("v0.1.0", REPOSITORY_ROOT) == "0.1.0"
+    assert validator.validate_release_tag(f"v{__version__}", REPOSITORY_ROOT) == __version__
 
 
 @pytest.mark.parametrize("tag", ["0.1.0", "v0.1", "v0.1.0rc1", "release-v0.1.0"])

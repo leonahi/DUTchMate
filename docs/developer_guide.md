@@ -51,7 +51,7 @@ Python packages:
 
 | Path | Package | Purpose |
 |---|---|---|
-| `packages/dutchmate/` | `dutchmate` | Public executable ownership for the five-distribution `v0.1.0` release. |
+| `packages/dutchmate/` | `dutchmate` | Public executable ownership for the five-distribution host release. |
 | `core/` | `dutchmate-core` | Protocol, capture, GPIO, sessions, runtime, and workflows. |
 | `apps/cli/` | `dutchmate-cli` | Human-facing HTTP client and process commands. |
 | `apps/service/` | `dutchmate-service` | FastAPI service and selected-serial ownership. |
@@ -81,7 +81,7 @@ uv run --package dutchmate-debug-agent dutchmate-debug --help
 
 The final command is a workspace-development interface. The Debug Agent is
 tested in normal CI but is not a dependency, extra, command, or artifact of the
-public `v0.1.0` release. Public Debug Agent distribution remains deferred; see
+public host release. Public Debug Agent distribution remains deferred; see
 [milestone overview](development_status.md) for the approved next-release scope.
 
 To analyze a completed schema-v1 session with a locally running Ollama model,

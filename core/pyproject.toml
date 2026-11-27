@@ -1,6 +1,6 @@
 [project]
 name = "dutchmate-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Core hardware interface, protocol parsing, session storage, and workflows for DUTchMate."
 requires-python = ">=3.10"
 license = "MIT"
