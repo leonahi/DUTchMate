@@ -1,7 +1,8 @@
-# CI, Packaging, Release, Firmware, and Plugin Distribution Plan
+# CI, Packaging and Distribution Contract
 
-**Status:** Approved design; implementation progress is tracked only in
-`docs/development_status.md`.
+**Scope:** package ownership, version authorities, CI and release acceptance.
+Tasks and follow-up work live in GitHub Issues and PRs; approved release scope
+is summarized in the [milestone overview](../development_status.md).
 
 ## Purpose
 
@@ -12,7 +13,8 @@ boundaries.
 
 Delivery infrastructure is independent of Debug Agent analysis and Phase 1
 hardware acceptance. Normal pull-request CI remains independent of physical
-hardware. Implementation status and release evidence belong in status/history.
+hardware. Implementation evidence belongs in PRs; publication evidence belongs
+with the release and retained artifact records.
 
 ## Architectural Invariants
 
@@ -28,9 +30,9 @@ hardware. Implementation status and release evidence belong in status/history.
   the artifacts that passed acceptance.
 - MCP remains the common coding-agent boundary. Plugins contain registration and
   workflow guidance, not Device Core or hardware-control implementations.
-- `docs/development_status.md` remains the only current progress tracker and
-  owner of the current next step; completed records belong in
-  `docs/development_history.md`.
+- GitHub Issues own work tracking and PRs own implementation/validation records.
+  The milestone overview summarizes release scope and acceptance; the previous
+  development history is archived.
 
 ## Python Distribution Model
 
@@ -110,49 +112,22 @@ The public `v0.1.0` aggregator does not declare a `debug-agent` extra or expose
 and source distribution. Normal CI still builds, installs, and tests the sixth
 workspace distribution so deferral does not allow it to decay.
 
-The first public Debug Agent release is planned for the coordinated `v0.2.0`
-host release. That slice must confirm its coding-agent access model and public
-command surface before adding any aggregator extra or launcher. If
+The Debug Agent remains excluded until a public distribution is explicitly
+approved; a host version bump alone does not add it. That future slice must
+confirm its coding-agent access model and public command surface before adding
+any aggregator extra or launcher. If
 `dutchmate debug` is introduced, it must invoke the installed Debug Agent's
 Python API directly rather than locating the dependency-owned executable on
 `PATH`, because `uv tool install` does not expose dependency executables by
 default.
 
-The `v0.2.0` acceptance slice must also preserve import failures raised inside
-the installed Debug Agent rather than converting them into misleading
+Any Debug Agent public-distribution acceptance must preserve import failures
+raised inside the installed Debug Agent rather than converting them into misleading
 missing-feature errors.
 
-### Console-script migration gate
-
-Before transferring executable ownership, inventory every repository assumption
-about the affected commands. Classify each occurrence as:
-
-- a runtime subprocess or process-replacement path;
-- a unit, integration, or installed-process test;
-- a developer command or helper script;
-- current user or architecture documentation;
-- historical validation evidence that should remain unchanged.
-
-The known migration surface includes the CLI service lifecycle launcher, the
-MCP process-replacement launcher, their tests, the installed MCP integration
-test, developer-guide workspace commands, and architecture text describing
-component-owned executables.
-
-Transfer the metadata ownership and update active consumers atomically. Do not
-commit an intermediate state in which two distributions own the same command.
-Historical evidence in `development_status.md` may continue to describe the
-ownership that applied when the evidence was recorded.
-
-The normal workspace development interface becomes:
-
-```text
-uv run --package dutchmate dutchmate --help
-uv run --package dutchmate dutchmate-service --help
-uv run --package dutchmate dutchmate-mcp --help
-uv run --package dutchmate-debug-agent dutchmate-debug --help
-```
-
-Component entry functions remain directly testable as Python APIs.
+Executable-ownership changes must update metadata, runtime callers, tests and
+current documentation together. Never give two distributions ownership of the
+same command. Preserve historical validation records as recorded.
 
 ## Version Authorities and Release Identities
 
@@ -173,12 +148,11 @@ The workspace version is initially synchronized at `0.1.0` for:
 - `dutchmate-debug-agent`.
 
 The public `v0.1.0` release contains the first five distributions only. The
-Debug Agent's first public release is planned for the coordinated `v0.2.0`
-release; its workspace `0.1.0` artifacts are private CI inputs, not published
-packages.
+Debug Agent remains a private CI input until its publication is approved;
+current release scope is recorded in development status.
 
 CI fails if any distribution version differs or an internal dependency lacks
-the exact synchronized constraint. Future release tooling updates the root and
+the exact synchronized constraint. Release version changes update the root and
 all six package declarations atomically.
 
 Host release tags use:
@@ -189,8 +163,8 @@ vX.Y.Z
 
 ### Debug Helper firmware
 
-Add a firmware-owned `PRODUCT_VERSION` file to the RP2350 Debug Helper project,
-initially `0.1.0`. It is authoritative for the firmware product version and is
+The RP2350 Debug Helper owns `PRODUCT_VERSION`, initially `0.1.0`.
+It is authoritative for the firmware product version and is
 not derived from the host version.
 
 Release-grade builds pass it into `CONFIG_DUTCHMATE_FIRMWARE_VERSION`. The
@@ -228,7 +202,7 @@ checks do not replace protocol and capability negotiation.
 
 ## Host CI
 
-Create one always-running `.github/workflows/ci.yml` with four jobs:
+`.github/workflows/ci.yml` defines four host CI jobs:
 
 1. `quality`;
 2. `python-tests`;
@@ -265,9 +239,9 @@ than live HIL.
 Do not initially require Ruff formatting, coverage thresholds, SBOMs,
 attestations, public plugin-directory submission, or physical hardware.
 
-Extend the existing architecture dependency test to cover the Debug Agent; do
-not create a duplicate dependency checker. Extend the existing protocol schema
-tests to enumerate every checked-in example.
+Architecture contracts cover the Debug Agent alongside the other delivery
+packages. Protocol schema tests enumerate every checked-in example; do not add
+duplicate boundary checkers.
 
 ## Clean-Artifact Acceptance
 
@@ -294,11 +268,12 @@ Validate the following sequence in normal CI:
 8. Install the standalone Debug Agent wheel from the same workspace artifact
    set and invoke `dutchmate-debug --help`.
 9. Start the installed MCP server over stdio, perform modern discovery, list the
-   [twelve v2 tools](mcp_integration_plan.md#target-tool-catalog) in deterministic
+   [twelve v2 tools](mcp_adapter_contract.md#target-tool-catalog) in deterministic
    order, verify bounded unavailable-service errors and clean EOF.
 
-For `v0.1.0`, copy only the five public wheel/source-distribution pairs into a
-separate release directory, rerun metadata, command, and MCP acceptance against
+While Debug Agent publication remains deferred, copy only the five public
+wheel/source-distribution pairs into a separate release directory, rerun
+metadata, command, and MCP acceptance against
 that exact directory, and retain only those accepted artifacts for publishing.
 
 Also run an actual isolated `uv tool install` smoke test with temporary
@@ -311,7 +286,7 @@ the normal `uv` workspace development workflow pass.
 
 ## Firmware CI and Provenance
 
-Create `.github/workflows/firmware.yml` independently from host CI. Use
+`.github/workflows/firmware.yml` is independent from host CI. It uses
 `ghcr.io/zephyrproject-rtos/ci:v0.29.4` pinned by digest; the image contains the
 accepted Zephyr SDK 1.0.1.
 
@@ -332,7 +307,7 @@ fixture exist. Firmware compilation is not hardware acceptance.
 
 ## Coding-Agent Plugin
 
-After clean installed-package MCP acceptance passes, add:
+The local coding-agent plugin has this layout:
 
 ```text
 plugins/dutchmate/
@@ -363,14 +338,14 @@ submission path expects a remote HTTPS MCP endpoint.
 
 CI, private artifacts, firmware builds, and the local plugin proceed before a
 public release. The owner approved Nahit Pawar as the public publisher on
-2026-09-23. The current [licensing policy](../LICENSE.md) applies MIT to all six
+2026-09-23. The current [licensing policy](../../LICENSE.md) applies MIT to all six
 Python distributions, DUTchMate-authored firmware, protocol definitions,
 documentation, scripts, and supporting tools. DUTchMate-authored hardware
 design files under `hardware/pcb/`, including the current Rev-A KiCad source,
 use CERN-OHL-P-2.0. Third-party assets retain their own terms. The legacy EAGLE
 design under `hardware/pcb/debug-helper/legacy-eagle/` remains outside the new
 grants and all public release artifacts; unresolved CAD provenance is recorded
-in the [third-party notices](../THIRD_PARTY_NOTICES.md).
+in the [third-party notices](../../THIRD_PARTY_NOTICES.md).
 
 The root `LICENSE.md` is the authoritative scope map. Each publishable Python
 project declares the SPDX expression `MIT` and includes its own complete
@@ -384,26 +359,15 @@ check configured in GitHub.
 TestPyPI digest verification, production publish, and production digest
 verification jobs separate. The protected `testpypi` and `pypi` environments
 remain the only publication environments. Do not register or publish
-`dutchmate-debug-agent` until the `v0.2.0` release slice.
-
-[PyPI permits only one pending GitHub Trusted Publisher for a given owner,
-repository, workflow, and environment tuple](https://github.com/pypi/warehouse/issues/16920).
-The five new monorepo projects therefore cannot all be registered as pending
-publishers at once. The initial `v0.1.0` release uses the Warehouse-supported
-sequential bootstrap: register one pending project, publish it so the pending
-publisher becomes normal, then register the next pending project with the same
-tuple. [Normal publishers may be associated with multiple
-projects](https://docs.pypi.org/trusted-publishers/adding-a-publisher/). This
-bootstrap is required independently on TestPyPI and production PyPI because
-they are separate indexes.
+`dutchmate-debug-agent` without explicit public-distribution approval.
 
 The host release workflow must:
 
 1. accept only `vX.Y.Z` tags;
 2. verify the tag against the root and all six package versions;
 3. build and validate all six workspace artifact pairs once;
-4. select and revalidate the five `v0.1.0` public artifact pairs without
-   rebuilding;
+4. select and revalidate the five public artifact pairs while Debug Agent is
+   deferred, without rebuilding;
 5. retain only those accepted public artifacts immutably;
 6. expose one separately protected OIDC publication job per project and index;
 7. publish to TestPyPI sequentially in this exact order: `dutchmate-core`,
@@ -423,91 +387,31 @@ The host release workflow must:
 13. use `uv publish` with Trusted Publishing and index checks in publishing
     jobs without rebuilding.
 
-### Initial `v0.1.0` Trusted Publisher Bootstrap
+### Publisher configuration and historical bootstrap
 
-This is the historical first-publication procedure, not a request to repeat
-bootstrap or publish current checkout changes under an existing release tag.
+Existing projects use their registered Trusted Publishers and protected index
+environments. Register a new project only when the approved public artifact set
+adds it; verify the repository, workflow and environment binding separately on
+TestPyPI and PyPI. Never bypass environment protection or rebuild the accepted
+artifacts during publication.
 
-Before pushing `v0.1.0`, register only `dutchmate-core` as a pending TestPyPI
-publisher with owner `leonahi`, repository `DUTchMate`, workflow `release.yml`,
-and environment `testpypi`. If a different project currently holds that pending
-tuple, remove it and register `dutchmate-core` instead. Confirm that the
-`testpypi` environment requires review and permits the release tag before
-starting the workflow.
+The completed first-release register-and-rerun procedure and implementation
+sequence are historical records, not instructions to bootstrap every version.
+Their full text is retained in Git:
 
-After the build job accepts and retains the five-package artifact set:
+```text
+git show eff9d67cd1828c3233308c061da4968fbd4509a0:docs/ci_packaging_distribution_plan.md
+```
 
-1. approve `publish-testpypi-core`;
-2. expect GitHub to start the next dependency job without another environment
-   review; if its project is not yet registered, the OIDC upload fails before
-   creating or uploading that project;
-3. after the preceding pending publisher has converted, register the failed
-   project's exact distribution name as the sole pending publisher and use
-   **Re-run failed jobs** so GitHub reruns that job and its dependents against
-   the retained artifact;
-4. repeat that register-and-rerun cycle for `dutchmate-cli`,
-   `dutchmate-service`, `dutchmate-mcp-server`, and `dutchmate`;
-5. require `verify-testpypi` to validate all five projects and all ten retained
-   files before any production action.
-
-Only after `verify-testpypi` succeeds, register `dutchmate-core` as the sole
-pending production publisher with the same repository and workflow but the
-`pypi` environment. Approve the protected production deployment once, then
-repeat the same one-at-a-time registration and failed-job rerun sequence through
-`publish-pypi-dutchmate`. Every production job uses the protected `pypi`
-environment, and `verify-pypi` validates the exact retained files after the
-final upload.
-
-Do not bypass environment protection. Register only one pending project for the
-shared tuple at a time, and do not use **Re-run all jobs**: **Re-run failed jobs**
-preserves successful predecessors and continues with the original retained
-artifact. The configured index check prevents an identical existing file from
-being treated as a new build.
-
-If sequential pending conversion fails because Warehouse behavior changes,
-stop before publishing the next project. The contingency is a temporary
-account-wide token for the affected index, exposed only through its protected
-GitHub environment, to upload the missing project from the exact retained
-artifact. Immediately revoke the token, remove the secret, and register the
-normal `release.yml` Trusted Publisher for the newly created project before
-continuing. This broader-credential path is a last resort and is not part of
-the normal workflow.
-
-Recheck project names immediately before registration because prior availability
-checks are not reservations.
-
-A future `.github/workflows/firmware-release.yml` may publish already-tested
-Debug Helper binaries and provenance for `debug-helper-vX.Y.Z`. Do not create it
-until public versioned UF2/ELF distribution is needed. Host and firmware release
-workflows never require matching version numbers or simultaneous releases.
-
-## Implementation Sequence
-
-The independently testable slices are:
-
-1. Establish host CI and extend existing architecture/protocol contracts.
-2. Add the aggregator, synchronized host-version validation, and executable
-   ownership migration.
-3. Add clean-wheel, isolated uv-tool, Debug Agent API, and installed-MCP
-   acceptance.
-4. Add firmware compile CI and independent version/provenance metadata.
-5. Add and validate the local coding-agent plugin.
-6. Record the approved license and public publisher metadata, add the DCO
-   contribution policy, and add the separately gated release workflow.
-7. Limit the `v0.1.0` public artifact set to the five deterministic host
-   distributions while preserving Debug Agent workspace CI.
-8. Validate the retained artifacts through TestPyPI.
-9. Publish the same artifacts to production PyPI.
-
-Every completed slice runs Ruff, mypy, full pytest, and `git diff --check`, plus
-its focused acceptance tests. Structural slices update architecture
-documentation and Graphify once near completion.
+Public firmware binaries, if separately approved, use independent
+`debug-helper-vX.Y.Z` tags and retained tested artifacts/provenance. Host and
+firmware versions and release dates need not match.
 
 ## Initial Support Boundaries
 
 - Linux and macOS are supported; Windows is not claimed.
-- The Debug Agent is a provider-disabled workspace feature until its planned
-  public `v0.2.0` release.
+- The Debug Agent is a provider-disabled workspace feature until separately
+  approved for public distribution.
 - Device Core HTTP endpoints, MCP tool schemas, Enhanced protocol v1, session
   formats, Basic/Enhanced backend isolation, and hardware ownership do not
   change.

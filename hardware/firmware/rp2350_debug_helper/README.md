@@ -179,7 +179,7 @@ A GPIO configuration error returns before ISO release.
 
 #### Negotiated DUT_VIO observations
 
-The report-only extension follows [the sensing contract](../../../docs/dut_vio_sensing_contract.md).
+The report-only extension follows [the sensing contract](../../../docs/specs/dut_vio_sensing_contract.md).
 Normal firmware advertises `power_sense`; `configure_power_sense` enables or
 stops observations only after its complete ACK. An older host receives no new
 frames. Epoch/DTR loss requires new negotiation. UART and control decisions
@@ -366,7 +366,7 @@ mapping checks and static allocation. Host-compiled tests establish no physical
 UART, voltage, sequencing or signal-integrity result. Existing physical results
 remain scoped to their recorded fixture/build in the validation records;
 current-board acceptance requires the manufactured KiCad campaign under
-[Phase 1 sections 34–35](../../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
+[Phase 1 sections 34–35](../../../docs/specs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
 EVENT pins remain safely initialized and reserved, with no capture implementation
 or advertised capability. GP28 observations establish no physical calibration
 or acceptance of TMUX2819 isolation beyond the recorded electrical evidence.

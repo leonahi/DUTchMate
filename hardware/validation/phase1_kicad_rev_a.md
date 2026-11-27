@@ -4,7 +4,7 @@ This record covers the manufactured KiCad board identified by the operator as
 fully assembled, using the Pico 2 reused from the legacy EAGLE fixture. It does
 not transfer acceptance from that fixture. Design authority is the
 [current KiCad source](../pcb/debug-helper/rev-a/README.md); acceptance remains
-governed by [Phase 1 §34](../../docs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
+governed by [Phase 1 §34](../../docs/specs/phase1_implementation_spec.md#34-phase-1b-done--enhanced).
 Current progress and next actions belong only in
 [development status](../../docs/development_status.md).
 

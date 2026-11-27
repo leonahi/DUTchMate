@@ -301,7 +301,7 @@ Record all of the following with every Basic or Enhanced acceptance run:
 
 The [Basic validation record](../../validation/phase1_basic_hil.md) preserves the
 original smoke procedure and its historical evidence. Use
-[Phase 1 sections 32–35](../../../docs/phase1_implementation_spec.md#32-dut-firmware-validation-fixture)
+[Phase 1 sections 32–35](../../../docs/specs/phase1_implementation_spec.md#32-dut-firmware-validation-fixture)
 and the [v2 CLI guide](../../../docs/developer_guide.md#continuous-evidence-through-the-cli)
 for current operation/session semantics; do not replay old forced-send examples
 against the current CLI. Record the actual fixture build used for any new run.

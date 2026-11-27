@@ -2,7 +2,8 @@
 
 > Approved report-only design contract, 2026-11-24.
 > This document defines the extension, not its implementation or acceptance status.
-> Current progress and review state belong only in [Development Status](development_status.md).
+> Task progress and reviews belong in GitHub Issues and PRs; milestone acceptance
+> is summarized in the [milestone overview](../development_status.md).
 
 ## Purpose and scope
 
@@ -10,7 +11,8 @@ An Enhanced helper measures its DUT-supplied interface reference and exposes the
 observation through durable evidence, service status and `dutchmate status`.
 The user selected reporting only. Measurements do not enable, disable, reconfigure
 or gate CTRL outputs, UART, EVENT interfaces, reset or boot actions. Configured
-`hardware.dut_io_voltage` remains a user declaration and is never overwritten.
+`hardware.dut_io_voltage` remains an optional user declaration and is never
+overwritten. Omitting it does not prevent Enhanced startup or GPIO control.
 
 This is an extension beyond the existing Phase 1 sensing exclusion, not an
 additional Phase 1 completion criterion. It does not add current measurement,
@@ -21,10 +23,10 @@ Existing authorities remain:
 
 - [Phase 1 specification](phase1_implementation_spec.md), particularly §§8, 11–12
   and the continuous acquisition, evidence, ownership and failure contracts.
-- [KiCad Rev-A electrical mapping](../hardware/pcb/debug-helper/rev-a/README.md#hardware-defined-dut_vio-sense-isolation).
+- [KiCad Rev-A electrical mapping](../../hardware/pcb/debug-helper/rev-a/README.md#hardware-defined-dut_vio-sense-isolation).
 - [Reconnect semantics](reconnect_session_semantics.md) and
-  [software architecture](software_architecture.md).
-- [Protocol schemas](../hardware/protocol/v1/device_to_host.schema.json), examples
+  [software architecture](../software_architecture.md).
+- [Protocol schemas](../../hardware/protocol/v1/device_to_host.schema.json), examples
   and typed parsers, which must change together when this extension is implemented.
 
 ## Hardware and conversion

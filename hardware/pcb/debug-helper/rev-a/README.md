@@ -181,7 +181,7 @@ The three evidence scopes remain separate:
   parts and firmware tested. They remain useful procedural/reference material.
   Their UART oscilloscope gap remains unresolved. The legacy board may still
   serve as a functional Enhanced HIL/development fixture under
-  [Phase 1 specification §4.1](../../../../docs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
+  [Phase 1 specification §4.1](../../../../docs/specs/phase1_implementation_spec.md#41-software-sequencing-and-hardware-acceptance-boundaries);
   such use does not establish electrical acceptance. Current-board UART
   electrical follow-up belongs to the manufactured KiCad campaign above.
 - The completed KiCad source review establishes that the corrected design
